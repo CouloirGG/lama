@@ -1,0 +1,12 @@
+# POE2 Price Overlay - Dependencies
+# Install: pip install -r requirements.txt
+
+# HTTP for price API
+requests>=2.31.0
+
+# Windows-specific (cursor tracking, window management)
+# These only install on Windows
+pywin32>=306; sys_platform == "win32"
+
+# For transparent overlay
+# tkinter is built-in with Python on Windows

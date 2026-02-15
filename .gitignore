@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+.claude/
+*.zip
+dist/
+build/
+*.exe
