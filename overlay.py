@@ -1,0 +1,394 @@
+"""
+POE2 Price Overlay - Overlay Window
+Draws a transparent, always-on-top price tag near the cursor.
+Uses tkinter for zero-dependency transparent window rendering.
+
+On Windows, this creates a layered window that:
+- Is always on top of other windows
+- Is click-through (doesn't steal focus from POE2)
+- Has a transparent background
+- Shows a small price tag with color coding
+"""
+
+import time
+import logging
+import threading
+from typing import Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+try:
+    import tkinter as tk
+    TK_AVAILABLE = True
+except ImportError:
+    TK_AVAILABLE = False
+    logger.warning("tkinter not available - overlay disabled")
+
+from config import (
+    OVERLAY_OFFSET_X,
+    OVERLAY_OFFSET_Y,
+    OVERLAY_BG_COLOR,
+    OVERLAY_FONT_SIZE,
+    OVERLAY_PADDING,
+    OVERLAY_DISPLAY_DURATION,
+    PRICE_COLOR_HIGH,
+    PRICE_COLOR_GOOD,
+    PRICE_COLOR_DECENT,
+    PRICE_COLOR_LOW,
+)
+
+
+class PriceOverlay:
+    """
+    Transparent overlay window that shows item prices.
+    
+    Architecture:
+    - tkinter runs on the main thread (requirement on macOS, best practice elsewhere)
+    - Other threads schedule UI updates via root.after()
+    - The overlay window is always present but hidden when not showing a price
+    """
+
+    def __init__(self):
+        self._root: Optional[tk.Tk] = None
+        self._label: Optional[tk.Label] = None
+        self._visible = False
+        self._hide_timer: Optional[str] = None
+        self._ready = threading.Event()
+        self._pending_updates = []
+        self._lock = threading.Lock()
+        self._hwnd: int = 0  # Top-level Win32 HWND for SetWindowPos calls
+
+    def initialize(self):
+        """
+        Initialize the tkinter overlay window.
+        MUST be called from the main thread.
+        """
+        if not TK_AVAILABLE:
+            logger.error("Cannot initialize overlay: tkinter not available")
+            return
+
+        self._root = tk.Tk()
+
+        # Window configuration
+        self._root.title("POE2 Price")
+        self._root.overrideredirect(True)          # No title bar, borders
+        self._root.attributes("-topmost", True)     # Always on top
+        self._root.attributes("-alpha", 0.92)       # Slight transparency
+
+        # Transparent background (Windows-specific)
+        transparent_color = "#010101"  # Nearly black, used as transparency key
+        self._root.configure(bg=transparent_color)
+        try:
+            self._root.attributes("-transparentcolor", transparent_color)
+        except tk.TclError:
+            # Not supported on all platforms
+            pass
+
+        # Border frame provides a subtle 1px outline around the label
+        self._frame = tk.Frame(
+            self._root,
+            bg="#333355",
+            padx=1,
+            pady=1,
+        )
+        self._frame.pack()
+
+        # Create the price label inside the border frame
+        self._label = tk.Label(
+            self._frame,
+            text="",
+            font=("Segoe UI", OVERLAY_FONT_SIZE, "bold"),
+            fg=PRICE_COLOR_GOOD,
+            bg=OVERLAY_BG_COLOR,
+            padx=OVERLAY_PADDING,
+            pady=OVERLAY_PADDING // 2,
+            relief="flat",
+            borderwidth=0,
+        )
+        self._label.pack()
+
+        # Force window realization so we get a valid HWND
+        self._root.update_idletasks()
+
+        # Make click-through on Windows (must be after update_idletasks)
+        self._make_click_through()
+
+        # Start hidden
+        self._root.withdraw()
+        self._visible = False
+
+        # Process pending updates periodically
+        self._root.after(50, self._process_pending)
+
+        self._ready.set()
+        logger.info("Overlay window initialized")
+
+    def show_price(self, text: str, tier: str, cursor_x: int, cursor_y: int):
+        """
+        Show a price tag near the cursor position.
+        Thread-safe - can be called from any thread.
+        
+        Args:
+            text: Price text (e.g., "~8 Exalted")
+            tier: Price tier ("high", "good", "decent", "low")
+            cursor_x: Cursor X position on screen
+            cursor_y: Cursor Y position on screen
+        """
+        with self._lock:
+            self._pending_updates.append(("show", text, tier, cursor_x, cursor_y))
+
+    def hide(self):
+        """Hide the price overlay. Thread-safe."""
+        with self._lock:
+            self._pending_updates.append(("hide",))
+
+    def run(self):
+        """
+        Run the tkinter main loop.
+        MUST be called from the main thread. Blocks until shutdown.
+        """
+        if not self._root:
+            self.initialize()
+        if self._root:
+            self._root.mainloop()
+
+    def shutdown(self):
+        """Shut down the overlay."""
+        if self._root:
+            try:
+                self._root.quit()
+                self._root.destroy()
+            except Exception:
+                pass
+
+    # ─── Internal Methods ────────────────────────────
+
+    def _process_pending(self):
+        """Process pending UI updates from other threads."""
+        with self._lock:
+            updates = self._pending_updates[:]
+            self._pending_updates.clear()
+
+        for update in updates:
+            try:
+                if update[0] == "show":
+                    _, text, tier, cx, cy = update
+                    self._do_show(text, tier, cx, cy)
+                elif update[0] == "hide":
+                    self._do_hide()
+            except Exception as e:
+                logger.error(f"Overlay update error: {e}")
+
+        # Schedule next check
+        if self._root:
+            self._root.after(50, self._process_pending)
+
+    def _do_show(self, text: str, tier: str, cursor_x: int, cursor_y: int):
+        """Actually show the price tag (must be on main thread)."""
+        if not self._root or not self._label:
+            return
+
+        # Set color based on tier
+        color = {
+            "high": PRICE_COLOR_HIGH,
+            "good": PRICE_COLOR_GOOD,
+            "decent": PRICE_COLOR_DECENT,
+            "low": PRICE_COLOR_LOW,
+        }.get(tier, PRICE_COLOR_LOW)
+
+        # Update label
+        self._label.configure(text=f" {text} ", fg=color)
+
+        # Position near cursor
+        x = cursor_x + OVERLAY_OFFSET_X
+        y = cursor_y + OVERLAY_OFFSET_Y
+
+        # Ensure it stays on screen
+        screen_w = self._root.winfo_screenwidth()
+        screen_h = self._root.winfo_screenheight()
+        self._root.update_idletasks()
+        label_w = self._label.winfo_reqwidth()
+        label_h = self._label.winfo_reqheight()
+
+        if x + label_w > screen_w:
+            x = cursor_x - label_w - 10
+        if y < 0:
+            y = cursor_y + 30
+        if y + label_h > screen_h:
+            y = screen_h - label_h
+
+        self._root.geometry(f"+{x}+{y}")
+
+        # Show the window
+        self._root.deiconify()
+        self._root.lift()
+        self._root.attributes("-topmost", True)
+
+        # Win32: force window above borderless fullscreen games
+        # tkinter's -topmost alone isn't sufficient against game windows
+        if self._hwnd:
+            try:
+                import ctypes
+                HWND_TOPMOST = -1
+                SWP_NOMOVE = 0x0002
+                SWP_NOSIZE = 0x0001
+                SWP_NOACTIVATE = 0x0010
+                SWP_SHOWWINDOW = 0x0040
+                ctypes.windll.user32.SetWindowPos(
+                    self._hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                )
+            except Exception:
+                pass
+
+        self._visible = True
+
+        # Cancel previous hide timer
+        if self._hide_timer:
+            self._root.after_cancel(self._hide_timer)
+
+        # Auto-hide after duration
+        self._hide_timer = self._root.after(
+            int(OVERLAY_DISPLAY_DURATION * 1000),
+            self._do_hide
+        )
+
+    def _do_hide(self):
+        """Actually hide the overlay (must be on main thread)."""
+        if self._root and self._visible:
+            self._root.withdraw()
+            self._visible = False
+            self._hide_timer = None
+
+    def _make_click_through(self):
+        """
+        Make the window click-through on Windows.
+        Uses WS_EX_NOACTIVATE so the overlay never steals focus from POE2.
+        WS_EX_TOOLWINDOW hides it from the taskbar/Alt-Tab.
+
+        Note: WS_EX_TRANSPARENT is intentionally NOT used here — it can
+        make the window completely invisible on some setups. NOACTIVATE
+        is sufficient to prevent focus stealing.
+        """
+        try:
+            import ctypes
+
+            user32 = ctypes.windll.user32
+
+            # winfo_id() returns the tkinter child widget HWND.
+            # GetParent() gives the actual top-level Win32 window.
+            # (wm_frame() returns '0x0' when overrideredirect is True)
+            child_hwnd = self._root.winfo_id()
+            hwnd = user32.GetParent(child_hwnd) or child_hwnd
+
+            GWL_EXSTYLE = -20
+            WS_EX_LAYERED = 0x00080000
+            WS_EX_TOPMOST = 0x00000008
+            WS_EX_TOOLWINDOW = 0x00000080      # Hide from taskbar
+            WS_EX_NOACTIVATE = 0x08000000       # Never steal focus
+
+            style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            style |= WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+
+            # Force Windows to apply the style change immediately
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_NOZORDER = 0x0004
+            SWP_FRAMECHANGED = 0x0020
+            user32.SetWindowPos(
+                hwnd, 0, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+            )
+
+            self._hwnd = hwnd
+            logger.info(f"Click-through enabled (hwnd=0x{hwnd:X})")
+        except Exception as e:
+            logger.warning(f"Click-through not available: {e}")
+
+
+class ConsoleOverlay:
+    """
+    Fallback overlay that prints to console.
+    Used for testing on non-Windows systems.
+    """
+
+    def __init__(self):
+        self._ready = threading.Event()
+        self._ready.set()
+
+    def initialize(self):
+        pass
+
+    def show_price(self, text: str, tier: str, cursor_x: int, cursor_y: int):
+        tier_symbols = {"high": "$$", "good": ">>", "decent": "- ", "low": "  "}
+        symbol = tier_symbols.get(tier, "  ")
+        try:
+            print(f"  {symbol} {text}  (at {cursor_x}, {cursor_y})")
+        except (UnicodeEncodeError, OSError):
+            pass  # Windows cp1252 terminal can't encode some chars
+
+    def hide(self):
+        pass
+
+    def run(self):
+        # Non-blocking for console mode
+        self._ready.set()
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+
+    def shutdown(self):
+        pass
+
+
+# ─── Quick Test ──────────────────────────────────────
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+
+    def _get_cursor_pos():
+        """Get current mouse cursor position via Win32 API (thread-safe)."""
+        import ctypes
+
+        class POINT(ctypes.Structure):
+            _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+        pt = POINT()
+        ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
+        return pt.x, pt.y
+
+    if TK_AVAILABLE:
+        overlay = PriceOverlay()
+
+        def test_sequence():
+            """Show test prices near the actual mouse cursor."""
+            import time as t
+            overlay._ready.wait()
+            t.sleep(1)
+
+            test_prices = [
+                ("12 Divine", "high"),
+                ("8 Exalted", "good"),
+                ("1.5 Exalted", "decent"),
+                ("45 Chaos", "low"),
+            ]
+
+            for text, tier in test_prices:
+                cx, cy = _get_cursor_pos()
+                print(f"Showing: {text} at ({cx}, {cy})")
+                overlay.show_price(text, tier, cx, cy)
+                t.sleep(3)
+
+            overlay.shutdown()
+
+        thread = threading.Thread(target=test_sequence, daemon=True)
+        thread.start()
+        overlay.run()
+    else:
+        print("tkinter not available, using console overlay")
+        overlay = ConsoleOverlay()
+        overlay.show_price("12 Divine", "high", 500, 400)
+        overlay.show_price("8 Exalted", "good", 600, 300)
