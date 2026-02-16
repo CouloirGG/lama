@@ -97,9 +97,10 @@ class TradeClient:
             return None
 
         quality = getattr(item, "quality", 0) or 0
+        sockets = getattr(item, "sockets", 0) or 0
 
-        # Check cache (includes quality in fingerprint)
-        fingerprint = self._make_fingerprint(base_type, mods, quality)
+        # Check cache (includes quality and sockets in fingerprint)
+        fingerprint = self._make_fingerprint(base_type, mods, quality, sockets)
         cached = self._check_cache(fingerprint)
         if cached:
             logger.debug(f"TradeClient: cache hit for {base_type}")
@@ -136,8 +137,21 @@ class TradeClient:
 
             search_result, exact_match = self._search_progressive(
                 base_type, stat_filters, priceable, quality=quality,
-                is_stale=is_stale,
+                sockets=sockets, is_stale=is_stale,
             )
+
+            # If no results with sockets, retry without socket filter
+            if not search_result and sockets > 0:
+                if is_stale and is_stale():
+                    return None
+                logger.info(
+                    f"TradeClient: no results with {sockets} sockets, "
+                    f"retrying without socket filter")
+                search_result, exact_match = self._search_progressive(
+                    base_type, stat_filters, priceable, quality=quality,
+                    sockets=0, is_stale=is_stale,
+                )
+
             if not search_result:
                 return None
 
@@ -181,7 +195,10 @@ class TradeClient:
 
         except Exception as e:
             logger.warning(f"TradeClient: pricing failed for {base_type}: {e}")
-            return None
+            return RarePriceResult(
+                min_price=0, max_price=0, num_results=0,
+                display="?", tier="low",
+            )
 
     def price_base_item(self, item, is_stale=None) -> Optional[RarePriceResult]:
         """
@@ -251,7 +268,10 @@ class TradeClient:
 
         except Exception as e:
             logger.warning(f"TradeClient: base pricing failed for {base_type}: {e}")
-            return None
+            return RarePriceResult(
+                min_price=0, max_price=0, num_results=0,
+                display="?", tier="low",
+            )
 
     def _build_base_query(self, base_type: str, sockets: int = 0,
                           item_level: int = 0) -> dict:
@@ -359,12 +379,13 @@ class TradeClient:
 
     def _build_query(self, base_type: str, stat_filters: list,
                      match_mode: str = "and", min_count: int = 0,
-                     quality: int = 0) -> dict:
+                     quality: int = 0, sockets: int = 0) -> dict:
         """Build a trade API search query.
 
         Args:
             match_mode: "and" (all must match) or "count" (at least min_count)
             quality: item quality — included as a min filter when > 0
+            sockets: minimum rune sockets — included when > 0
         """
         if match_mode == "count" and min_count > 0:
             stat_group = {"type": "count", "value": {"min": min_count},
@@ -378,28 +399,37 @@ class TradeClient:
         if quality > 0:
             misc_filters["quality"] = {"min": quality}
 
+        filters = {
+            "type_filters": {
+                "filters": {
+                    "rarity": {"option": "nonunique"},
+                }
+            },
+            "misc_filters": {
+                "filters": misc_filters,
+            },
+        }
+
+        if sockets > 0:
+            filters["equipment_filters"] = {
+                "filters": {
+                    "rune_sockets": {"min": sockets},
+                },
+            }
+
         return {
             "query": {
                 "status": {"option": "any"},
                 "type": base_type,
                 "stats": [stat_group],
-                "filters": {
-                    "type_filters": {
-                        "filters": {
-                            "rarity": {"option": "nonunique"},
-                        }
-                    },
-                    "misc_filters": {
-                        "filters": misc_filters,
-                    },
-                },
+                "filters": filters,
             },
             "sort": {"price": "asc"},
         }
 
     def _build_hybrid_query(self, base_type: str, key_filters: list,
                             common_filters: list, min_common: int,
-                            quality: int = 0) -> dict:
+                            quality: int = 0, sockets: int = 0) -> dict:
         """Build a query with key mods as "and" + common mods as "count".
 
         This ensures price-driving mods always match while allowing
@@ -423,21 +453,30 @@ class TradeClient:
         if quality > 0:
             misc_filters["quality"] = {"min": quality}
 
+        filters = {
+            "type_filters": {
+                "filters": {
+                    "rarity": {"option": "nonunique"},
+                }
+            },
+            "misc_filters": {
+                "filters": misc_filters,
+            },
+        }
+
+        if sockets > 0:
+            filters["equipment_filters"] = {
+                "filters": {
+                    "rune_sockets": {"min": sockets},
+                },
+            }
+
         return {
             "query": {
                 "status": {"option": "any"},
                 "type": base_type,
                 "stats": stat_groups,
-                "filters": {
-                    "type_filters": {
-                        "filters": {
-                            "rarity": {"option": "nonunique"},
-                        }
-                    },
-                    "misc_filters": {
-                        "filters": misc_filters,
-                    },
-                },
+                "filters": filters,
             },
             "sort": {"price": "asc"},
         }
@@ -511,7 +550,8 @@ class TradeClient:
 
     def _search_progressive(self, base_type: str, stat_filters: list,
                             priceable: List[ParsedMod] = None,
-                            quality: int = 0, is_stale=None):
+                            quality: int = 0, sockets: int = 0,
+                            is_stale=None):
         """Find the best price query using minimal API calls.
 
         Returns:
@@ -521,6 +561,7 @@ class TradeClient:
             Returns (None, False) when no results found.
         """
         q = quality
+        s = sockets
 
         def _stale():
             if is_stale and is_stale():
@@ -532,7 +573,21 @@ class TradeClient:
 
         # Small mod count — just try exact "and" match
         if n <= 4:
-            query = self._build_query(base_type, stat_filters, quality=q)
+            # For 1-2 mod items (typically magic), rolls drive value —
+            # try tight match first so we compare against similar quality.
+            if n <= 2 and priceable:
+                tight = self._build_stat_filters_custom(priceable, 0.98)
+                query = self._build_query(base_type, tight, quality=q, sockets=s)
+                result = self._do_search(query)
+                if result and result.get("result"):
+                    logger.info(
+                        f"TradeClient: tight match @98% "
+                        f"({result.get('total', 0)} results)")
+                    return result, True
+                if _stale():
+                    return None, False
+
+            query = self._build_query(base_type, stat_filters, quality=q, sockets=s)
             result = self._do_search(query)
             if result and result.get("result"):
                 logger.info(
@@ -540,10 +595,29 @@ class TradeClient:
                 return result, True
             if _stale():
                 return None, False
+
+            # For socketed items: try key mods + sockets (drop common mods).
+            # E.g., 2-socket boots with 35% MS — the sockets + key mod drive value,
+            # common mods like fire res are just bonus.
+            if s > 0 and priceable and len(priceable) == n and n >= 2:
+                key_m, common_m, key_f, common_f = self._classify_filters(
+                    priceable, stat_filters)
+                if key_f and common_f:
+                    query = self._build_query(
+                        base_type, key_f, quality=q, sockets=s)
+                    result = self._do_search(query)
+                    if result and result.get("result"):
+                        logger.info(
+                            f"TradeClient: key mods + {s}S "
+                            f"({result.get('total', 0)} results)")
+                        return result, False  # dropped common mods → estimate
+                    if _stale():
+                        return None, False
+
             # Fall through to count for small sets too
             if n >= 3:
                 query = self._build_query(
-                    base_type, stat_filters, "count", n - 1, quality=q)
+                    base_type, stat_filters, "count", n - 1, quality=q, sockets=s)
                 result = self._do_search(query)
                 if result and result.get("result"):
                     logger.info(
@@ -584,7 +658,7 @@ class TradeClient:
         # match exists at 90%, that's the best price.
         tight_filters = self._build_stat_filters_custom(priceable, 0.90)
         query = self._build_query(
-            base_type, tight_filters, "count", n, quality=q)
+            base_type, tight_filters, "count", n, quality=q, sockets=s)
         result = self._do_search(query)
         if result and result.get("result"):
             total = result.get("total", 0)
@@ -602,7 +676,7 @@ class TradeClient:
             # Try all common mods first
             query = self._build_hybrid_query(
                 base_type, key_filters, common_filters,
-                min_common=n_common, quality=q)
+                min_common=n_common, quality=q, sockets=s)
             result = self._do_search(query)
             if result and result.get("result"):
                 total = result.get("total", 0)
@@ -620,7 +694,7 @@ class TradeClient:
             if n_common >= 2:
                 query = self._build_hybrid_query(
                     base_type, key_filters, common_filters,
-                    min_common=n_common - 1, quality=q)
+                    min_common=n_common - 1, quality=q, sockets=s)
                 result = self._do_search(query)
                 if result and result.get("result"):
                     total = result.get("total", 0)
@@ -643,7 +717,7 @@ class TradeClient:
                 return None, False
             filters_at = self._build_stat_filters_custom(priceable, mult)
             query = self._build_query(
-                base_type, filters_at, "count", n - 1, quality=q)
+                base_type, filters_at, "count", n - 1, quality=q, sockets=s)
             result = self._do_search(query)
             if result and result.get("result"):
                 total = result.get("total", 0)
@@ -666,7 +740,7 @@ class TradeClient:
             if _stale():
                 return None, False
             query = self._build_query(
-                base_type, stat_filters, "count", min_count, quality=q)
+                base_type, stat_filters, "count", min_count, quality=q, sockets=s)
             result = self._do_search(query)
             if not result or not result.get("result"):
                 continue
@@ -708,41 +782,48 @@ class TradeClient:
         )
 
     def _do_search(self, query: dict) -> Optional[dict]:
-        """POST search query to trade API. Returns search result or None."""
+        """POST search query to trade API. Returns search result or None.
+        Retries once on connection errors / timeouts."""
         if self._is_rate_limited():
             return None
 
         url = f"{TRADE_API_BASE}/search/poe2/{self.league}"
-        self._rate_limit()
 
-        try:
-            resp = self._session.post(url, json=query, timeout=5)
-
-            if resp.status_code == 429:
-                retry_after = int(resp.headers.get("Retry-After", 2))
-                if retry_after > self._MAX_RETRY_WAIT:
-                    self._set_rate_limited(retry_after)
-                    return None
-                logger.warning(f"TradeClient: rate limited, waiting {retry_after}s")
-                time.sleep(retry_after)
-                self._rate_limit()
+        for attempt in range(2):
+            self._rate_limit()
+            try:
                 resp = self._session.post(url, json=query, timeout=5)
 
-            if resp.status_code != 200:
-                logger.warning(f"TradeClient: search returned HTTP {resp.status_code}")
+                if resp.status_code == 429:
+                    retry_after = int(resp.headers.get("Retry-After", 2))
+                    if retry_after > self._MAX_RETRY_WAIT:
+                        self._set_rate_limited(retry_after)
+                        return None
+                    logger.warning(f"TradeClient: rate limited, waiting {retry_after}s")
+                    time.sleep(retry_after)
+                    self._rate_limit()
+                    resp = self._session.post(url, json=query, timeout=5)
+
+                if resp.status_code != 200:
+                    logger.warning(f"TradeClient: search returned HTTP {resp.status_code}")
+                    return None
+
+                return resp.json()
+
+            except (requests.ConnectionError, requests.Timeout) as e:
+                if attempt == 0:
+                    logger.warning(f"TradeClient: search {type(e).__name__}, retrying in 1s")
+                    time.sleep(1)
+                    continue
+                logger.warning(f"TradeClient: search failed after retry: {e}")
+                return None
+            except Exception as e:
+                logger.warning(f"TradeClient: search failed: {e}")
                 return None
 
-            return resp.json()
-
-        except requests.Timeout:
-            logger.warning("TradeClient: search timed out")
-            return None
-        except Exception as e:
-            logger.warning(f"TradeClient: search failed: {e}")
-            return None
-
     def _do_fetch(self, query_id: str, result_ids: List[str]) -> Optional[list]:
-        """GET listing details for the given result IDs."""
+        """GET listing details for the given result IDs.
+        Retries once on connection errors / timeouts."""
         if not result_ids:
             return None
         if self._is_rate_limited():
@@ -750,33 +831,38 @@ class TradeClient:
 
         ids_str = ",".join(result_ids)
         url = f"{TRADE_API_BASE}/fetch/{ids_str}"
-        self._rate_limit()
 
-        try:
-            resp = self._session.get(url, params={"query": query_id}, timeout=5)
-
-            if resp.status_code == 429:
-                retry_after = int(resp.headers.get("Retry-After", 2))
-                if retry_after > self._MAX_RETRY_WAIT:
-                    self._set_rate_limited(retry_after)
-                    return None
-                logger.warning(f"TradeClient: fetch rate limited, waiting {retry_after}s")
-                time.sleep(retry_after)
-                self._rate_limit()
+        for attempt in range(2):
+            self._rate_limit()
+            try:
                 resp = self._session.get(url, params={"query": query_id}, timeout=5)
 
-            if resp.status_code != 200:
-                logger.warning(f"TradeClient: fetch returned HTTP {resp.status_code}")
+                if resp.status_code == 429:
+                    retry_after = int(resp.headers.get("Retry-After", 2))
+                    if retry_after > self._MAX_RETRY_WAIT:
+                        self._set_rate_limited(retry_after)
+                        return None
+                    logger.warning(f"TradeClient: fetch rate limited, waiting {retry_after}s")
+                    time.sleep(retry_after)
+                    self._rate_limit()
+                    resp = self._session.get(url, params={"query": query_id}, timeout=5)
+
+                if resp.status_code != 200:
+                    logger.warning(f"TradeClient: fetch returned HTTP {resp.status_code}")
+                    return None
+
+                data = resp.json()
+                return data.get("result", [])
+
+            except (requests.ConnectionError, requests.Timeout) as e:
+                if attempt == 0:
+                    logger.warning(f"TradeClient: fetch {type(e).__name__}, retrying in 1s")
+                    time.sleep(1)
+                    continue
+                logger.warning(f"TradeClient: fetch failed after retry: {e}")
                 return None
-
-            data = resp.json()
-            return data.get("result", [])
-
-        except requests.Timeout:
-            logger.warning("TradeClient: fetch timed out")
-            return None
-        except Exception as e:
-            logger.warning(f"TradeClient: fetch failed: {e}")
+            except Exception as e:
+                logger.warning(f"TradeClient: fetch failed: {e}")
             return None
 
     # ─── Price Extraction ─────────────────────────
@@ -816,18 +902,40 @@ class TradeClient:
         prices.sort(key=lambda p: p[0])
 
         if lower_bound:
-            # Comparables are strictly worse — the actual item has MORE
-            # mods so its value is ABOVE the most expensive comparable.
-            # Use the max price as the floor estimate.
-            # Skip to the last entry (most expensive comparable).
+            # Comparables are missing mod(s) — the actual item is likely
+            # worth more. Use the max price as the floor estimate.
             prices = prices[-1:]
         elif len(prices) >= 5:
-            # Skip cheapest ~25% as outliers (mispriced or lower-quality)
-            skip = len(prices) // 4
+            # Adaptive outlier trimming: when our sample is a tiny slice of
+            # total listings, the cheapest ones are extreme low outliers.
+            fetched = len(prices)
+            sample_pct = fetched / total if total > 0 else 1.0
+            if sample_pct < 0.05:
+                # Bottom ~4% of market — skip bottom 75%, keep top quarter
+                skip = fetched * 3 // 4
+            elif sample_pct < 0.10:
+                # Bottom 5-10% — skip bottom 50%
+                skip = fetched // 2
+            elif sample_pct < 0.25:
+                # Bottom 10-25% — skip bottom 33%
+                skip = fetched // 3
+            else:
+                # Small result set — skip bottom 25% (original behavior)
+                skip = fetched // 4
             prices = prices[skip:]
+        elif len(prices) >= 2:
+            # Very few results — bottom listing(s) likely mispriced.
+            # Use upper half as more representative.
+            prices = prices[len(prices) // 2:]
 
         min_divine, min_amount, min_currency = prices[0]
         max_divine, max_amount, max_currency = prices[-1]
+
+        # Collapse wide ranges to median — "~5 Divine" is more useful than "~1-20 Divine"
+        if min_divine > 0 and max_divine > min_divine * 3:
+            mid = prices[len(prices) // 2]
+            min_divine, min_amount, min_currency = mid
+            max_divine, max_amount, max_currency = mid
 
         # Items below ~10 exalted are effectively worthless — return None
         # so callers show "Low value" instead of a misleading price.
@@ -969,11 +1077,13 @@ class TradeClient:
     # ─── Caching ──────────────────────────────────
 
     def _make_fingerprint(self, base_type: str, mods: List[ParsedMod],
-                          quality: int = 0) -> str:
-        """Create a cache key from base type, mods, and quality."""
+                          quality: int = 0, sockets: int = 0) -> str:
+        """Create a cache key from base type, mods, quality, and sockets."""
         parts = [base_type.lower()]
         if quality > 0:
             parts.append(f"q{quality}")
+        if sockets > 0:
+            parts.append(f"s{sockets}")
         for mod in sorted(mods, key=lambda m: m.stat_id):
             # Round values to reduce cache misses for similar items
             rounded = round(mod.value / 5) * 5
