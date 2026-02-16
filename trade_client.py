@@ -448,8 +448,10 @@ class TradeClient:
         # Defenses / life / mana
         "maximum mana", "maximum life", "maximum energy shield",
         "mana regeneration", "life regeneration", "energy shield recharge",
-        "to armour", "to evasion",
+        "to armour", "to evasion", "to energy shield",
         "increased armour", "increased evasion", "increased energy shield",
+        "increased armour and evasion", "increased armour and energy shield",
+        "increased evasion and energy shield",
         # Resistances / attributes
         "to fire resistance", "to cold resistance", "to lightning resistance",
         "to chaos resistance", "to all elemental resistances",
@@ -563,6 +565,21 @@ class TradeClient:
         n_key = len(key_filters)
         n_common = len(common_filters)
 
+        # Low-key-confidence: items with <= 1 key mod among 4+ total mods
+        # are likely overpriced because the API returns items with the same
+        # key mod but much better overall stats. Never claim exact_match.
+        low_key_confidence = n_key <= 1 and n >= 4
+        if low_key_confidence:
+            logger.warning(
+                f"TradeClient: low key confidence — only {n_key} key mod(s) "
+                f"among {n} total. Prices will show as estimates."
+            )
+
+        logger.info(
+            f"TradeClient: classified {n_key} key + {n_common} common mods "
+            f"(of {n} total)"
+        )
+
         # Step 1: Try count(n/n) at tight minimums first — if an exact
         # match exists at 90%, that's the best price.
         tight_filters = self._build_stat_filters_custom(priceable, 0.90)
@@ -573,12 +590,51 @@ class TradeClient:
             total = result.get("total", 0)
             logger.info(f"TradeClient: count({n}/{n}) @90% = {total} results")
             if total <= self._TOO_MANY_RESULTS:
-                return result, True  # exact match — all mods matched
+                return result, not low_key_confidence  # exact unless low confidence
 
         if _stale():
             return None, False
 
-        # Step 2: count(n-1) at progressively looser minimums.
+        # Step 2 (NEW): Hybrid query — key mods as "and" (always required)
+        # + common mods as "count" (allow some to be absent).
+        # Only useful when we have >=2 key mods and >=1 common mod.
+        if n_key >= 2 and n_common >= 1:
+            # Try all common mods first
+            query = self._build_hybrid_query(
+                base_type, key_filters, common_filters,
+                min_common=n_common, quality=q)
+            result = self._do_search(query)
+            if result and result.get("result"):
+                total = result.get("total", 0)
+                logger.info(
+                    f"TradeClient: hybrid key={n_key} AND + "
+                    f"common>={n_common} = {total} results"
+                )
+                if total <= self._TOO_MANY_RESULTS:
+                    return result, not low_key_confidence
+
+            if _stale():
+                return None, False
+
+            # Drop 1 common mod
+            if n_common >= 2:
+                query = self._build_hybrid_query(
+                    base_type, key_filters, common_filters,
+                    min_common=n_common - 1, quality=q)
+                result = self._do_search(query)
+                if result and result.get("result"):
+                    total = result.get("total", 0)
+                    logger.info(
+                        f"TradeClient: hybrid key={n_key} AND + "
+                        f"common>={n_common - 1} = {total} results"
+                    )
+                    if total <= self._TOO_MANY_RESULTS:
+                        return result, False  # dropped a common — lower bound
+
+                if _stale():
+                    return None, False
+
+        # Step 3: count(n-1) at progressively looser minimums.
         # Results are LOWER BOUNDS — items are missing one mod, so the
         # actual item is strictly better. Flag as not exact.
         best = None
@@ -604,7 +660,7 @@ class TradeClient:
         if best:
             return best, False
 
-        # Step 3: count(n-2), count(n-3), ... with standard minimums
+        # Step 4: count(n-2), count(n-3), ... with standard minimums
         floor = max(2, n // 2)
         for min_count in range(n - 2, floor - 1, -1):
             if _stale():
