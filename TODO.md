@@ -9,6 +9,8 @@
 - [ ] **Common mod classification** — Heuristic-based; may occasionally misclassify an unusual valuable mod as "common", affecting rare item pricing.
 - [ ] **"Grants Skill:" edge cases** — Unusual skill grant formats might not be stripped by `_SKIP_LINE_RE`, leaking into trade queries.
 - [ ] **Rate limiting under burst** — Progressive search makes 2-3 API calls per item. Rapid scanning can trigger 60s trade API ban. Not an issue in normal usage but could be improved.
+- [ ] **Fancier ✗ dismiss indicator** — Current ✗ is plain Unicode in grey. Explore nicer options (custom icon, styled background, animation, etc.).
+- [ ] **Single key mod overpricing** — When an item has only 1 key mod (e.g., +36 spirit) among all-common filler, the trade API returns inflated prices from items with the same mod but much better overall stats. Need a smarter approach: e.g., discount result when key-to-common ratio is low, require minimum key mod count, or apply value-based thresholds per mod type.
 
 ## Completed
 

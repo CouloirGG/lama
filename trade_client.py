@@ -456,6 +456,8 @@ class TradeClient:
         # Accuracy / leech
         "to accuracy", "accuracy rating",
         "leeches", "leech",
+        # Flat added damage (filler at low rolls; high rolls come with crit/% damage)
+        "damage to attacks", "damage to spells",
         # Ailment / status duration
         "freeze duration", "chill effect", "ignite duration",
         "shock effect", "poison duration", "bleed duration",
