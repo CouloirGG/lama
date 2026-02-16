@@ -12,6 +12,7 @@ Usage:
 
 import sys
 import os
+import re
 import time
 import logging
 import argparse
@@ -338,7 +339,7 @@ class POE2PriceOverlay:
     def _price_rare_async(self, item, cursor_x: int, cursor_y: int):
         """
         Price a rare item via the trade API in a background thread.
-        Shows "Checking..." immediately, then updates with result.
+        Shows animated "Checking." indicator, then updates with result.
         Cancels any previous in-flight trade query via generation counter.
         """
         display_name = item.name or item.base_type
@@ -354,15 +355,34 @@ class POE2PriceOverlay:
             with self._trade_gen_lock:
                 return my_gen != self._trade_generation
 
-        # Show "Checking..." immediately
+        # Show initial checking indicator
         self.overlay.show_price(
-            text=f"{display_name}: Checking...",
+            text=f"{display_name}: Checking.",
             tier="low",
             cursor_x=cursor_x,
             cursor_y=cursor_y,
         )
 
+        # Animated dots: cycles ". → .. → ..." while searching
+        search_done = threading.Event()
+
+        def _animate_dots():
+            dots = 1
+            while not search_done.wait(0.4):
+                if _is_stale():
+                    return
+                dots = (dots % 3) + 1
+                self.overlay.show_price(
+                    text=f"{display_name}: Checking{'.' * dots}",
+                    tier="low",
+                    cursor_x=cursor_x,
+                    cursor_y=cursor_y,
+                )
+
         def _do_price():
+            anim = threading.Thread(
+                target=_animate_dots, daemon=True, name="PriceAnim")
+            anim.start()
             try:
                 # Resolve missing base_type for magic items (name includes
                 # prefix + base + suffix, e.g. "Mystic Stellar Amulet of the Fox")
@@ -413,7 +433,13 @@ class POE2PriceOverlay:
                     self.stats["not_found"] += 1
             except Exception as e:
                 logger.error(f"Rare pricing error: {e}", exc_info=True)
+                self.overlay.show_price(
+                    text=f"{display_name}: ?", tier="low",
+                    cursor_x=cursor_x, cursor_y=cursor_y,
+                )
                 self.stats["not_found"] += 1
+            finally:
+                search_done.set()
 
         thread = threading.Thread(target=_do_price, daemon=True, name="RarePricer")
         thread.start()
@@ -436,14 +462,34 @@ class POE2PriceOverlay:
             with self._trade_gen_lock:
                 return my_gen != self._trade_generation
 
+        # Show initial checking indicator
         self.overlay.show_price(
-            text=f"{display_name} ({tag}): Checking...",
+            text=f"{display_name} ({tag}): Checking.",
             tier="low",
             cursor_x=cursor_x,
             cursor_y=cursor_y,
         )
 
+        # Animated dots: cycles ". → .. → ..." while searching
+        search_done = threading.Event()
+
+        def _animate_dots():
+            dots = 1
+            while not search_done.wait(0.4):
+                if _is_stale():
+                    return
+                dots = (dots % 3) + 1
+                self.overlay.show_price(
+                    text=f"{display_name} ({tag}): Checking{'.' * dots}",
+                    tier="low",
+                    cursor_x=cursor_x,
+                    cursor_y=cursor_y,
+                )
+
         def _do_price():
+            anim = threading.Thread(
+                target=_animate_dots, daemon=True, name="BaseAnim")
+            anim.start()
             try:
                 if _is_stale():
                     return
@@ -469,7 +515,13 @@ class POE2PriceOverlay:
                     self.stats["not_found"] += 1
             except Exception as e:
                 logger.error(f"Base pricing error: {e}", exc_info=True)
+                self.overlay.show_price(
+                    text=f"{display_name}: ?", tier="low",
+                    cursor_x=cursor_x, cursor_y=cursor_y,
+                )
                 self.stats["not_found"] += 1
+            finally:
+                search_done.set()
 
         thread = threading.Thread(target=_do_price, daemon=True, name="BasePricer")
         thread.start()
@@ -487,9 +539,15 @@ class POE2PriceOverlay:
         "tribal mask": "The Vertex",
     }
 
+    # High-roll detection: don't dismiss common mods with exceptional values
+    _MOD_VALUE_RE = re.compile(r'[+-]?(\d+(?:\.\d+)?)')
+    _HIGH_ROLL_THRESHOLD = 100       # flat values: +158 mana → keep
+    _HIGH_ROLL_PCT_THRESHOLD = 50    # percentage values: 60% regen → keep
+
     def _has_only_common_mods(self, mods: list) -> bool:
         """Check if all mods are common filler (not worth trade API lookup).
         Implicit mods are always considered common (inherent to base type).
+        High-roll common mods (e.g., +158 mana) are NOT considered common.
         Uses the canonical pattern list from TradeClient."""
         patterns = TradeClient._COMMON_MOD_PATTERNS
         for mod_type, mod_text in mods:
@@ -498,6 +556,15 @@ class POE2PriceOverlay:
             text_lower = mod_text.lower()
             if not any(pat in text_lower for pat in patterns):
                 return False
+            # Common pattern matched — but check if the roll is high enough
+            # to be valuable despite being a "common" mod type
+            m = self._MOD_VALUE_RE.search(mod_text)
+            if m:
+                value = float(m.group(1))
+                is_pct = "%" in mod_text or "increased" in text_lower or "reduced" in text_lower
+                threshold = self._HIGH_ROLL_PCT_THRESHOLD if is_pct else self._HIGH_ROLL_THRESHOLD
+                if value >= threshold:
+                    return False  # High roll — don't dismiss
         return True
 
     def _save_debug_text(self, text: str, cx: int, cy: int):
