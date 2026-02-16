@@ -19,6 +19,8 @@ import requests
 from config import (
     TRADE_STATS_URL,
     TRADE_STATS_CACHE_FILE,
+    TRADE_ITEMS_URL,
+    TRADE_ITEMS_CACHE_FILE,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,16 @@ class ParsedMod:
     mod_type: str      # "explicit" or "implicit"
 
 
+# Word pairs where the game uses one for positive and the other for negative
+# values of the same stat. "increased" in the template also matches "reduced", etc.
+_OPPOSITE_WORDS = {
+    "increased": "reduced",
+    "reduced": "increased",
+    "more": "less",
+    "less": "more",
+}
+
+
 def _template_to_regex(text: str) -> Optional[re.Pattern]:
     """
     Convert a trade API stat text template to a regex.
@@ -50,6 +62,8 @@ def _template_to_regex(text: str) -> Optional[re.Pattern]:
 
     The '#' placeholder is replaced with a number capture group.
     Special regex chars are escaped, whitespace is made flexible.
+    "increased"/"reduced" and "more"/"less" are made interchangeable
+    so that the same stat matches both directions.
     """
     if not text or "#" not in text:
         return None
@@ -67,6 +81,17 @@ def _template_to_regex(text: str) -> Optional[re.Pattern]:
     # Join parts with a number capture group for each '#'
     number_group = r"(\d+(?:\.\d+)?)"
     pattern_str = number_group.join(escaped)
+
+    # Allow "increased"↔"reduced" and "more"↔"less" to be interchangeable
+    for word, opposite in _OPPOSITE_WORDS.items():
+        escaped_word = re.escape(word)
+        if re.search(escaped_word, pattern_str, re.IGNORECASE):
+            pattern_str = re.sub(
+                escaped_word,
+                "(?:%s|%s)" % (re.escape(word), re.escape(opposite)),
+                pattern_str,
+                flags=re.IGNORECASE,
+            )
 
     # Optional leading +/- sign (many mods start with +N or -N)
     pattern_str = r"^[\+\-]?" + pattern_str + r"$"
@@ -90,24 +115,26 @@ class ModParser:
     def __init__(self):
         self._stats: List[StatDefinition] = []
         self._loaded = False
+        # Base types for resolving magic item names → base_type
+        # Sorted longest-first so "Stellar Amulet" matches before "Amulet"
+        self._base_types: List[str] = []
 
     @property
     def loaded(self) -> bool:
         return self._loaded
 
     def load_stats(self):
-        """Load stat definitions from disk cache or trade API."""
+        """Load stat definitions and base types from disk cache or trade API."""
         # Try disk cache first
         if self._load_from_disk():
             self._loaded = True
-            return
-
-        # Fetch from API
-        if self._fetch_from_api():
+        elif self._fetch_from_api():
             self._loaded = True
-            return
+        else:
+            logger.warning("ModParser: no stat definitions available — rare pricing disabled")
 
-        logger.warning("ModParser: no stat definitions available — rare pricing disabled")
+        # Load base types (for magic item base_type resolution)
+        self._load_base_types()
 
     def parse_mods(self, item) -> List[ParsedMod]:
         """
@@ -141,6 +168,8 @@ class ModParser:
         # Filter stats by mod type for efficiency
         type_filter = mod_type if mod_type in ("explicit", "implicit") else None
 
+        text_lower = text.lower()
+
         for stat in self._stats:
             if type_filter and stat.type != type_filter:
                 continue
@@ -159,6 +188,17 @@ class ModParser:
                         except ValueError:
                             continue
 
+                # Negate value when the mod uses the opposite word from the
+                # template (e.g. template says "increased", mod says "reduced")
+                stat_lower = stat.text.lower()
+                for positive, negative in (("increased", "reduced"), ("more", "less")):
+                    if positive in stat_lower and negative in text_lower:
+                        value = -value
+                        break
+                    if negative in stat_lower and positive in text_lower:
+                        value = -value
+                        break
+
                 return ParsedMod(
                     raw_text=raw_text,
                     stat_id=stat.id,
@@ -167,6 +207,101 @@ class ModParser:
                 )
 
         return None
+
+    # ─── Base Type Resolution ─────────────────────
+
+    def resolve_base_type(self, magic_name: str) -> Optional[str]:
+        """
+        Extract the base type from a magic item name.
+
+        Magic items combine prefix + base type + suffix into one name, e.g.
+        "Mystic Stellar Amulet of the Fox". This finds the longest known
+        base type that appears as a substring.
+
+        Returns the base type string or None.
+        """
+        if not self._base_types or not magic_name:
+            return None
+
+        name_lower = magic_name.lower()
+
+        # _base_types is sorted longest-first, so the first match
+        # is the most specific (e.g. "Stellar Amulet" before "Amulet")
+        for bt in self._base_types:
+            if bt.lower() in name_lower:
+                logger.debug(f"Resolved base type: '{magic_name}' → '{bt}'")
+                return bt
+
+        logger.debug(f"Could not resolve base type from '{magic_name}'")
+        return None
+
+    def _load_base_types(self):
+        """Load base type list from disk cache or trade API items endpoint."""
+        if self._load_base_types_from_disk():
+            return
+        self._fetch_base_types_from_api()
+
+    def _load_base_types_from_disk(self) -> bool:
+        """Load cached base types from disk."""
+        try:
+            if not TRADE_ITEMS_CACHE_FILE.exists():
+                return False
+
+            age = time.time() - TRADE_ITEMS_CACHE_FILE.stat().st_mtime
+            if age > STATS_CACHE_MAX_AGE:
+                return False
+
+            with open(TRADE_ITEMS_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            self._build_base_types(data)
+            logger.info(f"ModParser: loaded {len(self._base_types)} base types from disk cache")
+            return True
+        except Exception as e:
+            logger.warning(f"ModParser: base types disk cache load failed: {e}")
+            return False
+
+    def _fetch_base_types_from_api(self) -> bool:
+        """Fetch item base types from the trade API items endpoint."""
+        try:
+            logger.info("ModParser: fetching base types from trade API...")
+            resp = requests.get(
+                TRADE_ITEMS_URL,
+                timeout=15,
+                headers={"User-Agent": "POE2PriceOverlay/1.0"},
+            )
+            if resp.status_code != 200:
+                logger.warning(f"ModParser: items API returned HTTP {resp.status_code}")
+                return False
+
+            data = resp.json()
+
+            TRADE_ITEMS_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(TRADE_ITEMS_CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            self._build_base_types(data)
+            logger.info(f"ModParser: fetched {len(self._base_types)} base types from API")
+            return True
+        except Exception as e:
+            logger.warning(f"ModParser: items API fetch failed: {e}")
+            return False
+
+    def _build_base_types(self, data: dict):
+        """Extract unique base type names from the items API response.
+
+        The API returns categories, each with entries that have a "type" field
+        (the base type name). We collect all unique non-empty type values and
+        sort them longest-first so substring matching prefers specific types.
+        """
+        types = set()
+        for group in data.get("result", []):
+            for entry in group.get("entries", []):
+                base = entry.get("type", "")
+                if base:
+                    types.add(base)
+        # Sort longest-first for greedy substring matching
+        self._base_types = sorted(types, key=len, reverse=True)
 
     # ─── Data Loading ─────────────────────────────
 

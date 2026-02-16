@@ -155,7 +155,7 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 ## Known Issues / Technical Debt
 1. **Rate limiting under burst:** The progressive search can make 2-3 API calls per item. Testing multiple items rapidly can trigger 60s rate limit from trade API. Not an issue in normal single-item usage.
 2. **"Grants Skill:" lines** are skipped via `_SKIP_LINE_RE` but unusual skill formats might slip through
-3. **Magic items without base_type:** Some magic items in POE2 don't have a separate base_type line in clipboard text. If `base_type` is empty, trade API query fails with "no base_type"
+3. ~~**Magic items without base_type**~~ — Fixed: `ModParser.resolve_base_type()` fetches all base types from the trade API items endpoint, caches to disk, and extracts the base type from a magic item name by longest substring match (e.g., "Mystic Stellar Amulet of the Fox" → "Stellar Amulet")
 4. **Common mod classification** is heuristic-based — may occasionally misclassify an unusual valuable mod as "common"
 5. ~~**README.md is outdated**~~ — Fixed: rewritten for clipboard-based architecture
 

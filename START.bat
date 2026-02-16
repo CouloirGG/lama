@@ -1,12 +1,12 @@
 @echo off
+chcp 65001 >nul 2>&1
 title POE2 Price Overlay
 color 0A
 
+
 echo.
-echo   ╔══════════════════════════════════════════════╗
-echo   ║        POE2 Price Overlay                    ║
-echo   ║        Real-time item pricing                ║
-echo   ╚══════════════════════════════════════════════╝
+echo  POE2 Price Overlay
+echo  Real-time item pricing
 echo.
 
 :: ─── Check Python ───────────────────────────────────
@@ -57,7 +57,7 @@ if not exist "%LEAGUE_FILE%" (
     echo   Which league are you playing?
     echo   ────────────────────────────────────────────
     echo.
-    echo   1. Fate of the Vaal (current temp league)
+    echo   1. Fate of the Vaal [current league]
     echo   2. Standard
     echo   3. Hardcore Fate of the Vaal
     echo   4. Hardcore
@@ -75,17 +75,11 @@ set /p LEAGUE=<"%LEAGUE_FILE%"
 :: ─── Launch ─────────────────────────────────────────
 color 0A
 echo.
-echo   ════════════════════════════════════════════
-echo   Starting POE2 Price Overlay
-echo   League: %LEAGUE%
-echo   ════════════════════════════════════════════
+echo  League: %LEAGUE%
+echo  ──────────────────────────────
 echo.
-echo   • Set POE2 to Windowed Fullscreen
-echo   • Copy items with Ctrl+C in POE2 to get prices
-echo   • Hover over items to see prices
-echo   • Press Ctrl+C here to stop
-echo.
-echo   ────────────────────────────────────────────
+echo  Hover over items for prices
+echo  Close window to stop
 echo.
 
 cd /d "%~dp0"

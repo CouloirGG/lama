@@ -41,6 +41,7 @@ class RarePriceResult:
     num_results: int     # total results found
     display: str         # "~5-8 Divine"
     tier: str            # "high"/"good"/"decent"/"low"
+    estimate: bool = False  # True when no exact match — conservative lower bound
 
 
 class TradeClient:
@@ -65,18 +66,23 @@ class TradeClient:
         self._last_request_time = 0.0
         self._rate_lock = threading.Lock()
         self._min_interval = 1.0 / TRADE_MAX_REQUESTS_PER_SECOND
+        # When the trade API returns 429, don't retry until this time
+        self._rate_limited_until = 0.0
 
         # In-memory cache: fingerprint → (result, timestamp)
         self._cache: dict = {}
         self._cache_lock = threading.Lock()
 
-    def price_rare_item(self, item, mods: List[ParsedMod]) -> Optional[RarePriceResult]:
+    def price_rare_item(self, item, mods: List[ParsedMod],
+                        is_stale=None) -> Optional[RarePriceResult]:
         """
         Price a rare item by querying the trade API.
 
         Args:
-            item: ParsedItem with base_type
+            item: ParsedItem with base_type and quality
             mods: List of ParsedMod from ModParser
+            is_stale: Optional callback that returns True if this query has been
+                superseded by a newer detection (abort early to save API calls)
 
         Returns:
             RarePriceResult or None if pricing fails
@@ -90,14 +96,26 @@ class TradeClient:
             logger.debug("TradeClient: no base_type")
             return None
 
-        # Check cache
-        fingerprint = self._make_fingerprint(base_type, mods)
+        quality = getattr(item, "quality", 0) or 0
+
+        # Check cache (includes quality in fingerprint)
+        fingerprint = self._make_fingerprint(base_type, mods, quality)
         cached = self._check_cache(fingerprint)
         if cached:
             logger.debug(f"TradeClient: cache hit for {base_type}")
             return cached
 
         try:
+            # Bail early if we're in a rate-limit cooldown
+            if self._is_rate_limited():
+                wait = int(self._rate_limited_until - time.time())
+                logger.info(f"TradeClient: rate limited, {wait}s remaining")
+                return RarePriceResult(
+                    min_price=0, max_price=0, num_results=0,
+                    display=f"Rate limited ({wait}s)",
+                    tier="low",
+                )
+
             # Build stat filters once, then try progressively looser queries
             # Include explicit, implicit, fractured, and desecrated mods.
             # Skip rune (socketed), enchant (changeable), and crafted (bench).
@@ -105,8 +123,27 @@ class TradeClient:
             priceable = [m for m in mods if m.mod_type in _PRICEABLE_TYPES]
             stat_filters = self._build_stat_filters(priceable)
 
-            search_result = self._search_progressive(base_type, stat_filters, priceable)
+            # Log what we're querying for diagnostics
+            skipped = [m for m in mods if m.mod_type not in _PRICEABLE_TYPES]
+            if skipped:
+                logger.info(
+                    f"TradeClient: skipped {len(skipped)} non-priceable: "
+                    + ", ".join(f"[{m.mod_type}] {m.raw_text}" for m in skipped))
+            for m in priceable:
+                logger.info(
+                    f"TradeClient: mod [{m.mod_type}] {m.raw_text} "
+                    f"→ {m.stat_id} (val={m.value})")
+
+            search_result, exact_match = self._search_progressive(
+                base_type, stat_filters, priceable, quality=quality,
+                is_stale=is_stale,
+            )
             if not search_result:
+                return None
+
+            # Abort if a newer item detection superseded us
+            if is_stale and is_stale():
+                logger.debug(f"TradeClient: query stale after search, aborting")
                 return None
 
             query_id = search_result.get("id")
@@ -123,8 +160,16 @@ class TradeClient:
             if not listings:
                 return None
 
-            # Extract prices and build result
-            result = self._build_result(listings, total)
+            # Extract prices and build result.
+            # When mods were dropped to find results, comparables are
+            # strictly worse than the actual item — use upper prices.
+            is_estimate = not exact_match
+            result = self._build_result(
+                listings, total, lower_bound=is_estimate)
+            if is_estimate and result:
+                logger.info(
+                    f"TradeClient: no exact match — showing conservative "
+                    f"estimate from similar items missing 1+ mod")
             if result:
                 self._put_cache(fingerprint, result)
                 logger.info(
@@ -144,8 +189,43 @@ class TradeClient:
         """Build stat filter dicts from priceable mods."""
         stat_filters = []
         for mod in priceable:
-            min_val = self._compute_min_value(mod.value)
-            stat_filters.append({"id": mod.stat_id, "value": {"min": min_val}})
+            if mod.value >= 0:
+                min_val = self._compute_min_value(mod.value)
+                stat_filters.append({"id": mod.stat_id, "value": {"min": min_val}})
+            else:
+                max_val = self._compute_min_value(mod.value)
+                stat_filters.append({"id": mod.stat_id, "value": {"max": max_val}})
+        return stat_filters
+
+    @staticmethod
+    def _build_stat_filters_custom(mods: List[ParsedMod], multiplier: float) -> list:
+        """Build stat filters with a custom value multiplier."""
+        stat_filters = []
+        for mod in mods:
+            val = mod.value * multiplier
+            rounded = int(val) if val == int(val) else round(val, 1)
+            if mod.value >= 0:
+                stat_filters.append({"id": mod.stat_id, "value": {"min": rounded}})
+            else:
+                stat_filters.append({"id": mod.stat_id, "value": {"max": rounded}})
+        return stat_filters
+
+    def _build_stat_filters_relaxed(self, priceable: List[ParsedMod]) -> list:
+        """Build stat filters with much looser value minimums (60%).
+
+        Used when normal minimums return 0 results with all mods required.
+        Keeps ALL mods in the query (preserving item identity) while accepting
+        items with lower rolls — better than dropping mods entirely.
+        """
+        _RELAXED_MULTIPLIER = 0.6
+        stat_filters = []
+        for mod in priceable:
+            val = mod.value * _RELAXED_MULTIPLIER
+            rounded = int(val) if val == int(val) else round(val, 1)
+            if mod.value >= 0:
+                stat_filters.append({"id": mod.stat_id, "value": {"min": rounded}})
+            else:
+                stat_filters.append({"id": mod.stat_id, "value": {"max": rounded}})
         return stat_filters
 
     @staticmethod
@@ -155,28 +235,40 @@ class TradeClient:
         Low values (1-10) use tight matching because they represent discrete
         tiers where each point matters enormously (e.g., +6 vs +7 skills).
         Higher values use progressively looser matching.
+
+        For negative values (e.g. "reduced" mods), uses the absolute value
+        for tier selection, then applies to the original sign.
         """
-        if value <= 10:
+        abs_val = abs(value)
+        if abs_val <= 10:
             multiplier = 0.95
-        elif value <= 50:
+        elif abs_val <= 50:
             multiplier = 0.90
         else:
             multiplier = TRADE_MOD_MIN_MULTIPLIER  # 0.8
-        min_val = value * multiplier
-        return int(min_val) if min_val == int(min_val) else round(min_val, 1)
+        result = value * multiplier
+        return int(result) if result == int(result) else round(result, 1)
 
     def _build_query(self, base_type: str, stat_filters: list,
-                     match_mode: str = "and", min_count: int = 0) -> dict:
+                     match_mode: str = "and", min_count: int = 0,
+                     quality: int = 0) -> dict:
         """Build a trade API search query.
 
         Args:
             match_mode: "and" (all must match) or "count" (at least min_count)
+            quality: item quality — included as a min filter when > 0
         """
         if match_mode == "count" and min_count > 0:
             stat_group = {"type": "count", "value": {"min": min_count},
                           "filters": stat_filters}
         else:
             stat_group = {"type": "and", "filters": stat_filters}
+
+        misc_filters = {
+            "mirrored": {"option": "false"},
+        }
+        if quality > 0:
+            misc_filters["quality"] = {"min": quality}
 
         return {
             "query": {
@@ -190,9 +282,52 @@ class TradeClient:
                         }
                     },
                     "misc_filters": {
+                        "filters": misc_filters,
+                    },
+                },
+            },
+            "sort": {"price": "asc"},
+        }
+
+    def _build_hybrid_query(self, base_type: str, key_filters: list,
+                            common_filters: list, min_common: int,
+                            quality: int = 0) -> dict:
+        """Build a query with key mods as "and" + common mods as "count".
+
+        This ensures price-driving mods always match while allowing
+        some common mods to be absent.
+        """
+        stat_groups = []
+
+        if key_filters:
+            stat_groups.append({"type": "and", "filters": key_filters})
+
+        if common_filters and min_common > 0:
+            stat_groups.append({
+                "type": "count",
+                "value": {"min": min_common},
+                "filters": common_filters,
+            })
+
+        misc_filters = {
+            "mirrored": {"option": "false"},
+        }
+        if quality > 0:
+            misc_filters["quality"] = {"min": quality}
+
+        return {
+            "query": {
+                "status": {"option": "any"},
+                "type": base_type,
+                "stats": stat_groups,
+                "filters": {
+                    "type_filters": {
                         "filters": {
-                            "mirrored": {"option": "false"},
+                            "rarity": {"option": "nonunique"},
                         }
+                    },
+                    "misc_filters": {
+                        "filters": misc_filters,
                     },
                 },
             },
@@ -212,90 +347,181 @@ class TradeClient:
     )
 
     def _classify_filters(self, priceable: List[ParsedMod], stat_filters: list):
-        """Split stat filters into key (price-driving) and common (filler)."""
-        key = []
-        common = []
+        """Split stat filters into key (price-driving) and common (filler).
+
+        Returns:
+            (key_mods, common_mods, key_filters, common_filters)
+            key_mods/common_mods: ParsedMod lists (for rebuilding with different multipliers)
+            key_filters/common_filters: pre-built stat filter dicts (standard multiplier)
+        """
+        key_mods = []
+        common_mods = []
+        key_filters = []
+        common_filters = []
         for mod, sf in zip(priceable, stat_filters):
             text_lower = mod.raw_text.lower()
             is_common = any(pat in text_lower for pat in self._COMMON_MOD_PATTERNS)
             if is_common:
-                common.append(sf)
+                common_mods.append(mod)
+                common_filters.append(sf)
             else:
-                key.append(sf)
-        return key, common
+                key_mods.append(mod)
+                key_filters.append(sf)
+        return key_mods, common_mods, key_filters, common_filters
+
+    # Queries returning more results than this are considered too loose —
+    # the price will reflect generic items rather than this specific item.
+    _TOO_MANY_RESULTS = 50
 
     def _search_progressive(self, base_type: str, stat_filters: list,
-                            priceable: List[ParsedMod] = None) -> Optional[dict]:
-        """Find the best price query by progressively relaxing filters.
+                            priceable: List[ParsedMod] = None,
+                            quality: int = 0, is_stale=None):
+        """Find the best price query using minimal API calls.
 
-        Strategy:
-        1. Try "and" with ALL mods (exact match, best accuracy)
-        2. Try "and" with only KEY mods (drop common filler mods)
-        3. Progressively remove key mods until results are found
+        Returns:
+            (search_result, exact_match) tuple.
+            exact_match is True when ALL mods matched (count n/n or "and"),
+            False when mods were dropped (comparables are worse than actual item).
+            Returns (None, False) when no results found.
         """
+        q = quality
+
+        def _stale():
+            if is_stale and is_stale():
+                logger.debug("TradeClient: search aborted (stale)")
+                return True
+            return False
+
         n = len(stat_filters)
-        if n <= 3:
-            return self._do_search(self._build_query(base_type, stat_filters))
 
-        # Step 1: Try all mods
-        query = self._build_query(base_type, stat_filters, "and")
-        result = self._do_search(query)
-        if result and result.get("result"):
-            logger.debug(f"TradeClient: exact match ({result.get('total', 0)} results)")
-            return result
-
-        # Step 2: Classify into key vs common, try key mods only
-        if priceable and len(priceable) == len(stat_filters):
-            key_filters, common_filters = self._classify_filters(priceable, stat_filters)
-        else:
-            key_filters, common_filters = stat_filters, []
-
-        if key_filters and len(key_filters) < n:
-            logger.debug(
-                f"TradeClient: trying {len(key_filters)} key mods "
-                f"(dropped {len(common_filters)} common)"
-            )
-            query = self._build_query(base_type, key_filters, "and")
+        # Small mod count — just try exact "and" match
+        if n <= 4:
+            query = self._build_query(base_type, stat_filters, quality=q)
             result = self._do_search(query)
             if result and result.get("result"):
-                logger.debug(
-                    f"TradeClient: key-mods hit ({result.get('total', 0)} results)"
-                )
-                return result
-
-            # Step 3: Still 0 — try dropping key mods one at a time from the end
-            # (keep the first/most distinctive mods)
-            for drop in range(1, len(key_filters) - 1):
-                subset = key_filters[:len(key_filters) - drop]
-                if len(subset) < 2:
-                    break
-                query = self._build_query(base_type, subset, "and")
+                logger.info(
+                    f"TradeClient: exact match ({result.get('total', 0)} results)")
+                return result, True
+            if _stale():
+                return None, False
+            # Fall through to count for small sets too
+            if n >= 3:
+                query = self._build_query(
+                    base_type, stat_filters, "count", n - 1, quality=q)
                 result = self._do_search(query)
                 if result and result.get("result"):
-                    logger.debug(
-                        f"TradeClient: {len(subset)}-key-mods hit "
-                        f"({result.get('total', 0)} results)"
-                    )
-                    return result
+                    logger.info(
+                        f"TradeClient: count({n-1}/{n}) = "
+                        f"{result.get('total', 0)} results")
+                    return result, False
+            return None, False
 
-        # Step 4: Last resort — count-based with all filters
-        min_count = max(2, n - 2)
-        query = self._build_query(base_type, stat_filters, "count", min_count)
+        # For 5+ mods: use a multi-group strategy that preserves key mods.
+
+        # Classify into key vs common
+        if priceable and len(priceable) == len(stat_filters):
+            key_mods, common_mods, key_filters, common_filters = \
+                self._classify_filters(priceable, stat_filters)
+        else:
+            key_mods, common_mods = priceable or [], []
+            key_filters, common_filters = stat_filters, []
+
+        n_key = len(key_filters)
+        n_common = len(common_filters)
+
+        # Step 1: Try count(n/n) at tight minimums first — if an exact
+        # match exists at 90%, that's the best price.
+        tight_filters = self._build_stat_filters_custom(priceable, 0.90)
+        query = self._build_query(
+            base_type, tight_filters, "count", n, quality=q)
         result = self._do_search(query)
         if result and result.get("result"):
-            logger.debug(
-                f"TradeClient: count({min_count}/{n}) fallback "
-                f"({result.get('total', 0)} results)"
-            )
-            return result
+            total = result.get("total", 0)
+            logger.info(f"TradeClient: count({n}/{n}) @90% = {total} results")
+            if total <= self._TOO_MANY_RESULTS:
+                return result, True  # exact match — all mods matched
 
-        logger.debug(f"TradeClient: all queries returned 0 for {base_type}")
-        return None
+        if _stale():
+            return None, False
+
+        # Step 2: count(n-1) at progressively looser minimums.
+        # Results are LOWER BOUNDS — items are missing one mod, so the
+        # actual item is strictly better. Flag as not exact.
+        best = None
+        for mult in (0.90, 0.85, 0.80):
+            if _stale():
+                return None, False
+            filters_at = self._build_stat_filters_custom(priceable, mult)
+            query = self._build_query(
+                base_type, filters_at, "count", n - 1, quality=q)
+            result = self._do_search(query)
+            if result and result.get("result"):
+                total = result.get("total", 0)
+                pct = int(mult * 100)
+                logger.info(
+                    f"TradeClient: count({n-1}/{n}) @{pct}% = {total} results")
+                if total <= self._TOO_MANY_RESULTS:
+                    return result, False  # mods dropped — lower bound
+                # Too many — use as best so far, stop loosening
+                if best is None:
+                    best = result
+                break
+
+        if best:
+            return best, False
+
+        # Step 3: count(n-2), count(n-3), ... with standard minimums
+        floor = max(2, n // 2)
+        for min_count in range(n - 2, floor - 1, -1):
+            if _stale():
+                return None, False
+            query = self._build_query(
+                base_type, stat_filters, "count", min_count, quality=q)
+            result = self._do_search(query)
+            if not result or not result.get("result"):
+                continue
+
+            total = result.get("total", 0)
+            logger.info(f"TradeClient: count({min_count}/{n}) = {total} results")
+
+            if total <= self._TOO_MANY_RESULTS:
+                return result, False
+
+            if best is None:
+                best = result
+            break
+
+        if best:
+            return best, False
+
+        logger.info(f"TradeClient: all queries returned 0 for {base_type}")
+        return None, False
 
     # ─── API Calls ────────────────────────────────
 
+    # Don't wait longer than this for a rate-limit retry (seconds).
+    # Avoids "Checking..." hanging for 60s — user can re-hover instead.
+    _MAX_RETRY_WAIT = 5
+
+    def _is_rate_limited(self) -> bool:
+        """Check if we're in a rate-limit cooldown period."""
+        if time.time() < self._rate_limited_until:
+            return True
+        return False
+
+    def _set_rate_limited(self, retry_after: int):
+        """Record a rate-limit cooldown so all calls bail immediately."""
+        self._rate_limited_until = time.time() + retry_after
+        logger.warning(
+            f"TradeClient: rate limited for {retry_after}s, "
+            f"pausing all requests"
+        )
+
     def _do_search(self, query: dict) -> Optional[dict]:
         """POST search query to trade API. Returns search result or None."""
+        if self._is_rate_limited():
+            return None
+
         url = f"{TRADE_API_BASE}/search/poe2/{self.league}"
         self._rate_limit()
 
@@ -303,8 +529,10 @@ class TradeClient:
             resp = self._session.post(url, json=query, timeout=5)
 
             if resp.status_code == 429:
-                # Rate limited — try once more after Retry-After
                 retry_after = int(resp.headers.get("Retry-After", 2))
+                if retry_after > self._MAX_RETRY_WAIT:
+                    self._set_rate_limited(retry_after)
+                    return None
                 logger.warning(f"TradeClient: rate limited, waiting {retry_after}s")
                 time.sleep(retry_after)
                 self._rate_limit()
@@ -327,6 +555,8 @@ class TradeClient:
         """GET listing details for the given result IDs."""
         if not result_ids:
             return None
+        if self._is_rate_limited():
+            return None
 
         ids_str = ",".join(result_ids)
         url = f"{TRADE_API_BASE}/fetch/{ids_str}"
@@ -337,6 +567,9 @@ class TradeClient:
 
             if resp.status_code == 429:
                 retry_after = int(resp.headers.get("Retry-After", 2))
+                if retry_after > self._MAX_RETRY_WAIT:
+                    self._set_rate_limited(retry_after)
+                    return None
                 logger.warning(f"TradeClient: fetch rate limited, waiting {retry_after}s")
                 time.sleep(retry_after)
                 self._rate_limit()
@@ -358,8 +591,15 @@ class TradeClient:
 
     # ─── Price Extraction ─────────────────────────
 
-    def _build_result(self, listings: list, total: int) -> Optional[RarePriceResult]:
-        """Extract prices from listings and build a RarePriceResult."""
+    def _build_result(self, listings: list, total: int,
+                      lower_bound: bool = False) -> Optional[RarePriceResult]:
+        """Extract prices from listings and build a RarePriceResult.
+
+        Args:
+            lower_bound: When True, comparables are worse than the actual item
+                (mods were dropped to find results). Uses upper prices and
+                shows "X+" instead of "X-Y" to indicate a floor price.
+        """
         divine_to_chaos = self._divine_to_chaos_fn()
         # Collect (divine_value, original_amount, original_currency) for display
         prices = []
@@ -385,19 +625,29 @@ class TradeClient:
 
         prices.sort(key=lambda p: p[0])
 
-        # Skip cheapest ~25% as outliers (mispriced or lower-quality matches)
-        if len(prices) >= 5:
+        if lower_bound:
+            # Comparables are strictly worse — the actual item has MORE
+            # mods so its value is ABOVE the most expensive comparable.
+            # Use the max price as the floor estimate.
+            # Skip to the last entry (most expensive comparable).
+            prices = prices[-1:]
+        elif len(prices) >= 5:
+            # Skip cheapest ~25% as outliers (mispriced or lower-quality)
             skip = len(prices) // 4
             prices = prices[skip:]
 
         min_divine, min_amount, min_currency = prices[0]
         max_divine, max_amount, max_currency = prices[-1]
 
-        # Build display string using original currency for readability
-        display = self._format_display(
-            min_divine, max_divine,
-            min_amount, max_amount, min_currency, max_currency,
-        )
+        # Build display string
+        if lower_bound:
+            display = self._format_display_lower_bound(
+                min_divine, min_amount, min_currency)
+        else:
+            display = self._format_display(
+                min_divine, max_divine,
+                min_amount, max_amount, min_currency, max_currency,
+            )
         tier = self._determine_tier(min_divine)
 
         return RarePriceResult(
@@ -406,6 +656,7 @@ class TradeClient:
             num_results=total,
             display=display,
             tier=tier,
+            estimate=lower_bound,
         )
 
     def _normalize_to_divine(self, amount: float, currency: str, divine_to_chaos: float) -> Optional[float]:
@@ -467,6 +718,32 @@ class TradeClient:
             return f"~{chaos_min:.0f} Chaos"
         return f"~{chaos_min:.0f}-{chaos_max:.0f} Chaos"
 
+    @staticmethod
+    def _fmt_price(val: float) -> str:
+        """Format a price value, dropping unnecessary '.0'."""
+        if val == int(val):
+            return str(int(val))
+        return f"{val:.1f}"
+
+    def _format_display_lower_bound(self, divine_val: float,
+                                    amount: float, currency: str) -> str:
+        """Format a lower-bound price (item is better than comparables).
+
+        Shows 'X+ Divine (est.)' to indicate the price is a conservative
+        estimate — no exact comparables exist on the trade site.
+        """
+        if currency == "divine":
+            return f"{self._fmt_price(amount)}+ Divine (est.)"
+
+        # Normalize to divine for display
+        if divine_val >= 1.0:
+            return f"{self._fmt_price(divine_val)}+ Divine (est.)"
+
+        # Show in chaos
+        divine_to_chaos = self._divine_to_chaos_fn()
+        chaos_val = divine_val * divine_to_chaos
+        return f"{int(chaos_val)}+ Chaos (est.)"
+
     def _determine_tier(self, min_price: float) -> str:
         """Determine price tier from divine value."""
         if min_price >= 5.0:
@@ -491,9 +768,12 @@ class TradeClient:
 
     # ─── Caching ──────────────────────────────────
 
-    def _make_fingerprint(self, base_type: str, mods: List[ParsedMod]) -> str:
-        """Create a cache key from base type and mods."""
+    def _make_fingerprint(self, base_type: str, mods: List[ParsedMod],
+                          quality: int = 0) -> str:
+        """Create a cache key from base type, mods, and quality."""
         parts = [base_type.lower()]
+        if quality > 0:
+            parts.append(f"q{quality}")
         for mod in sorted(mods, key=lambda m: m.stat_id):
             # Round values to reduce cache misses for similar items
             rounded = round(mod.value / 5) * 5
