@@ -425,6 +425,8 @@ class POE2PriceOverlay:
         """
         display_name = item.base_type or item.name
         sockets = item.sockets
+        ilvl = getattr(item, "item_level", 0) or 0
+        tag = f"{sockets}S, ilvl {ilvl}" if ilvl > 0 else f"{sockets}S"
 
         with self._trade_gen_lock:
             self._trade_generation += 1
@@ -435,7 +437,7 @@ class POE2PriceOverlay:
                 return my_gen != self._trade_generation
 
         self.overlay.show_price(
-            text=f"{display_name} ({sockets}S): Checking...",
+            text=f"{display_name} ({tag}): Checking...",
             tier="low",
             cursor_x=cursor_x,
             cursor_y=cursor_y,
@@ -452,7 +454,7 @@ class POE2PriceOverlay:
                     return
                 if result:
                     self.overlay.show_price(
-                        text=f"{display_name} ({sockets}S): {result.display}",
+                        text=f"{display_name} ({tag}): {result.display}",
                         tier=result.tier,
                         cursor_x=cursor_x,
                         cursor_y=cursor_y,

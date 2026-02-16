@@ -193,9 +193,10 @@ class TradeClient:
             return None
 
         sockets = getattr(item, "sockets", 0) or 0
+        item_level = getattr(item, "item_level", 0) or 0
 
-        # Cache key: base + sockets
-        cache_key = f"base:{base_type}:{sockets}"
+        # Cache key: base + sockets + ilvl
+        cache_key = f"base:{base_type}:{sockets}:{item_level}"
         cached = self._check_cache(cache_key)
         if cached:
             logger.debug(f"TradeClient: cache hit for base {base_type}")
@@ -211,11 +212,11 @@ class TradeClient:
 
             logger.info(
                 f"TradeClient: pricing base {base_type} "
-                f"(sockets={sockets})"
+                f"(sockets={sockets}, ilvl={item_level})"
             )
 
-            # Build a simple query: base type + socket count
-            query = self._build_base_query(base_type, sockets)
+            # Build a simple query: base type + socket count + ilvl
+            query = self._build_base_query(base_type, sockets, item_level)
 
             if is_stale and is_stale():
                 return None
@@ -252,8 +253,15 @@ class TradeClient:
             logger.warning(f"TradeClient: base pricing failed for {base_type}: {e}")
             return None
 
-    def _build_base_query(self, base_type: str, sockets: int = 0) -> dict:
-        """Build a trade API query for a base item (no mods, just type + sockets)."""
+    def _build_base_query(self, base_type: str, sockets: int = 0,
+                          item_level: int = 0) -> dict:
+        """Build a trade API query for a base item (no mods, just type + sockets + ilvl)."""
+        misc = {
+            "mirrored": {"option": "false"},
+        }
+        if item_level > 0:
+            misc["ilvl"] = {"min": item_level}
+
         filters = {
             "type_filters": {
                 "filters": {
@@ -261,9 +269,7 @@ class TradeClient:
                 }
             },
             "misc_filters": {
-                "filters": {
-                    "mirrored": {"option": "false"},
-                },
+                "filters": misc,
             },
         }
 
