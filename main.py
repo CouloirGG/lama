@@ -181,13 +181,56 @@ class POE2PriceOverlay:
             logger.info(
                 f"Item: {item.name} ({item.rarity})"
                 + (f" base={item.base_type}" if item.base_type else "")
+                + (" [unidentified]" if item.unidentified else "")
             )
+
+            # Unidentified items: can't price rares/magic without mods
+            if item.unidentified:
+                base = item.base_type or item.name
+
+                # Only look up possible uniques when the rarity IS unique
+                if item.rarity == "unique":
+                    result = self.price_cache.lookup_unidentified(base)
+                    if result:
+                        logger.info(
+                            f">>> PRICE [unid] {base}: {result['display']} "
+                            f"({result['name']})"
+                        )
+                        self.overlay.show_price(
+                            text=f"{base} (unid): {result['display']}",
+                            tier=result["tier"],
+                            cursor_x=cursor_x,
+                            cursor_y=cursor_y,
+                            price_divine=result.get("divine_value", 0),
+                        )
+                        self.stats["successful_lookups"] += 1
+                        return
+
+                # Rare/magic/unknown unidentified — no mods to price
+                logger.info(f"Unidentified {item.rarity}: {base}")
+                return
 
             # Step 2: Non-unique items with mods → trade API (skip cache which
             # would match base_type to an unrelated unique's price)
             if (item.rarity in ("rare", "magic") and item.mods
                     and self.mod_parser.loaded):
+                # Skip trade API for magic items with only common mods
+                if item.rarity == "magic" and self._has_only_common_mods(item.mods):
+                    display_name = item.name or item.base_type
+                    logger.info(f"Magic item with common mods: {display_name}")
+                    self.overlay.show_price(
+                        text=f"{display_name}: Low value",
+                        tier="low",
+                        cursor_x=cursor_x,
+                        cursor_y=cursor_y,
+                    )
+                    return
                 self._price_rare_async(item, cursor_x, cursor_y)
+                return
+
+            # Step 2b: Normal/magic items with sockets → trade API for base pricing
+            if (item.rarity in ("normal", "magic") and item.sockets >= 2):
+                self._price_base_async(item, cursor_x, cursor_y)
                 return
 
             # Step 3: Static price lookup (uniques, currency, gems)
@@ -272,6 +315,12 @@ class POE2PriceOverlay:
                 parsed_mods = self.mod_parser.parse_mods(item)
                 if not parsed_mods:
                     logger.info(f"No mods matched for {display_name}")
+                    self.overlay.show_price(
+                        text=f"{display_name}: Low value",
+                        tier="low",
+                        cursor_x=cursor_x,
+                        cursor_y=cursor_y,
+                    )
                     self.stats["not_found"] += 1
                     return
 
@@ -293,8 +342,11 @@ class POE2PriceOverlay:
                     )
                     self.stats["successful_lookups"] += 1
                 else:
+                    # Magic items with no trade results are vendor trash;
+                    # rare items might just be unusual/unlisted
+                    no_price_text = "Low value" if item.rarity == "magic" else "No price"
                     self.overlay.show_price(
-                        text=f"{display_name}: No price",
+                        text=f"{display_name}: {no_price_text}",
                         tier="low",
                         cursor_x=cursor_x,
                         cursor_y=cursor_y,
@@ -306,6 +358,92 @@ class POE2PriceOverlay:
 
         thread = threading.Thread(target=_do_price, daemon=True, name="RarePricer")
         thread.start()
+
+    def _price_base_async(self, item, cursor_x: int, cursor_y: int):
+        """
+        Price a normal/magic base item via the trade API in a background thread.
+        Used for items valued by their base type + sockets (e.g., 3-socket bases).
+        """
+        display_name = item.base_type or item.name
+        sockets = item.sockets
+
+        with self._trade_gen_lock:
+            self._trade_generation += 1
+            my_gen = self._trade_generation
+
+        def _is_stale():
+            with self._trade_gen_lock:
+                return my_gen != self._trade_generation
+
+        self.overlay.show_price(
+            text=f"{display_name} ({sockets}S): Checking...",
+            tier="low",
+            cursor_x=cursor_x,
+            cursor_y=cursor_y,
+        )
+
+        def _do_price():
+            try:
+                if _is_stale():
+                    return
+
+                result = self.trade_client.price_base_item(
+                    item, is_stale=_is_stale)
+                if _is_stale():
+                    return
+                if result:
+                    self.overlay.show_price(
+                        text=f"{display_name} ({sockets}S): {result.display}",
+                        tier=result.tier,
+                        cursor_x=cursor_x,
+                        cursor_y=cursor_y,
+                        price_divine=result.min_price,
+                    )
+                    self.stats["successful_lookups"] += 1
+                else:
+                    self.overlay.show_price(
+                        text=f"{display_name} ({sockets}S): No price",
+                        tier="low",
+                        cursor_x=cursor_x,
+                        cursor_y=cursor_y,
+                    )
+                    self.stats["not_found"] += 1
+            except Exception as e:
+                logger.error(f"Base pricing error: {e}", exc_info=True)
+                self.stats["not_found"] += 1
+
+        thread = threading.Thread(target=_do_price, daemon=True, name="BasePricer")
+        thread.start()
+
+    # Patterns for common filler mods on magic items — not worth a trade API call
+    _COMMON_MOD_PATTERNS = (
+        # Defenses
+        "to armour", "to evasion", "to energy shield",
+        "increased armour", "increased evasion", "increased energy shield",
+        "increased armour and evasion", "increased armour and energy shield",
+        "increased evasion and energy shield",
+        # Life/mana
+        "maximum life", "maximum mana",
+        "life regeneration", "mana regeneration",
+        "energy shield recharge",
+        # Resistances
+        "to fire resistance", "to cold resistance", "to lightning resistance",
+        "to chaos resistance", "to all elemental resistances",
+        # Attributes
+        "to strength", "to dexterity", "to intelligence", "to all attributes",
+        # Misc filler
+        "item rarity", "light radius", "stun ", "knockback",
+        "mana on kill", "life on kill",
+        "reduced attribute requirements",
+    )
+
+    def _has_only_common_mods(self, mods: list) -> bool:
+        """Check if all mods are common filler (not worth trade API lookup)."""
+        for mod_type, mod_text in mods:
+            text_lower = mod_text.lower()
+            if not any(pat in text_lower for pat in self._COMMON_MOD_PATTERNS):
+                return False
+        return True
 
     def _save_debug_text(self, text: str, cx: int, cy: int):
         """Save clipboard text for debugging."""

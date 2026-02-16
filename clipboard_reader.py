@@ -94,7 +94,10 @@ class ClipboardReader:
         original = self._get_clipboard_text()
 
         # 2. Clear clipboard so we can detect if Ctrl+C wrote something
-        self._clear_clipboard()
+        cleared = self._clear_clipboard()
+        if not cleared:
+            # Clipboard locked by another process — skip this trigger
+            return None
 
         # 3. Send Ctrl+C
         self._send_ctrl_c()
@@ -102,20 +105,20 @@ class ClipboardReader:
         # 4. Wait for the game to process
         time.sleep(CTRL_C_DELAY)
 
-        # 5. Read clipboard
+        # 5. Read clipboard (anything here is fresh from the game,
+        #    since we confirmed the clear succeeded)
         new_text = self._get_clipboard_text()
 
-        # 6. Restore original clipboard (only if we got item data or clipboard was cleared)
-        if original and original != new_text:
+        # 6. Restore original clipboard
+        if original:
             self._set_clipboard_text(original)
 
-        # 7. If the text didn't change, the clipboard clear failed or no
-        #    new item was copied — treat as no detection to avoid stale data.
-        if new_text == original:
+        # 7. If clipboard is still empty, game didn't copy anything
+        if not new_text:
             return None
 
         # 8. Validate — POE2 item data always contains "Rarity:" in the header
-        if new_text and self._looks_like_item_data(new_text):
+        if self._looks_like_item_data(new_text):
             return new_text
 
         return None
@@ -170,12 +173,13 @@ class ClipboardReader:
         finally:
             CloseClipboard()
 
-    def _clear_clipboard(self):
-        """Empty the clipboard."""
+    def _clear_clipboard(self) -> bool:
+        """Empty the clipboard. Returns True if successful."""
         if not OpenClipboard(None):
-            return
+            return False
         try:
             EmptyClipboard()
+            return True
         finally:
             CloseClipboard()
 

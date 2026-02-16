@@ -35,6 +35,7 @@ class ParsedItem:
     raw_text: str = ""
     confidence: float = 0.0
     mods: list = field(default_factory=list)
+    unidentified: bool = False
 
     @property
     def lookup_key(self) -> str:
@@ -88,7 +89,8 @@ RARITY_PATTERNS = {
 ITEM_LEVEL_PATTERN = re.compile(r"item\s*level[:\s]*(\d+)", re.IGNORECASE)
 GEM_LEVEL_PATTERN = re.compile(r"(?:level|lvl)[:\s]*(\d+)", re.IGNORECASE)
 QUALITY_PATTERN = re.compile(r"quality[:\s]*\+?(\d+)%", re.IGNORECASE)
-SOCKET_PATTERN = re.compile(r"sockets?[:\s]*(\d+)", re.IGNORECASE)
+# POE2 clipboard shows sockets as "Sockets: S S S" (one S per socket)
+SOCKET_PATTERN = re.compile(r"sockets?[:\s]*((?:S\s*)+)", re.IGNORECASE)
 STACK_PATTERN = re.compile(r"stack\s*size[:\s]*(\d+)", re.IGNORECASE)
 
 # Waystone/Map patterns
@@ -164,11 +166,21 @@ class ItemParser:
         if item.rarity in ("currency", "normal") and not item.base_type:
             item.base_type = item.name
 
+        # Strip quality prefixes from base type (trade API uses raw base names)
+        # e.g., "Exceptional Gemini Crossbow" → "Gemini Crossbow"
+        if item.base_type:
+            item.base_type = self._strip_quality_prefix(item.base_type)
+
         # ─── Parse remaining sections for properties ──
         full_text = text
         item.item_level = self._extract_item_level(full_text)
         item.quality = self._extract_quality(full_text)
         item.gem_level = self._extract_gem_level(full_text)
+
+        # Sockets: POE2 shows "Sockets: S S S" — count the S characters
+        socket_match = SOCKET_PATTERN.search(full_text)
+        if socket_match:
+            item.sockets = socket_match.group(1).upper().count("S")
 
         # Stack size for currency
         match = STACK_PATTERN.search(full_text)
@@ -180,6 +192,10 @@ class ItemParser:
         if waystone:
             item.name = waystone
             item.rarity = "currency"
+
+        # Check for unidentified items
+        if "\nUnidentified" in text or text.endswith("Unidentified"):
+            item.unidentified = True
 
         # Extract mod lines for non-unique equippable items
         if item.rarity in ("rare", "magic"):
@@ -283,6 +299,21 @@ class ItemParser:
         return item
 
     # ─── Internal Methods ────────────────────────────
+
+    # Quality prefixes that POE2 prepends to base type names
+    _QUALITY_PREFIXES = (
+        "Superior ", "Exceptional ", "Masterful ",
+    )
+
+    @staticmethod
+    def _strip_quality_prefix(base_type: str) -> str:
+        """Strip quality prefix from a base type name.
+        e.g., 'Exceptional Gemini Crossbow' → 'Gemini Crossbow'
+        """
+        for prefix in ItemParser._QUALITY_PREFIXES:
+            if base_type.startswith(prefix):
+                return base_type[len(prefix):]
+        return base_type
 
     # Markers that indicate non-mod sections in clipboard text
     _NON_MOD_MARKERS = frozenset({

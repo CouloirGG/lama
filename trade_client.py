@@ -183,6 +183,108 @@ class TradeClient:
             logger.warning(f"TradeClient: pricing failed for {base_type}: {e}")
             return None
 
+    def price_base_item(self, item, is_stale=None) -> Optional[RarePriceResult]:
+        """
+        Price a normal/magic item by base type + sockets via the trade API.
+        Used for items where the value comes from the base itself (e.g., 3-socket bases).
+        """
+        base_type = item.base_type or item.name
+        if not base_type:
+            return None
+
+        sockets = getattr(item, "sockets", 0) or 0
+
+        # Cache key: base + sockets
+        cache_key = f"base:{base_type}:{sockets}"
+        cached = self._check_cache(cache_key)
+        if cached:
+            logger.debug(f"TradeClient: cache hit for base {base_type}")
+            return cached
+
+        try:
+            if self._is_rate_limited():
+                wait = int(self._rate_limited_until - time.time())
+                return RarePriceResult(
+                    min_price=0, max_price=0, num_results=0,
+                    display=f"Rate limited ({wait}s)", tier="low",
+                )
+
+            logger.info(
+                f"TradeClient: pricing base {base_type} "
+                f"(sockets={sockets})"
+            )
+
+            # Build a simple query: base type + socket count
+            query = self._build_base_query(base_type, sockets)
+
+            if is_stale and is_stale():
+                return None
+
+            search_result = self._do_search(query)
+            if not search_result:
+                return None
+
+            query_id = search_result.get("id")
+            result_ids = search_result.get("result", [])
+            total = search_result.get("total", 0)
+
+            if not query_id or not result_ids:
+                return None
+
+            if is_stale and is_stale():
+                return None
+
+            fetch_ids = result_ids[:TRADE_RESULT_COUNT]
+            listings = self._do_fetch(query_id, fetch_ids)
+            if not listings:
+                return None
+
+            result = self._build_result(listings, total)
+            if result:
+                self._put_cache(cache_key, result)
+                logger.info(
+                    f"BASE PRICE {base_type}: {result.display} "
+                    f"({result.num_results} results)"
+                )
+            return result
+
+        except Exception as e:
+            logger.warning(f"TradeClient: base pricing failed for {base_type}: {e}")
+            return None
+
+    def _build_base_query(self, base_type: str, sockets: int = 0) -> dict:
+        """Build a trade API query for a base item (no mods, just type + sockets)."""
+        filters = {
+            "type_filters": {
+                "filters": {
+                    "rarity": {"option": "nonunique"},
+                }
+            },
+            "misc_filters": {
+                "filters": {
+                    "mirrored": {"option": "false"},
+                },
+            },
+        }
+
+        if sockets > 0:
+            # POE2 uses "rune_sockets" (Augmentable Sockets), not "sockets"
+            filters["equipment_filters"] = {
+                "filters": {
+                    "rune_sockets": {"min": sockets},
+                },
+            }
+
+        return {
+            "query": {
+                "status": {"option": "any"},
+                "type": base_type,
+                "stats": [{"type": "and", "filters": []}],
+                "filters": filters,
+            },
+            "sort": {"price": "asc"},
+        }
+
     # ─── Query Building ───────────────────────────
 
     def _build_stat_filters(self, priceable: List[ParsedMod]) -> list:

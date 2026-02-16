@@ -109,6 +109,77 @@ class PriceCache:
 
             return None
 
+    def lookup_unidentified(self, base_type: str) -> Optional[dict]:
+        """
+        Look up all uniques sharing a base type and return a price range.
+        Used for unidentified unique items where only the base type is known.
+        """
+        if not base_type:
+            return None
+
+        bt_lower = base_type.strip().lower()
+        matches = []
+
+        with self._lock:
+            for data in self.prices.values():
+                if data.get("base_type", "").lower() == bt_lower:
+                    matches.append(data)
+
+        if not matches:
+            return None
+
+        # Sort by divine value
+        matches.sort(key=lambda m: m.get("divine_value", 0))
+        low = matches[0]
+        high = matches[-1]
+
+        low_dv = low["divine_value"]
+        high_dv = high["divine_value"]
+
+        # Build display string
+        if len(matches) == 1:
+            display = self._enrich(low)["display"]
+            name = low["name"]
+        else:
+            low_str = self._format_value(low_dv)
+            high_str = self._format_value(high_dv)
+            display = f"{low_str}-{high_str}"
+            name = f"{len(matches)} possible uniques"
+
+        # Tier based on highest possible value
+        if high_dv >= 5:
+            tier = "high"
+        elif high_dv >= 1:
+            tier = "good"
+        elif high_dv * self.divine_to_exalted >= 1:
+            tier = "decent"
+        else:
+            tier = "low"
+
+        return {
+            "display": display,
+            "tier": tier,
+            "name": name,
+            "divine_value": high_dv,
+            "unidentified": True,
+        }
+
+    def _format_value(self, divine_value: float) -> str:
+        """Format a divine value to a readable string."""
+        if divine_value >= 0.99:
+            if divine_value >= 10:
+                return f"{divine_value:.0f} Divine"
+            return f"{divine_value:.1f} Divine"
+        ev = divine_value * self.divine_to_exalted
+        if ev >= 5:
+            return f"{ev:.0f} Exalted"
+        if ev >= 1:
+            return f"{ev:.1f} Exalted"
+        chaos = divine_value * self.divine_to_chaos
+        if chaos >= 3:
+            return f"{chaos:.0f} Chaos"
+        return "< 3 Chaos"
+
     def lookup_from_text(self, ocr_text: str) -> Optional[dict]:
         """
         Try to find a priced item name anywhere in the OCR text.
@@ -295,6 +366,7 @@ class PriceCache:
             "divine_value": divine_value,
             "chaos_value": chaos_value,
             "name": name,
+            "base_type": base_type,
             "category": f"unique/{category}",
             "source": "poe2scout",
         }
