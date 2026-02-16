@@ -208,21 +208,23 @@ class POE2PriceOverlay:
 
                 # Rare/magic/unknown unidentified — no mods to price
                 logger.info(f"Unidentified {item.rarity}: {base}")
+                self.overlay.show_price(
+                    text="\u2717", tier="low",
+                    cursor_x=cursor_x, cursor_y=cursor_y,
+                )
                 return
 
             # Step 2: Non-unique items with mods → trade API (skip cache which
             # would match base_type to an unrelated unique's price)
             if (item.rarity in ("rare", "magic") and item.mods
                     and self.mod_parser.loaded):
-                # Skip trade API for items with only common/filler mods
+                # Common/filler mods only — not worth checking
                 if self._has_only_common_mods(item.mods):
                     display_name = item.name or item.base_type
                     logger.info(f"{item.rarity.title()} with common mods only: {display_name}")
                     self.overlay.show_price(
-                        text=f"{display_name}: Low value",
-                        tier="low",
-                        cursor_x=cursor_x,
-                        cursor_y=cursor_y,
+                        text="\u2717", tier="low",
+                        cursor_x=cursor_x, cursor_y=cursor_y,
                     )
                     return
                 self._price_rare_async(item, cursor_x, cursor_y)
@@ -247,6 +249,10 @@ class POE2PriceOverlay:
             if not result:
                 self.stats["not_found"] += 1
                 logger.info(f"No price: {item.lookup_key} (base: {item.base_type})")
+                self.overlay.show_price(
+                    text="\u2717", tier="low",
+                    cursor_x=cursor_x, cursor_y=cursor_y,
+                )
                 return
 
             # Step 3: Display the price
@@ -316,10 +322,8 @@ class POE2PriceOverlay:
                 if not parsed_mods:
                     logger.info(f"No mods matched for {display_name}")
                     self.overlay.show_price(
-                        text=f"{display_name}: Low value",
-                        tier="low",
-                        cursor_x=cursor_x,
-                        cursor_y=cursor_y,
+                        text="\u2717", tier="low",
+                        cursor_x=cursor_x, cursor_y=cursor_y,
                     )
                     self.stats["not_found"] += 1
                     return
@@ -343,10 +347,8 @@ class POE2PriceOverlay:
                     self.stats["successful_lookups"] += 1
                 else:
                     self.overlay.show_price(
-                        text=f"{display_name}: Low value",
-                        tier="low",
-                        cursor_x=cursor_x,
-                        cursor_y=cursor_y,
+                        text="\u2717", tier="low",
+                        cursor_x=cursor_x, cursor_y=cursor_y,
                     )
                     self.stats["not_found"] += 1
             except Exception as e:
@@ -399,10 +401,8 @@ class POE2PriceOverlay:
                     self.stats["successful_lookups"] += 1
                 else:
                     self.overlay.show_price(
-                        text=f"{display_name} ({sockets}S): No price",
-                        tier="low",
-                        cursor_x=cursor_x,
-                        cursor_y=cursor_y,
+                        text="\u2717", tier="low",
+                        cursor_x=cursor_x, cursor_y=cursor_y,
                     )
                     self.stats["not_found"] += 1
             except Exception as e:
@@ -436,6 +436,10 @@ class POE2PriceOverlay:
         # Accuracy / leech
         "to accuracy", "accuracy rating",
         "leeches", "leech",
+        # Ailment / status duration
+        "freeze duration", "chill effect", "ignite duration",
+        "shock effect", "poison duration", "bleed duration",
+        "curse effect", "ailment",
         # Misc filler
         "item rarity", "light radius", "stun ", "knockback",
         "mana on kill", "life on kill", "mana cost",
