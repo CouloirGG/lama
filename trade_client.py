@@ -761,6 +761,16 @@ class TradeClient:
         min_divine, min_amount, min_currency = prices[0]
         max_divine, max_amount, max_currency = prices[-1]
 
+        # Items below ~10 exalted are effectively worthless — return None
+        # so callers show "Low value" instead of a misleading price.
+        divine_to_exalted = self._divine_to_exalted_fn()
+        low_value_threshold = 10.0 / divine_to_exalted if divine_to_exalted > 0 else 0.03
+        if min_divine < low_value_threshold:
+            logger.info(
+                f"TradeClient: below low-value threshold "
+                f"({min_divine:.4f} div < {low_value_threshold:.4f} div = 10 exalted)")
+            return None
+
         # Build display string
         if lower_bound:
             display = self._format_display_lower_bound(
@@ -794,7 +804,7 @@ class TradeClient:
             return amount / divine_to_exalted if divine_to_exalted > 0 else None
         elif c in ("alchemy", "chance", "alteration", "transmute",
                     "augmentation", "jeweller", "fusing", "chromatic",
-                    "scouring", "regret", "vaal"):
+                    "scouring", "regret", "vaal", "regal"):
             # Low-value currencies — treat as near-zero
             return 0.001 * amount
         else:
