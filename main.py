@@ -33,6 +33,7 @@ from price_cache import PriceCache
 from overlay import PriceOverlay, ConsoleOverlay
 from mod_parser import ModParser
 from trade_client import TradeClient
+from filter_updater import FilterUpdater, find_template_filter
 
 logger = logging.getLogger("poe2-overlay")
 
@@ -48,8 +49,11 @@ class POE2PriceOverlay:
     4. Overlay displays the result
     """
 
-    def __init__(self, league: str = DEFAULT_LEAGUE, use_console: bool = False):
+    def __init__(self, league: str = DEFAULT_LEAGUE, use_console: bool = False,
+                 no_filter_update: bool = False, test_filter_update: bool = False):
         self.league = league.strip()
+        self._no_filter_update = no_filter_update
+        self._test_filter_update = test_filter_update
 
         # Initialize components
         logger.info("Initializing POE2 Price Overlay...")
@@ -64,6 +68,18 @@ class POE2PriceOverlay:
             divine_to_chaos_fn=lambda: self.price_cache.divine_to_chaos,
             divine_to_exalted_fn=lambda: self.price_cache.divine_to_exalted,
         )
+
+        # Filter updater
+        project_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        template = find_template_filter(project_dir)
+        self.filter_updater = FilterUpdater(
+            self.price_cache, template,
+            test_mode=self._test_filter_update,
+        )
+        if template:
+            logger.info(f"Filter template: {template.name}")
+        else:
+            logger.info("No .filter template found — filter updater disabled")
 
         if use_console:
             self.overlay = ConsoleOverlay()
@@ -122,6 +138,15 @@ class POE2PriceOverlay:
         else:
             logger.warning("Rare item pricing disabled (no stat data)")
 
+        # 1c. Handle filter update
+        if self._test_filter_update:
+            logger.info("Running filter update (test mode: hidden items show as tiny text)...")
+            self.filter_updater.update_now(dry_run=False)
+            logger.info("Test filter written. Reload in-game to verify.")
+            return
+        if not self._no_filter_update:
+            self.filter_updater.start()
+
         # 2. Start item detection in background thread
         logger.info("Starting item detection (clipboard mode)...")
         detect_thread = threading.Thread(
@@ -151,6 +176,7 @@ class POE2PriceOverlay:
     def stop(self):
         """Shut down all components."""
         logger.info("\nShutting down...")
+        self.filter_updater.stop()
         self.price_cache.stop()
         self.overlay.shutdown()
         self._print_session_stats()
@@ -633,6 +659,16 @@ Examples:
         action="store_true",
         help="Enable debug logging"
     )
+    parser.add_argument(
+        "--no-filter-update",
+        action="store_true",
+        help="Disable automatic loot filter updating"
+    )
+    parser.add_argument(
+        "--test-filter-update",
+        action="store_true",
+        help="Dry-run filter update (parse + compute + print diff, no write)"
+    )
 
     args = parser.parse_args()
 
@@ -642,6 +678,8 @@ Examples:
         app = POE2PriceOverlay(
             league=args.league,
             use_console=args.console,
+            no_filter_update=args.no_filter_update,
+            test_filter_update=args.test_filter_update,
         )
         app.start()
     except KeyboardInterrupt:

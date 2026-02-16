@@ -472,49 +472,54 @@ class PriceCache:
     # ─── Display ─────────────────────────────────────
 
     def _enrich(self, data: dict) -> dict:
-        """Add display string and tier."""
+        """Add display string and tier.
+
+        Tier is based on chaos value so it stays consistent with the loot
+        filter updater regardless of how cheap exalted orbs are.
+        """
         result = data.copy()
         dv = result.get("divine_value", 0)
-        chaos = result.get("chaos_value", 0)
+        chaos = dv * self.divine_to_chaos
 
-        # Calculate exalted value
+        # Calculate exalted value (for display only, NOT for tier)
         ex_rate = self.divine_to_exalted
         ev = dv * ex_rate if ex_rate > 0 else 0
         result["exalted_value"] = round(ev, 1)
 
         is_currency = "currency" in data.get("category", "").lower()
 
-        # Display string - use the most readable denomination
+        # Tier based on chaos value (aligned with filter updater thresholds)
+        #   high  = filter S  (>= 25c, divine+)
+        #   good  = filter A  (>= 5c)
+        #   decent = filter B/C (>= 1c)
+        #   low   = filter D/E (< 1c)
+        if chaos >= 25:
+            result["tier"] = "high" if dv >= 5 else "good"
+        elif chaos >= 5:
+            result["tier"] = "good"
+        elif chaos >= 1:
+            result["tier"] = "decent"
+        else:
+            result["tier"] = "low"
+
+        # Display string - pick the most readable denomination
         # Use 0.85 threshold for divine to handle poe2scout rounding
-        # (e.g. Divine Orb can report as 0.92 divine due to rate mismatch)
         if dv >= 0.85:
             result["display"] = f"{dv:.1f} Divine" if dv < 10 else f"{dv:.0f} Divine"
-            result["tier"] = "high" if dv >= 5 else "good"
         elif is_currency and dv > 0:
-            # Currency items: show exchange rate (more useful than raw chaos value)
+            # Currency items: show exchange rate (more useful than raw value)
             per_divine = 1.0 / dv
             per_exalted = per_divine / ex_rate if ex_rate > 0 else 0
             if 2 <= per_exalted <= 100:
                 result["display"] = f"~{per_exalted:.0f} = 1 Exalted"
-                result["tier"] = "decent"
             elif per_divine <= 10000:
                 result["display"] = f"~{per_divine:.0f} = 1 Divine"
-                result["tier"] = "decent"
             else:
-                result["display"] = "< 3 Chaos"
-                result["tier"] = "low"
-        elif ev >= 5:
-            result["display"] = f"{ev:.0f} Exalted"
-            result["tier"] = "good"
-        elif ev >= 1:
-            result["display"] = f"{ev:.1f} Exalted"
-            result["tier"] = "decent"
-        elif chaos >= 3:
+                result["display"] = "< 1 Chaos"
+        elif chaos >= 1:
             result["display"] = f"{chaos:.0f} Chaos"
-            result["tier"] = "low"
         else:
-            result["display"] = "< 3 Chaos"
-            result["tier"] = "low"
+            result["display"] = "< 1 Chaos"
 
         return result
 

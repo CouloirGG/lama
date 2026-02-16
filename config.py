@@ -88,6 +88,47 @@ TRADE_ITEMS_URL = f"{TRADE_API_BASE}/data/items"
 TRADE_ITEMS_CACHE_FILE = CACHE_DIR / "trade_items.json"
 
 # ─────────────────────────────────────────────
+# Loot Filter Updater
+# ─────────────────────────────────────────────
+# POE2 game filter directory (OneDrive-synced Documents)
+FILTER_OUTPUT_DIR = Path(os.path.expanduser("~")) / "OneDrive" / "Documents" / "My Games" / "Path of Exile 2"
+
+# How often to re-tier the filter (seconds)
+FILTER_UPDATE_INTERVAL = 86400  # 24 hours
+
+# Tier thresholds in CHAOS values (converted to divine at runtime using
+# the current divine:chaos exchange rate so tiers stay meaningful
+# regardless of divine orb price fluctuations).
+#
+# Currency-style tiers (s/a/b/c/d/e):
+FILTER_CURRENCY_CHAOS_THRESHOLDS = {
+    "s": 25.0,     # >= 25 chaos (roughly 1 divine)
+    "a": 5.0,      # >= 5 chaos
+    "b": 2.0,      # >= 2 chaos
+    "c": 1.0,      # >= 1 chaos
+    "d": 1.0,      # same as c (d-tier styling still has colored fill, skip it)
+    "e": 0.0,      # everything under 1c — text only, no fill
+}
+
+# Unique tiers (t1/t2/t3/hideable):
+FILTER_UNIQUE_CHAOS_THRESHOLDS = {
+    "t1": 25.0,    # >= 25 chaos (~1 divine)
+    "t2": 3.0,     # >= 3 chaos
+    "t3": 0.5,     # >= 0.5 chaos
+    "hideable": 0.0,
+}
+
+# Fragment tiers (a/b/c):
+FILTER_FRAGMENT_CHAOS_THRESHOLDS = {
+    "a": 5.0,      # >= 5 chaos
+    "b": 1.0,      # >= 1 chaos
+    "c": 0.0,
+}
+
+# Timestamp file for tracking last update
+FILTER_LAST_UPDATE_FILE = CACHE_DIR / "filter_last_update"
+
+# ─────────────────────────────────────────────
 # Logging
 # ─────────────────────────────────────────────
 LOG_LEVEL = "INFO"
