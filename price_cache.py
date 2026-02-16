@@ -482,11 +482,27 @@ class PriceCache:
         ev = dv * ex_rate if ex_rate > 0 else 0
         result["exalted_value"] = round(ev, 1)
 
+        is_currency = "currency" in data.get("category", "").lower()
+
         # Display string - use the most readable denomination
-        # Use 0.99 threshold for divine to handle API rounding (e.g. Divine Orb = 0.993 div)
-        if dv >= 0.99:
+        # Use 0.85 threshold for divine to handle poe2scout rounding
+        # (e.g. Divine Orb can report as 0.92 divine due to rate mismatch)
+        if dv >= 0.85:
             result["display"] = f"{dv:.1f} Divine" if dv < 10 else f"{dv:.0f} Divine"
             result["tier"] = "high" if dv >= 5 else "good"
+        elif is_currency and dv > 0:
+            # Currency items: show exchange rate (more useful than raw chaos value)
+            per_divine = 1.0 / dv
+            per_exalted = per_divine / ex_rate if ex_rate > 0 else 0
+            if 2 <= per_exalted <= 100:
+                result["display"] = f"~{per_exalted:.0f} = 1 Exalted"
+                result["tier"] = "decent"
+            elif per_divine <= 10000:
+                result["display"] = f"~{per_divine:.0f} = 1 Divine"
+                result["tier"] = "decent"
+            else:
+                result["display"] = "< 3 Chaos"
+                result["tier"] = "low"
         elif ev >= 5:
             result["display"] = f"{ev:.0f} Exalted"
             result["tier"] = "good"
