@@ -44,6 +44,7 @@ Cursor stops over POE2 window (8 fps polling)
 | `launcher.py` | GUI launcher (bat files call this) |
 | `START.bat` | Main launcher |
 | `DEBUG.bat` | Launches with `--debug` flag for verbose logging |
+| `REPORT_BUG.bat` | Zips logs to Desktop, opens GitHub issue page |
 | `LICENSE` | GPLv3 |
 | `.gitignore` | Standard Python gitignore |
 
@@ -136,10 +137,12 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 - **Log file:** `~/.poe2-price-overlay/overlay.log`
 
 ## Git Status
-- Repo initialized locally: `C:\Users\Stu\GitHub\POE2_OCR`
-- Initial commit made (GPLv3 license, .gitignore, all source files)
-- **No remote configured yet** — user plans to host on GitHub (see future ideas #9)
-- Several uncommitted changes since initial commit (all the trade API fixes)
+- **Remote:** `https://github.com/CarbonSMASH/POE2_OCR.git` (private repo)
+- **Branch:** `main`
+- All changes committed and pushed
+- GitHub CLI (`gh`) installed and authenticated as CarbonSMASH
+- Issue template at `.github/ISSUE_TEMPLATE/bug_report.md`
+- Bug reporting script: `REPORT_BUG.bat` (zips logs, opens GitHub issue page)
 
 ## Known Working
 - Unique items price correctly from poe2scout cache
@@ -154,7 +157,7 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 2. **"Grants Skill:" lines** are skipped via `_SKIP_LINE_RE` but unusual skill formats might slip through
 3. **Magic items without base_type:** Some magic items in POE2 don't have a separate base_type line in clipboard text. If `base_type` is empty, trade API query fails with "no base_type"
 4. **Common mod classification** is heuristic-based — may occasionally misclassify an unusual valuable mod as "common"
-5. **README.md is outdated** — still references OCR-based approach, Tesseract, src/ directory structure
+5. ~~**README.md is outdated**~~ — Fixed: rewritten for clipboard-based architecture
 
 ## Bugs Fixed This Session (2026-02-15)
 1. Mod annotations (`(implicit)`, `(rune)`, etc.) not stripped before regex matching
@@ -211,9 +214,10 @@ Add a subtle "Buy me a coffee" button/link that connects to the user's accounts.
 
 ## How To Resume Development
 
-1. Open a terminal in `C:\Users\Stu\GitHub\POE2_OCR`
-2. Run `claude` (Claude Code CLI)
-3. Say: "Read CLAUDE_CODE_HANDOFF.md and continue development"
-4. To test: `python main.py --debug` or double-click `DEBUG.bat`
-5. Debug clipboard captures: `~/.poe2-price-overlay/debug/`
-6. Log file: `~/.poe2-price-overlay/overlay.log`
+1. Clone: `git clone https://github.com/CarbonSMASH/POE2_OCR.git`
+2. `cd POE2_OCR`
+3. Run `claude` (Claude Code CLI)
+4. Say: "Read CLAUDE_CODE_HANDOFF.md and continue development"
+5. To test: `python main.py --debug` or double-click `DEBUG.bat`
+6. Debug clipboard captures: `~/.poe2-price-overlay/debug/`
+7. Log file: `~/.poe2-price-overlay/overlay.log`
