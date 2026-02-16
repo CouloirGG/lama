@@ -99,6 +99,13 @@ class TradeClient:
         quality = getattr(item, "quality", 0) or 0
         sockets = getattr(item, "sockets", 0) or 0
 
+        # Items with fractured/desecrated mods or 3+ sockets are likely
+        # valuable but may be too niche for base-type-specific results.
+        has_value_signals = (
+            sockets >= 3
+            or any(m.mod_type in ("fractured", "desecrated") for m in mods)
+        )
+
         # Check cache (includes quality and sockets in fingerprint)
         fingerprint = self._make_fingerprint(base_type, mods, quality, sockets)
         cached = self._check_cache(fingerprint)
@@ -135,24 +142,82 @@ class TradeClient:
                     f"TradeClient: mod [{m.mod_type}] {m.raw_text} "
                     f"→ {m.stat_id} (val={m.value})")
 
-            search_result, exact_match = self._search_progressive(
-                base_type, stat_filters, priceable, quality=quality,
-                sockets=sockets, is_stale=is_stale,
-            )
-
-            # If no results with sockets, retry without socket filter
-            if not search_result and sockets > 0:
-                if is_stale and is_stale():
-                    return None
-                logger.info(
-                    f"TradeClient: no results with {sockets} sockets, "
-                    f"retrying without socket filter")
+            if has_value_signals:
+                # Niche items (fractured/desecrated/3S): quick probe with
+                # specific base type (1 call), then broad count(n-1) without
+                # base type (up to 3 calls).  Total max 4 — stays well under
+                # the API's rate limit window.
                 search_result, exact_match = self._search_progressive(
                     base_type, stat_filters, priceable, quality=quality,
-                    sockets=0, is_stale=is_stale,
+                    sockets=sockets, is_stale=is_stale, max_calls=1,
                 )
 
+                if not search_result:
+                    if is_stale and is_stale():
+                        return None
+                    # Broad search: count queries without base type.
+                    # Skip count(n/n) and hybrid — too tight for niche items.
+                    # Interleave count levels: dropping a mod is more
+                    # productive than loosening values for the same count.
+                    n = len(stat_filters)
+                    floor = max(2, n - 2)
+                    broad_specs = [
+                        (n - 1, 0.85),   # drop 1 mod, medium values
+                        (floor, 0.85),   # drop 2 mods, medium values
+                        (floor, 0.80),   # drop 2 mods, loose values
+                    ]
+                    logger.info(
+                        f"TradeClient: broad search (no base type) "
+                        f"for {base_type}")
+                    for min_count, mult in broad_specs:
+                        if (is_stale and is_stale()) or self._is_rate_limited():
+                            break
+                        filters_at = self._build_stat_filters_custom(
+                            priceable, mult)
+                        query = self._build_query(
+                            None, filters_at, "count", min_count,
+                            quality=quality, sockets=sockets)
+                        result = self._do_search(query)
+                        pct = int(mult * 100)
+                        if result and result.get("result"):
+                            total = result.get("total", 0)
+                            logger.info(
+                                f"TradeClient: broad count({min_count}/{n}) "
+                                f"@{pct}% = {total} results")
+                            search_result = result
+                            exact_match = False
+                            break
+                        logger.info(
+                            f"TradeClient: broad count({min_count}/{n}) "
+                            f"@{pct}% = 0 results")
+            else:
+                # Normal items: full progressive search + socket fallback.
+                search_result, exact_match = self._search_progressive(
+                    base_type, stat_filters, priceable, quality=quality,
+                    sockets=sockets, is_stale=is_stale,
+                )
+
+                if not search_result and sockets > 0:
+                    if is_stale and is_stale():
+                        return None
+                    logger.info(
+                        f"TradeClient: no results with {sockets} sockets, "
+                        f"retrying without socket filter")
+                    search_result, exact_match = self._search_progressive(
+                        base_type, stat_filters, priceable, quality=quality,
+                        sockets=0, is_stale=is_stale, max_calls=3,
+                    )
+
             if not search_result:
+                if has_value_signals:
+                    logger.info(
+                        f"TradeClient: no results for {base_type}, "
+                        f"flagging as probably valuable "
+                        f"(fractured/desecrated/3S)")
+                    return RarePriceResult(
+                        min_price=0, max_price=0, num_results=0,
+                        display="+", tier="good", estimate=True,
+                    )
                 return None
 
             # Abort if a newer item detection superseded us
@@ -417,17 +482,16 @@ class TradeClient:
                 },
             }
 
-        return {
-            "query": {
-                "status": {"option": "any"},
-                "type": base_type,
-                "stats": [stat_group],
-                "filters": filters,
-            },
-            "sort": {"price": "asc"},
+        query_inner = {
+            "status": {"option": "any"},
+            "stats": [stat_group],
+            "filters": filters,
         }
+        if base_type:
+            query_inner["type"] = base_type
+        return {"query": query_inner, "sort": {"price": "asc"}}
 
-    def _build_hybrid_query(self, base_type: str, key_filters: list,
+    def _build_hybrid_query(self, base_type, key_filters: list,
                             common_filters: list, min_common: int,
                             quality: int = 0, sockets: int = 0) -> dict:
         """Build a query with key mods as "and" + common mods as "count".
@@ -471,15 +535,14 @@ class TradeClient:
                 },
             }
 
-        return {
-            "query": {
-                "status": {"option": "any"},
-                "type": base_type,
-                "stats": stat_groups,
-                "filters": filters,
-            },
-            "sort": {"price": "asc"},
+        query_inner = {
+            "status": {"option": "any"},
+            "stats": stat_groups,
+            "filters": filters,
         }
+        if base_type:
+            query_inner["type"] = base_type
+        return {"query": query_inner, "sort": {"price": "asc"}}
 
     # Patterns for common "filler" mods that rarely drive item price.
     # Mods NOT matching any of these patterns are considered "key" mods.
@@ -551,8 +614,13 @@ class TradeClient:
     def _search_progressive(self, base_type: str, stat_filters: list,
                             priceable: List[ParsedMod] = None,
                             quality: int = 0, sockets: int = 0,
-                            is_stale=None):
+                            is_stale=None, max_calls: int = 6):
         """Find the best price query using minimal API calls.
+
+        Args:
+            max_calls: Maximum number of _do_search invocations allowed.
+                Prevents niche items from burning through the rate limit.
+                Default 6 covers the most productive search steps.
 
         Returns:
             (search_result, exact_match) tuple.
@@ -562,6 +630,16 @@ class TradeClient:
         """
         q = quality
         s = sockets
+        calls_remaining = max_calls
+
+        def _budget_search(query):
+            """Call _do_search if budget remains, decrement counter."""
+            nonlocal calls_remaining
+            if calls_remaining <= 0:
+                logger.info("TradeClient: search budget exhausted")
+                return None
+            calls_remaining -= 1
+            return self._do_search(query)
 
         def _stale():
             if is_stale and is_stale():
@@ -578,7 +656,7 @@ class TradeClient:
             if n <= 2 and priceable:
                 tight = self._build_stat_filters_custom(priceable, 0.98)
                 query = self._build_query(base_type, tight, quality=q, sockets=s)
-                result = self._do_search(query)
+                result = _budget_search(query)
                 if result and result.get("result"):
                     logger.info(
                         f"TradeClient: tight match @98% "
@@ -588,7 +666,7 @@ class TradeClient:
                     return None, False
 
             query = self._build_query(base_type, stat_filters, quality=q, sockets=s)
-            result = self._do_search(query)
+            result = _budget_search(query)
             if result and result.get("result"):
                 logger.info(
                     f"TradeClient: exact match ({result.get('total', 0)} results)")
@@ -605,7 +683,7 @@ class TradeClient:
                 if key_f and common_f:
                     query = self._build_query(
                         base_type, key_f, quality=q, sockets=s)
-                    result = self._do_search(query)
+                    result = _budget_search(query)
                     if result and result.get("result"):
                         logger.info(
                             f"TradeClient: key mods + {s}S "
@@ -618,7 +696,7 @@ class TradeClient:
             if n >= 3:
                 query = self._build_query(
                     base_type, stat_filters, "count", n - 1, quality=q, sockets=s)
-                result = self._do_search(query)
+                result = _budget_search(query)
                 if result and result.get("result"):
                     logger.info(
                         f"TradeClient: count({n-1}/{n}) = "
@@ -659,7 +737,7 @@ class TradeClient:
         tight_filters = self._build_stat_filters_custom(priceable, 0.90)
         query = self._build_query(
             base_type, tight_filters, "count", n, quality=q, sockets=s)
-        result = self._do_search(query)
+        result = _budget_search(query)
         if result and result.get("result"):
             total = result.get("total", 0)
             logger.info(f"TradeClient: count({n}/{n}) @90% = {total} results")
@@ -677,7 +755,7 @@ class TradeClient:
             query = self._build_hybrid_query(
                 base_type, key_filters, common_filters,
                 min_common=n_common, quality=q, sockets=s)
-            result = self._do_search(query)
+            result = _budget_search(query)
             if result and result.get("result"):
                 total = result.get("total", 0)
                 logger.info(
@@ -695,7 +773,7 @@ class TradeClient:
                 query = self._build_hybrid_query(
                     base_type, key_filters, common_filters,
                     min_common=n_common - 1, quality=q, sockets=s)
-                result = self._do_search(query)
+                result = _budget_search(query)
                 if result and result.get("result"):
                     total = result.get("total", 0)
                     logger.info(
@@ -713,12 +791,12 @@ class TradeClient:
         # actual item is strictly better. Flag as not exact.
         best = None
         for mult in (0.90, 0.85, 0.80):
-            if _stale():
-                return None, False
+            if _stale() or calls_remaining <= 0:
+                break
             filters_at = self._build_stat_filters_custom(priceable, mult)
             query = self._build_query(
                 base_type, filters_at, "count", n - 1, quality=q, sockets=s)
-            result = self._do_search(query)
+            result = _budget_search(query)
             if result and result.get("result"):
                 total = result.get("total", 0)
                 pct = int(mult * 100)
@@ -737,11 +815,11 @@ class TradeClient:
         # Step 4: count(n-2), count(n-3), ... with standard minimums
         floor = max(2, n // 2)
         for min_count in range(n - 2, floor - 1, -1):
-            if _stale():
-                return None, False
+            if _stale() or calls_remaining <= 0:
+                break
             query = self._build_query(
                 base_type, stat_filters, "count", min_count, quality=q, sockets=s)
-            result = self._do_search(query)
+            result = _budget_search(query)
             if not result or not result.get("result"):
                 continue
 
