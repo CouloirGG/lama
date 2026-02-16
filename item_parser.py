@@ -179,8 +179,8 @@ class ItemParser:
             item.name = waystone
             item.rarity = "currency"
 
-        # Extract mod lines for rare items
-        if item.rarity == "rare":
+        # Extract mod lines for non-unique equippable items
+        if item.rarity in ("rare", "magic"):
             item.mods = self._extract_mod_lines(sections)
 
         if not item.name:
@@ -287,16 +287,28 @@ class ItemParser:
         "corrupted", "mirrored", "split", "unmodifiable",
     })
 
+    # POE2 appends mod type annotations like (implicit), (enchant), (rune), etc.
+    _MOD_ANNOTATION_RE = re.compile(r"\s*\((implicit|enchant|rune|mutated|desecrated|fractured|crafted|augmented)\)\s*$", re.IGNORECASE)
+
+    # Lines starting with "Grants Skill:" are skill grants, not tradeable mods
+    _SKIP_LINE_RE = re.compile(
+        r"^(Item Level|Level|Quality|Sockets|Requires|Rarity|Item Class|Grants Skill)",
+        re.IGNORECASE,
+    )
+
+    # Lines that look like flavour text (quoted strings)
+    _FLAVOUR_RE = re.compile(r'^".*"$|^- .+$')
+
     def _extract_mod_lines(self, sections: list) -> list:
         """
         Extract mod lines from clipboard sections for rare items.
 
         Returns a list of (mod_type, text) tuples where mod_type is
-        "implicit" or "explicit".
+        "explicit", "implicit", "enchant", "rune", etc.
 
-        POE2 clipboard format puts mods in sections after "Item Level:".
-        Implicit mods appear in the section right after Item Level,
-        followed by a separator, then explicit mods.
+        POE2 clipboard appends annotations like (implicit), (enchant), (rune)
+        to mod lines. We use these to classify mods and strip them from the text.
+        Unannotated mods in the final section are assumed to be explicit.
         """
         mods = []
 
@@ -310,10 +322,8 @@ class ItemParser:
         if ilvl_idx is None:
             return mods
 
-        # Sections after Item Level contain mods
-        # First mod section after ilvl is implicits (if present), rest are explicits
+        # Collect all lines from sections after Item Level
         mod_sections = sections[ilvl_idx + 1:]
-        is_first_mod_section = True
 
         for section in mod_sections:
             section_text = section.strip()
@@ -330,32 +340,25 @@ class ItemParser:
             if any(l.startswith("Note:") for l in lines):
                 continue
 
-            # Skip requirement/property lines that sometimes appear after ilvl
-            if any(l.startswith("Requires ") for l in lines):
-                continue
-
-            # Determine mod type: first mod section = implicit, rest = explicit
-            # (POE2 puts implicits in a separate section before explicits)
-            if is_first_mod_section:
-                # Heuristic: if the section has very few lines (1-2) and comes
-                # right after ilvl, it's likely implicits. But we can't be 100%
-                # sure, so we check if there are more sections after this one.
-                remaining = [s for s in mod_sections[mod_sections.index(section) + 1:]
-                             if s.strip() and not s.strip().lower() in self._NON_MOD_MARKERS]
-                if remaining:
-                    mod_type = "implicit"
-                else:
-                    # Only one mod section — these are explicits
-                    mod_type = "explicit"
-                is_first_mod_section = False
-            else:
-                mod_type = "explicit"
-
             for line in lines:
-                # Skip lines that look like properties rather than mods
-                if re.match(r"^(Item Level|Level|Quality|Sockets|Requires|Rarity|Item Class)", line, re.IGNORECASE):
+                # Skip property/requirement lines
+                if self._SKIP_LINE_RE.match(line):
                     continue
-                mods.append((mod_type, line))
+                # Skip flavour text
+                if self._FLAVOUR_RE.match(line):
+                    continue
+
+                # Check for annotation suffix: (implicit), (enchant), (rune), etc.
+                ann_match = self._MOD_ANNOTATION_RE.search(line)
+                if ann_match:
+                    mod_type = ann_match.group(1).lower()
+                    clean_text = line[:ann_match.start()].strip()
+                else:
+                    mod_type = "explicit"
+                    clean_text = line
+
+                if clean_text:
+                    mods.append((mod_type, clean_text))
 
         return mods
 

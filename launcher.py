@@ -19,7 +19,6 @@ from pathlib import Path
 # ─── Paths ───────────────────────────────────────────
 APP_NAME = "POE2 Price Overlay"
 APP_DIR = Path(__file__).parent.resolve()
-SRC_DIR = APP_DIR / "src"
 DATA_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay"
 
 logging.basicConfig(
@@ -74,7 +73,7 @@ def create_desktop_shortcut():
         bat_content = f'''@echo off
 title {APP_NAME}
 cd /d "{APP_DIR}"
-python "{SRC_DIR / 'main.py'}" %*
+python "{APP_DIR / 'main.py'}" %*
 pause
 '''
         shortcut.write_text(bat_content, encoding="utf-8")
@@ -96,7 +95,7 @@ def create_start_menu_entry():
 
         bat_content = f'''@echo off
 cd /d "{APP_DIR}"
-pythonw "{SRC_DIR / 'main.py'}" %*
+pythonw "{APP_DIR / 'main.py'}" %*
 '''
         bat.write_text(bat_content, encoding="utf-8")
         log.info(f"✓ Start Menu entry created")
@@ -180,7 +179,7 @@ def first_run_setup():
     log.info("")
     log.info("  Tips:")
     log.info("  • Set POE2 to Windowed Fullscreen mode")
-    log.info("  • Enable 'Show Full Descriptions' in UI settings")
+    log.info("  • Copy items with Ctrl+C in POE2 to get prices")
     log.info("  • Hover over items to see prices")
     log.info("")
 
@@ -195,7 +194,7 @@ def launch_overlay():
     if league_file.exists():
         league = league_file.read_text(encoding="utf-8").strip()
 
-    main_script = SRC_DIR / "main.py"
+    main_script = APP_DIR / "main.py"
     if not main_script.exists():
         log.error(f"Cannot find {main_script}")
         return 1

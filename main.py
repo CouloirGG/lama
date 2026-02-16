@@ -62,6 +62,7 @@ class POE2PriceOverlay:
         self.trade_client = TradeClient(
             league=self.league,
             divine_to_chaos_fn=lambda: self.price_cache.divine_to_chaos,
+            divine_to_exalted_fn=lambda: self.price_cache.divine_to_exalted,
         )
 
         if use_console:
@@ -132,8 +133,18 @@ class POE2PriceOverlay:
         )
         status_thread.start()
 
+        # 3b. Disable console Ctrl+C handling — we send Ctrl+C via keybd_event
+        # to copy items from POE2, and Python's console would otherwise treat
+        # it as a KeyboardInterrupt that kills the overlay.
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, True)
+            logger.debug("Console Ctrl+C handler disabled")
+        except Exception:
+            pass
+
         logger.info("Ready! Hover over items in POE2 to see prices.")
-        logger.info("Press Ctrl+C to stop.\n")
+        logger.info("Close this window to stop.\n")
 
         # 4. Run overlay on main thread (tkinter requirement)
         try:
@@ -176,24 +187,25 @@ class POE2PriceOverlay:
                 + (f" base={item.base_type}" if item.base_type else "")
             )
 
-            # Step 2: Price lookup
+            # Step 2: Non-unique items with mods → trade API (skip cache which
+            # would match base_type to an unrelated unique's price)
+            if (item.rarity in ("rare", "magic") and item.mods
+                    and self.mod_parser.loaded):
+                self._price_rare_async(item, cursor_x, cursor_y)
+                return
+
+            # Step 3: Static price lookup (uniques, currency, gems)
             result = self.price_cache.lookup(
                 item_name=item.lookup_key,
                 base_type=item.base_type,
                 item_level=item.item_level,
             )
 
-            # Step 2b: Fallback — search clipboard text directly against cache
             if not result:
+                # Step 3b: Fallback — search clipboard text directly against cache
                 result = self.price_cache.lookup_from_text(item_text)
 
             if not result:
-                # Try rare item pricing via trade API
-                if (item.rarity == "rare" and item.mods
-                        and self.mod_parser.loaded):
-                    self._price_rare_async(item, cursor_x, cursor_y)
-                    return
-
                 self.stats["not_found"] += 1
                 logger.info(f"No price: {item.lookup_key} (base: {item.base_type})")
                 return

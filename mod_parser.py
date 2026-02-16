@@ -163,7 +163,7 @@ class ModParser:
                     raw_text=raw_text,
                     stat_id=stat.id,
                     value=value,
-                    mod_type=stat.type,
+                    mod_type=mod_type,
                 )
 
         return None

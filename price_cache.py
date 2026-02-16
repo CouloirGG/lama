@@ -299,15 +299,10 @@ class PriceCache:
             "source": "poe2scout",
         }
 
-        # Store by unique name (primary lookup key)
+        # Store by unique name only — not by base_type, which would cause
+        # magic/normal/rare items with the same base to match this unique's price
         key = name.lower()
         prices[key] = entry
-
-        # Also store by base type if it doesn't collide with an existing entry
-        if base_type:
-            bt_key = base_type.lower()
-            if bt_key not in prices:
-                prices[bt_key] = entry
 
         return 1
 

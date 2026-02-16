@@ -42,6 +42,11 @@ class ItemDetector:
         # Position-based cooldown: don't re-fire at the same spot
         self._last_trigger_pos: Optional[Tuple[int, int]] = None
 
+        # Content-based dedup: don't fire callback for the same item text
+        self._last_item_text: str = ""
+        self._last_item_time: float = 0
+        self._DEDUP_TTL: float = 5.0  # seconds before same item can re-trigger
+
         # Callback when item text is read
         self._on_change: Optional[Callable] = None
 
@@ -88,9 +93,10 @@ class ItemDetector:
 
                 if cursor_moved:
                     self._cursor_still_count = 0
-                    # Clear position cooldown when cursor moves away
+                    # Clear cooldowns when cursor moves away from last trigger spot
                     if self._last_trigger_pos and not self._is_same_position((cx, cy), self._last_trigger_pos):
                         self._last_trigger_pos = None
+                        self._last_item_text = ""
                 else:
                     self._cursor_still_count += 1
 
@@ -118,6 +124,14 @@ class ItemDetector:
                     self._last_trigger_pos = (cx, cy)
                     continue
 
+                # Content-based dedup: skip if same item text was just processed
+                now_dedup = time.time()
+                if (item_text == self._last_item_text
+                        and (now_dedup - self._last_item_time) < self._DEDUP_TTL):
+                    logger.debug(f"Skipping duplicate item at ({cx}, {cy})")
+                    self._last_trigger_pos = (cx, cy)
+                    continue
+
                 logger.info(f"Clipboard item at ({cx}, {cy}): {item_text.split(chr(10))[0]}")
 
                 # Fire callback with item text
@@ -125,6 +139,8 @@ class ItemDetector:
                     self._on_change(item_text, cx, cy)
                     self._last_trigger_time = now
                     self._last_trigger_pos = (cx, cy)
+                    self._last_item_text = item_text
+                    self._last_item_time = now_dedup
 
             except Exception as e:
                 logger.error(f"Detection loop error: {e}", exc_info=True)

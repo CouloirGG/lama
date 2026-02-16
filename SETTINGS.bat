@@ -25,8 +25,7 @@ echo   1. Change league
 echo   2. Reset first-run setup
 echo   3. Open log file
 echo   4. Open cache folder
-echo   5. Test Tesseract OCR
-echo   6. Run pipeline tests
+echo   5. Run pipeline tests
 echo   0. Exit
 echo.
 set /p CHOICE="  Enter choice: "
@@ -35,8 +34,7 @@ if "%CHOICE%"=="1" goto :change_league
 if "%CHOICE%"=="2" goto :reset_setup
 if "%CHOICE%"=="3" goto :open_log
 if "%CHOICE%"=="4" goto :open_cache
-if "%CHOICE%"=="5" goto :test_tesseract
-if "%CHOICE%"=="6" goto :run_tests
+if "%CHOICE%"=="5" goto :run_tests
 goto :eof
 
 :change_league
@@ -85,31 +83,10 @@ if exist "%CACHE%" (
 )
 goto :eof
 
-:test_tesseract
-echo.
-where tesseract >nul 2>&1
-if not errorlevel 1 (
-    tesseract --version
-    echo.
-    echo   ✓ Tesseract is working
-) else (
-    if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
-        "C:\Program Files\Tesseract-OCR\tesseract.exe" --version
-        echo.
-        echo   ✓ Tesseract is working
-    ) else (
-        echo   ✗ Tesseract not found
-        echo   Install from: https://github.com/UB-Mannheim/tesseract/wiki
-    )
-)
-echo.
-pause
-goto :eof
-
 :run_tests
 echo.
 cd /d "%~dp0"
-python src\test_pipeline.py
+python test_pipeline.py
 echo.
 pause
 goto :eof
