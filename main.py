@@ -214,10 +214,10 @@ class POE2PriceOverlay:
             # would match base_type to an unrelated unique's price)
             if (item.rarity in ("rare", "magic") and item.mods
                     and self.mod_parser.loaded):
-                # Skip trade API for magic items with only common mods
-                if item.rarity == "magic" and self._has_only_common_mods(item.mods):
+                # Skip trade API for items with only common/filler mods
+                if self._has_only_common_mods(item.mods):
                     display_name = item.name or item.base_type
-                    logger.info(f"Magic item with common mods: {display_name}")
+                    logger.info(f"{item.rarity.title()} with common mods only: {display_name}")
                     self.overlay.show_price(
                         text=f"{display_name}: Low value",
                         tier="low",
@@ -342,11 +342,8 @@ class POE2PriceOverlay:
                     )
                     self.stats["successful_lookups"] += 1
                 else:
-                    # Magic items with no trade results are vendor trash;
-                    # rare items might just be unusual/unlisted
-                    no_price_text = "Low value" if item.rarity == "magic" else "No price"
                     self.overlay.show_price(
-                        text=f"{display_name}: {no_price_text}",
+                        text=f"{display_name}: Low value",
                         tier="low",
                         cursor_x=cursor_x,
                         cursor_y=cursor_y,
@@ -431,15 +428,27 @@ class POE2PriceOverlay:
         "to chaos resistance", "to all elemental resistances",
         # Attributes
         "to strength", "to dexterity", "to intelligence", "to all attributes",
+        # Flask mods
+        "flask charges", "flask effect", "flask duration",
+        "reduced flask", "increased flask",
+        # Thorns / reflect
+        "thorns damage", "damage taken on block",
+        # Accuracy / leech
+        "to accuracy", "accuracy rating",
+        "leeches", "leech",
         # Misc filler
         "item rarity", "light radius", "stun ", "knockback",
-        "mana on kill", "life on kill",
+        "mana on kill", "life on kill", "mana cost",
         "reduced attribute requirements",
+        "reduced projectile range",
     )
 
     def _has_only_common_mods(self, mods: list) -> bool:
-        """Check if all mods are common filler (not worth trade API lookup)."""
+        """Check if all mods are common filler (not worth trade API lookup).
+        Implicit mods are always considered common (inherent to base type)."""
         for mod_type, mod_text in mods:
+            if mod_type == "implicit":
+                continue  # Implicits don't drive item value
             text_lower = mod_text.lower()
             if not any(pat in text_lower for pat in self._COMMON_MOD_PATTERNS):
                 return False

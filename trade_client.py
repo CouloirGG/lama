@@ -439,13 +439,28 @@ class TradeClient:
     # Patterns for common "filler" mods that rarely drive item price.
     # Mods NOT matching any of these patterns are considered "key" mods.
     _COMMON_MOD_PATTERNS = (
+        # Defenses / life / mana
         "maximum mana", "maximum life", "maximum energy shield",
         "mana regeneration", "life regeneration", "energy shield recharge",
+        "to armour", "to evasion",
+        "increased armour", "increased evasion", "increased energy shield",
+        # Resistances / attributes
         "to fire resistance", "to cold resistance", "to lightning resistance",
         "to chaos resistance", "to all elemental resistances",
         "to strength", "to dexterity", "to intelligence", "to all attributes",
+        # Flask mods (generally low value)
+        "flask charges", "flask effect", "flask duration",
+        "reduced flask", "increased flask",
+        # Thorns / reflect (generally worthless)
+        "thorns damage", "damage taken on block",
+        # Accuracy / leech
+        "to accuracy", "accuracy rating",
+        "leeches", "leech",
+        # Misc filler
         "item rarity", "light radius", "stun ", "knockback",
-        "mana on kill", "life on kill",
+        "mana on kill", "life on kill", "mana cost",
+        "reduced attribute requirements",
+        "reduced projectile range",
     )
 
     def _classify_filters(self, priceable: List[ParsedMod], stat_filters: list):
@@ -462,7 +477,12 @@ class TradeClient:
         common_filters = []
         for mod, sf in zip(priceable, stat_filters):
             text_lower = mod.raw_text.lower()
-            is_common = any(pat in text_lower for pat in self._COMMON_MOD_PATTERNS)
+            # Implicit mods are inherent to the base type — they don't
+            # differentiate value and should never be key mods
+            is_common = (
+                mod.mod_type == "implicit"
+                or any(pat in text_lower for pat in self._COMMON_MOD_PATTERNS)
+            )
             if is_common:
                 common_mods.append(mod)
                 common_filters.append(sf)
