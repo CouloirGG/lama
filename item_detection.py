@@ -50,6 +50,10 @@ class ItemDetector:
         # Callbacks
         self._on_change: Optional[Callable] = None
         self._on_hide: Optional[Callable] = None
+        # When True, the overlay was hidden by cursor movement and the
+        # next detection of the same item should re-fire the callback
+        # instead of being blocked by content dedup.
+        self._awaiting_reshow: bool = False
 
     def set_callback(self, callback: Callable):
         """
@@ -107,6 +111,7 @@ class ItemDetector:
                         # Hide overlay when cursor leaves the item
                         if self._on_hide:
                             self._on_hide()
+                            self._awaiting_reshow = True
                 else:
                     self._cursor_still_count += 1
 
@@ -138,8 +143,16 @@ class ItemDetector:
                 now_dedup = time.time()
                 if (item_text == self._last_item_text
                         and (now_dedup - self._last_item_time) < self._DEDUP_TTL):
-                    logger.debug(f"Skipping duplicate item at ({cx}, {cy})")
-                    self._last_trigger_pos = (cx, cy)
+                    if self._awaiting_reshow:
+                        # Overlay was hidden by cursor jitter — re-show same item
+                        logger.debug(f"Re-showing item at ({cx}, {cy})")
+                        self._awaiting_reshow = False
+                        self._last_trigger_pos = (cx, cy)
+                        if self._on_change:
+                            self._on_change(item_text, cx, cy)
+                    else:
+                        logger.debug(f"Skipping duplicate item at ({cx}, {cy})")
+                        self._last_trigger_pos = (cx, cy)
                     continue
 
                 logger.info(f"Clipboard item at ({cx}, {cy}): {item_text.split(chr(10))[0]}")
@@ -151,6 +164,7 @@ class ItemDetector:
                     self._last_trigger_pos = (cx, cy)
                     self._last_item_text = item_text
                     self._last_item_time = now_dedup
+                    self._awaiting_reshow = False
 
             except Exception as e:
                 logger.error(f"Detection loop error: {e}", exc_info=True)
