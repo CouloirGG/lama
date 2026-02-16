@@ -30,7 +30,7 @@ echo   Python %PYVER% detected
 :: ─── Check/Install Dependencies ─────────────────────
 echo   Checking dependencies...
 
-python -c "import mss, cv2, numpy, PIL, pytesseract, requests" >nul 2>&1
+python -c "import requests" >nul 2>&1
 if errorlevel 1 (
     echo   Installing required packages...
     pip install -r "%~dp0requirements.txt" --quiet
@@ -44,55 +44,6 @@ if errorlevel 1 (
     echo   ✓ Dependencies installed
 ) else (
     echo   ✓ Dependencies OK
-)
-
-:: ─── Check Tesseract ────────────────────────────────
-echo   Checking Tesseract OCR...
-
-:: Check common locations
-set TESS_FOUND=0
-
-if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
-    set TESS_FOUND=1
-    set TESS_PATH=C:\Program Files\Tesseract-OCR\tesseract.exe
-    echo   ✓ Tesseract found: %TESS_PATH%
-)
-
-if %TESS_FOUND%==0 (
-    where tesseract >nul 2>&1
-    if not errorlevel 1 (
-        set TESS_FOUND=1
-        echo   ✓ Tesseract found in PATH
-    )
-)
-
-if %TESS_FOUND%==0 (
-    color 0E
-    echo.
-    echo   ════════════════════════════════════════════
-    echo   Tesseract OCR is required but not installed.
-    echo   ════════════════════════════════════════════
-    echo.
-    echo   Install options:
-    echo.
-    echo   Option A - winget (recommended, fast):
-    echo     Open PowerShell and run:
-    echo     winget install UB-Mannheim.TesseractOCR
-    echo.
-    echo   Option B - Manual download:
-    echo     https://github.com/UB-Mannheim/tesseract/wiki
-    echo     Download and run the Windows installer.
-    echo     Use the default install path.
-    echo.
-    echo   After installing, run this script again.
-    echo.
-
-    set /p OPEN_BROWSER="  Open download page in browser? [Y/n]: "
-    if /i not "%OPEN_BROWSER%"=="n" (
-        start https://github.com/UB-Mannheim/tesseract/wiki
-    )
-    pause
-    exit /b 1
 )
 
 :: ─── Select League (first run) ──────────────────────
@@ -130,7 +81,7 @@ echo   League: %LEAGUE%
 echo   ════════════════════════════════════════════
 echo.
 echo   • Set POE2 to Windowed Fullscreen
-echo   • Enable "Show Full Descriptions" in UI settings
+echo   • Copy items with Ctrl+C in POE2 to get prices
 echo   • Hover over items to see prices
 echo   • Press Ctrl+C here to stop
 echo.
@@ -138,7 +89,7 @@ echo   ────────────────────────�
 echo.
 
 cd /d "%~dp0"
-python src\main.py --league "%LEAGUE%"
+python main.py --league "%LEAGUE%"
 
 echo.
 echo   Overlay stopped.

@@ -1,130 +1,110 @@
 # POE2 Price Overlay
 
-**Real-time item pricing for Path of Exile 2 — zero setup, zero hotkeys.**
+**Real-time item pricing for Path of Exile 2 — clipboard-based, zero third-party installs.**
 
-Hover over any item and instantly see its market value. No Ctrl+C, no Ctrl+D, no alt-tabbing. Just play.
+Copy any item with Ctrl+C and instantly see its market value in an overlay. No OCR, no Tesseract, no screen capture. Just clipboard monitoring and poe.ninja lookups.
+
+---
+
+## Quick Start
+
+```
+git clone https://github.com/CarbonSMASH/POE2_OCR.git
+cd POE2_OCR
+```
+
+**Double-click `START.bat`** — that's it.
+
+On first run it will:
+1. Check Python and install missing packages (`requests`)
+2. Ask which league you're playing
+3. Launch the overlay
+
+Subsequent launches skip setup and go straight to the overlay.
+
+### Prerequisites
+
+- **Python 3.10+** — [Download](https://www.python.org/downloads/) (check "Add Python to PATH" during install)
+- **Windows 10/11** (required for overlay and cursor tracking)
 
 ---
 
 ## How It Works
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        DETECTION PIPELINE                       │
-│                                                                 │
-│   ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌─────────┐ │
-│   │  Screen   │───▶│   OCR    │───▶│  Item    │───▶│  Price  │ │
-│   │  Capture  │    │  Engine  │    │  Parser  │    │  Cache  │ │
-│   └──────────┘    └──────────┘    └──────────┘    └────┬────┘ │
-│        │                                                │      │
-│   Watches 600x400           Extracts text         Looks up     │
-│   region around cursor      from tooltips        poe.ninja     │
-│   at 10 fps                                      local cache   │
-│                                                        │       │
-│                                                   ┌────▼────┐  │
-│                                                   │ Overlay  │  │
-│                                                   │ Window   │  │
-│                                                   └─────────┘  │
-│                                                   Shows price   │
-│                                                   near cursor   │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                    CLIPBOARD PIPELINE                       │
+│                                                            │
+│   ┌───────────┐    ┌───────────┐    ┌──────────────────┐  │
+│   │ Clipboard  │───>│   Item    │───>│   Price Cache    │  │
+│   │ Monitor    │    │   Parser  │    │   (poe.ninja)    │  │
+│   └───────────┘    └───────────┘    └────────┬─────────┘  │
+│                                               │            │
+│   Watches for        Parses item text    Looks up price    │
+│   Ctrl+C in POE2     into structured     from local cache  │
+│                      item data                             │
+│                                          ┌────v─────────┐  │
+│                                          │   Overlay     │  │
+│                                          │   Window      │  │
+│                                          └──────────────┘  │
+│                                          Shows price near   │
+│                                          cursor             │
+└────────────────────────────────────────────────────────────┘
 ```
 
-### Core Concepts
-
-1. **Cursor Region Monitoring** — Only captures a small area around your cursor (not the full screen). This keeps CPU usage minimal (~3-5%).
-
-2. **Visual Change Detection** — Compares frames to detect when a tooltip appears or a nameplate expands. Only triggers OCR when something actually changes.
-
-3. **Local Price Cache** — Downloads all price data from poe.ninja every 15 minutes and stores it locally. Price lookups are instant (no API calls during gameplay).
-
-4. **Transparent Overlay** — Click-through window that shows a color-coded price tag next to the item. Disappears after 4 seconds.
+1. **Clipboard Monitoring** — Detects when you Ctrl+C an item in POE2. Parses the item text from the clipboard.
+2. **Item Detection** — Identifies the item type (unique, currency, gem, rare, etc.) and extracts key properties.
+3. **Local Price Cache** — Downloads all price data from poe.ninja periodically and caches it locally. Price lookups are instant.
+4. **Trade API** — For rare items, queries the POE2 trade API with the item's actual mods to find comparable listings.
+5. **Transparent Overlay** — Click-through window that shows a color-coded price tag near your cursor.
 
 ---
 
-## Quick Start (Desktop App)
+## Scripts
 
-### Prerequisites
+| File             | Purpose                                        |
+|------------------|------------------------------------------------|
+| `START.bat`      | Main launcher — double-click to run            |
+| `DEBUG.bat`      | Launch with verbose logging to console         |
+| `SETTINGS.bat`   | Change league, view logs, run tests            |
+| `REPORT_BUG.bat` | Zip logs and open a GitHub issue               |
 
-- **Python 3.10+** — [Download](https://www.python.org/downloads/)
-  - ⚠️ Check **"Add Python to PATH"** during install
-- **Tesseract OCR** — Install via one of:
-  - PowerShell: `winget install UB-Mannheim.TesseractOCR`
-  - Or download from [UB-Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
-- **Windows 10/11** (required for overlay and cursor tracking)
+---
 
-### Launch
+## Bug Reporting
 
-**Double-click `START.bat`** — that's it.
+Something broken? **Double-click `REPORT_BUG.bat`**. It will:
 
-On first run it will:
-1. Check Python and install missing packages
-2. Verify Tesseract is installed
-3. Ask which league you're playing
-4. Launch the overlay
+1. Zip your logs and debug data to your Desktop
+2. Open a GitHub issue page in your browser
+3. Describe the bug, drag-drop the zip, and submit
 
-Subsequent launches skip setup and go straight to the overlay.
+---
 
-### Other Scripts
+## File Structure
 
-| File             | Purpose                                       |
-|------------------|-----------------------------------------------|
-| `START.bat`      | Main launcher (double-click this)             |
-| `SETTINGS.bat`   | Change league, view logs, run tests           |
-| `BUILD.bat`      | Build standalone .exe (optional, advanced)    |
-| `launcher.py`    | Python launcher with first-run wizard         |
-
-### Manual Launch (Advanced)
-
-```bash
-# Install dependencies once
-pip install -r requirements.txt
-
-# Run with specific league
-python src/main.py --league "Dawn"
-
-# Debug mode (verbose logging, console output)
-python src/main.py --console --debug
 ```
-
----
-
-## POE2 Game Settings (Recommended)
-
-For best results, enable these in POE2 settings:
-
-1. **Options → UI → Show Full Descriptions**: `ON`
-   - Shows item level on ground nameplates
-   - Enables accurate base type pricing
-
-2. **Display Mode**: `Windowed Fullscreen` (borderless)
-   - Required for overlay to appear on top of game
-
----
-
-## Price Display
-
-Prices are color-coded by value:
-
-| Color  | Meaning              | Threshold    |
-|--------|----------------------|--------------|
-| 🟠 Orange | Very valuable      | ≥ 50 Exalted |
-| 🟡 Gold   | Worth picking up   | ≥ 5 Exalted  |
-| 🔵 Teal   | Decent value       | ≥ 1 Exalted  |
-| ⚪ Grey   | Low value          | < 1 Exalted  |
-
----
-
-## What Gets Priced
-
-| Item Type       | Ground Nameplate | Hover Tooltip | Inventory |
-|-----------------|:----------------:|:-------------:|:---------:|
-| Currency        | ✅               | ✅            | ✅        |
-| Unique Items    | ✅               | ✅            | ✅        |
-| Skill Gems      | ✅               | ✅            | ✅        |
-| Waystones/Maps  | ✅               | ✅            | ✅        |
-| Valuable Bases  | ✅ (with ilvl)   | ✅            | ✅        |
-| Rare Items      | Base value only  | ✅ (mods)     | ✅        |
+POE2_OCR/
+├── START.bat              # Main launcher
+├── DEBUG.bat              # Debug mode launcher
+├── SETTINGS.bat           # Settings menu
+├── REPORT_BUG.bat         # Bug report helper
+├── launcher.py            # Python launcher with first-run wizard
+├── main.py                # Entry point & orchestrator
+├── config.py              # All tunable constants
+├── clipboard_reader.py    # Clipboard monitoring
+├── item_detection.py      # Item type detection from clipboard text
+├── item_parser.py         # Parse item text into structured data
+├── mod_parser.py          # Mod parsing for rare item pricing
+├── price_cache.py         # poe.ninja data fetcher & local cache
+├── trade_client.py        # POE2 trade API client for rare items
+├── overlay.py             # Transparent overlay window
+├── screen_capture.py      # Screen region capture utilities
+├── test_pipeline.py       # Pipeline validation tests
+├── diagnose.py            # Diagnostic tool
+├── requirements.txt
+└── README.md
+```
 
 ---
 
@@ -132,85 +112,17 @@ Prices are color-coded by value:
 
 This tool is designed to be fully compliant with GGG's third-party tool policy:
 
-- ❌ Does NOT inject into the game client
-- ❌ Does NOT read game memory
-- ❌ Does NOT modify any game files
-- ❌ Does NOT automate any game actions
-- ❌ Does NOT send any keypresses to the game
-- ✅ ONLY reads pixels from the screen (passive observation)
-- ✅ ONLY displays information in a separate overlay window
-- ✅ Same approach used by Awakened PoE Trade, Exiled Exchange, etc.
-
----
-
-## Architecture
-
-```
-poe2-price-overlay/
-├── START.bat              # ← Double-click to launch
-├── SETTINGS.bat           # Change league, view logs, run tests
-├── BUILD.bat              # Build standalone .exe (optional)
-├── launcher.py            # Python launcher with first-run wizard
-├── build.spec             # PyInstaller config for .exe build
-├── requirements.txt
-├── README.md
-├── src/
-│   ├── main.py            # Entry point & orchestrator
-│   ├── config.py           # All tunable constants
-│   ├── screen_capture.py   # Cursor tracking & change detection
-│   ├── ocr_engine.py       # Text extraction from screenshots
-│   ├── item_parser.py      # Parse OCR text → structured item data
-│   ├── price_cache.py      # poe.ninja data fetcher & local cache
-│   ├── overlay.py          # Transparent overlay window
-│   └── test_pipeline.py    # Pipeline validation tests
-├── data/                   # Cached price data (auto-generated)
-└── assets/                 # Icons, fonts (future)
-```
-
----
-
-## Configuration
-
-All settings are in `src/config.py`. Key tunables:
-
-| Setting                  | Default | Description                        |
-|--------------------------|---------|------------------------------------|
-| `SCAN_FPS`              | 10      | Capture checks per second          |
-| `CHANGE_THRESHOLD`      | 25      | Pixel change sensitivity           |
-| `DETECTION_COOLDOWN`    | 0.5s    | Minimum time between triggers      |
-| `PRICE_REFRESH_INTERVAL`| 900s    | poe.ninja refresh interval         |
-| `OVERLAY_DISPLAY_DURATION`| 4.0s  | How long price tag stays visible   |
-
----
-
-## Development Roadmap
-
-### Phase 1 — Python Prototype (Current)
-- [x] Screen capture around cursor
-- [x] Visual change detection
-- [x] OCR text extraction
-- [x] Item name/type parsing
-- [x] poe.ninja price cache
-- [x] Transparent overlay window
-- [ ] Real-world accuracy testing with POE2
-- [ ] Performance benchmarking
-
-### Phase 2 — Polish & Optimize
-- [ ] Windows OCR API integration (faster than Tesseract)
-- [ ] Loot filter parsing (fast-path detection)
-- [ ] Settings GUI (system tray)
-- [ ] Auto-detect active league
-- [ ] Overlay customization (size, position, opacity)
-
-### Phase 3 — Steam Release
-- [ ] Electron wrapper for Steam distribution
-- [ ] Steam SDK integration
-- [ ] Auto-update system
-- [ ] Store page & marketing
-- [ ] Community beta testing
+- Does NOT inject into the game client
+- Does NOT read game memory
+- Does NOT modify any game files
+- Does NOT automate any game actions
+- Does NOT send any keypresses to the game
+- ONLY reads text from the clipboard (Ctrl+C is a manual player action)
+- ONLY displays information in a separate overlay window
+- Same approach used by Awakened PoE Trade, Exiled Exchange, etc.
 
 ---
 
 ## License
 
-TBD — This is a prototype. Do not distribute without permission.
+See [LICENSE](LICENSE) for details.
