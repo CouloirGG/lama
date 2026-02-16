@@ -487,51 +487,16 @@ class POE2PriceOverlay:
         "tribal mask": "The Vertex",
     }
 
-    # Patterns for common filler mods on magic items — not worth a trade API call
-    _COMMON_MOD_PATTERNS = (
-        # Defenses
-        "to armour", "to evasion", "to energy shield",
-        "increased armour", "increased evasion", "increased energy shield",
-        "increased armour and evasion", "increased armour and energy shield",
-        "increased evasion and energy shield",
-        # Life/mana
-        "maximum life", "maximum mana",
-        "life regeneration", "mana regeneration",
-        "energy shield recharge",
-        # Resistances
-        "to fire resistance", "to cold resistance", "to lightning resistance",
-        "to chaos resistance", "to all elemental resistances",
-        # Attributes
-        "to strength", "to dexterity", "to intelligence", "to all attributes",
-        # Flask mods
-        "flask charges", "flask effect", "flask duration",
-        "reduced flask", "increased flask",
-        # Thorns / reflect
-        "thorns damage", "damage taken on block",
-        # Accuracy / leech
-        "to accuracy", "accuracy rating",
-        "leeches", "leech",
-        # Flat added damage (filler at low rolls; high rolls come with crit/% damage)
-        "damage to attacks", "damage to spells",
-        # Ailment / status duration
-        "freeze duration", "chill effect", "ignite duration",
-        "shock effect", "poison duration", "bleed duration",
-        "curse effect", "ailment",
-        # Misc filler
-        "item rarity", "light radius", "stun ", "knockback",
-        "mana on kill", "life on kill", "mana cost",
-        "reduced attribute requirements",
-        "reduced projectile range",
-    )
-
     def _has_only_common_mods(self, mods: list) -> bool:
         """Check if all mods are common filler (not worth trade API lookup).
-        Implicit mods are always considered common (inherent to base type)."""
+        Implicit mods are always considered common (inherent to base type).
+        Uses the canonical pattern list from TradeClient."""
+        patterns = TradeClient._COMMON_MOD_PATTERNS
         for mod_type, mod_text in mods:
             if mod_type == "implicit":
                 continue  # Implicits don't drive item value
             text_lower = mod_text.lower()
-            if not any(pat in text_lower for pat in self._COMMON_MOD_PATTERNS):
+            if not any(pat in text_lower for pat in patterns):
                 return False
         return True
 
