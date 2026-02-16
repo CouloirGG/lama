@@ -45,10 +45,11 @@ class ItemDetector:
         # Content-based dedup: don't fire callback for the same item text
         self._last_item_text: str = ""
         self._last_item_time: float = 0
-        self._DEDUP_TTL: float = 5.0  # seconds before same item can re-trigger
+        self._DEDUP_TTL: float = 30.0  # seconds before same item can re-trigger
 
-        # Callback when item text is read
+        # Callbacks
         self._on_change: Optional[Callable] = None
+        self._on_hide: Optional[Callable] = None
 
     def set_callback(self, callback: Callable):
         """
@@ -56,6 +57,10 @@ class ItemDetector:
         Callback receives: (item_text: str, cursor_x: int, cursor_y: int)
         """
         self._on_change = callback
+
+    def set_hide_callback(self, callback: Callable):
+        """Set callback for when cursor moves away from a priced item."""
+        self._on_hide = callback
 
     def _is_same_position(self, pos_a: Tuple[int, int], pos_b: Tuple[int, int]) -> bool:
         """Check if two positions are within CURSOR_STILL_RADIUS of each other."""
@@ -93,10 +98,15 @@ class ItemDetector:
 
                 if cursor_moved:
                     self._cursor_still_count = 0
-                    # Clear cooldowns when cursor moves away from last trigger spot
+                    # Clear position cooldown when cursor moves away from last trigger spot
+                    # (but keep _last_item_text for content dedup — the game can return
+                    # stale item data from a previous tooltip, so we must prevent
+                    # the same item text from re-triggering at every new position)
                     if self._last_trigger_pos and not self._is_same_position((cx, cy), self._last_trigger_pos):
                         self._last_trigger_pos = None
-                        self._last_item_text = ""
+                        # Hide overlay when cursor leaves the item
+                        if self._on_hide:
+                            self._on_hide()
                 else:
                     self._cursor_still_count += 1
 

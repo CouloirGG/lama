@@ -109,7 +109,12 @@ class ClipboardReader:
         if original and original != new_text:
             self._set_clipboard_text(original)
 
-        # 7. Validate — POE2 item data always contains "Rarity:" in the header
+        # 7. If the text didn't change, the clipboard clear failed or no
+        #    new item was copied — treat as no detection to avoid stale data.
+        if new_text == original:
+            return None
+
+        # 8. Validate — POE2 item data always contains "Rarity:" in the header
         if new_text and self._looks_like_item_data(new_text):
             return new_text
 

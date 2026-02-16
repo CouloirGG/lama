@@ -72,18 +72,20 @@ PRICE_TIER_GOOD = 5.0
 PRICE_TIER_DECENT = 1.0
 
 # How long the price tag stays visible (seconds)
-OVERLAY_DISPLAY_DURATION = 4.0
+OVERLAY_DISPLAY_DURATION = 2.0
 
 # ─────────────────────────────────────────────
 # Trade API (for rare item pricing)
 # ─────────────────────────────────────────────
 TRADE_API_BASE = "https://www.pathofexile.com/api/trade2"
 TRADE_STATS_URL = f"{TRADE_API_BASE}/data/stats"
-TRADE_MAX_REQUESTS_PER_SECOND = 2
+TRADE_MAX_REQUESTS_PER_SECOND = 1  # Conservative to avoid 60s trade API bans
 TRADE_RESULT_COUNT = 8
 TRADE_CACHE_TTL = 300  # 5 minutes
 TRADE_MOD_MIN_MULTIPLIER = 0.8  # 80% of actual value as min filter
 TRADE_STATS_CACHE_FILE = CACHE_DIR / "trade_stats.json"
+TRADE_ITEMS_URL = f"{TRADE_API_BASE}/data/items"
+TRADE_ITEMS_CACHE_FILE = CACHE_DIR / "trade_items.json"
 
 # ─────────────────────────────────────────────
 # Logging

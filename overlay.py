@@ -48,11 +48,32 @@ class PriceOverlay:
     - The overlay window is always present but hidden when not showing a price
     """
 
+    _NORMAL_BORDER_COLOR = "#333355"
+
+    # Value-based border effects: (min_divine, colors, pulse_ms, border_width)
+    # pulse_ms=0 means static (no pulse). Checked highest-first.
+    _VALUE_TIERS = [
+        (1000, ("#FF4500", "#FFD700"), 250, 3),   # Mirror: red-orange/gold, fast
+        (500,  ("#FF6600", "#FFD700"), 350, 3),    # Orange/gold, fast
+        (250,  ("#FFD700", "#B8860B"), 450, 3),    # Gold, medium
+        (100,  ("#FFD700", "#8B7536"), 600, 2),    # Gold, slow
+        (50,   ("#DAA520",),           0,   2),    # Dark gold, static
+        (25,   ("#A0A0B0",),           0,   2),    # Silver, static
+    ]
+    # Fallback for estimates below 25 divine
+    _ESTIMATE_BORDER_COLORS = ("#FFD700", "#B8860B")
+    _ESTIMATE_PULSE_MS = 600
+
     def __init__(self):
         self._root: Optional[tk.Tk] = None
         self._label: Optional[tk.Label] = None
         self._visible = False
         self._hide_timer: Optional[str] = None
+        self._pulse_timer: Optional[str] = None
+        self._pulse_index: int = 0
+        self._pulse_colors: tuple = ()
+        self._pulse_ms: int = 0
+        self._is_estimate: bool = False
         self._ready = threading.Event()
         self._pending_updates = []
         self._lock = threading.Lock()
@@ -84,12 +105,13 @@ class PriceOverlay:
             # Not supported on all platforms
             pass
 
-        # Border frame provides a subtle 1px outline around the label
+        # Border frame provides an outline around the label
+        # (2px so estimate pulse is clearly visible)
         self._frame = tk.Frame(
             self._root,
-            bg="#333355",
-            padx=1,
-            pady=1,
+            bg=self._NORMAL_BORDER_COLOR,
+            padx=2,
+            pady=2,
         )
         self._frame.pack()
 
@@ -123,19 +145,23 @@ class PriceOverlay:
         self._ready.set()
         logger.info("Overlay window initialized")
 
-    def show_price(self, text: str, tier: str, cursor_x: int, cursor_y: int):
+    def show_price(self, text: str, tier: str, cursor_x: int, cursor_y: int,
+                   estimate: bool = False, price_divine: float = 0):
         """
         Show a price tag near the cursor position.
         Thread-safe - can be called from any thread.
-        
+
         Args:
             text: Price text (e.g., "~8 Exalted")
             tier: Price tier ("high", "good", "decent", "low")
             cursor_x: Cursor X position on screen
             cursor_y: Cursor Y position on screen
+            estimate: If True, price is a conservative estimate
+            price_divine: Price in divine orbs (drives border effects)
         """
         with self._lock:
-            self._pending_updates.append(("show", text, tier, cursor_x, cursor_y))
+            self._pending_updates.append(
+                ("show", text, tier, cursor_x, cursor_y, estimate, price_divine))
 
     def hide(self):
         """Hide the price overlay. Thread-safe."""
@@ -172,8 +198,8 @@ class PriceOverlay:
         for update in updates:
             try:
                 if update[0] == "show":
-                    _, text, tier, cx, cy = update
-                    self._do_show(text, tier, cx, cy)
+                    _, text, tier, cx, cy, estimate, price_divine = update
+                    self._do_show(text, tier, cx, cy, estimate, price_divine)
                 elif update[0] == "hide":
                     self._do_hide()
             except Exception as e:
@@ -183,12 +209,13 @@ class PriceOverlay:
         if self._root:
             self._root.after(50, self._process_pending)
 
-    def _do_show(self, text: str, tier: str, cursor_x: int, cursor_y: int):
+    def _do_show(self, text: str, tier: str, cursor_x: int, cursor_y: int,
+                 estimate: bool = False, price_divine: float = 0):
         """Actually show the price tag (must be on main thread)."""
         if not self._root or not self._label:
             return
 
-        # Set color based on tier
+        # Set text color based on tier
         color = {
             "high": PRICE_COLOR_HIGH,
             "good": PRICE_COLOR_GOOD,
@@ -198,6 +225,44 @@ class PriceOverlay:
 
         # Update label
         self._label.configure(text=f" {text} ", fg=color)
+
+        # Stop any existing pulse animation
+        if self._pulse_timer:
+            self._root.after_cancel(self._pulse_timer)
+            self._pulse_timer = None
+
+        # Determine border effect from divine price
+        border_colors = None
+        pulse_ms = 0
+        border_width = 2
+
+        for min_div, colors, pms, bw in self._VALUE_TIERS:
+            if price_divine >= min_div:
+                border_colors = colors
+                pulse_ms = pms
+                border_width = bw
+                break
+
+        # Fallback: estimates below value tiers still get gold pulse
+        if not border_colors and estimate:
+            border_colors = self._ESTIMATE_BORDER_COLORS
+            pulse_ms = self._ESTIMATE_PULSE_MS
+
+        # Apply border effect
+        self._frame.configure(padx=border_width, pady=border_width)
+        if border_colors:
+            self._pulse_colors = border_colors
+            self._pulse_ms = pulse_ms
+            self._pulse_index = 0
+            self._frame.configure(bg=border_colors[0])
+            if pulse_ms > 0 and len(border_colors) > 1:
+                self._is_estimate = True  # reuse flag to keep pulse running
+                self._start_pulse()
+            else:
+                self._is_estimate = False
+        else:
+            self._frame.configure(bg=self._NORMAL_BORDER_COLOR)
+            self._is_estimate = False
 
         # Position near cursor
         x = cursor_x + OVERLAY_OFFSET_X
@@ -253,9 +318,23 @@ class PriceOverlay:
             self._do_hide
         )
 
+    def _start_pulse(self):
+        """Pulse the border between colors at the configured speed."""
+        if not self._root or not self._is_estimate or not self._visible:
+            return
+        self._pulse_index = (self._pulse_index + 1) % len(self._pulse_colors)
+        self._frame.configure(bg=self._pulse_colors[self._pulse_index])
+        self._pulse_timer = self._root.after(self._pulse_ms, self._start_pulse)
+
     def _do_hide(self):
         """Actually hide the overlay (must be on main thread)."""
         if self._root and self._visible:
+            # Stop pulse animation
+            if self._pulse_timer:
+                self._root.after_cancel(self._pulse_timer)
+                self._pulse_timer = None
+            self._is_estimate = False
+            self._frame.configure(bg=self._NORMAL_BORDER_COLOR, padx=2, pady=2)
             self._root.withdraw()
             self._visible = False
             self._hide_timer = None
@@ -320,11 +399,13 @@ class ConsoleOverlay:
     def initialize(self):
         pass
 
-    def show_price(self, text: str, tier: str, cursor_x: int, cursor_y: int):
+    def show_price(self, text: str, tier: str, cursor_x: int, cursor_y: int,
+                   estimate: bool = False, price_divine: float = 0):
         tier_symbols = {"high": "$$", "good": ">>", "decent": "- ", "low": "  "}
         symbol = tier_symbols.get(tier, "  ")
+        flag = " [est]" if estimate else ""
         try:
-            print(f"  {symbol} {text}  (at {cursor_x}, {cursor_y})")
+            print(f"  {symbol} {text}{flag}  (at {cursor_x}, {cursor_y})")
         except (UnicodeEncodeError, OSError):
             pass  # Windows cp1252 terminal can't encode some chars
 

@@ -49,7 +49,7 @@ class POE2PriceOverlay:
     """
 
     def __init__(self, league: str = DEFAULT_LEAGUE, use_console: bool = False):
-        self.league = league
+        self.league = league.strip()
 
         # Initialize components
         logger.info("Initializing POE2 Price Overlay...")
@@ -70,6 +70,11 @@ class POE2PriceOverlay:
         else:
             self.overlay = PriceOverlay()
 
+        # Trade query cancellation: increment on each new detection so
+        # stale trade queries abort before wasting API calls.
+        self._trade_generation = 0
+        self._trade_gen_lock = threading.Lock()
+
         # Statistics
         self.stats = {
             "triggers": 0,
@@ -80,8 +85,9 @@ class POE2PriceOverlay:
             "start_time": 0,
         }
 
-        # Wire up the detection callback
+        # Wire up detection callbacks
         self.item_detector.set_callback(self._on_change_detected)
+        self.item_detector.set_hide_callback(self.overlay.hide)
 
     def start(self):
         """
@@ -132,16 +138,6 @@ class POE2PriceOverlay:
             name="StatusReporter"
         )
         status_thread.start()
-
-        # 3b. Disable console Ctrl+C handling — we send Ctrl+C via keybd_event
-        # to copy items from POE2, and Python's console would otherwise treat
-        # it as a KeyboardInterrupt that kills the overlay.
-        try:
-            import ctypes
-            ctypes.windll.kernel32.SetConsoleCtrlHandler(None, True)
-            logger.debug("Console Ctrl+C handler disabled")
-        except Exception:
-            pass
 
         logger.info("Ready! Hover over items in POE2 to see prices.")
         logger.info("Close this window to stop.\n")
@@ -223,6 +219,7 @@ class POE2PriceOverlay:
                 tier=result["tier"],
                 cursor_x=cursor_x,
                 cursor_y=cursor_y,
+                price_divine=result.get("divine_value", 0),
             )
             self.stats["successful_lookups"] += 1
 
@@ -233,8 +230,20 @@ class POE2PriceOverlay:
         """
         Price a rare item via the trade API in a background thread.
         Shows "Checking..." immediately, then updates with result.
+        Cancels any previous in-flight trade query via generation counter.
         """
         display_name = item.name or item.base_type
+
+        # Increment generation — any in-flight trade query with an older
+        # generation will abort before making more API calls.
+        with self._trade_gen_lock:
+            self._trade_generation += 1
+            my_gen = self._trade_generation
+
+        def _is_stale():
+            """Check if a newer item detection has superseded us."""
+            with self._trade_gen_lock:
+                return my_gen != self._trade_generation
 
         # Show "Checking..." immediately
         self.overlay.show_price(
@@ -246,6 +255,20 @@ class POE2PriceOverlay:
 
         def _do_price():
             try:
+                # Resolve missing base_type for magic items (name includes
+                # prefix + base + suffix, e.g. "Mystic Stellar Amulet of the Fox")
+                if not item.base_type and item.name:
+                    resolved = self.mod_parser.resolve_base_type(item.name)
+                    if resolved:
+                        item.base_type = resolved
+                        logger.info(f"Resolved base type: '{item.name}' → '{resolved}'")
+                    else:
+                        logger.info(f"Could not resolve base type for '{item.name}'")
+
+                if _is_stale():
+                    logger.debug(f"Trade query cancelled (stale): {display_name}")
+                    return
+
                 parsed_mods = self.mod_parser.parse_mods(item)
                 if not parsed_mods:
                     logger.info(f"No mods matched for {display_name}")
@@ -254,13 +277,19 @@ class POE2PriceOverlay:
 
                 logger.info(f"Matched {len(parsed_mods)} mods for {display_name}")
 
-                result = self.trade_client.price_rare_item(item, parsed_mods)
+                result = self.trade_client.price_rare_item(
+                    item, parsed_mods, is_stale=_is_stale)
+                if _is_stale():
+                    logger.debug(f"Trade result discarded (stale): {display_name}")
+                    return
                 if result:
                     self.overlay.show_price(
                         text=f"{display_name}: {result.display}",
                         tier=result.tier,
                         cursor_x=cursor_x,
                         cursor_y=cursor_y,
+                        estimate=result.estimate,
+                        price_divine=result.min_price,
                     )
                     self.stats["successful_lookups"] += 1
                 else:
@@ -370,6 +399,15 @@ def setup_logging(debug: bool = False):
 
 
 def main():
+    # Disable console Ctrl+C handling FIRST — before any threads start.
+    # We send Ctrl+C via keybd_event to copy items from POE2, and the
+    # Windows console would otherwise treat it as a terminate signal.
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetConsoleCtrlHandler(None, True)
+    except Exception:
+        pass
+
     parser = argparse.ArgumentParser(
         description="POE2 Price Overlay - Real-time item pricing",
         formatter_class=argparse.RawDescriptionHelpFormatter,

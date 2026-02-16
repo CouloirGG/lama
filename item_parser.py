@@ -25,6 +25,7 @@ class ParsedItem:
     """Structured item data extracted from OCR text."""
     name: str = ""
     base_type: str = ""
+    item_class: str = ""  # "Amulets", "Body Armours", etc. from clipboard header
     rarity: str = "unknown"  # normal, magic, rare, unique, currency, gem
     item_level: int = 0
     gem_level: int = 0
@@ -135,6 +136,7 @@ class ItemParser:
         for line in header_lines:
             if line.startswith("Item Class:"):
                 item_class = line.split(":", 1)[1].strip()
+                item.item_class = item_class
                 # Use item class to help classify
                 if item_class.lower() in ("currency", "stackable currency"):
                     item.rarity = "currency"
