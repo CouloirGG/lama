@@ -329,6 +329,11 @@ class PriceOverlay:
     def _do_hide(self):
         """Actually hide the overlay (must be on main thread)."""
         if self._root and self._visible:
+            # Cancel auto-hide timer so it can't fire later and kill a
+            # subsequent show_price (the root cause of the "flash and vanish" bug)
+            if self._hide_timer:
+                self._root.after_cancel(self._hide_timer)
+                self._hide_timer = None
             # Stop pulse animation
             if self._pulse_timer:
                 self._root.after_cancel(self._pulse_timer)
@@ -337,7 +342,6 @@ class PriceOverlay:
             self._frame.configure(bg=self._NORMAL_BORDER_COLOR, padx=2, pady=2)
             self._root.withdraw()
             self._visible = False
-            self._hide_timer = None
 
     def _make_click_through(self):
         """
