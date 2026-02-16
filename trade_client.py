@@ -456,6 +456,10 @@ class TradeClient:
         # Accuracy / leech
         "to accuracy", "accuracy rating",
         "leeches", "leech",
+        # Ailment / status duration
+        "freeze duration", "chill effect", "ignite duration",
+        "shock effect", "poison duration", "bleed duration",
+        "curse effect", "ailment",
         # Misc filler
         "item rarity", "light radius", "stun ", "knockback",
         "mana on kill", "life on kill", "mana cost",
