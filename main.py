@@ -633,6 +633,11 @@ def main():
     try:
         import ctypes
         ctypes.windll.kernel32.SetConsoleCtrlHandler(None, True)
+        # Resize console window — find by title for Windows Terminal compatibility
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, "POE2 Price Overlay")
+        if hwnd:
+            user32.MoveWindow(hwnd, 100, 100, 650, 500, True)
     except Exception:
         pass
 

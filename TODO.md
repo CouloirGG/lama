@@ -5,7 +5,7 @@
 - [ ] **"Terminate batch job?" on START.bat** — Moved `SetConsoleCtrlHandler` earlier but prompt may still appear occasionally. Needs further investigation.
 
 ## Backlog
-- [ ] **Terminal window sizing** — Make the console window smaller (~400x400). `mode con` and PowerShell `MoveWindow` didn't take effect. Try alternative approaches.
+- [ ] **ilvl breakpoint tables** — ilvl is now included in trade API queries for base items, but different slots have different ilvl breakpoints (bows need 82 for top phys%, wands only need 81). Could build per-slot breakpoint tables and consider ilvl in loot filter tiering for exceptional bases.
 - [ ] **Common mod classification** — Heuristic-based; may occasionally misclassify an unusual valuable mod as "common", affecting rare item pricing.
 - [ ] **"Grants Skill:" edge cases** — Unusual skill grant formats might not be stripped by `_SKIP_LINE_RE`, leaking into trade queries.
 - [ ] **Rate limiting under burst** — Progressive search makes 2-3 API calls per item. Rapid scanning can trigger 60s trade API ban. Not an issue in normal usage but could be improved.
@@ -17,6 +17,10 @@
 - [ ] **Chanceable base icons** — Show a Chance Orb icon and the target unique's icon (e.g., Headhunter) in the overlay for chanceable normal bases. Visual support alongside the text.
 
 ## Completed
+
+### Session 4 (2026-02-16)
+- [x] ilvl-aware base pricing — trade API queries now include ilvl min filter, separate cache entries per ilvl, overlay shows ilvl in display text
+- [x] Terminal window sizing — resize console to ~420x400 via Win32 `GetConsoleWindow` + `MoveWindow`
 
 ### Session 3 (2026-02-15)
 - [x] Fix clipboard reader same-item bug — clear verification instead of comparing with original
