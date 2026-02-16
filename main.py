@@ -184,6 +184,40 @@ class POE2PriceOverlay:
                 + (" [unidentified]" if item.unidentified else "")
             )
 
+            # Skip worthless currency shards — not worth displaying
+            item_lower = (item.name or "").lower()
+            if any(s in item_lower for s in self._WORTHLESS_ITEMS):
+                logger.info(f"Worthless item: {item.name}")
+                self.overlay.show_price(
+                    text="\u2717", tier="low",
+                    cursor_x=cursor_x, cursor_y=cursor_y,
+                )
+                return
+
+            # Chanceable bases: normal items that can become valuable uniques
+            base_lower = (item.base_type or "").lower()
+            if item.rarity == "normal" and base_lower in self._CHANCEABLE_BASES:
+                unique_name = self._CHANCEABLE_BASES[base_lower]
+                # Try to pull the unique's price from cache
+                unique_result = self.price_cache.lookup(unique_name)
+                if unique_result:
+                    price_str = unique_result["display"]
+                    tier = unique_result["tier"]
+                    divine = unique_result.get("divine_value", 0)
+                else:
+                    price_str = "valuable"
+                    tier = "good"
+                    divine = 0
+                logger.info(f"Chanceable base: {item.base_type} → {unique_name} ({price_str})")
+                self.overlay.show_price(
+                    text=f"Chance \u2192 {unique_name} ({price_str})",
+                    tier=tier,
+                    cursor_x=cursor_x, cursor_y=cursor_y,
+                    price_divine=divine,
+                )
+                self.stats["successful_lookups"] += 1
+                return
+
             # Unidentified items: can't price rares/magic without mods
             if item.unidentified:
                 base = item.base_type or item.name
@@ -411,6 +445,19 @@ class POE2PriceOverlay:
 
         thread = threading.Thread(target=_do_price, daemon=True, name="BasePricer")
         thread.start()
+
+    # Items that should always show ✗ (too cheap to bother pricing)
+    _WORTHLESS_ITEMS = (
+        "chance shard", "transmutation shard", "regal shard",
+        "artificer's shard",
+    )
+
+    # Normal base types that can be chanced into valuable uniques.
+    # Maps base_type (lowercase) → unique name for price lookup.
+    _CHANCEABLE_BASES = {
+        "heavy belt": "Headhunter",
+        "tribal mask": "The Vertex",
+    }
 
     # Patterns for common filler mods on magic items — not worth a trade API call
     _COMMON_MOD_PATTERNS = (
