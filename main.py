@@ -37,6 +37,7 @@ from trade_client import TradeClient
 from filter_updater import FilterUpdater, find_template_filter
 from mod_database import ModDatabase
 from calibration import CalibrationEngine
+from bug_reporter import BugReporter
 
 logger = logging.getLogger("poe2-overlay")
 
@@ -112,6 +113,13 @@ class POE2PriceOverlay:
             "not_found": 0,
             "start_time": 0,
         }
+
+        # Bug reporter (Ctrl+Shift+B)
+        self.bug_reporter = BugReporter(
+            root_fn=lambda: self.overlay._root,
+            stats_fn=lambda: self.stats,
+            overlay=self.overlay,
+        )
 
         # Wire up detection callbacks
         self.item_detector.set_callback(self._on_change_detected)
@@ -189,6 +197,13 @@ class POE2PriceOverlay:
                 daemon=True,
                 name="DeepQueryHotkey",
             ).start()
+
+        # 2c. Bug report hotkey listener (Ctrl+Shift+B)
+        threading.Thread(
+            target=self._bug_report_hotkey_loop,
+            daemon=True,
+            name="BugReportHotkey",
+        ).start()
 
         # 3. Start status reporting
         status_thread = threading.Thread(
@@ -760,6 +775,24 @@ class POE2PriceOverlay:
             if pressed and not was_pressed:
                 was_pressed = True
                 self._trigger_deep_query()
+            elif not pressed:
+                was_pressed = False
+
+    def _bug_report_hotkey_loop(self):
+        """Poll for Ctrl+Shift+B to trigger bug report dialog."""
+        import ctypes
+        VK_SHIFT, VK_CONTROL, VK_B = 0x10, 0x11, 0x42
+        _gaks = ctypes.windll.user32.GetAsyncKeyState
+        was_pressed = False
+
+        while True:
+            time.sleep(0.05)  # 20 Hz
+            pressed = bool(_gaks(VK_CONTROL) & 0x8000
+                           and _gaks(VK_SHIFT) & 0x8000
+                           and _gaks(VK_B) & 0x8000)
+            if pressed and not was_pressed:
+                was_pressed = True
+                self.bug_reporter.report()
             elif not pressed:
                 was_pressed = False
 
