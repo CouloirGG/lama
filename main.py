@@ -772,7 +772,7 @@ class POE2PriceOverlay:
 
         self.overlay.show_price(text=text, tier=overlay_tier,
                                 cursor_x=cursor_x, cursor_y=cursor_y)
-        if score.grade.value != "JUNK":
+        if score.grade.value not in ("C", "JUNK"):
             self.stats["successful_lookups"] += 1
 
         # Auto-queue for background trade API calibration.

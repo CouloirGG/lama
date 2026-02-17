@@ -30,7 +30,6 @@ from config import (
     OVERLAY_BG_COLOR,
     OVERLAY_FONT_SIZE,
     OVERLAY_PADDING,
-    OVERLAY_DISPLAY_DURATION,
     PRICE_COLOR_HIGH,
     PRICE_COLOR_GOOD,
     PRICE_COLOR_DECENT,
@@ -316,15 +315,14 @@ class PriceOverlay:
 
         self._visible = True
 
-        # Cancel previous hide timer
+        # Cancel any leftover hide timer from a previous show
         if self._hide_timer:
             self._root.after_cancel(self._hide_timer)
+            self._hide_timer = None
 
-        # Auto-hide after duration
-        self._hide_timer = self._root.after(
-            int(OVERLAY_DISPLAY_DURATION * 1000),
-            self._do_hide
-        )
+        # No auto-hide timer — the overlay stays visible until the cursor
+        # moves off the item, which triggers overlay.hide() via the
+        # ItemDetector's on_hide callback (item_detection.py:114-116).
 
     def _start_pulse(self):
         """Pulse the border between colors at the configured speed."""

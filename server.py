@@ -1,0 +1,753 @@
+"""
+server.py — FastAPI backend for POE2 Price Overlay dashboard.
+
+Manages the overlay subprocess (main.py), streams logs over WebSocket,
+exposes status/settings APIs, and serves the dashboard HTML.
+
+Endpoints:
+  GET  /dashboard        → serves dashboard.html
+  GET  /api/status       → overlay state + parsed stats
+  POST /api/start        → launch main.py subprocess
+  POST /api/stop         → graceful shutdown via CTRL_BREAK_EVENT
+  POST /api/restart      → stop + start
+  GET  /api/settings     → read dashboard_settings.json
+  POST /api/settings     → write dashboard_settings.json
+  GET  /api/leagues      → fetch leagues from poe2scout
+  GET  /api/log          → recent log lines (initial load)
+  WS   /ws               → real-time log + status streaming
+"""
+
+import asyncio
+import json
+import logging
+import os
+import re
+import signal
+import subprocess
+import sys
+import threading
+import time
+from collections import deque
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Optional
+
+import platform
+
+import requests
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+logger = logging.getLogger("dashboard")
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+PORT = int(os.environ.get("POE2_DASHBOARD_PORT", "8450"))
+SETTINGS_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay"
+SETTINGS_FILE = SETTINGS_DIR / "dashboard_settings.json"
+POE2SCOUT_API = "https://poe2scout.com/api"
+
+# Bug report (mirrors config.py constants)
+DISCORD_WEBHOOK_URL = ""
+LOG_FILE = SETTINGS_DIR / "overlay.log"
+DEBUG_DIR = SETTINGS_DIR / "debug"
+BUG_REPORT_LOG_LINES = 200
+BUG_REPORT_MAX_CLIPBOARDS = 5
+BUG_REPORT_DB = SETTINGS_DIR / "cache" / "bug_reports.jsonl"
+
+# Status line regex — matches main.py:1040-1044 format
+STATUS_RE = re.compile(
+    r"\[Status\] Uptime: (\d+)min \| "
+    r"Triggers: (\d+) \| Prices shown: (\d+) \((\d+)%\) \| "
+    r"Cache: (\d+) items \| "
+    r"Last refresh: (.+)"
+)
+
+
+# ---------------------------------------------------------------------------
+# Settings manager
+# ---------------------------------------------------------------------------
+DEFAULT_SETTINGS = {
+    "league": "Fate of the Vaal",
+    "no_filter_update": False,
+    "auto_start": True,
+    "font_size": 14,
+    "scan_fps": 8,
+    "detection_cooldown": 1.0,
+    "overlay_duration": 2.0,
+    "cursor_still_radius": 20,
+    "cursor_still_frames": 3,
+}
+
+
+def load_settings() -> dict:
+    """Load settings from disk, merging with defaults."""
+    settings = dict(DEFAULT_SETTINGS)
+    if SETTINGS_FILE.exists():
+        try:
+            with open(SETTINGS_FILE) as f:
+                saved = json.load(f)
+            settings.update(saved)
+        except Exception as e:
+            logger.warning(f"Failed to load settings: {e}")
+    return settings
+
+
+def save_settings(settings: dict):
+    """Persist settings to disk."""
+    SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(settings, f, indent=2)
+    except Exception as e:
+        logger.warning(f"Failed to save settings: {e}")
+
+
+# ---------------------------------------------------------------------------
+# WebSocket connection manager
+# ---------------------------------------------------------------------------
+class ConnectionManager:
+    """Manages active WebSocket connections and broadcasts events."""
+
+    def __init__(self):
+        self.connections: list[WebSocket] = []
+
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        self.connections.append(ws)
+        logger.info(f"WebSocket connected ({len(self.connections)} active)")
+
+    def disconnect(self, ws: WebSocket):
+        if ws in self.connections:
+            self.connections.remove(ws)
+        logger.info(f"WebSocket disconnected ({len(self.connections)} active)")
+
+    async def broadcast(self, event: dict):
+        """Send a JSON event to all connected clients."""
+        dead = []
+        for ws in self.connections:
+            try:
+                await ws.send_json(event)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+
+ws_manager = ConnectionManager()
+
+
+# ---------------------------------------------------------------------------
+# Overlay subprocess manager
+# ---------------------------------------------------------------------------
+class OverlayProcess:
+    """Manages the main.py overlay subprocess lifecycle."""
+
+    def __init__(self):
+        self.process: Optional[subprocess.Popen] = None
+        self.state = "stopped"  # stopped | starting | running | error
+        self.started_at: Optional[float] = None
+        self.reader_thread: Optional[threading.Thread] = None
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+
+        # Stats parsed from [Status] lines
+        self.stats = {
+            "uptime_min": 0,
+            "triggers": 0,
+            "prices_shown": 0,
+            "success_rate": 0,
+            "cache_items": 0,
+            "last_refresh": "never",
+        }
+
+    def set_loop(self, loop: asyncio.AbstractEventLoop):
+        self._loop = loop
+
+    def start(self, league: str, no_filter_update: bool = False):
+        """Spawn main.py as a subprocess."""
+        if self.process and self.process.poll() is None:
+            return {"error": "Overlay is already running"}
+
+        self.state = "starting"
+
+        cmd = [sys.executable, "main.py", "--league", league]
+        if no_filter_update:
+            cmd.append("--no-filter-update")
+
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+
+        try:
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                cwd=Path(__file__).parent,
+                env=env,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+            self.started_at = time.time()
+            self.state = "running"
+
+            # Reset stats
+            self.stats = {
+                "uptime_min": 0,
+                "triggers": 0,
+                "prices_shown": 0,
+                "success_rate": 0,
+                "cache_items": 0,
+                "last_refresh": "never",
+            }
+
+            # Start output reader thread
+            self.reader_thread = threading.Thread(
+                target=self._read_output, daemon=True
+            )
+            self.reader_thread.start()
+
+            logger.info(f"Overlay started: PID {self.process.pid}, league={league}")
+            return {"status": "started", "pid": self.process.pid}
+
+        except Exception as e:
+            self.state = "error"
+            logger.error(f"Failed to start overlay: {e}")
+            return {"error": str(e)}
+
+    def stop(self):
+        """Gracefully stop the overlay subprocess."""
+        if not self.process or self.process.poll() is not None:
+            self.state = "stopped"
+            return {"status": "not_running"}
+
+        pid = self.process.pid
+        logger.info(f"Stopping overlay PID {pid}...")
+
+        try:
+            # Send CTRL_BREAK_EVENT — bypasses SetConsoleCtrlHandler(None, True)
+            # in main.py:1110, delivers KeyboardInterrupt for graceful shutdown
+            os.kill(pid, signal.CTRL_BREAK_EVENT)
+
+            try:
+                self.process.wait(timeout=5)
+                logger.info(f"Overlay stopped gracefully (PID {pid})")
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Overlay didn't stop in 5s, killing PID {pid}")
+                self.process.kill()
+                self.process.wait(timeout=3)
+
+        except Exception as e:
+            logger.error(f"Error stopping overlay: {e}")
+            try:
+                self.process.kill()
+            except Exception:
+                pass
+            return {"error": str(e)}
+        finally:
+            self.process = None
+            self.started_at = None
+            self.state = "stopped"
+
+        return {"status": "stopped", "pid": pid}
+
+    def get_status(self) -> dict:
+        """Return current overlay status and stats."""
+        # Check if process crashed
+        if self.process and self.process.poll() is not None:
+            self.state = "error"
+            self.process = None
+
+        uptime = 0
+        if self.started_at and self.state == "running":
+            uptime = int(time.time() - self.started_at)
+
+        return {
+            "state": self.state,
+            "uptime": uptime,
+            "stats": dict(self.stats),
+        }
+
+    def _classify_line(self, line: str) -> str:
+        """Assign a color to a log line based on content."""
+        lower = line.lower()
+        if "[status]" in lower:
+            return "#818cf8"  # purple for status
+        if "error" in lower or "failed" in lower or "exception" in lower:
+            return "#ef4444"  # red
+        if "warning" in lower or "warn" in lower:
+            return "#f59e0b"  # amber
+        if "price:" in lower or "divine" in lower or "exalted" in lower:
+            return "#34d399"  # green for prices
+        if "cache" in lower or "refresh" in lower:
+            return "#22d3ee"  # cyan
+        if "session summary" in lower or "=====" in lower:
+            return "#fbbf24"  # yellow
+        return "#94a3b8"  # default grey
+
+    def _read_output(self):
+        """Read stdout from subprocess and queue lines for broadcast."""
+        try:
+            for raw_line in iter(self.process.stdout.readline, b""):
+                line = raw_line.decode("utf-8", errors="replace").rstrip()
+                if not line:
+                    continue
+
+                # Parse [Status] lines for stats
+                m = STATUS_RE.search(line)
+                if m:
+                    self.stats = {
+                        "uptime_min": int(m.group(1)),
+                        "triggers": int(m.group(2)),
+                        "prices_shown": int(m.group(3)),
+                        "success_rate": int(m.group(4)),
+                        "cache_items": int(m.group(5)),
+                        "last_refresh": m.group(6),
+                    }
+
+                color = self._classify_line(line)
+
+                # Extract timestamp if present (HH:MM:SS format from logger)
+                ts_match = re.match(r"^(\d{2}:\d{2}:\d{2})\s+(.*)$", line)
+                if ts_match:
+                    ts = ts_match.group(1)
+                    msg = ts_match.group(2)
+                else:
+                    ts = time.strftime("%H:%M:%S")
+                    msg = line
+
+                log_entry = {"time": ts, "message": msg, "color": color}
+
+                # Add to log buffer
+                log_buffer.append(log_entry)
+
+                # Broadcast to WebSocket clients
+                if self._loop:
+                    asyncio.run_coroutine_threadsafe(
+                        ws_manager.broadcast({"type": "log", **log_entry}),
+                        self._loop,
+                    )
+
+        except Exception as e:
+            logger.error(f"Output reader error: {e}")
+        finally:
+            # Process has ended
+            if self.state == "running":
+                self.state = "error"
+                if self._loop:
+                    asyncio.run_coroutine_threadsafe(
+                        ws_manager.broadcast({
+                            "type": "state_change",
+                            "state": "error",
+                        }),
+                        self._loop,
+                    )
+
+
+overlay = OverlayProcess()
+log_buffer: deque[dict] = deque(maxlen=500)
+
+
+# ---------------------------------------------------------------------------
+# FastAPI app
+# ---------------------------------------------------------------------------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Set up the event loop reference and background tasks."""
+    loop = asyncio.get_running_loop()
+    overlay.set_loop(loop)
+
+    # Background task: periodic status push
+    status_task = asyncio.create_task(status_broadcast_loop())
+
+    logger.info("POE2 Dashboard server ready")
+    try:
+        yield
+    finally:
+        status_task.cancel()
+        # Stop overlay if running
+        overlay.stop()
+
+
+app = FastAPI(title="POE2 Dashboard API", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+async def status_broadcast_loop():
+    """Push status updates to WebSocket clients every 5 seconds."""
+    while True:
+        await asyncio.sleep(5)
+        if ws_manager.connections:
+            status = overlay.get_status()
+            await ws_manager.broadcast({"type": "status", **status})
+
+
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+class StartRequest(BaseModel):
+    league: Optional[str] = None
+    no_filter_update: Optional[bool] = None
+
+
+class SettingsRequest(BaseModel):
+    league: Optional[str] = None
+    no_filter_update: Optional[bool] = None
+    auto_start: Optional[bool] = None
+    font_size: Optional[int] = None
+    scan_fps: Optional[int] = None
+    detection_cooldown: Optional[float] = None
+    overlay_duration: Optional[float] = None
+    cursor_still_radius: Optional[int] = None
+    cursor_still_frames: Optional[int] = None
+
+
+# ---------------------------------------------------------------------------
+# REST endpoints
+# ---------------------------------------------------------------------------
+@app.get("/api/status")
+async def get_status():
+    return overlay.get_status()
+
+
+@app.post("/api/start")
+async def start_overlay(req: StartRequest = StartRequest()):
+    settings = load_settings()
+    league = req.league or settings.get("league", "Fate of the Vaal")
+    no_filter = req.no_filter_update if req.no_filter_update is not None else settings.get("no_filter_update", False)
+
+    result = overlay.start(league, no_filter_update=no_filter)
+
+    if "error" not in result:
+        await ws_manager.broadcast({
+            "type": "state_change",
+            "state": "running",
+        })
+
+    return result
+
+
+@app.post("/api/stop")
+async def stop_overlay():
+    result = overlay.stop()
+    await ws_manager.broadcast({
+        "type": "state_change",
+        "state": "stopped",
+    })
+    return result
+
+
+@app.post("/api/restart")
+async def restart_overlay(req: StartRequest = StartRequest()):
+    overlay.stop()
+    await ws_manager.broadcast({"type": "state_change", "state": "stopped"})
+
+    # Brief pause for cleanup
+    await asyncio.sleep(0.5)
+
+    settings = load_settings()
+    league = req.league or settings.get("league", "Fate of the Vaal")
+    no_filter = req.no_filter_update if req.no_filter_update is not None else settings.get("no_filter_update", False)
+
+    result = overlay.start(league, no_filter_update=no_filter)
+    if "error" not in result:
+        await ws_manager.broadcast({"type": "state_change", "state": "running"})
+
+    return result
+
+
+@app.get("/api/settings")
+async def get_settings():
+    return load_settings()
+
+
+@app.post("/api/settings")
+async def update_settings(req: SettingsRequest):
+    settings = load_settings()
+    updates = req.model_dump(exclude_none=True)
+    settings.update(updates)
+    save_settings(settings)
+    await ws_manager.broadcast({"type": "settings", "settings": settings})
+    return settings
+
+
+@app.get("/api/leagues")
+async def get_leagues():
+    """Fetch available leagues from poe2scout API."""
+    try:
+        resp = requests.get(
+            f"{POE2SCOUT_API}/leagues",
+            timeout=10,
+            headers={"User-Agent": "POE2-Price-Overlay-Dashboard/1.0"},
+        )
+        if resp.status_code == 200:
+            leagues = resp.json()
+            # Extract league names (value field)
+            return {
+                "leagues": [
+                    {"value": lg.get("value", ""), "label": lg.get("value", "")}
+                    for lg in leagues
+                    if lg.get("value")
+                ]
+            }
+        return {"leagues": [], "error": f"HTTP {resp.status_code}"}
+    except Exception as e:
+        logger.warning(f"Failed to fetch leagues: {e}")
+        # Fallback
+        return {
+            "leagues": [
+                {"value": "Fate of the Vaal", "label": "Fate of the Vaal"},
+                {"value": "Standard", "label": "Standard"},
+                {"value": "Hardcore Fate of the Vaal", "label": "Hardcore Fate of the Vaal"},
+                {"value": "Hardcore", "label": "Hardcore"},
+            ],
+            "error": str(e),
+        }
+
+
+@app.get("/api/log")
+async def get_log():
+    """Return recent log lines for initial load."""
+    return {"lines": list(log_buffer)}
+
+
+# ---------------------------------------------------------------------------
+# Bug report endpoint
+# ---------------------------------------------------------------------------
+class BugReportRequest(BaseModel):
+    title: str = ""
+    description: str = ""
+
+
+@app.post("/api/bug-report")
+async def submit_bug_report(req: BugReportRequest):
+    """Collect logs + system info and POST to Discord webhook."""
+
+    title = req.title.strip() or f"Bug report {time.strftime('%Y-%m-%d %H:%M')}"
+    description = req.description.strip()
+
+    # Collect data (mirrors bug_reporter.py._collect_data)
+    log_tail = ""
+    try:
+        if LOG_FILE.exists():
+            lines = LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
+            log_tail = "\n".join(lines[-BUG_REPORT_LOG_LINES:])
+    except Exception as e:
+        log_tail = f"(failed to read log: {e})"
+
+    clipboards = []
+    try:
+        if DEBUG_DIR.exists():
+            clips = sorted(
+                DEBUG_DIR.glob("clipboard_*.txt"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )[:BUG_REPORT_MAX_CLIPBOARDS]
+            for clip_path in clips:
+                try:
+                    content = clip_path.read_text(encoding="utf-8", errors="replace")
+                    clipboards.append((clip_path.name, content))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # System info
+    screen_info = "unknown"
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        screen_info = f"{user32.GetSystemMetrics(0)}x{user32.GetSystemMetrics(1)}"
+    except Exception:
+        pass
+    system_info = f"Python {sys.version.split()[0]}, {platform.platform()}, Screen {screen_info}"
+
+    # Session stats from overlay
+    status = overlay.get_status()
+    stats = status["stats"]
+    session_stats = (
+        f"Uptime {status['uptime'] // 60}min, "
+        f"{stats['triggers']} triggers, "
+        f"{stats['prices_shown']} prices ({stats['success_rate']}%)"
+    )
+
+    # Save local record
+    try:
+        BUG_REPORT_DB.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "ts": int(time.time()),
+            "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "title": title,
+            "description": description,
+            "system_info": system_info,
+            "session_stats": session_stats,
+        }
+        with open(BUG_REPORT_DB, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+    except Exception:
+        pass
+
+    # Build Discord message
+    message = f"**Bug Report: {title}**"
+    if description:
+        message += f"\n{description}"
+    message += f"\n\n**System:** {system_info}"
+    message += f"\n**Session:** {session_stats}"
+    message += f"\n**Source:** Dashboard"
+    if len(message) > 2000:
+        message = message[:1997] + "..."
+
+    # Build attachment
+    parts = []
+    if log_tail:
+        parts.append(f"=== LOG TAIL (last {BUG_REPORT_LOG_LINES} lines) ===\n")
+        parts.append(log_tail)
+        parts.append("\n\n")
+    for filename, content in clipboards:
+        parts.append(f"=== {filename} ===\n")
+        parts.append(content)
+        parts.append("\n\n")
+    combined = "".join(parts).encode("utf-8")
+
+    # POST to Discord
+    try:
+        resp = requests.post(
+            DISCORD_WEBHOOK_URL,
+            data={"content": message},
+            files={"file": ("bug_report.txt", combined, "text/plain")},
+            timeout=15,
+        )
+        if resp.status_code in range(200, 300):
+            logger.info("Bug report sent successfully")
+            return {"status": "sent", "title": title}
+        else:
+            logger.error(f"Bug report failed: HTTP {resp.status_code}")
+            return {"error": f"Discord returned HTTP {resp.status_code}"}
+    except Exception as e:
+        logger.error(f"Bug report upload error: {e}")
+        return {"error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Filter update endpoint
+# ---------------------------------------------------------------------------
+@app.post("/api/update-filter")
+async def update_filter():
+    """Trigger a loot filter update by spawning a subprocess."""
+    settings = load_settings()
+    league = settings.get("league", "Fate of the Vaal")
+
+    cmd = [
+        sys.executable, "main.py",
+        "--league", league,
+        "--test-filter-update",
+    ]
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+
+    def _run_update():
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=str(Path(__file__).parent),
+                env=env,
+                timeout=120,
+            )
+            output = result.stdout + result.stderr
+            return {"status": "completed", "output": output, "returncode": result.returncode}
+        except subprocess.TimeoutExpired:
+            return {"error": "Filter update timed out after 120s"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    # Run in executor to avoid blocking
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, _run_update)
+
+    # Broadcast result to WebSocket clients
+    if "error" not in result:
+        await ws_manager.broadcast({
+            "type": "log",
+            "time": time.strftime("%H:%M:%S"),
+            "message": "Loot filter updated successfully",
+            "color": "#34d399",
+        })
+        log_buffer.append({
+            "time": time.strftime("%H:%M:%S"),
+            "message": "Loot filter updated successfully",
+            "color": "#34d399",
+        })
+    else:
+        await ws_manager.broadcast({
+            "type": "log",
+            "time": time.strftime("%H:%M:%S"),
+            "message": f"Filter update failed: {result['error']}",
+            "color": "#ef4444",
+        })
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Dashboard serving
+# ---------------------------------------------------------------------------
+@app.get("/dashboard", response_class=HTMLResponse)
+async def serve_dashboard():
+    """Serve dashboard.html for standalone app mode."""
+    dashboard_path = Path(__file__).parent / "dashboard.html"
+    if not dashboard_path.exists():
+        return HTMLResponse("<h1>dashboard.html not found</h1>", status_code=404)
+    return HTMLResponse(dashboard_path.read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# WebSocket endpoint
+# ---------------------------------------------------------------------------
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await ws_manager.connect(ws)
+    try:
+        # Send initial state
+        settings = load_settings()
+        await ws.send_json({
+            "type": "init",
+            **overlay.get_status(),
+            "settings": settings,
+            "log": list(log_buffer),
+        })
+        # Keep alive
+        while True:
+            data = await ws.receive_text()
+            # Future: handle client-sent commands
+    except WebSocketDisconnect:
+        ws_manager.disconnect(ws)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    import uvicorn
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    logger.info(f"Starting POE2 Dashboard server on port {PORT}")
+    uvicorn.run(
+        "server:app",
+        host="127.0.0.1",
+        port=PORT,
+        log_level="info",
+    )
