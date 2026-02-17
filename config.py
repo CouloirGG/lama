@@ -128,6 +128,15 @@ FILTER_FRAGMENT_CHAOS_THRESHOLDS = {
 # Timestamp file for tracking last update
 FILTER_LAST_UPDATE_FILE = CACHE_DIR / "filter_last_update"
 
+# Strictness presets: multiplied against chaos thresholds
+# Lower = show more items, higher = show only top items
+STRICTNESS_PRESETS = {
+    "relaxed": 0.5,
+    "normal": 1.0,
+    "strict": 2.0,
+    "very_strict": 4.0,
+}
+
 # ─────────────────────────────────────────────
 # DPS & Defense Classification
 # ─────────────────────────────────────────────

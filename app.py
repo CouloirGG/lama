@@ -82,7 +82,7 @@ def main():
         width=WINDOW_WIDTH,
         height=WINDOW_HEIGHT,
         min_size=(900, 600),
-        background_color="#0f1118",
+        background_color="#0d0b08",
         text_select=True,
     )
 

@@ -80,7 +80,20 @@ DEFAULT_SETTINGS = {
     "overlay_duration": 2.0,
     "cursor_still_radius": 20,
     "cursor_still_frames": 3,
+    "filter_strictness": "normal",
+    "filter_tier_styles": {},
+    "filter_section_visibility": {},
 }
+
+
+def deep_merge(base: dict, updates: dict) -> dict:
+    """Deep merge updates into base dict. Mutates and returns base."""
+    for key, value in updates.items():
+        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
 
 
 def load_settings() -> dict:
@@ -407,6 +420,9 @@ class SettingsRequest(BaseModel):
     overlay_duration: Optional[float] = None
     cursor_still_radius: Optional[int] = None
     cursor_still_frames: Optional[int] = None
+    filter_strictness: Optional[str] = None
+    filter_tier_styles: Optional[dict] = None
+    filter_section_visibility: Optional[dict] = None
 
 
 # ---------------------------------------------------------------------------
@@ -472,7 +488,7 @@ async def get_settings():
 async def update_settings(req: SettingsRequest):
     settings = load_settings()
     updates = req.model_dump(exclude_none=True)
-    settings.update(updates)
+    deep_merge(settings, updates)
     save_settings(settings)
     await ws_manager.broadcast({"type": "settings", "settings": settings})
     return settings
@@ -644,6 +660,14 @@ async def update_filter():
     settings = load_settings()
     league = settings.get("league", "Fate of the Vaal")
 
+    # Pass filter preferences via environment variable so the subprocess
+    # can read them and forward to FilterUpdater.update_now()
+    filter_prefs = {
+        "filter_strictness": settings.get("filter_strictness", "normal"),
+        "filter_tier_styles": settings.get("filter_tier_styles", {}),
+        "filter_section_visibility": settings.get("filter_section_visibility", {}),
+    }
+
     cmd = [
         sys.executable, "main.py",
         "--league", league,
@@ -651,6 +675,7 @@ async def update_filter():
     ]
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
+    env["POE2_FILTER_PREFS"] = json.dumps(filter_prefs)
 
     def _run_update():
         try:
@@ -679,22 +704,42 @@ async def update_filter():
             "type": "log",
             "time": time.strftime("%H:%M:%S"),
             "message": "Loot filter updated successfully",
-            "color": "#34d399",
+            "color": "#4a7c59",
         })
         log_buffer.append({
             "time": time.strftime("%H:%M:%S"),
             "message": "Loot filter updated successfully",
-            "color": "#34d399",
+            "color": "#4a7c59",
         })
     else:
         await ws_manager.broadcast({
             "type": "log",
             "time": time.strftime("%H:%M:%S"),
             "message": f"Filter update failed: {result['error']}",
-            "color": "#ef4444",
+            "color": "#a83232",
         })
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# App restart endpoint
+# ---------------------------------------------------------------------------
+@app.post("/api/restart-app")
+async def restart_app():
+    """Stop overlay and restart the entire app process."""
+    overlay.stop()
+
+    entry = Path(__file__).parent / "app.py"
+    if not entry.exists():
+        return {"error": "app.py not found — restart only works in standalone mode"}
+
+    def _do_restart():
+        time.sleep(0.5)
+        os.execv(sys.executable, [sys.executable, str(entry)])
+
+    threading.Thread(target=_do_restart, daemon=True).start()
+    return {"status": "restarting"}
 
 
 # ---------------------------------------------------------------------------

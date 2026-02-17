@@ -35,6 +35,7 @@ from config import (
     FILTER_FRAGMENT_CHAOS_THRESHOLDS,
     FILTER_LAST_UPDATE_FILE,
     CACHE_DIR,
+    STRICTNESS_PRESETS,
 )
 
 logger = logging.getLogger(__name__)
@@ -629,7 +630,66 @@ STYLE_MAP = {
 }
 
 
-def apply_styling_overrides(parsed: list, test_mode: bool = False):
+def _build_style_lines(overrides: dict, base_style: list) -> list:
+    """
+    Merge user JSON style overrides with base filter style lines.
+
+    overrides keys: font_size, text_color, border_color, bg_color,
+                    sound_enabled, sound_id, beam_enabled, beam_color,
+                    minimap_enabled
+    Colors are hex strings like "#ff0000".
+    """
+    if not overrides:
+        return list(base_style)
+
+    # Parse base style into a dict of keyword -> line
+    base_map = {}
+    for line in base_style:
+        stripped = line.strip()
+        if stripped:
+            keyword = stripped.split()[0]
+            base_map[keyword] = line
+
+    def hex_to_rgba(hex_color, alpha=255):
+        """Convert #rrggbb to 'R G B A' string."""
+        h = hex_color.lstrip("#")
+        if len(h) == 6:
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            return f"{r} {g} {b} {alpha}"
+        return f"200 200 200 {alpha}"
+
+    result = dict(base_map)
+
+    if "font_size" in overrides:
+        result["SetFontSize"] = f"\tSetFontSize {overrides['font_size']}"
+    if "text_color" in overrides:
+        result["SetTextColor"] = f"\tSetTextColor {hex_to_rgba(overrides['text_color'])}"
+    if "border_color" in overrides:
+        result["SetBorderColor"] = f"\tSetBorderColor {hex_to_rgba(overrides['border_color'])}"
+    if "bg_color" in overrides:
+        result["SetBackgroundColor"] = f"\tSetBackgroundColor {hex_to_rgba(overrides['bg_color'])}"
+
+    # Sound: if explicitly disabled, remove; if enabled, set sound ID
+    if overrides.get("sound_enabled") is False:
+        result.pop("PlayAlertSound", None)
+    elif overrides.get("sound_enabled") and "sound_id" in overrides:
+        result["PlayAlertSound"] = f"\tPlayAlertSound {overrides['sound_id']} 300"
+
+    # Beam: if explicitly disabled, remove; if enabled, set color
+    if overrides.get("beam_enabled") is False:
+        result.pop("PlayEffect", None)
+    elif overrides.get("beam_enabled") and "beam_color" in overrides:
+        result["PlayEffect"] = f"\tPlayEffect {overrides['beam_color']}"
+
+    # Minimap: if explicitly disabled, remove
+    if overrides.get("minimap_enabled") is False:
+        result.pop("MinimapIcon", None)
+
+    return list(result.values())
+
+
+def apply_styling_overrides(parsed: list, test_mode: bool = False,
+                            user_styles: dict = None):
     """
     Replace styling on every economy block to match actual item value.
     Also downstyles rare/magic gear to small yellow text.
@@ -679,6 +739,9 @@ def apply_styling_overrides(parsed: list, test_mode: bool = False):
 
         style = style_table.get(block.tier)
         if style:
+            # Apply user overrides if present for this tier
+            if user_styles and block.tier in user_styles:
+                style = _build_style_lines(user_styles[block.tier], style)
             _replace_styling(block, style)
 
 
@@ -835,11 +898,34 @@ class FilterUpdater:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         FILTER_LAST_UPDATE_FILE.write_text(str(time.time()))
 
-    def update_now(self, dry_run: bool = False) -> dict:
+    def update_now(self, dry_run: bool = False, user_styles: dict = None,
+                   section_visibility: dict = None,
+                   strictness: str = "normal") -> dict:
         """
         Run a filter update immediately.
+
+        Args:
+            dry_run: Compute changes but don't write.
+            user_styles: Per-tier style overrides from dashboard UI.
+            section_visibility: {section_id: bool} — False hides a section.
+            strictness: Preset name from STRICTNESS_PRESETS.
+
         Returns the changes dict.
         """
+        # Read filter preferences from env var if not provided directly
+        # (set by server.py when spawning via subprocess)
+        if user_styles is None and section_visibility is None:
+            import json as _json
+            prefs_json = os.environ.get("POE2_FILTER_PREFS")
+            if prefs_json:
+                try:
+                    prefs = _json.loads(prefs_json)
+                    user_styles = prefs.get("filter_tier_styles") or None
+                    section_visibility = prefs.get("filter_section_visibility") or None
+                    strictness = prefs.get("filter_strictness", strictness)
+                except (ValueError, TypeError):
+                    pass
+
         template = self.template_path
         if not template or not template.exists():
             logger.error(f"Filter template not found: {template}")
@@ -854,14 +940,29 @@ class FilterUpdater:
             prices = dict(self.price_cache.prices)
             divine_to_chaos = self.price_cache.divine_to_chaos
 
-        logger.info(f"Filter update: 1 divine = {divine_to_chaos:.0f} chaos")
+        # Apply strictness multiplier to divine_to_chaos
+        # Higher multiplier = higher effective divine_to_chaos = lower divine
+        # thresholds = fewer items shown
+        multiplier = STRICTNESS_PRESETS.get(strictness, 1.0)
+        effective_divine_to_chaos = divine_to_chaos / multiplier if multiplier else divine_to_chaos
 
-        # Re-tier
-        changes = retier_filter(parsed, prices, divine_to_chaos, dry_run=dry_run)
+        logger.info(
+            f"Filter update: 1 divine = {divine_to_chaos:.0f} chaos, "
+            f"strictness={strictness} ({multiplier}x)"
+        )
+
+        # Re-tier with adjusted thresholds
+        changes = retier_filter(parsed, prices, effective_divine_to_chaos,
+                                dry_run=dry_run)
 
         # Apply styling: strip alert sounds from cheap tiers, test mode for exhide
         if not dry_run:
-            apply_styling_overrides(parsed, test_mode=self.test_mode)
+            apply_styling_overrides(parsed, test_mode=self.test_mode,
+                                    user_styles=user_styles)
+
+        # Apply section visibility — comment out hidden sections
+        if not dry_run and section_visibility:
+            _apply_section_visibility(parsed, section_visibility)
 
         if dry_run:
             _log_changes(changes, dry_run=True)
@@ -884,6 +985,21 @@ class FilterUpdater:
         logger.info(f"Filter output: {output_path}")
 
         return changes
+
+
+def _apply_section_visibility(parsed: list, section_visibility: dict):
+    """Comment out blocks belonging to hidden sections."""
+    for kind, block in parsed:
+        if kind != "block":
+            continue
+        if not block.section_type:
+            continue
+        # Check if this section is explicitly hidden
+        visible = section_visibility.get(block.section_type, True)
+        if not visible and not block.is_commented:
+            block.header_line = "#" + block.header_line
+            block.body_lines = ["#" + bl for bl in block.body_lines]
+            block.is_commented = True
 
 
 def _log_changes(changes: dict, dry_run: bool = False):
