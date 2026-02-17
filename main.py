@@ -759,11 +759,13 @@ class POE2PriceOverlay:
             else:
                 overlay_tier = "low"
 
-        # Log combat factors when they modify the score
+        # Log factors when they modify the score
         if score.dps_factor != 1.0:
             logger.info(f"DPS factor: {score.dps_factor:.2f} (dps={score.total_dps:.0f})")
         if score.defense_factor != 1.0:
             logger.info(f"Defense factor: {score.defense_factor:.2f} (def={score.total_defense})")
+        if score.somv_factor != 1.0:
+            logger.info(f"SOMV factor: {score.somv_factor:.3f} (roll quality)")
 
         log_extra = f" est~{price_est:.1f}d" if price_est else ""
         logger.info(f"Grade {score.grade.value}: {display_name} "
@@ -924,6 +926,7 @@ class POE2PriceOverlay:
                 "total_defense": score_result.total_defense,
                 "dps_factor": round(score_result.dps_factor, 3),
                 "defense_factor": round(score_result.defense_factor, 3),
+                "somv_factor": round(score_result.somv_factor, 3),
             }
             CALIBRATION_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(CALIBRATION_LOG_FILE, "a", encoding="utf-8") as f:
