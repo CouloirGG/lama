@@ -110,6 +110,7 @@ class ModScore:
     weight: float          # mod importance
     weighted_score: float  # percentile * weight
     is_key_mod: bool       # True if not a common/filler mod
+    roll_quality: float = 0.5  # 0.0-1.0 within tier (0=bottom, 1=perfect)
 
 
 @dataclass
@@ -123,6 +124,7 @@ class ItemScore:
     top_tier_count: int = 0  # count of valuable T1/T2 mods (weight >= 1.0)
     dps_factor: float = 1.0
     defense_factor: float = 1.0
+    somv_factor: float = 1.0   # roll quality multiplier (0.90-1.10)
     total_dps: float = 0.0
     total_defense: int = 0
 
@@ -211,10 +213,11 @@ _WEIGHT_TABLE: List[Tuple[float, List[str]]] = [
         "armour", "evasion",
         "localphysicaldamagereductionrating", "localevasionrating",
         "defencespercent", "alldefences",
+        "chaosresist",  # chaos res is rarer, lower cap, bypasses ES
     ]),
     (0.3, [
         "resistance", "fireresist", "coldresist", "lightningresist",
-        "chaosresist", "allresist", "elementalresist",
+        "allresist", "elementalresist",
         "strength", "dexterity", "intelligence", "allattributes",
         "maximummana", "increasedmana",
         "accuracy", "accuracyrating",
@@ -598,6 +601,20 @@ class ModDatabase:
         max_possible = sum(ms.weight for ms in mod_scores)
         normalized = total_weighted / max_possible if max_possible > 0 else 0.0
 
+        # Apply SOMV (Sum of Mod Values) factor — rewards items where mods
+        # rolled well within their tiers.  A perfect-roll tri-res ring gets
+        # a ~10% boost; an all-bottom-roll item gets a ~10% penalty.
+        # Only mods with tier data contribute; neutral (0.5) for unknown mods.
+        somv_mods = [ms for ms in mod_scores if ms.tier is not None]
+        if somv_mods:
+            avg_roll = sum(ms.roll_quality for ms in somv_mods) / len(somv_mods)
+            # Map avg_roll (0.0-1.0) to factor (0.90-1.10)
+            somv_factor = 0.90 + 0.20 * avg_roll
+        else:
+            somv_factor = 1.0
+
+        normalized = normalized * somv_factor
+
         # Apply DPS/defense combat factors
         item_class_raw = getattr(item, 'item_class', '') or ''
         item_level = getattr(item, 'item_level', 0) or 0
@@ -651,6 +668,7 @@ class ModDatabase:
             top_tier_count=len(valuable_top_tier),
             dps_factor=round(d_factor, 3),
             defense_factor=round(a_factor, 3),
+            somv_factor=round(somv_factor, 3),
             total_dps=round(total_dps, 1),
             total_defense=total_defense,
         )
@@ -1018,6 +1036,7 @@ class ModDatabase:
         tier = None
         tier_label = ""
         percentile = 0.5  # default neutral
+        roll_quality = 0.5  # default neutral (no tier data)
 
         if bridge_entry:
             group, gen_type = bridge_entry
@@ -1035,6 +1054,14 @@ class ModDatabase:
                 tier = ladder.identify_tier(mod.value)
                 if tier:
                     tier_label = f"T{tier.tier_num}"
+                    # Compute roll quality within tier
+                    t_min = min(abs(tier.stat_min), abs(tier.stat_max))
+                    t_max = max(abs(tier.stat_min), abs(tier.stat_max))
+                    if t_max > t_min:
+                        roll_quality = (abs(mod.value) - t_min) / (t_max - t_min)
+                        roll_quality = max(0.0, min(1.0, roll_quality))
+                    else:
+                        roll_quality = 1.0  # single-value tier = perfect
                 # Compute percentile
                 g_min = ladder.global_min
                 g_max = ladder.global_max
@@ -1062,6 +1089,7 @@ class ModDatabase:
         if mod.mod_type in ("fractured", "desecrated"):
             weight = max(weight, 2.0)  # at least Key-tier weight
             percentile = max(percentile, 0.85)  # treat as high-roll
+            roll_quality = max(roll_quality, 0.85)
 
         # Percentile floor for key/premium mods: even a low-tier roll of a
         # premium mod type is valuable because the mod's PRESENCE matters.
@@ -1097,6 +1125,7 @@ class ModDatabase:
             weight=weight,
             weighted_score=round(weighted_score, 3),
             is_key_mod=is_key,
+            roll_quality=round(roll_quality, 3),
         )
 
     @staticmethod
@@ -1439,6 +1468,53 @@ if __name__ == "__main__":
          item("Gale Coif", "Iron Hat", "Helmets"),
          [mod("cold_res", 10, "+10% to Cold Resistance")]),
 
+        # ── SOMV: Roll Quality Tests ──────────────────
+        # These pairs compare high-roll vs low-roll versions of the same mods.
+        # High rolls should score higher due to SOMV factor.
+        ("V1: Tri-res ring — PERFECT rolls (45/43/40)",
+         {"C", "B"},
+         item("Godly Band", "Ruby Ring", "Rings"),
+         [mod("fire_res", 45, "+45% to Fire Resistance"),
+          mod("cold_res", 43, "+43% to Cold Resistance"),
+          mod("lightning_res", 40, "+40% to Lightning Resistance")]),
+
+        ("V2: Tri-res ring — BOTTOM rolls (12/10/11)",
+         {"JUNK"},
+         item("Trash Band", "Ruby Ring", "Rings"),
+         [mod("fire_res", 12, "+12% to Fire Resistance"),
+          mod("cold_res", 10, "+10% to Cold Resistance"),
+          mod("lightning_res", 11, "+11% to Lightning Resistance")]),
+
+        ("V3: Life + resist ring — HIGH rolls (T3 life 78, T1 fire 45, T1 cold 44)",
+         {"C"},
+         item("Inferno Loop", "Ruby Ring", "Rings"),
+         [mod("life", 78, "+78 to maximum Life"),
+          mod("fire_res", 45, "+45% to Fire Resistance"),
+          mod("cold_res", 44, "+44% to Cold Resistance")]),
+
+        ("V4: Life + resist ring — LOW rolls (T5 life 25, T6 fire 14, T6 cold 12)",
+         {"C", "JUNK"},
+         item("Dim Loop", "Ruby Ring", "Rings"),
+         [mod("life", 25, "+25 to maximum Life"),
+          mod("fire_res", 14, "+14% to Fire Resistance"),
+          mod("cold_res", 12, "+12% to Cold Resistance")]),
+
+        ("V5: Gloves T1 mods perfect rolls (life 145, atk spd 24, crit multi 42)",
+         {"S"},
+         item("Divine Grip", "Plated Gauntlets", "Gloves"),
+         [mod("life", 145, "+145 to maximum Life"),
+          mod("atk_spd", 24, "24% increased Attack Speed"),
+          mod("crit_multi", 42, "42% increased Critical Damage Bonus"),
+          mod("fire_res", 45, "+45% to Fire Resistance")]),
+
+        ("V6: Gloves same tiers bottom rolls (life 100, atk spd 13, crit multi 25)",
+         {"B", "A", "C"},
+         item("Worn Grip", "Plated Gauntlets", "Gloves"),
+         [mod("life", 100, "+100 to maximum Life"),
+          mod("atk_spd", 13, "13% increased Attack Speed"),
+          mod("crit_multi", 25, "25% increased Critical Damage Bonus"),
+          mod("fire_res", 20, "+20% to Fire Resistance")]),
+
         # ── Edge Cases ────────────────────────────────
         ("E1: Unknown item class (falls back to any ladder match)",
          {"S", "A", "B", "C"},
@@ -1555,15 +1631,17 @@ if __name__ == "__main__":
 
         # Compact output
         mods_summary = score.top_mods_summary or "(no mods)"
-        combat = ""
+        factors = ""
         if score.dps_factor != 1.0:
-            combat += f"  dps_f={score.dps_factor:.2f}"
+            factors += f"  dps_f={score.dps_factor:.2f}"
         if score.defense_factor != 1.0:
-            combat += f"  def_f={score.defense_factor:.2f}"
+            factors += f"  def_f={score.defense_factor:.2f}"
+        if score.somv_factor != 1.0:
+            factors += f"  somv={score.somv_factor:.3f}"
         print(f"\n  [{status}] {desc}")
         print(f"         Grade={grade_str} (expected {'/'.join(sorted(expected_grades))})"
               f"  score={score.normalized_score:.3f}"
-              f"  P={score.prefix_count} S={score.suffix_count}{combat}")
+              f"  P={score.prefix_count} S={score.suffix_count}{factors}")
         print(f"         {mods_summary}")
 
         if not ok:
@@ -1624,6 +1702,37 @@ if __name__ == "__main__":
     for def_val in [50, 100]:
         f = _defense_factor(def_val, "Rings")
         print(f"    {def_val:>4} def -> factor {f:.3f}")
+
+    # ── SOMV Diagnostics ─────────────────────────────
+    print(f"\n{'='*70}")
+    print(f"  SOMV (Roll Quality) Diagnostics")
+    print(f"{'='*70}")
+
+    # Compare V1 vs V2 (tri-res perfect vs bottom)
+    print("\n  Tri-res ring — roll quality comparison:")
+    for label, res_vals in [("Perfect rolls", [45, 43, 40]), ("Bottom rolls", [12, 10, 11])]:
+        test_mods = [
+            mod("fire_res", res_vals[0], f"+{res_vals[0]}% to Fire Resistance"),
+            mod("cold_res", res_vals[1], f"+{res_vals[1]}% to Cold Resistance"),
+            mod("lightning_res", res_vals[2], f"+{res_vals[2]}% to Lightning Resistance"),
+        ]
+        test_item = item("Test Ring", "Ruby Ring", "Rings")
+        score = db.score_item(test_item, test_mods)
+        print(f"    {label} ({res_vals}):")
+        print(f"      grade={score.grade.value}  score={score.normalized_score:.3f}  somv={score.somv_factor:.3f}")
+        for ms in score.mod_scores:
+            dn = _display_name(ms.mod_group) if ms.mod_group else "?"
+            print(f"        {dn}: val={ms.value:.0f}  {ms.tier_label}  pct={ms.percentile:.3f}  rq={ms.roll_quality:.3f}")
+
+    # Show roll quality across a range for fire res
+    print("\n  Fire resistance roll quality curve (Rings):")
+    if "fire_res" in stat_ids:
+        for val in [10, 15, 20, 25, 30, 35, 40, 45, 46]:
+            test_mods = [mod("fire_res", val, f"+{val}% to Fire Resistance")]
+            test_item = item("Test Ring", "Ruby Ring", "Rings")
+            score = db.score_item(test_item, test_mods)
+            ms = score.mod_scores[0]
+            print(f"    +{val:>2}% fire -> {ms.tier_label:>3}  pct={ms.percentile:.3f}  rq={ms.roll_quality:.3f}  somv={score.somv_factor:.3f}")
 
     # ── Summary ───────────────────────────────────────
     print(f"\n{'='*70}")

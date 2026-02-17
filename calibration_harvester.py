@@ -252,6 +252,7 @@ def write_calibration_record(score_result, price_divine: float,
         "total_defense": score_result.total_defense,
         "dps_factor": round(score_result.dps_factor, 3),
         "defense_factor": round(score_result.defense_factor, 3),
+        "somv_factor": round(score_result.somv_factor, 3),
     }
 
     CALIBRATION_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
