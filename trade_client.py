@@ -298,6 +298,22 @@ class TradeClient:
                 result = self._build_result(
                     listings, total, lower_bound=False)
             else:
+                # Low result count filter: estimates from 1-2 listings
+                # are almost always price-fixers (Bramble Spiral at 900 div
+                # from 1 listing, etc.).  Suppress these entirely.
+                if is_estimate and total <= 2:
+                    logger.info(
+                        f"TradeClient: suppressing low-count estimate "
+                        f"({total} result(s), {mods_dropped} mod(s) dropped)"
+                        f" -- too few listings for reliable pricing")
+                    return None
+                # Exact matches with 1-2 results: force estimate mode —
+                # a single listing could still be a price-fixer
+                if not is_estimate and total <= 2:
+                    logger.info(
+                        f"TradeClient: only {total} exact match(es) "
+                        f"-- downgrading to estimate")
+                    is_estimate = True
                 result = self._build_result(
                     listings, total, lower_bound=is_estimate)
             if is_estimate and result:

@@ -212,6 +212,7 @@ _WEIGHT_TABLE: List[Tuple[float, List[str]]] = [
     (0.5, [
         "armour", "evasion",
         "localphysicaldamagereductionrating", "localevasionrating",
+        "defencespercent", "alldefences",
     ]),
     (0.3, [
         "resistance", "fireresist", "coldresist", "lightningresist",
@@ -409,6 +410,8 @@ _DISPLAY_NAMES: List[Tuple[str, str]] = [
     ("spirit", "Spirit"),
     ("armour", "Armour"),
     ("evasion", "Evasion"),
+    ("defencespercent", "Def%"),
+    ("alldefences", "AllDef"),
     # Filler (0.3)
     ("allresist", "AllRes"),
     ("elementalresist", "AllRes"),
@@ -1073,8 +1076,15 @@ class ModDatabase:
 
         # Key mod: weight >= 1.0.  When group is known, trust the weight
         # table (Life is weight 1.0 despite matching common patterns).
-        # When group is unknown, defer to the common pattern check.
-        is_key = weight >= 1.0 if group else not _is_common_mod(mod.raw_text)
+        # When group is unknown, defer to the common pattern check —
+        # BUT always respect boosted weight (desecrated/fractured mods
+        # get weight >= 2.0 and should always be key).
+        if weight >= 1.0:
+            is_key = True
+        elif group:
+            is_key = False
+        else:
+            is_key = not _is_common_mod(mod.raw_text)
         weighted_score = percentile * weight
 
         return ModScore(
@@ -1104,6 +1114,7 @@ class ModDatabase:
         | A | 1+ T1/T2 key mods AND normalized >= 0.60 AND 2+ total mods |
         | B | normalized >= 0.45 AND 2+ key mods |
         | C | normalized >= 0.30 OR 1+ key mods |
+        | C | no key mods BUT normalized >= 0.65 AND 3+ total mods |
         | JUNK | everything else |
 
         Special affixes (fractured/desecrated) lower thresholds by 0.10
@@ -1114,11 +1125,16 @@ class ModDatabase:
         premium mod types on one item is inherently rare and valuable,
         even if individual rolls are mediocre.
 
-        No key mods at all -> JUNK regardless of score.
+        No key mods at all -> usually JUNK, but pure-defense items with
+        very high scores (T1 rolls on all filler mods) can reach C.
         Items with <2 mods can't be S-tier, <2 can't be A-tier (prevents
         single-mod items from inflating grades).
         """
         if not key_mods:
+            # Pure-defense/filler items with excellent rolls still deserve C
+            # (e.g., T1 Evasion + T1 Evasion + T1 Ailment Threshold = 0.83)
+            if normalized >= 0.65 and total_mods >= 3:
+                return Grade.C
             return Grade.JUNK
 
         n_high = len(high_tier_key)
