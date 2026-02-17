@@ -200,3 +200,12 @@ CALIBRATION_LOG_FILE = CACHE_DIR / "calibration.jsonl"
 # ─────────────────────────────────────────────
 LOG_LEVEL = "INFO"
 LOG_FILE = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "overlay.log"
+
+# ─────────────────────────────────────────────
+# Bug Reporting (Discord webhook)
+# ─────────────────────────────────────────────
+DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1473188390324142176/weHt5E4MdtfC_8Mdl3GgvMqel-JaoOmlUrdYHAguLlqcyQHdngvaZF_o99bjtrCh5mjg"
+BUG_REPORT_LOG_LINES = 200        # Tail of overlay.log to include
+BUG_REPORT_MAX_CLIPBOARDS = 5     # Most recent clipboard debug files
+BUG_REPORT_DB = CACHE_DIR / "bug_reports.jsonl"
+DEBUG_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "debug"
