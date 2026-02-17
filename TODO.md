@@ -20,6 +20,12 @@
 
 ## Completed
 
+### Session 10 (2026-02-16)
+- [x] Discord webhook bug reporting — Ctrl+Shift+B opens dark-themed dialog, collects logs + clipboard captures + system info, uploads to Discord channel
+- [x] Bug report dialog — standalone Toplevel (not transient), forced above fullscreen via Win32 SetWindowPos, timestamp header, title + description fields, Ctrl+Enter to send
+- [x] Local bug report database — each report appended to `bug_reports.jsonl` for cross-session analysis
+- [x] Claude prompt in Discord — each message includes copyable `claude "Look at bug: <title>"` for quick session start
+
 ### Session 9 (2026-02-16)
 - [x] DPS & defense stat integration — weapons scored by total DPS output, armor by total defense; low values crush grade
 - [x] Combat stat parsing — extract physical/elemental damage, APS, armour, evasion, ES from clipboard text
