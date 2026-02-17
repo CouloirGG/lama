@@ -195,6 +195,9 @@ GRADE_TIER_MAP = {
 # Calibration log file (grade vs actual trade price)
 CALIBRATION_LOG_FILE = CACHE_DIR / "calibration.jsonl"
 
+# Harvester state file (resumability across runs)
+HARVESTER_STATE_FILE = CACHE_DIR / "harvester_state.json"
+
 # ─────────────────────────────────────────────
 # Logging
 # ─────────────────────────────────────────────
