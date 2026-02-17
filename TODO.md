@@ -8,7 +8,7 @@
 - [ ] **ilvl breakpoint tables** — ilvl is now included in trade API queries for base items, but different slots have different ilvl breakpoints (bows need 82 for top phys%, wands only need 81). Could build per-slot breakpoint tables and consider ilvl in loot filter tiering for exceptional bases.
 - [ ] **Common mod classification** — Heuristic-based; may occasionally misclassify an unusual valuable mod as "common". Mitigated by hybrid queries that always require key mods.
 - [ ] **"Grants Skill:" edge cases** — Unusual skill grant formats might not be stripped by `_SKIP_LINE_RE`, leaking into trade queries.
-- [ ] **Rate limiting under burst** — Progressive search makes 2-3 API calls per item. Rapid scanning can trigger 60s trade API ban. Not an issue in normal usage but could be improved.
+- [x] **Rate limiting under burst** — Fixed: API call budget caps `_do_search` per progressive search (default 6). Niche items use a 1+3 call strategy (base probe + broad search) to stay under the rate limit.
 - [ ] **Fancier ✗ dismiss indicator** — Current ✗ is plain Unicode in grey. Explore nicer options (custom icon, styled background, animation, etc.).
 - [x] **Single key mod overpricing** — Items with ≤1 key mod among 4+ total now flagged as low confidence; results show as estimates with "(est.)" suffix and pulsing gold border.
 - [ ] **User-configurable mod classification UI** — When we build an app interface, expose the common/key mod lists as toggleable options (radio buttons or checkboxes). Lets users override our defaults, adapt to meta shifts, and adjust per-league without code changes. Also addresses the "we can't be right for everyone" problem.
@@ -18,6 +18,12 @@
 - [ ] **Chanceable base icons** — Show a Chance Orb icon and the target unique's icon (e.g., Headhunter) in the overlay for chanceable normal bases. Visual support alongside the text.
 
 ## Completed
+
+### Session 6 (2026-02-16)
+- [x] API call budget — `_search_progressive` now caps `_do_search` invocations via `max_calls` param (default 6), prevents single niche item from burning through rate limit
+- [x] Broad search for niche items — items with fractured/desecrated mods or 3+ sockets get a two-phase strategy: quick base-type probe (1 call) then broad count(n-1)/count(n-2) queries without base type (up to 3 calls)
+- [x] "+" indicator for unpriced valuable items — pulsing green "+" with gold border when all searches fail but item has value signals (fractured/desecrated/3S)
+- [x] Optional base_type in query builders — `_build_query` and `_build_hybrid_query` omit `type` field when base_type is None, enabling category-agnostic searches
 
 ### Session 5 (2026-02-16)
 - [x] Deduplicate common mod patterns — single canonical list in TradeClient, main.py references it
