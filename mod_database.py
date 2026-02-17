@@ -135,11 +135,9 @@ class ItemScore:
         B/A/S without price:  'A 67% ★3: T1 SpellCrit, T1 CritChance, T1 ES'
         B/A/S with price:     'A ~130d ★3: T1 SpellCrit, T1 CritChance, T1 ES'
         """
-        if self.grade == Grade.JUNK:
+        if self.grade in (Grade.JUNK, Grade.C):
             return "\u2717"
         g = self.grade.value
-        if self.grade == Grade.C:
-            return g
 
         # Star count: valuable T1/T2 mods
         star = f"\u2605{self.top_tier_count}" if self.top_tier_count > 0 else ""

@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POE2 Price Overlay</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f1118; color: #e2e8f0; font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1e2330; border-radius: 3px; }
+    input:focus, select:focus { outline: none; border-color: #3b82f6 !important; }
+    select option { background: #0c0e14; color: #e2e8f0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // -----------------------------------------------------------------------
+    // Config
+    // -----------------------------------------------------------------------
+    const PORT = 8450;
+    const API_BASE = `http://127.0.0.1:${PORT}`;
+    const WS_URL = `ws://127.0.0.1:${PORT}/ws`;
+
+    // -----------------------------------------------------------------------
+    // Design system (matches build-deployer)
+    // -----------------------------------------------------------------------
+    const MONO = { fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace" };
+    const LABEL = { fontSize: 10, fontWeight: 700, color: "#64748b", letterSpacing: "0.1em", textTransform: "uppercase" };
+    const FIELD_LABEL = { fontSize: 10, fontWeight: 600, display: "block", marginBottom: 4, letterSpacing: "0.08em", color: "#94a3b8" };
+    const FIELD_INPUT = { width: "100%", background: "#0c0e14", border: "1px solid #2a3040", borderRadius: 5, color: "#e2e8f0", padding: "7px 10px", ...MONO, fontSize: 12 };
+    const CARD = { background: "#141720", border: "1px solid #1e2330", borderRadius: 8, padding: 16 };
+    const BTN = { border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", letterSpacing: "0.04em", transition: "all 0.15s ease" };
+
+    const OVERLAY_STATES = {
+      stopped: { label: "STOPPED", color: "#64748b", bg: "rgba(100,116,139,0.12)" },
+      starting: { label: "STARTING", color: "#f59e0b", bg: "rgba(245,158,11,0.12)" },
+      running: { label: "RUNNING", color: "#34d399", bg: "rgba(52,211,153,0.12)" },
+      error: { label: "ERROR", color: "#ef4444", bg: "rgba(239,68,68,0.12)" },
+    };
+
+    // -----------------------------------------------------------------------
+    // API helper
+    // -----------------------------------------------------------------------
+    async function api(path, method = "GET", body = null) {
+      const opts = { method, headers: { "Content-Type": "application/json" } };
+      if (body) opts.body = JSON.stringify(body);
+      try {
+        const res = await fetch(`${API_BASE}${path}`, opts);
+        const raw = await res.text();
+        let data = {};
+        try { data = raw ? JSON.parse(raw) : {}; } catch { data = { raw }; }
+        if (!res.ok) return { error: data?.error || data?.detail || `HTTP ${res.status}`, ...data };
+        return data;
+      } catch (e) {
+        return { error: e.message };
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // WebSocket hook
+    // -----------------------------------------------------------------------
+    function useDashboardSocket(url, onMessage) {
+      const wsRef = useRef(null);
+      const [connected, setConnected] = useState(false);
+      const reconnectRef = useRef(null);
+      const disconnectTimerRef = useRef(null);
+      const onMessageRef = useRef(onMessage);
+      onMessageRef.current = onMessage;
+
+      const connect = useCallback(() => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) return;
+        const ws = new WebSocket(url);
+        wsRef.current = ws;
+        ws.onopen = () => {
+          if (disconnectTimerRef.current) { clearTimeout(disconnectTimerRef.current); disconnectTimerRef.current = null; }
+          setConnected(true);
+          if (reconnectRef.current) { clearTimeout(reconnectRef.current); reconnectRef.current = null; }
+        };
+        ws.onmessage = (evt) => { try { onMessageRef.current(JSON.parse(evt.data)); } catch (e) { console.error("WS parse:", e); } };
+        ws.onclose = () => {
+          if (!disconnectTimerRef.current) {
+            disconnectTimerRef.current = setTimeout(() => { setConnected(false); disconnectTimerRef.current = null; }, 800);
+          }
+          reconnectRef.current = setTimeout(connect, 2000);
+        };
+        ws.onerror = () => ws.close();
+      }, [url]);
+
+      useEffect(() => { connect(); return () => { wsRef.current?.close(); if (reconnectRef.current) clearTimeout(reconnectRef.current); if (disconnectTimerRef.current) clearTimeout(disconnectTimerRef.current); }; }, [connect]);
+      return { connected };
+    }
+
+    // -----------------------------------------------------------------------
+    // Time formatting
+    // -----------------------------------------------------------------------
+    function formatUptime(seconds) {
+      if (!seconds || seconds <= 0) return "0s";
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
+      if (h > 0) return `${h}h ${m}m`;
+      if (m > 0) return `${m}m ${s}s`;
+      return `${s}s`;
+    }
+
+    // -----------------------------------------------------------------------
+    // Header
+    // -----------------------------------------------------------------------
+    function Header({ wsConnected, overlayState }) {
+      const st = OVERLAY_STATES[overlayState] || OVERLAY_STATES.stopped;
+      return (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 0", borderBottom: "1px solid #1e2330", marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>POE2 Price Overlay</div>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              background: wsConnected ? "rgba(52,211,153,0.1)" : "rgba(239,68,68,0.1)",
+              border: `1px solid ${wsConnected ? "#34d39944" : "#ef444444"}`,
+              borderRadius: 20, padding: "3px 10px", fontSize: 10, fontWeight: 600,
+              color: wsConnected ? "#34d399" : "#ef4444",
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: wsConnected ? "#34d399" : "#ef4444", animation: wsConnected ? "none" : "pulse 1.5s infinite" }} />
+              {wsConnected ? "Connected" : "Reconnecting"}
+            </div>
+          </div>
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            background: st.bg, border: `1px solid ${st.color}44`,
+            borderRadius: 20, padding: "4px 14px", fontSize: 11, fontWeight: 700,
+            color: st.color, letterSpacing: "0.06em",
+          }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.color, animation: overlayState === "running" ? "pulse 2s infinite" : "none" }} />
+            {st.label}
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tooltip wrapper
+    // -----------------------------------------------------------------------
+    function Tooltip({ text, children }) {
+      const [show, setShow] = useState(false);
+      const [pos, setPos] = useState({ x: 0, y: 0 });
+      const ref = useRef(null);
+
+      const onEnter = (e) => {
+        const rect = ref.current?.getBoundingClientRect();
+        if (rect) setPos({ x: rect.left + rect.width / 2, y: rect.top });
+        setShow(true);
+      };
+
+      return (
+        <div ref={ref} onMouseEnter={onEnter} onMouseLeave={() => setShow(false)} style={{ position: "relative" }}>
+          {children}
+          {show && text && (
+            <div style={{
+              position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)",
+              background: "#1e2330", border: "1px solid #2a3040", borderRadius: 6,
+              padding: "6px 10px", fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap",
+              zIndex: 100, marginBottom: 6, pointerEvents: "none",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+            }}>{text}</div>
+          )}
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // StatCard
+    // -----------------------------------------------------------------------
+    function StatCard({ label, value, sub, color, tooltip }) {
+      const card = (
+        <div style={{ ...CARD, textAlign: "center", minWidth: 0 }}>
+          <div style={{ ...LABEL, marginBottom: 8 }}>{label}</div>
+          <div style={{ ...MONO, fontSize: 22, fontWeight: 700, color: color || "#e2e8f0", lineHeight: 1.2 }}>{value}</div>
+          {sub && <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>{sub}</div>}
+        </div>
+      );
+      return tooltip ? <Tooltip text={tooltip}>{card}</Tooltip> : card;
+    }
+
+    // -----------------------------------------------------------------------
+    // StatusPanel
+    // -----------------------------------------------------------------------
+    function StatusPanel({ status }) {
+      const { stats, uptime, state } = status;
+      const isRunning = state === "running";
+
+      return (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 20 }}>
+          <StatCard label="Uptime" value={formatUptime(uptime)} color={isRunning ? "#34d399" : "#64748b"} tooltip="Time since overlay was started" />
+          <StatCard label="Scans" value={stats.triggers} color="#22d3ee" tooltip="Number of item tooltips scanned via Ctrl+C" />
+          <StatCard label="Prices Shown" value={stats.prices_shown} color="#818cf8" tooltip="Items that matched a price in the cache" />
+          <StatCard label="Success Rate" value={`${stats.success_rate}%`} color={stats.success_rate >= 50 ? "#34d399" : stats.success_rate > 0 ? "#f59e0b" : "#64748b"} tooltip="Percentage of scans that found a price" />
+          <StatCard label="Cache Items" value={stats.cache_items} color="#f472b6" tooltip="Total priced items from poe2scout + poe.ninja" />
+          <StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color="#94a3b8" tooltip="When price data was last fetched (refreshes every 15 min)" />
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Bug Report Modal
+    // -----------------------------------------------------------------------
+    function BugReportModal({ open, onClose }) {
+      const [title, setTitle] = useState("");
+      const [desc, setDesc] = useState("");
+      const [sending, setSending] = useState(false);
+      const [result, setResult] = useState(null);
+
+      if (!open) return null;
+
+      const handleSend = async () => {
+        setSending(true);
+        setResult(null);
+        const res = await api("/api/bug-report", "POST", { title, description: desc });
+        setSending(false);
+        if (res.error) {
+          setResult({ ok: false, msg: res.error });
+        } else {
+          setResult({ ok: true, msg: "Report sent!" });
+          setTimeout(() => { onClose(); setTitle(""); setDesc(""); setResult(null); }, 1200);
+        }
+      };
+
+      return (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={onClose}>
+          <div style={{
+            background: "#141720", border: "1px solid #2a3040", borderRadius: 10,
+            padding: 24, width: 420, maxWidth: "90vw",
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Bug Report</div>
+
+            <label style={FIELD_LABEL}>Title</label>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Brief summary..."
+              style={{ ...FIELD_INPUT, marginBottom: 12 }}
+              autoFocus
+              onKeyDown={e => e.key === "Enter" && document.getElementById("bug-desc")?.focus()}
+            />
+
+            <label style={FIELD_LABEL}>What happened?</label>
+            <textarea
+              id="bug-desc"
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              placeholder="Describe the issue..."
+              rows={4}
+              style={{ ...FIELD_INPUT, resize: "vertical", marginBottom: 8 }}
+              onKeyDown={e => { if (e.ctrlKey && e.key === "Enter") handleSend(); }}
+            />
+
+            <div style={{ fontSize: 10, color: "#475569", marginBottom: 16 }}>
+              Logs + system info attached automatically. Sent to Discord.
+            </div>
+
+            {result && (
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12, color: result.ok ? "#34d399" : "#ef4444" }}>
+                {result.msg}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={onClose} style={{ ...BTN, background: "#2a3040", color: "#94a3b8" }}>Cancel</button>
+              <button onClick={handleSend} disabled={sending} style={{
+                ...BTN, background: sending ? "#1e2330" : "#3b82f6", color: sending ? "#475569" : "#fff",
+              }}>{sending ? "Sending..." : "Send Report"}</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // ControlBar
+    // -----------------------------------------------------------------------
+    function ControlBar({ overlayState, settings, leagues, onStart, onStop, onRestart, onLeagueChange, onBugReport, onUpdateFilter, filterUpdating }) {
+      const isRunning = overlayState === "running" || overlayState === "starting";
+      const selectedLeague = settings.league || "Fate of the Vaal";
+
+      return (
+        <div style={{ ...CARD, display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+          <button
+            onClick={onStart}
+            disabled={isRunning}
+            style={{
+              ...BTN,
+              background: isRunning ? "#1e2330" : "#22c55e",
+              color: isRunning ? "#475569" : "#fff",
+              cursor: isRunning ? "default" : "pointer",
+            }}
+          >Start</button>
+          <button
+            onClick={onStop}
+            disabled={!isRunning}
+            style={{
+              ...BTN,
+              background: !isRunning ? "#1e2330" : "#ef4444",
+              color: !isRunning ? "#475569" : "#fff",
+              cursor: !isRunning ? "default" : "pointer",
+            }}
+          >Stop</button>
+          <button
+            onClick={onRestart}
+            disabled={!isRunning}
+            style={{
+              ...BTN,
+              background: !isRunning ? "#1e2330" : "#3b82f6",
+              color: !isRunning ? "#475569" : "#fff",
+              cursor: !isRunning ? "default" : "pointer",
+            }}
+          >Restart</button>
+
+          <div style={{ width: 1, height: 24, background: "#2a3040" }} />
+
+          <Tooltip text="Update loot filter tiers from current prices">
+            <button
+              onClick={onUpdateFilter}
+              disabled={filterUpdating}
+              style={{
+                ...BTN,
+                background: filterUpdating ? "#1e2330" : "#a855f7",
+                color: filterUpdating ? "#475569" : "#fff",
+                cursor: filterUpdating ? "default" : "pointer",
+              }}
+            >{filterUpdating ? "Updating..." : "Update Filter"}</button>
+          </Tooltip>
+
+          <Tooltip text="Send a bug report with logs to Discord">
+            <button
+              onClick={onBugReport}
+              style={{ ...BTN, background: "#f59e0b", color: "#000" }}
+            >Report Bug</button>
+          </Tooltip>
+
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ ...LABEL, marginBottom: 0 }}>League</span>
+            <select
+              value={selectedLeague}
+              onChange={(e) => onLeagueChange(e.target.value)}
+              style={{
+                ...FIELD_INPUT, width: "auto", minWidth: 180, padding: "6px 10px",
+                appearance: "auto",
+              }}
+            >
+              {leagues.map(lg => (
+                <option key={lg.value} value={lg.value}>{lg.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // SettingsPanel
+    // -----------------------------------------------------------------------
+    function SettingsPanel({ settings, onUpdate, overlayState }) {
+      const [activeTab, setActiveTab] = useState("overlay");
+      const isRunning = overlayState === "running";
+
+      const tabs = [
+        { id: "overlay", label: "Overlay" },
+        { id: "detection", label: "Detection" },
+        { id: "filter", label: "Filter" },
+      ];
+
+      const Field = ({ label, field, type = "number", step, min, max, helpText }) => (
+        <div style={{ marginBottom: 12 }}>
+          <label style={FIELD_LABEL}>{label}</label>
+          <input
+            type={type}
+            value={settings[field] ?? ""}
+            onChange={(e) => {
+              const val = type === "number" ? parseFloat(e.target.value) : e.target.value;
+              onUpdate({ [field]: val });
+            }}
+            step={step}
+            min={min}
+            max={max}
+            style={FIELD_INPUT}
+          />
+          {helpText && <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>{helpText}</div>}
+        </div>
+      );
+
+      const Toggle = ({ label, field, helpText }) => (
+        <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            onClick={() => onUpdate({ [field]: !settings[field] })}
+            style={{
+              width: 36, height: 20, borderRadius: 10, cursor: "pointer",
+              background: settings[field] ? "#3b82f6" : "#2a3040",
+              position: "relative", transition: "background 0.2s",
+              flexShrink: 0,
+            }}
+          >
+            <div style={{
+              width: 16, height: 16, borderRadius: "50%", background: "#e2e8f0",
+              position: "absolute", top: 2,
+              left: settings[field] ? 18 : 2,
+              transition: "left 0.2s",
+            }} />
+          </div>
+          <div>
+            <span style={{ fontSize: 12, fontWeight: 500 }}>{label}</span>
+            {helpText && <div style={{ fontSize: 10, color: "#475569" }}>{helpText}</div>}
+          </div>
+        </div>
+      );
+
+      return (
+        <div style={{ ...CARD, marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+            <span style={{ ...LABEL, marginBottom: 0 }}>Settings</span>
+            {isRunning && (
+              <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 500 }}>
+                Restart to apply changes
+              </span>
+            )}
+          </div>
+
+          {/* Tab bar */}
+          <div style={{ display: "flex", gap: 2, marginBottom: 16, borderBottom: "1px solid #1e2330" }}>
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  background: "transparent", border: "none", borderBottom: `2px solid ${activeTab === tab.id ? "#3b82f6" : "transparent"}`,
+                  color: activeTab === tab.id ? "#e2e8f0" : "#64748b",
+                  padding: "8px 16px", fontSize: 12, fontWeight: 600,
+                  cursor: "pointer", letterSpacing: "0.04em",
+                  transition: "all 0.15s",
+                }}
+              >{tab.label}</button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 20px" }}>
+            {activeTab === "overlay" && <>
+              <Field label="Font Size" field="font_size" min={8} max={24} step={1} helpText="Overlay text size (px)" />
+              <Field label="Display Duration" field="overlay_duration" min={0.5} max={10} step={0.5} helpText="Seconds to show price (s)" />
+            </>}
+            {activeTab === "detection" && <>
+              <Field label="Scan FPS" field="scan_fps" min={1} max={30} step={1} helpText="Cursor checks per second" />
+              <Field label="Detection Cooldown" field="detection_cooldown" min={0.1} max={5} step={0.1} helpText="Seconds between detections" />
+              <Field label="Cursor Still Radius" field="cursor_still_radius" min={5} max={50} step={1} helpText="Max movement pixels" />
+              <Field label="Cursor Still Frames" field="cursor_still_frames" min={1} max={10} step={1} helpText="Frames cursor must be still" />
+            </>}
+            {activeTab === "filter" && <>
+              <Toggle label="Disable Filter Updates" field="no_filter_update" helpText="Don't auto-update loot filter on startup" />
+            </>}
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // LogPanel
+    // -----------------------------------------------------------------------
+    function LogPanel({ logs, logRef, onClear }) {
+      const [copyLabel, setCopyLabel] = useState("COPY");
+
+      const copyLogs = () => {
+        const text = logs.map(l => `${l.time || ""} ${l.message}`.trim()).join("\n");
+        navigator.clipboard.writeText(text).then(() => {
+          setCopyLabel("COPIED!");
+          setTimeout(() => setCopyLabel("COPY"), 1500);
+        }).catch(() => {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          setCopyLabel("COPIED!");
+          setTimeout(() => setCopyLabel("COPY"), 1500);
+        });
+      };
+
+      return (
+        <div style={CARD}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={LABEL}>Console Output</span>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={copyLogs} disabled={logs.length === 0} style={{
+                background: "transparent", border: "none", fontSize: 10, fontWeight: 600,
+                cursor: logs.length > 0 ? "pointer" : "default", letterSpacing: "0.06em",
+                color: copyLabel === "COPIED!" ? "#34d399" : (logs.length > 0 ? "#3b82f6" : "#1e2330"),
+                transition: "color 0.15s",
+              }}>{copyLabel}</button>
+              <button onClick={onClear} disabled={logs.length === 0} style={{
+                background: "transparent", border: "none", color: logs.length > 0 ? "#334155" : "#1e2330",
+                fontSize: 10, fontWeight: 600, cursor: logs.length > 0 ? "pointer" : "default", letterSpacing: "0.06em",
+              }}>CLEAR</button>
+            </div>
+          </div>
+          <div ref={logRef} style={{
+            background: "#0c0e14", border: "1px solid #1e2330", borderRadius: 6,
+            ...MONO, fontSize: 11.5, lineHeight: 1.7, height: 280, overflowY: "auto", padding: "12px 16px",
+          }}>
+            {logs.length === 0 && <div style={{ color: "#475569", fontStyle: "italic" }}>Waiting for overlay output...</div>}
+            {logs.map((log, i) => (
+              <div key={i} style={{ color: log.color || "#94a3b8" }}>
+                <span style={{ color: "#475569" }}>{log.time}</span>{" "}
+                {log.message}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Main App
+    // -----------------------------------------------------------------------
+    function Dashboard() {
+      const [status, setStatus] = useState({ state: "stopped", uptime: 0, stats: { uptime_min: 0, triggers: 0, prices_shown: 0, success_rate: 0, cache_items: 0, last_refresh: "never" } });
+      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3 });
+      const [leagues, setLeagues] = useState([{ value: "Fate of the Vaal", label: "Fate of the Vaal" }]);
+      const [logs, setLogs] = useState([]);
+      const [autoStartDone, setAutoStartDone] = useState(false);
+      const [bugModalOpen, setBugModalOpen] = useState(false);
+      const [filterUpdating, setFilterUpdating] = useState(false);
+      const logRef = useRef(null);
+      const autoScrollRef = useRef(true);
+
+      // Auto-scroll log panel
+      useEffect(() => {
+        if (logRef.current && autoScrollRef.current) {
+          logRef.current.scrollTop = logRef.current.scrollHeight;
+        }
+      }, [logs]);
+
+      // Track if user has scrolled up
+      useEffect(() => {
+        const el = logRef.current;
+        if (!el) return;
+        const onScroll = () => {
+          const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+          autoScrollRef.current = atBottom;
+        };
+        el.addEventListener("scroll", onScroll);
+        return () => el.removeEventListener("scroll", onScroll);
+      }, []);
+
+      // WebSocket handler
+      const handleWsMessage = useCallback((msg) => {
+        switch (msg.type) {
+          case "init":
+            setStatus({ state: msg.state, uptime: msg.uptime, stats: msg.stats });
+            if (msg.settings) setSettings(msg.settings);
+            if (msg.log && msg.log.length > 0) {
+              setLogs(msg.log);
+            }
+            break;
+          case "log":
+            setLogs(prev => {
+              const next = [...prev, { time: msg.time, message: msg.message, color: msg.color }];
+              return next.length > 500 ? next.slice(-500) : next;
+            });
+            break;
+          case "status":
+            setStatus(prev => ({ ...prev, state: msg.state, uptime: msg.uptime, stats: msg.stats }));
+            break;
+          case "state_change":
+            setStatus(prev => ({ ...prev, state: msg.state }));
+            break;
+          case "settings":
+            if (msg.settings) setSettings(msg.settings);
+            break;
+        }
+      }, []);
+
+      const { connected } = useDashboardSocket(WS_URL, handleWsMessage);
+
+      // Fetch leagues on mount
+      useEffect(() => {
+        api("/api/leagues").then(data => {
+          if (data.leagues && data.leagues.length > 0) {
+            setLeagues(data.leagues);
+          }
+        });
+      }, []);
+
+      // Auto-start overlay on mount
+      useEffect(() => {
+        if (autoStartDone) return;
+        if (!connected) return;
+
+        setAutoStartDone(true);
+
+        // Small delay to let init message arrive
+        const timer = setTimeout(() => {
+          setStatus(prev => {
+            // Only auto-start if not already running and auto_start is enabled
+            if (prev.state !== "running" && prev.state !== "starting") {
+              // Check settings from the latest state
+              api("/api/settings").then(s => {
+                if (s.auto_start !== false) {
+                  api("/api/start", "POST");
+                }
+              });
+            }
+            return prev;
+          });
+        }, 500);
+
+        return () => clearTimeout(timer);
+      }, [connected, autoStartDone]);
+
+      // Handlers
+      const handleStart = () => api("/api/start", "POST");
+      const handleStop = () => api("/api/stop", "POST");
+      const handleRestart = () => api("/api/restart", "POST");
+
+      const handleLeagueChange = (league) => {
+        const newSettings = { ...settings, league };
+        setSettings(newSettings);
+        api("/api/settings", "POST", { league });
+      };
+
+      const handleSettingsUpdate = (updates) => {
+        const newSettings = { ...settings, ...updates };
+        setSettings(newSettings);
+        api("/api/settings", "POST", updates);
+      };
+
+      const handleUpdateFilter = async () => {
+        setFilterUpdating(true);
+        const res = await api("/api/update-filter", "POST");
+        setFilterUpdating(false);
+        if (res.error) {
+          console.error("Filter update failed:", res.error);
+        }
+      };
+
+      return (
+        <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 24px" }}>
+          <Header wsConnected={connected} overlayState={status.state} />
+          <StatusPanel status={status} />
+          <ControlBar
+            overlayState={status.state}
+            settings={settings}
+            leagues={leagues}
+            onStart={handleStart}
+            onStop={handleStop}
+            onRestart={handleRestart}
+            onLeagueChange={handleLeagueChange}
+            onBugReport={() => setBugModalOpen(true)}
+            onUpdateFilter={handleUpdateFilter}
+            filterUpdating={filterUpdating}
+          />
+          <SettingsPanel settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} />
+          <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
+          <BugReportModal open={bugModalOpen} onClose={() => setBugModalOpen(false)} />
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Mount
+    // -----------------------------------------------------------------------
+    ReactDOM.createRoot(document.getElementById("root")).render(<Dashboard />);
+  </script>
+</body>
+</html>
