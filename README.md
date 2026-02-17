@@ -61,6 +61,16 @@ Subsequent launches skip setup and go straight to the overlay.
 
 ---
 
+## Hotkeys
+
+| Hotkey | Context | What it does |
+|--------|---------|-------------|
+| **Ctrl+C** | In POE2 | Copy item — overlay shows price |
+| **Ctrl+Shift+C** | In POE2 | Deep query — trade API lookup on last scored item |
+| **Ctrl+Shift+B** | Anywhere | Open bug report dialog |
+
+---
+
 ## Scripts
 
 | File             | Purpose                                        |
@@ -74,11 +84,9 @@ Subsequent launches skip setup and go straight to the overlay.
 
 ## Bug Reporting
 
-Something broken? **Double-click `REPORT_BUG.bat`**. It will:
+Press **Ctrl+Shift+B** from anywhere (in-game or alt-tabbed). A dialog pops up — type what happened and hit Send (or Ctrl+Enter). It automatically attaches your logs, recent clipboard captures, and system info to Discord. No GitHub account needed, no zipping files.
 
-1. Zip your logs and debug data to your Desktop
-2. Open a GitHub issue page in your browser
-3. Describe the bug, drag-drop the zip, and submit
+Alternatively, **double-click `REPORT_BUG.bat`** to zip logs and open a GitHub issue.
 
 ---
 
@@ -101,6 +109,7 @@ POE2_OCR/
 ├── calibration.py         # Score-to-price calibration engine
 ├── price_cache.py         # poe.ninja data fetcher & local cache
 ├── trade_client.py        # POE2 trade API client for rare items
+├── bug_reporter.py        # Discord webhook bug reporting
 ├── filter_updater.py      # Loot filter economy re-tiering
 ├── overlay.py             # Transparent overlay window
 ├── screen_capture.py      # Screen region capture utilities
