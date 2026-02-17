@@ -127,15 +127,19 @@ class ClipboardReader:
         return None
 
     def _send_ctrl_c(self):
-        """Send Ctrl+C keypress via Windows keybd_event."""
-        # Press Ctrl
-        keybd_event(VK_CONTROL, 0, 0, None)
-        # Press C
+        """Send Ctrl+C keypress via Windows keybd_event.
+
+        If the user is already holding Ctrl physically, only send C
+        down/up — avoids desynchronizing the OS keyboard state which
+        causes the game to see a bare 'C' on the user's next keypress.
+        """
+        ctrl_held = bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
+        if not ctrl_held:
+            keybd_event(VK_CONTROL, 0, 0, None)
         keybd_event(VK_C, 0, 0, None)
-        # Release C
         keybd_event(VK_C, 0, KEYEVENTF_KEYUP, None)
-        # Release Ctrl
-        keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, None)
+        if not ctrl_held:
+            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, None)
 
     def _get_clipboard_text(self) -> str:
         """Read CF_UNICODETEXT from the Windows clipboard."""

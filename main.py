@@ -14,6 +14,7 @@ import sys
 import os
 import re
 import time
+import queue
 import logging
 import argparse
 import threading
@@ -81,6 +82,9 @@ class POE2PriceOverlay:
         self._last_scored_result = None
         self._last_scored_cursor = (0, 0)
         self._last_scored_lock = threading.Lock()
+
+        # Auto-calibration queue: A/S graded items get trade API lookups in background
+        self._calibration_queue = queue.Queue()
 
         # Filter updater
         project_dir = Path(os.path.dirname(os.path.abspath(__file__)))
@@ -204,6 +208,14 @@ class POE2PriceOverlay:
             daemon=True,
             name="BugReportHotkey",
         ).start()
+
+        # 2d. Auto-calibration queue processor
+        if self.mod_database.loaded:
+            threading.Thread(
+                target=self._calibration_queue_loop,
+                daemon=True,
+                name="CalibrationQueue",
+            ).start()
 
         # 3. Start status reporting
         status_thread = threading.Thread(
@@ -760,6 +772,19 @@ class POE2PriceOverlay:
         if score.grade.value != "JUNK":
             self.stats["successful_lookups"] += 1
 
+        # Auto-queue for background trade API calibration.
+        # A/S always, B sampled 1-in-3, C/JUNK sampled 1-in-10.
+        # Sampling rates are for collection only — analysis weights
+        # results equally regardless of sample rate.
+        import random
+        grade = score.grade.value
+        if grade in ("A", "S"):
+            self._calibration_queue.put((item, parsed_mods, score))
+        elif grade == "B" and random.random() < 0.33:
+            self._calibration_queue.put((item, parsed_mods, score))
+        elif grade in ("C", "JUNK") and random.random() < 0.10:
+            self._calibration_queue.put((item, parsed_mods, score))
+
     def _deep_query_hotkey_loop(self):
         """Poll for Ctrl+Shift+C to trigger trade API lookup on last scored item."""
         import ctypes
@@ -909,6 +934,26 @@ class POE2PriceOverlay:
                     getattr(item, "item_class", ""))
         except Exception as e:
             logger.warning(f"Calibration log failed: {e}")
+
+    def _calibration_queue_loop(self):
+        """Process auto-queued A/S items for trade API calibration."""
+        while True:
+            item, parsed_mods, score_result = self._calibration_queue.get()
+            display_name = item.name or item.base_type
+            try:
+                result = self.trade_client.price_rare_item(
+                    item, parsed_mods, is_stale=lambda: False)
+                if result:
+                    self._log_calibration(score_result, result, item)
+                    logger.info(
+                        f"Auto-cal: {display_name} "
+                        f"grade={score_result.grade.value} → {result.display}")
+                else:
+                    logger.info(
+                        f"Auto-cal: {display_name} "
+                        f"grade={score_result.grade.value} → no listings")
+            except Exception as e:
+                logger.warning(f"Auto-cal failed ({display_name}): {e}")
 
     # Items that should always show ✗ (too cheap to bother pricing)
     _WORTHLESS_ITEMS = (
