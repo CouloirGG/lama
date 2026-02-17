@@ -129,6 +129,13 @@ FILTER_FRAGMENT_CHAOS_THRESHOLDS = {
 FILTER_LAST_UPDATE_FILE = CACHE_DIR / "filter_last_update"
 
 # ─────────────────────────────────────────────
+# RePoE Mod Database (local scoring engine)
+# ─────────────────────────────────────────────
+REPOE_BASE_URL = "https://repoe-fork.github.io/poe2"
+REPOE_CACHE_DIR = CACHE_DIR / "repoe"
+REPOE_CACHE_TTL = 7 * 86400  # 7 days
+
+# ─────────────────────────────────────────────
 # Logging
 # ─────────────────────────────────────────────
 LOG_LEVEL = "INFO"
