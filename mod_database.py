@@ -207,7 +207,6 @@ _WEIGHT_TABLE: List[Tuple[float, List[str]]] = [
     (1.0, [
         "increasedlife", "maximumlife",
         "energyshield", "localenergyshield", "increasedenergy",
-        "maximummana", "increasedmana",
         "armour", "evasion",
         "localphysicaldamagereductionrating", "localevasionrating",
     ]),
@@ -215,6 +214,7 @@ _WEIGHT_TABLE: List[Tuple[float, List[str]]] = [
         "resistance", "fireresist", "coldresist", "lightningresist",
         "chaosresist", "allresist", "elementalresist",
         "strength", "dexterity", "intelligence", "allattributes",
+        "maximummana", "increasedmana",
         "accuracy", "accuracyrating",
         "regen", "liferegeneration", "manaregeneration",
         "energyshieldrecharge",
@@ -382,6 +382,11 @@ _DISPLAY_NAMES: List[Tuple[str, str]] = [
     ("lightningdamage", "LightDmg"),
     ("chaosdamage", "ChaosDmg"),
     ("elementaldamage", "EleDmg"),
+    ("damagetophysical", "AddPhys"),
+    ("damagetofire", "AddFire"),
+    ("damagetocold", "AddCold"),
+    ("damagetolightning", "AddLight"),
+    ("damagetochaos", "AddChaos"),
     ("manareservation", "ManaRes"),
     ("liferecoup", "Recoup"),
     ("lifeonhit", "LifeOnHit"),
@@ -1055,7 +1060,10 @@ class ModDatabase:
         # Percentile floor for key/premium mods: even a low-tier roll of a
         # premium mod type is valuable because the mod's PRESENCE matters.
         # E.g. T8 spell damage on a staff is still spell damage.
-        if weight >= 2.0:
+        # But skip the floor for very deep tiers (T10+) — those are
+        # bottom-barrel rolls in oversized ladders (e.g. T40 WDTP).
+        tier_num = tier.tier_num if tier else 999
+        if weight >= 2.0 and tier_num <= 10:
             percentile = max(percentile, 0.30)
 
         # Key mod: weight >= 1.0.  When group is known, trust the weight
@@ -1118,9 +1126,10 @@ class ModDatabase:
         if n_key >= 3:
             bonus += min((n_key - 2) * 0.05, 0.15)
 
-        if n_high >= 2 and normalized >= (0.75 - bonus) and total_mods >= 3:
+        if (n_high >= 2 and n_key >= 3
+                and normalized >= (0.75 - bonus) and total_mods >= 4):
             return Grade.S
-        if n_high >= 1 and normalized >= (0.60 - bonus) and total_mods >= 2:
+        if n_high >= 1 and normalized >= (0.60 - bonus) and total_mods >= 3:
             return Grade.A
         if normalized >= (0.45 - bonus) and n_key >= 2:
             return Grade.B

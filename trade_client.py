@@ -724,8 +724,8 @@ class TradeClient:
     # Patterns for common "filler" mods that rarely drive item price.
     # Mods NOT matching any of these patterns are considered "key" mods.
     _COMMON_MOD_PATTERNS = (
-        # Defenses / life / mana
-        "maximum mana", "maximum life", "maximum energy shield",
+        # Defenses / mana (life and all-res removed — they drive value on jewelry)
+        "maximum mana", "maximum energy shield",
         "mana regeneration", "life regeneration", "energy shield recharge",
         "to armour", "to evasion", "to energy shield",
         "increased armour", "increased evasion", "increased energy shield",
@@ -733,7 +733,7 @@ class TradeClient:
         "increased evasion and energy shield",
         # Resistances / attributes
         "to fire resistance", "to cold resistance", "to lightning resistance",
-        "to chaos resistance", "to all elemental resistances",
+        "to chaos resistance",
         "to strength", "to dexterity", "to intelligence", "to all attributes",
         # Flask mods (generally low value)
         "flask charges", "flask effect", "flask duration",

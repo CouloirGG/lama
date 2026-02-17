@@ -936,14 +936,24 @@ class POE2PriceOverlay:
             logger.warning(f"Calibration log failed: {e}")
 
     def _calibration_queue_loop(self):
-        """Process auto-queued A/S items for trade API calibration."""
+        """Process auto-queued items for trade API calibration."""
         while True:
             item, parsed_mods, score_result = self._calibration_queue.get()
             display_name = item.name or item.base_type
             try:
+                # Wait out any active rate limit before attempting
+                while self.trade_client._is_rate_limited():
+                    wait = self.trade_client._rate_limited_until - time.time()
+                    if wait > 0:
+                        time.sleep(min(wait + 1, 65))
+
                 result = self.trade_client.price_rare_item(
                     item, parsed_mods, is_stale=lambda: False)
-                if result:
+                if result and "Rate limited" in result.display:
+                    # Still rate limited — re-queue and back off
+                    self._calibration_queue.put((item, parsed_mods, score_result))
+                    time.sleep(10)
+                elif result and result.min_price > 0:
                     self._log_calibration(score_result, result, item)
                     logger.info(
                         f"Auto-cal: {display_name} "
