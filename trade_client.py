@@ -750,10 +750,11 @@ class TradeClient:
         "shock effect", "poison duration", "bleed duration",
         "curse effect", "ailment",
         # Misc filler
-        "item rarity", "light radius", "stun ", "knockback",
+        "item rarity", "rarity of items", "light radius", "stun ", "knockback",
         "mana on kill", "life on kill", "mana cost",
         "reduced attribute requirements",
         "reduced projectile range",
+        "effect of socketed",
     )
 
     def _classify_filters(self, priceable: List[ParsedMod], stat_filters: list):

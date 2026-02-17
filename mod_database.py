@@ -207,6 +207,9 @@ _WEIGHT_TABLE: List[Tuple[float, List[str]]] = [
     (1.0, [
         "increasedlife", "maximumlife",
         "energyshield", "localenergyshield", "increasedenergy",
+        "spirit",
+    ]),
+    (0.5, [
         "armour", "evasion",
         "localphysicaldamagereductionrating", "localevasionrating",
     ]),
@@ -219,6 +222,7 @@ _WEIGHT_TABLE: List[Tuple[float, List[str]]] = [
         "regen", "liferegeneration", "manaregeneration",
         "energyshieldrecharge",
         "flask", "flaskcharge", "flaskeffect",
+        "charmduration", "charmeffect",
         "stun", "blockandstun", "stunrecovery",
         "reducedattributerequirements",
     ]),
@@ -373,6 +377,7 @@ _DISPLAY_NAMES: List[Tuple[str, str]] = [
     ("criticalstrikechance", "CritChance"),
     ("critchance", "CritChance"),
     ("spelldamage", "SpellDmg"),
+    ("physicaldamagereduction", "Armour"),
     ("physicaldamage", "PhysDmg"),
     # Key (2.0)
     ("attackspeed", "AtkSpd"),
@@ -1046,10 +1051,10 @@ class ModDatabase:
                 weight = w
             else:
                 # Unknown group — classify by common pattern
-                weight = 0.3 if _is_common_mod(mod.raw_text) else 2.0
+                weight = 0.3 if _is_common_mod(mod.raw_text) else 1.0
         else:
             # No bridge entry — use common/key classification
-            weight = 0.3 if _is_common_mod(mod.raw_text) else 2.0
+            weight = 0.3 if _is_common_mod(mod.raw_text) else 1.0
 
         # Fractured/desecrated mods are inherently premium: permanent (can't
         # reroll) and rare.  Boost their weight to reflect this.
@@ -1376,7 +1381,7 @@ if __name__ == "__main__":
           mod("fire_res", 15, "+15% to Fire Resistance")]),
 
         ("C2: Mediocre Amulet (T4 int + T5 mana + low res)",
-         {"C"},
+         {"C", "JUNK"},
          item("Skull Choker", "Jade Amulet", "Amulets"),
          [mod("int", 18, "+18 to Intelligence"),
           mod("mana", 30, "+30 to maximum Mana"),
