@@ -744,8 +744,10 @@ class POE2PriceOverlay:
         text = score.format_overlay_text(price_estimate=price_est,
                                          divine_to_chaos=d2c)
 
-        # If we have a price estimate, use price-based tier instead of grade-based
-        if price_est is not None:
+        # If we have a price estimate, use price-based tier instead of grade-based.
+        # Only override for B+ grades — C/JUNK calibration estimates are unreliable
+        # and would show misleading colors (e.g. orange "C") with few samples.
+        if price_est is not None and score.grade.value not in ("C", "JUNK"):
             chaos_val = price_est * d2c
             if chaos_val >= 25:
                 overlay_tier = "high"
