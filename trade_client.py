@@ -1056,6 +1056,9 @@ class TradeClient:
         elif c == "exalted":
             divine_to_exalted = self._divine_to_exalted_fn()
             return amount / divine_to_exalted if divine_to_exalted > 0 else None
+        elif c == "mirror":
+            # Mirror of Kalandra — extremely high value
+            return amount * 9000.0
         elif c in ("alchemy", "chance", "alteration", "transmute",
                     "augmentation", "jeweller", "fusing", "chromatic",
                     "scouring", "regret", "vaal", "regal"):
@@ -1068,6 +1071,7 @@ class TradeClient:
     # Currency display names
     _CURRENCY_NAMES = {
         "divine": "Divine", "chaos": "Chaos", "exalted": "Exalted",
+        "mirror": "Mirror",
         "alchemy": "Alch", "vaal": "Vaal", "chance": "Chance",
     }
 

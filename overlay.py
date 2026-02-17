@@ -50,15 +50,19 @@ class PriceOverlay:
 
     _NORMAL_BORDER_COLOR = "#333355"
 
-    # Value-based border effects: (min_divine, colors, pulse_ms, border_width)
+    # Value-based border effects:
+    #   (min_divine, colors, pulse_ms, border_width, text_cycle)
     # pulse_ms=0 means static (no pulse). Checked highest-first.
+    # text_cycle=True cycles label text color through the palette too.
     _VALUE_TIERS = [
-        (1000, ("#FF4500", "#FFD700"), 250, 3),   # Mirror: red-orange/gold, fast
-        (500,  ("#FF6600", "#FFD700"), 350, 3),    # Orange/gold, fast
-        (250,  ("#FFD700", "#B8860B"), 450, 3),    # Gold, medium
-        (100,  ("#FFD700", "#8B7536"), 600, 2),    # Gold, slow
-        (50,   ("#DAA520",),           0,   2),    # Dark gold, static
-        (25,   ("#A0A0B0",),           0,   2),    # Silver, static
+        (5000, ("#FF4040", "#FF8C00", "#FFD700", "#40FF40", "#40CCFF", "#FF69B4"),
+               150, 4, True),    # Mirror: rainbow, very fast, text cycles
+        (1000, ("#FF4500", "#FFD700"), 250, 3, False),   # Red-orange/gold, fast
+        (500,  ("#FF6600", "#FFD700"), 350, 3, False),    # Orange/gold, fast
+        (250,  ("#FFD700", "#B8860B"), 450, 3, False),    # Gold, medium
+        (100,  ("#FFD700", "#8B7536"), 600, 2, False),    # Gold, slow
+        (50,   ("#DAA520",),           0,   2, False),    # Dark gold, static
+        (25,   ("#A0A0B0",),           0,   2, False),    # Silver, static
     ]
     # Fallback for estimates below 25 divine
     _ESTIMATE_BORDER_COLORS = ("#FFD700", "#B8860B")
@@ -73,6 +77,7 @@ class PriceOverlay:
         self._pulse_index: int = 0
         self._pulse_colors: tuple = ()
         self._pulse_ms: int = 0
+        self._text_pulse: bool = False
         self._is_estimate: bool = False
         self._ready = threading.Event()
         self._pending_updates = []
@@ -235,12 +240,14 @@ class PriceOverlay:
         border_colors = None
         pulse_ms = 0
         border_width = 2
+        text_cycle = False
 
-        for min_div, colors, pms, bw in self._VALUE_TIERS:
+        for min_div, colors, pms, bw, tc in self._VALUE_TIERS:
             if price_divine >= min_div:
                 border_colors = colors
                 pulse_ms = pms
                 border_width = bw
+                text_cycle = tc
                 break
 
         # Fallback: estimates below value tiers still get gold pulse
@@ -250,6 +257,7 @@ class PriceOverlay:
 
         # Apply border effect
         self._frame.configure(padx=border_width, pady=border_width)
+        self._text_pulse = text_cycle
         if border_colors:
             self._pulse_colors = border_colors
             self._pulse_ms = pulse_ms
@@ -324,6 +332,11 @@ class PriceOverlay:
             return
         self._pulse_index = (self._pulse_index + 1) % len(self._pulse_colors)
         self._frame.configure(bg=self._pulse_colors[self._pulse_index])
+        # Mirror tier: cycle text color too (offset by half for contrast)
+        if self._text_pulse and self._label:
+            n = len(self._pulse_colors)
+            text_idx = (self._pulse_index + n // 2) % n
+            self._label.configure(fg=self._pulse_colors[text_idx])
         self._pulse_timer = self._root.after(self._pulse_ms, self._start_pulse)
 
     def _do_hide(self):
