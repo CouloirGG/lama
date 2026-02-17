@@ -84,7 +84,3 @@ echo.
 
 cd /d "%~dp0"
 python main.py --league "%LEAGUE%"
-
-echo.
-echo   Overlay stopped.
-pause

@@ -54,6 +54,7 @@ class ItemDetector:
         # next detection of the same item should re-fire the callback
         # instead of being blocked by content dedup.
         self._awaiting_reshow: bool = False
+        self._reshow_origin_pos: Optional[Tuple[int, int]] = None
 
     def set_callback(self, callback: Callable):
         """
@@ -107,6 +108,8 @@ class ItemDetector:
                     # stale item data from a previous tooltip, so we must prevent
                     # the same item text from re-triggering at every new position)
                     if self._last_trigger_pos and not self._is_same_position((cx, cy), self._last_trigger_pos):
+                        # Save origin before clearing — needed for distance-guarded reshow
+                        self._reshow_origin_pos = self._last_trigger_pos
                         self._last_trigger_pos = None
                         # Hide overlay when cursor leaves the item
                         if self._on_hide:
@@ -130,6 +133,11 @@ class ItemDetector:
                 if (now - self._last_trigger_time) < DETECTION_COOLDOWN:
                     continue
 
+                # Only send Ctrl+C if POE2 is the focused window
+                if not self.game_window.is_poe2_foreground():
+                    logger.debug(f"POE2 not focused, skipping Ctrl+C")
+                    continue
+
                 # Send Ctrl+C and read clipboard
                 logger.debug(f"Cursor stopped at ({cx}, {cy}), reading clipboard...")
                 item_text = self.clipboard.copy_item_under_cursor()
@@ -144,12 +152,19 @@ class ItemDetector:
                 if (item_text == self._last_item_text
                         and (now_dedup - self._last_item_time) < self._DEDUP_TTL):
                     if self._awaiting_reshow:
-                        # Overlay was hidden by cursor jitter — re-show same item
-                        logger.debug(f"Re-showing item at ({cx}, {cy})")
-                        self._awaiting_reshow = False
-                        self._last_trigger_pos = (cx, cy)
-                        if self._on_change:
-                            self._on_change(item_text, cx, cy)
+                        if self._reshow_origin_pos and self._is_same_position(
+                                (cx, cy), self._reshow_origin_pos):
+                            # Genuine jitter — cursor returned to same item
+                            logger.debug(f"Re-showing item at ({cx}, {cy})")
+                            self._awaiting_reshow = False
+                            self._last_trigger_pos = (cx, cy)
+                            if self._on_change:
+                                self._on_change(item_text, cx, cy)
+                        else:
+                            # Stale cached data at a different position — suppress
+                            logger.debug(f"Suppressing stale reshow at ({cx}, {cy})")
+                            self._last_trigger_pos = (cx, cy)
+                            self._awaiting_reshow = False
                     else:
                         logger.debug(f"Skipping duplicate item at ({cx}, {cy})")
                         self._last_trigger_pos = (cx, cy)

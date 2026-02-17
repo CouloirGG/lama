@@ -108,6 +108,9 @@ class ClipboardReader:
         # 5. Read clipboard (anything here is fresh from the game,
         #    since we confirmed the clear succeeded)
         new_text = self._get_clipboard_text()
+        if not new_text:
+            time.sleep(0.03)  # 30ms extra wait — game may be slow
+            new_text = self._get_clipboard_text()
 
         # 6. Restore original clipboard
         if original:

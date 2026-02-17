@@ -1,8 +1,8 @@
 # POE2 Price Overlay — Bug & Work Tracker
 
 ## Bugs
-- [ ] **Stale clipboard spam** — Pain Emblem (or last-copied item) sometimes re-triggers at new cursor positions. Improved with dedup TTL (30s) and clipboard clear verification, but not fully resolved. Root cause: game may return cached item data on Ctrl+C even when cursor isn't over an item.
-- [ ] **"Terminate batch job?" on START.bat** — Moved `SetConsoleCtrlHandler` earlier but prompt may still appear occasionally. Needs further investigation.
+- [x] **Stale clipboard spam** — Fixed: distance-guarded reshow only allows re-fire when cursor returns near the original item position; stale cached data at new positions is suppressed. Also added clipboard retry (30ms) for slow game responses.
+- [x] **"Terminate batch job?" on START.bat** — Fixed: Ctrl+C is now gated on `is_poe2_foreground()` check — keystrokes only sent when POE2 has focus, preventing console from receiving them. Removed trailing echo/pause from START.bat for clean exit.
 
 ## Backlog
 - [ ] **ilvl breakpoint tables** — ilvl is now included in trade API queries for base items, but different slots have different ilvl breakpoints (bows need 82 for top phys%, wands only need 81). Could build per-slot breakpoint tables and consider ilvl in loot filter tiering for exceptional bases.
@@ -18,6 +18,13 @@
 - [ ] **Chanceable base icons** — Show a Chance Orb icon and the target unique's icon (e.g., Headhunter) in the overlay for chanceable normal bases. Visual support alongside the text.
 
 ## Completed
+
+### Session 7 (2026-02-16)
+- [x] Fix stale clipboard spam — distance-guarded reshow via `_reshow_origin_pos`; suppress stale cached data at new positions
+- [x] Clipboard retry — 30ms retry on empty clipboard read after Ctrl+C
+- [x] Fix "Terminate batch job?" — gate Ctrl+C on `is_poe2_foreground()` so keystrokes only go to POE2
+- [x] Add `GameWindowDetector.is_poe2_foreground()` — checks `GetForegroundWindow()` title
+- [x] Clean START.bat exit — remove trailing echo/pause
 
 ### Session 6 (2026-02-16)
 - [x] API call budget — `_search_progressive` now caps `_do_search` invocations via `max_calls` param (default 6), prevents single niche item from burning through rate limit

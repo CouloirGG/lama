@@ -64,6 +64,18 @@ class GameWindowDetector:
         except (AttributeError, OSError):
             pass
 
+    def is_poe2_foreground(self) -> bool:
+        """Check if POE2 is the foreground (focused) window."""
+        if not self._use_win32:
+            return True
+        fg_hwnd = self._user32.GetForegroundWindow()
+        length = self._user32.GetWindowTextLengthW(fg_hwnd)
+        if length <= 0:
+            return False
+        buf = ctypes.create_unicode_buffer(length + 1)
+        self._user32.GetWindowTextW(fg_hwnd, buf, length + 1)
+        return buf.value == POE2_WINDOW_TITLE
+
     def is_cursor_over_poe2(self, cx: int, cy: int) -> bool:
         """Check if cursor position (cx, cy) is inside the POE2 window."""
         if not self._use_win32:
