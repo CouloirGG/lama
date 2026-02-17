@@ -739,7 +739,8 @@ class POE2PriceOverlay:
 
         # Query calibration for price estimate
         price_est = self.calibration.estimate(
-            score.normalized_score, getattr(item, "item_class", "") or "")
+            score.normalized_score, getattr(item, "item_class", "") or "",
+            grade=score.grade.value)
         d2c = self.price_cache.divine_to_chaos
         text = score.format_overlay_text(price_estimate=price_est,
                                          divine_to_chaos=d2c)
@@ -933,7 +934,8 @@ class POE2PriceOverlay:
                 self.calibration.add_sample(
                     score_result.normalized_score,
                     trade_result.min_price,
-                    getattr(item, "item_class", ""))
+                    getattr(item, "item_class", ""),
+                    grade=score_result.grade.value)
         except Exception as e:
             logger.warning(f"Calibration log failed: {e}")
 
