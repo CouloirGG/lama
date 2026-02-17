@@ -21,6 +21,16 @@
 
 ## Completed
 
+### Session 12 (2026-02-17)
+- [x] New 0.5 weight tier for armour/evasion — secondary defense mods no longer count as "key mods", fixing pure-evasion items (like Gloom Veil) getting false A grades
+- [x] Spirit added to weight table at 1.0 (Standard) — was accidentally getting 2.0 via unknown mod fallback
+- [x] Charm duration/effect added to Filler (0.3) — belt charm mods were inflating grades (Ambush Tether A→C)
+- [x] Unknown non-common mod fallback reduced from 2.0 to 1.0 — prevents niche mods from getting Key weight
+- [x] Fixed "Rarity of Items found" not matching common pattern "item rarity" — word order mismatch was causing rarity to be classified as key mod, inflating grades on multiple items (Wrath Salvation A→JUNK, Corruption Coil A→JUNK)
+- [x] Fixed "effect of Socketed Items" not in common patterns — niche mod was getting key weight
+- [x] Fixed armour display name — LocalPhysicalDamageReductionRating now shows "Armour" instead of "PhysDmg"
+- [x] Fixed orange C display bug — calibration estimate no longer overrides text color for C/JUNK grades
+
 ### Session 11 (2026-02-16)
 - [x] Auto-calibration queue — A/S items always queued for background trade API lookup, B sampled 1-in-3, C/JUNK sampled 1-in-10. Results logged to calibration.jsonl silently.
 - [x] Fix Ctrl key desync — synthetic Ctrl+C now skips Ctrl down/up when user is already holding Ctrl physically, preventing game from seeing bare 'C' keypresses during rapid stash scanning
