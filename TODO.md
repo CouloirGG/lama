@@ -17,9 +17,16 @@
 - [ ] **Automated regression test suite** — `python mod_database.py` runs 29 mock items covering S/A/B/C/JUNK grades, edge cases, and tier comparisons across item classes. Should be extended into a proper test framework (`pytest`) that runs against all major CLs: mod_database scoring, mod_parser stat matching, item_parser clipboard parsing, trade_client query building. CI integration to run on every commit.
 - [ ] **Currency icons in overlay** — Show small currency images (Divine, Exalted, Chaos, etc.) next to the price text in the overlay instead of just the name string. Makes prices instantly recognizable at a glance.
 - [ ] **Chanceable base icons** — Show a Chance Orb icon and the target unique's icon (e.g., Headhunter) in the overlay for chanceable normal bases. Visual support alongside the text.
-- [ ] **Pre-built calibration data shard** — Ship a curated `calibration.jsonl` with the repo so new users get reasonable price estimates from day one instead of starting from scratch. Update periodically as more data is collected. Consider league-aware shards (calibration data from one league may not apply to another).
+- [ ] **Pre-built calibration data shard** — Ship a curated `calibration.jsonl` with the repo so new users get reasonable price estimates from day one instead of starting from scratch. Update periodically as more data is collected. Consider league-aware shards (calibration data from one league may not apply to another). Harvester (`calibration_harvester.py`) can now generate these shards automatically.
 
 ## Completed
+
+### Session 13 (2026-02-17)
+- [x] Calibration harvester (`calibration_harvester.py`) — standalone CLI that queries trade API for rare items across 24 equipment categories x 4 price brackets (96 queries), scores them locally via ModDatabase, and writes (score, price) calibration pairs to `calibration.jsonl`
+- [x] Resumability — state file tracks completed queries with date-based seed; re-running same day skips finished queries
+- [x] Fake listing detection — sanity filter rejects JUNK items at 5+ divine, C items at 50+ divine, and low-score items at 20+ divine (caught 157 price-fixers in first run)
+- [x] First harvest: 486 raw samples collected, cleaned to 392 across 19 item classes (10x increase from 37 manual samples)
+- [x] `HARVESTER_STATE_FILE` added to config.py
 
 ### Session 12 (2026-02-17)
 - [x] New 0.5 weight tier for armour/evasion — secondary defense mods no longer count as "key mods", fixing pure-evasion items (like Gloom Veil) getting false A grades
