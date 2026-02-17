@@ -69,6 +69,11 @@ class TradeClient:
         # When the trade API returns 429, don't retry until this time
         self._rate_limited_until = 0.0
 
+        # Adaptive rate limiting — learned from API response headers
+        self._rl_rules = []          # [(max_hits, window_secs, penalty_secs), ...]
+        self._rl_state = []          # [(current_hits, window_secs, penalty_remaining), ...]
+        self._rl_rules_logged = False
+
         # In-memory cache: fingerprint → (result, timestamp)
         self._cache: dict = {}
         self._cache_lock = threading.Lock()
@@ -199,6 +204,10 @@ class TradeClient:
 
                 if not search_result and sockets > 0:
                     if is_stale and is_stale():
+                        return None
+                    if self._is_rate_limited():
+                        logger.info(
+                            "TradeClient: skipping socket retry — rate limited")
                         return None
                     logger.info(
                         f"TradeClient: no results with {sockets} sockets, "
@@ -871,6 +880,7 @@ class TradeClient:
             self._rate_limit()
             try:
                 resp = self._session.post(url, json=query, timeout=5)
+                self._parse_rate_limit_headers(resp)
 
                 if resp.status_code == 429:
                     retry_after = int(resp.headers.get("Retry-After", 2))
@@ -881,6 +891,7 @@ class TradeClient:
                     time.sleep(retry_after)
                     self._rate_limit()
                     resp = self._session.post(url, json=query, timeout=5)
+                    self._parse_rate_limit_headers(resp)
 
                 if resp.status_code != 200:
                     logger.warning(f"TradeClient: search returned HTTP {resp.status_code}")
@@ -914,6 +925,7 @@ class TradeClient:
             self._rate_limit()
             try:
                 resp = self._session.get(url, params={"query": query_id}, timeout=5)
+                self._parse_rate_limit_headers(resp)
 
                 if resp.status_code == 429:
                     retry_after = int(resp.headers.get("Retry-After", 2))
@@ -924,6 +936,7 @@ class TradeClient:
                     time.sleep(retry_after)
                     self._rate_limit()
                     resp = self._session.get(url, params={"query": query_id}, timeout=5)
+                    self._parse_rate_limit_headers(resp)
 
                 if resp.status_code != 200:
                     logger.warning(f"TradeClient: fetch returned HTTP {resp.status_code}")
@@ -1148,13 +1161,93 @@ class TradeClient:
     # ─── Rate Limiting ────────────────────────────
 
     def _rate_limit(self):
-        """Enforce rate limit between API requests."""
+        """Enforce rate limit between API requests.
+
+        Uses adaptive interval from API headers when available,
+        falling back to _min_interval (1.0s) when no rules are known.
+        """
         with self._rate_lock:
+            interval = self._compute_adaptive_interval()
             now = time.time()
             elapsed = now - self._last_request_time
-            if elapsed < self._min_interval:
-                time.sleep(self._min_interval - elapsed)
+            if elapsed < interval:
+                time.sleep(interval - elapsed)
             self._last_request_time = time.time()
+
+    def _parse_rate_limit_headers(self, resp):
+        """Parse rate limit rules and state from API response headers.
+
+        Headers format (comma-separated triplets):
+            X-Rate-Limit-Ip: max_hits:window_secs:penalty_secs,...
+            X-Rate-Limit-Ip-State: current_hits:window_secs:penalty_remaining,...
+        """
+        rules_raw = resp.headers.get("X-Rate-Limit-Ip")
+        state_raw = resp.headers.get("X-Rate-Limit-Ip-State")
+        if not rules_raw or not state_raw:
+            return
+
+        try:
+            rules = []
+            for part in rules_raw.split(","):
+                max_hits, window, penalty = part.strip().split(":")
+                rules.append((int(max_hits), int(window), int(penalty)))
+
+            state = []
+            for part in state_raw.split(","):
+                hits, window, penalty_rem = part.strip().split(":")
+                state.append((int(hits), int(window), int(penalty_rem)))
+
+            with self._rate_lock:
+                self._rl_rules = rules
+                self._rl_state = state
+
+                # Set rate limited if any window has an active penalty
+                for hits, window, penalty_rem in state:
+                    if penalty_rem > 0:
+                        until = time.time() + penalty_rem
+                        if until > self._rate_limited_until:
+                            self._rate_limited_until = until
+                            logger.warning(
+                                f"TradeClient: API penalty active — "
+                                f"{penalty_rem}s remaining")
+
+                if not self._rl_rules_logged:
+                    self._rl_rules_logged = True
+                    rule_strs = [
+                        f"{m}/{w}s (penalty {p}s)" for m, w, p in rules]
+                    logger.info(
+                        f"TradeClient: rate limit rules discovered: "
+                        + ", ".join(rule_strs))
+        except (ValueError, AttributeError):
+            pass  # Malformed headers — ignore silently
+
+    def _compute_adaptive_interval(self):
+        """Compute the safest request interval based on current API usage.
+
+        Called inside _rate_lock. For each window, if usage exceeds 50%
+        of the limit, switches to the safe rate (window_secs / max_hits).
+        Returns the most conservative (largest) interval across all windows.
+        Falls back to _min_interval when no rules are known.
+        """
+        if not self._rl_rules:
+            return self._min_interval
+
+        best_interval = self._min_interval
+
+        for i, (max_hits, window, penalty) in enumerate(self._rl_rules):
+            safe_rate = window / max_hits
+            if i < len(self._rl_state):
+                current_hits, _, _ = self._rl_state[i]
+                usage_ratio = current_hits / max_hits if max_hits > 0 else 1.0
+                if usage_ratio >= 0.5 and safe_rate > best_interval:
+                    if safe_rate > self._min_interval:
+                        logger.info(
+                            f"TradeClient: adaptive backoff — "
+                            f"{current_hits}/{max_hits} hits in {window}s "
+                            f"window, slowing to {safe_rate:.1f}s/req")
+                    best_interval = safe_rate
+
+        return best_interval
 
     # ─── Caching ──────────────────────────────────
 
