@@ -8,16 +8,23 @@
 - [ ] **ilvl breakpoint tables** — ilvl is now included in trade API queries for base items, but different slots have different ilvl breakpoints (bows need 82 for top phys%, wands only need 81). Could build per-slot breakpoint tables and consider ilvl in loot filter tiering for exceptional bases.
 - [ ] **Common mod classification** — Heuristic-based; may occasionally misclassify an unusual valuable mod as "common". Mitigated by hybrid queries that always require key mods.
 - [ ] **"Grants Skill:" edge cases** — Unusual skill grant formats might not be stripped by `_SKIP_LINE_RE`, leaking into trade queries.
-- [x] **Rate limiting under burst** — Fixed: API call budget caps `_do_search` per progressive search (default 6). Niche items use a 1+3 call strategy (base probe + broad search) to stay under the rate limit.
+- [x] **Rate limiting under burst** — Fixed: adaptive rate limiting parses `X-Rate-Limit-Ip` headers from API responses, backs off proactively at 50% usage per window. Socket retry path also guarded against wasted calls when rate limited.
 - [ ] **Fancier ✗ dismiss indicator** — Current ✗ is plain Unicode in grey. Explore nicer options (custom icon, styled background, animation, etc.).
 - [x] **Single key mod overpricing** — Items with ≤1 key mod among 4+ total now flagged as low confidence; results show as estimates with "(est.)" suffix and pulsing gold border.
 - [ ] **User-configurable mod classification UI** — When we build an app interface, expose the common/key mod lists as toggleable options (radio buttons or checkboxes). Lets users override our defaults, adapt to meta shifts, and adjust per-league without code changes. Also addresses the "we can't be right for everyone" problem.
 - [ ] **Scrap indicator for worthless items with quality/sockets** — Items dismissed as ✗ that have quality % or sockets should show a scrap icon (hammer 🔨) instead, reminding players to break them down. Scrapping quality/socketed items yields etchers, armour scraps, whetstones, baubles, gemcutters — all valuable for upgrades and worth trading on the currency exchange.
 - [ ] **Resistance SOMV (Sum of Mod Value)** — High resist rolls add real value beyond what the trade query captures. If a resist mod is above 40% (fire/cold/lightning) or 20% (chaos), calculate a sum-of-mod-value bonus and factor it into the price. Could be a multiplier or flat addition to the estimate, helping differentiate a ring with 43% fire res from one with 20%.
+- [ ] **Automated regression test suite** — `python mod_database.py` runs 29 mock items covering S/A/B/C/JUNK grades, edge cases, and tier comparisons across item classes. Should be extended into a proper test framework (`pytest`) that runs against all major CLs: mod_database scoring, mod_parser stat matching, item_parser clipboard parsing, trade_client query building. CI integration to run on every commit.
 - [ ] **Currency icons in overlay** — Show small currency images (Divine, Exalted, Chaos, etc.) next to the price text in the overlay instead of just the name string. Makes prices instantly recognizable at a glance.
 - [ ] **Chanceable base icons** — Show a Chance Orb icon and the target unique's icon (e.g., Headhunter) in the overlay for chanceable normal bases. Visual support alongside the text.
 
 ## Completed
+
+### Session 8 (2026-02-16)
+- [x] Adaptive rate limiting — parse `X-Rate-Limit-Ip` and `X-Rate-Limit-Ip-State` headers from every API response to learn actual rate windows (e.g., 5/10s, 15/60s, 30/300s)
+- [x] Proactive backoff — at 50% usage in any window, switch to safe rate (`window_secs / max_hits`); most conservative interval wins
+- [x] Rate limit rule discovery logging — first API call logs all discovered windows and penalties
+- [x] Socket retry rate-limit guard — skip `_search_progressive` retry when already rate limited, with clear log message
 
 ### Session 7 (2026-02-16)
 - [x] Fix stale clipboard spam — distance-guarded reshow via `_reshow_origin_pos`; suppress stale cached data at new positions
