@@ -17,6 +17,7 @@
 - [ ] **Automated regression test suite** — `python mod_database.py` runs 29 mock items covering S/A/B/C/JUNK grades, edge cases, and tier comparisons across item classes. Should be extended into a proper test framework (`pytest`) that runs against all major CLs: mod_database scoring, mod_parser stat matching, item_parser clipboard parsing, trade_client query building. CI integration to run on every commit.
 - [ ] **Currency icons in overlay** — Show small currency images (Divine, Exalted, Chaos, etc.) next to the price text in the overlay instead of just the name string. Makes prices instantly recognizable at a glance.
 - [ ] **Chanceable base icons** — Show a Chance Orb icon and the target unique's icon (e.g., Headhunter) in the overlay for chanceable normal bases. Visual support alongside the text.
+- [ ] **Pre-built calibration data shard** — Ship a curated `calibration.jsonl` with the repo so new users get reasonable price estimates from day one instead of starting from scratch. Update periodically as more data is collected. Consider league-aware shards (calibration data from one league may not apply to another).
 
 ## Completed
 
