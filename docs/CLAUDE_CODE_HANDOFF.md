@@ -1,6 +1,6 @@
 # POE2 Price Overlay — Claude Code Handoff
 
-> **Last updated:** 2026-02-17
+> **Last updated:** 2026-02-18
 > **Status:** Working prototype — distributable exe build + local mod scoring + DPS/defense integration + trade API pricing + 106-test regression suite
 
 ## What This Is
