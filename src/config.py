@@ -223,6 +223,17 @@ CALIBRATION_LOG_FILE = CACHE_DIR / "calibration.jsonl"
 # Harvester state file (resumability across runs)
 HARVESTER_STATE_FILE = CACHE_DIR / "harvester_state.json"
 
+# Calibration write-time filters
+CALIBRATION_MAX_PRICE_DIVINE = 300.0   # skip records above this
+CALIBRATION_MIN_RESULTS = 3            # skip thin results (< 3 listings)
+
+# ─────────────────────────────────────────────
+# Calibration Shards (pre-built data)
+# ─────────────────────────────────────────────
+SHARD_DIR = CACHE_DIR / "shards"
+SHARD_REFRESH_INTERVAL = 86400  # 24 hours
+SHARD_GITHUB_REPO = "CarbonSMASH/POE2_OCR"
+
 # ─────────────────────────────────────────────
 # Logging
 # ─────────────────────────────────────────────

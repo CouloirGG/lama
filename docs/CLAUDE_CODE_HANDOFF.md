@@ -1,7 +1,7 @@
 # POE2 Price Overlay — Claude Code Handoff
 
 > **Last updated:** 2026-02-18
-> **Status:** Working prototype — distributable exe build + local mod scoring + DPS/defense integration + trade API pricing + 106-test regression suite
+> **Status:** Working prototype — frameless desktop app + calibration shards + local mod scoring + DPS/defense integration + trade API pricing + 106-test regression suite
 
 ## What This Is
 
@@ -22,12 +22,14 @@ A real-time price overlay for Path of Exile 2. Hover over any item in-game, it s
    - Inno Setup installer (`scripts/installer.iss`): installs to `%LOCALAPPDATA%\POE2PriceOverlay`, desktop + Start Menu shortcuts
    - Auto-update: checks GitHub releases API on startup, shows gold banner with "Install Update" button, downloads Setup exe with progress bar, launches `/SILENT` install
 2. **Desktop Dashboard (source)** — `python src/app.py` or `POE2 Dashboard.bat`
-   - PyWebView native window → FastAPI server (`src/server.py`) → React UI (`resources/dashboard.html`)
+   - Frameless PyWebView native window with custom title bar, rounded corners, Couloir branding
+   - FastAPI server (`src/server.py`) → React UI (`resources/dashboard.html`)
    - 3 tabs: Overlay (controls + live log), Loot Filter (strictness/styles), Watchlist (trade queries)
    - Manages overlay subprocess (main.py) with start/stop/restart
    - Real-time log streaming via WebSocket
    - Settings persistence to `~/.poe2-price-overlay/dashboard_settings.json`
    - Bug report submission (Discord webhook)
+   - About modal with version info (click title bar text)
    - Loot filter update trigger
 3. **CLI/Overlay mode** — `python src/main.py` or `START.bat`
    - Direct overlay without dashboard (legacy mode)
@@ -61,23 +63,26 @@ Cursor stops over POE2 window (8 fps polling)
 | `item_parser.py` | Clipboard text → ParsedItem (name, base_type, rarity, mods, DPS, defense) |
 | `mod_parser.py` | Matches mod text to trade API stat IDs via regex |
 | `mod_database.py` | Local mod scoring engine — RePoE tier data, DPS/defense factors, S/A/B/C/JUNK grades |
-| `calibration.py` | Score-to-price calibration engine (learns from deep query results) |
+| `calibration.py` | Score-to-price calibration engine — k-NN interpolation, shard loading, learns from deep queries |
+| `calibration_harvester.py` | Standalone CLI for bulk calibration data collection from trade API |
+| `shard_generator.py` | Generates compressed calibration shard files from harvested data |
 | `trade_client.py` | Queries POE2 trade API for rare item pricing (includes DPS/defense equipment_filters) |
 | `filter_updater.py` | Loot filter economy re-tiering (NeverSink .filter + poe.ninja prices) |
 | `price_cache.py` | Fetches/caches prices from poe2scout.com (uniques, currency, gems) |
 | `overlay.py` | Transparent tkinter overlay + ConsoleOverlay fallback |
 | `clipboard_reader.py` | Windows clipboard reading via ctypes |
 | `screen_capture.py` | POE2 window detection via Win32 API |
-| `app.py` | **Desktop dashboard shell** — pywebview native window hosting FastAPI server |
+| `app.py` | **Desktop dashboard shell** — frameless pywebview window with WindowApi (min/max/close via Win32) |
 | `server.py` | **FastAPI backend** — overlay process mgmt, WS log streaming, settings, watchlist, bug reports, filter updates, league API |
 | `watchlist.py` | Trade API polling worker for the Watchlist tab |
 
 ### Resources (`resources/`)
 | File | Purpose |
 |------|---------|
-| `dashboard.html` | **Single-file React UI** — POE2 dark theme, 3 tabs (Overlay, Loot Filter, Watchlist), KPI cards, real-time log console |
+| `dashboard.html` | **Single-file React UI** — frameless POE2 dark theme, custom title bar, About modal, 3 tabs, KPI cards, real-time log console |
 | `VERSION` | App version string (read by config.py → APP_VERSION) |
 | `NewBooBoo.filter` | Loot filter template for filter updater |
+| `calibration_shard.json.gz` | Pre-built calibration data for instant accuracy from first launch |
 
 ### Scripts (`scripts/`)
 | File | Purpose |
@@ -90,7 +95,7 @@ Cursor stops over POE2 window (8 fps polling)
 ### Root (user-facing launchers)
 | File | Purpose |
 |------|---------|
-| `POE2 Dashboard.bat` | **Launches the GUI dashboard** (`python src/app.py`) |
+| `POE2 Dashboard.bat` | **Launches the GUI dashboard** (`pythonw src/app.py`, no console) |
 | `START.bat` | Main launcher (CLI mode) |
 | `SETUP.bat` | One-click install + launch |
 | `LICENSE` | GPLv3 |
@@ -303,7 +308,7 @@ Make the price overlay look like it's actually part of the game UI (matching fon
 Test and ensure the tool works across different platforms, resolutions, and monitor setups (not just 3440x1440 ultrawide).
 
 ### 6. Desktop App Polish
-Desktop dashboard exists (app.py + server.py + dashboard.html with pywebview). Next steps: installer/setup wizard, system tray icon, auto-start with Windows.
+~~Frameless window, custom title bar, rounded corners, Couloir branding~~ (done). Installer exists (Inno Setup). Next steps: system tray icon, auto-start with Windows.
 
 ### 7. Auto-Launch with POE2
 Detect when POE2 launches and automatically start the overlay. Could use Windows Task Scheduler or a lightweight tray service.

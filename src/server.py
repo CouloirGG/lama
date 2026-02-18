@@ -63,12 +63,13 @@ BUG_REPORT_LOG_LINES = 200
 BUG_REPORT_MAX_CLIPBOARDS = 5
 BUG_REPORT_DB = SETTINGS_DIR / "cache" / "bug_reports.jsonl"
 
-# Status line regex — matches main.py:1040-1044 format
+# Status line regex — matches main.py status format
 STATUS_RE = re.compile(
     r"\[Status\] Uptime: (\d+)min \| "
     r"Triggers: (\d+) \| Prices shown: (\d+) \((\d+)%\) \| "
     r"Cache: (\d+) items \| "
-    r"Last refresh: (.+)"
+    r"Last refresh: (.+?) \| "
+    r"D2C: ([\d.]+) \| D2E: ([\d.]+) \| Cal: (\d+)"
 )
 
 
@@ -183,6 +184,9 @@ class OverlayProcess:
             "success_rate": 0,
             "cache_items": 0,
             "last_refresh": "never",
+            "divine_to_chaos": 0,
+            "divine_to_exalted": 0,
+            "calibration_samples": 0,
         }
 
     def set_loop(self, loop: asyncio.AbstractEventLoop):
@@ -225,6 +229,9 @@ class OverlayProcess:
                 "success_rate": 0,
                 "cache_items": 0,
                 "last_refresh": "never",
+                "divine_to_chaos": 0,
+                "divine_to_exalted": 0,
+                "calibration_samples": 0,
             }
 
             # Start output reader thread
@@ -288,10 +295,12 @@ class OverlayProcess:
         if self.started_at and self.state == "running":
             uptime = int(time.time() - self.started_at)
 
+        from config import APP_VERSION
         return {
             "state": self.state,
             "uptime": uptime,
             "stats": dict(self.stats),
+            "version": APP_VERSION,
         }
 
     def _classify_line(self, line: str) -> str:
@@ -329,6 +338,9 @@ class OverlayProcess:
                         "success_rate": int(m.group(4)),
                         "cache_items": int(m.group(5)),
                         "last_refresh": m.group(6),
+                        "divine_to_chaos": float(m.group(7)),
+                        "divine_to_exalted": float(m.group(8)),
+                        "calibration_samples": int(m.group(9)),
                     }
 
                 color = self._classify_line(line)
@@ -1067,6 +1079,16 @@ async def serve_dashboard():
     if not dashboard_path.exists():
         return HTMLResponse("<h1>dashboard.html not found</h1>", status_code=404)
     return HTMLResponse(dashboard_path.read_text(encoding="utf-8"))
+
+
+@app.get("/img/{filename}")
+async def serve_image(filename: str):
+    """Serve static images from resources/img/."""
+    from fastapi.responses import FileResponse
+    img_path = get_resource(f"resources/img/{filename}")
+    if not img_path.exists():
+        return HTMLResponse("Not found", status_code=404)
+    return FileResponse(img_path, media_type="image/png")
 
 
 # ---------------------------------------------------------------------------

@@ -3,15 +3,16 @@ POE2 Price Overlay - Calibration Harvester
 
 Standalone CLI script that queries the trade API for listed rare items,
 scores them locally using ModDatabase, and records (score, actual_price)
-calibration pairs to calibration.jsonl.
+calibration pairs to a shard output file.
 
-Target: 400-600 samples across all equipment categories in ~10 minutes.
+Target: 3,600+ samples per run across all equipment categories.
 
 Usage:
     python calibration_harvester.py
     python calibration_harvester.py --dry-run
     python calibration_harvester.py --categories rings,amulets --max-queries 8
     python calibration_harvester.py --league "Fate of the Vaal"
+    python calibration_harvester.py --passes 3
 """
 
 import argparse
@@ -25,11 +26,11 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from config import (
-    CALIBRATION_LOG_FILE,
     CACHE_DIR,
     DEFAULT_LEAGUE,
     HARVESTER_STATE_FILE,
     TRADE_API_BASE,
+    CALIBRATION_MAX_PRICE_DIVINE,
 )
 from item_parser import ParsedItem
 from mod_database import ModDatabase
@@ -69,17 +70,79 @@ CATEGORIES: Dict[str, Tuple[str, str]] = {
 }
 
 # Price brackets: (label, min_price, max_price, currency)
-# Using exalted for cheap bracket, divine for the rest
-PRICE_BRACKETS = [
-    ("cheap",   50,  100, "exalted"),
-    ("mid",      1,    5, "divine"),
-    ("high",     5,   50, "divine"),
-    ("premium", 50, None, "divine"),
+# Primary brackets (passes 1-5)
+_PRIMARY_BRACKETS = [
+    ("very_cheap",  10,   50, "exalted"),
+    ("cheap",       50,  100, "exalted"),
+    ("low_mid",      1,    2, "divine"),
+    ("mid",          2,    5, "divine"),
+    ("high_low",     5,   15, "divine"),
+    ("high",        15,   50, "divine"),
+    ("premium",     50,  150, "divine"),
+    ("ultra",      150,  300, "divine"),
 ]
 
-RESULTS_PER_QUERY = 10
+# Stagger brackets: offset ranges that sample gaps between primary brackets
+_STAGGER_BRACKETS = [
+    ("stag_exalt",  25,   75, "exalted"),
+    ("stag_cheap",  75,  150, "exalted"),
+    ("stag_low",     1,    3, "divine"),
+    ("stag_mid",     3,    8, "divine"),
+    ("stag_high",    8,   25, "divine"),
+    ("stag_prem",   25,   80, "divine"),
+    ("stag_ultra",  80,  200, "divine"),
+    ("stag_top",   200,  300, "divine"),
+]
+
+# Micro brackets: fine-grained resolution in the 1-50d range where most
+# real pricing action happens, plus extra exalted coverage
+_MICRO_BRACKETS = [
+    ("micro_ex1",    5,   30, "exalted"),
+    ("micro_ex2",   30,   60, "exalted"),
+    ("micro_ex3",   60,  100, "exalted"),
+    ("micro_1",      1,    2, "divine"),
+    ("micro_2",      2,    4, "divine"),
+    ("micro_3",      4,    7, "divine"),
+    ("micro_4",      7,   12, "divine"),
+    ("micro_5",     12,   20, "divine"),
+    ("micro_6",     20,   35, "divine"),
+    ("micro_7",     35,   60, "divine"),
+    ("micro_8",     60,  100, "divine"),
+    ("micro_9",    100,  200, "divine"),
+]
+
+_BRACKET_SETS = [_PRIMARY_BRACKETS, _STAGGER_BRACKETS, _MICRO_BRACKETS]
+
+def get_brackets_for_pass(pass_num: int):
+    """Return the bracket set for a given pass number.
+    Cycles through primary -> stagger -> micro, 5 passes each."""
+    set_index = (pass_num - 1) // 5
+    if set_index >= len(_BRACKET_SETS):
+        # Wrap around for very long runs
+        set_index = set_index % len(_BRACKET_SETS)
+    return _BRACKET_SETS[set_index]
+
+def bracket_set_name(pass_num: int) -> str:
+    """Human-readable name for the bracket set used by a pass."""
+    set_index = ((pass_num - 1) // 5) % len(_BRACKET_SETS)
+    return ["primary", "stagger", "micro"][set_index]
+
+# For backward compat and dry-run display
+PRICE_BRACKETS = _PRIMARY_BRACKETS
+
+RESULTS_PER_QUERY = 20
+FETCH_BATCH_SIZE = 10  # Trade API caps fetches at 10 IDs per request
 MIN_INTERVAL = 2.5  # seconds between API calls
 LONG_PENALTY_THRESHOLD = 300  # seconds — bail if penalty exceeds this
+
+
+# ─── Output File ──────────────────────────────────────
+
+def get_shard_output_path(league: str, pass_num: int = 1) -> Path:
+    """Return path for harvester output: calibration_shard_{league}_{date}_p{pass}.jsonl"""
+    league_slug = league.lower().replace(" ", "_")
+    today = date.today().isoformat()
+    return CACHE_DIR / f"calibration_shard_{league_slug}_{today}_p{pass_num}.jsonl"
 
 
 # ─── Query Building ──────────────────────────────────
@@ -192,11 +255,12 @@ def extract_price_divine(listing: dict, trade_client: TradeClient) -> Optional[f
 
 # ─── State Management ────────────────────────────────
 
-def load_state() -> dict:
+def load_state(pass_num: int = 1) -> dict:
     """Load harvester state from disk."""
-    if HARVESTER_STATE_FILE.exists():
+    state_file = HARVESTER_STATE_FILE.parent / f"harvester_state_p{pass_num}.json"
+    if state_file.exists():
         try:
-            with open(HARVESTER_STATE_FILE, "r", encoding="utf-8") as f:
+            with open(state_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
@@ -204,10 +268,11 @@ def load_state() -> dict:
             "query_plan_seed": ""}
 
 
-def save_state(state: dict):
+def save_state(state: dict, pass_num: int = 1):
     """Persist harvester state to disk."""
-    HARVESTER_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(HARVESTER_STATE_FILE, "w", encoding="utf-8") as f:
+    state_file = HARVESTER_STATE_FILE.parent / f"harvester_state_p{pass_num}.json"
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(state_file, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
 
 
@@ -217,15 +282,18 @@ def make_query_key(cat_name: str, bracket_label: str) -> str:
 
 
 def build_query_plan(categories: Dict[str, Tuple[str, str]],
-                     seed: str) -> List[Tuple[str, str, str, str]]:
+                     seed: str,
+                     brackets=None) -> List[Tuple[str, str, str, str]]:
     """Build the full query plan: list of (cat_name, item_class, cat_filter, bracket_label).
 
     Deterministically shuffled by seed so re-runs on the same day
     process items in the same order.
     """
+    if brackets is None:
+        brackets = PRICE_BRACKETS
     plan = []
     for cat_name, (cat_filter, item_class) in categories.items():
-        for bracket_label, _, _, _ in PRICE_BRACKETS:
+        for bracket_label, _, _, _ in brackets:
             plan.append((cat_name, item_class, cat_filter, bracket_label))
 
     rng = random.Random(seed)
@@ -233,13 +301,47 @@ def build_query_plan(categories: Dict[str, Tuple[str, str]],
     return plan
 
 
+# ─── Fake/Price-Fixer Detection ──────────────────────
+
+def is_fake_listing(grade: str, score: float, price_div: float,
+                    n_explicit_mods: int) -> bool:
+    """Return True if this listing looks like a price-fixer or fake.
+
+    Balanced thresholds: strict enough to filter obvious fakes,
+    loose enough to capture legitimate high-price items where
+    our grading disagrees with the market (these are valuable
+    calibration data points).
+    """
+    # JUNK items listed at 5+ divine
+    if grade == "JUNK" and price_div >= 5:
+        return True
+    # C-grade items listed at 50+ divine
+    if grade == "C" and price_div >= 50:
+        return True
+    # Very low-score JUNK/C at 30+ divine
+    if grade in ("JUNK", "C") and score < 0.2 and price_div >= 30:
+        return True
+    # B-grade with very low score at 150+ divine
+    if grade == "B" and score < 0.35 and price_div >= 150:
+        return True
+    # Items with only 1 explicit mod listed at 50+ divine — suspicious
+    if n_explicit_mods <= 1 and price_div >= 50:
+        return True
+    # Price above absolute cap
+    if price_div > CALIBRATION_MAX_PRICE_DIVINE:
+        return True
+    return False
+
+
 # ─── Calibration Record Writing ──────────────────────
 
 def write_calibration_record(score_result, price_divine: float,
-                             item_class: str):
-    """Append a calibration record in the same format as _log_calibration()."""
+                             item_class: str, league: str,
+                             output_file: Path):
+    """Append a calibration record to the shard output file."""
     record = {
         "ts": int(time.time()),
+        "league": league,
         "grade": score_result.grade.value,
         "score": round(score_result.normalized_score, 3),
         "item_class": item_class,
@@ -255,45 +357,51 @@ def write_calibration_record(score_result, price_divine: float,
         "somv_factor": round(score_result.somv_factor, 3),
     }
 
-    CALIBRATION_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CALIBRATION_LOG_FILE, "a", encoding="utf-8") as f:
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
 
 
 # ─── Main Harvester Loop ────────────────────────────
 
 def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
-                  dry_run: bool = False, max_queries: int = 0):
+                  dry_run: bool = False, max_queries: int = 0,
+                  pass_num: int = 1):
     """Execute the harvester: query trade API, score items, write calibration data."""
+
+    output_file = get_shard_output_path(league, pass_num)
+    brackets = get_brackets_for_pass(pass_num)
 
     # Initialize components
     print(f"League: {league}")
     print(f"Categories: {len(categories)}")
-    print(f"Brackets: {len(PRICE_BRACKETS)}")
-    total_queries = len(categories) * len(PRICE_BRACKETS)
+    print(f"Brackets: {len(brackets)} ({bracket_set_name(pass_num)})")
+    total_queries = len(categories) * len(brackets)
     print(f"Total queries: {total_queries}")
+    print(f"Pass: {pass_num}")
+    print(f"Output: {output_file}")
 
     if max_queries > 0:
         print(f"Max queries: {max_queries}")
 
-    # Build deterministic query plan (same seed = same order per day)
-    today_seed = date.today().isoformat()
-    plan = build_query_plan(categories, today_seed)
+    # Build deterministic query plan (seed varies by pass for different offsets)
+    today_seed = f"{date.today().isoformat()}:p{pass_num}"
+    plan = build_query_plan(categories, today_seed, brackets)
 
     # Load state for resumability
-    state = load_state()
+    state = load_state(pass_num)
     if state.get("query_plan_seed") != today_seed:
-        # New day — reset state
+        # New day or new pass — reset state
         state = {"completed_queries": [], "total_samples": 0,
                  "query_plan_seed": today_seed}
-        save_state(state)
+        save_state(state, pass_num)
 
     completed = set(state["completed_queries"])
     remaining = [(cn, ic, cf, bl) for cn, ic, cf, bl in plan
                  if make_query_key(cn, bl) not in completed]
 
     if not remaining:
-        print(f"All {total_queries} queries already completed today. "
+        print(f"All {total_queries} queries already completed for pass {pass_num}. "
               f"({state['total_samples']} samples collected)")
         return
 
@@ -303,9 +411,9 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
     if dry_run:
         print("\n--- DRY RUN: Query Plan ---")
         for i, (cn, ic, cf, bl) in enumerate(remaining):
-            bracket = next(b for b in PRICE_BRACKETS if b[0] == bl)
+            bracket = next(b for b in brackets if b[0] == bl)
             price_str = f"{bracket[1]}-{bracket[2] or 'max'} {bracket[3]}"
-            print(f"  {i+1:3d}. {cn:20s} {bl:8s} ({price_str})")
+            print(f"  {i+1:3d}. {cn:20s} {bl:10s} ({price_str})")
             if max_queries > 0 and i + 1 >= max_queries:
                 print(f"  ... (capped at {max_queries})")
                 break
@@ -332,7 +440,7 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
     # Initialize TradeClient (no rate conversion needed — we read prices directly)
     trade_client = TradeClient(league=league)
 
-    print(f"\nStarting harvest...")
+    print(f"\nStarting harvest (pass {pass_num})...")
     session = trade_client._session
     queries_done = 0
     samples_this_run = 0
@@ -348,7 +456,7 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
             break
 
         query_key = make_query_key(cat_name, bracket_label)
-        bracket = next(b for b in PRICE_BRACKETS if b[0] == bracket_label)
+        bracket = next(b for b in brackets if b[0] == bracket_label)
         _, price_min, price_max, price_currency = bracket
 
         print(f"\n[{queries_done+1}/{min(len(remaining), max_queries or len(remaining))}] "
@@ -365,7 +473,7 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
             if wait > LONG_PENALTY_THRESHOLD:
                 print(f"  Rate limited for {wait:.0f}s (>{LONG_PENALTY_THRESHOLD}s) "
                       f"— saving state and exiting.")
-                save_state(state)
+                save_state(state, pass_num)
                 sys.exit(0)
             print(f"  Rate limited, waiting {wait:.0f}s...")
             time.sleep(wait + 1)
@@ -383,7 +491,7 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
                 retry_after = int(resp.headers.get("Retry-After", 5))
                 if retry_after > LONG_PENALTY_THRESHOLD:
                     print(f"  429 with penalty {retry_after}s — saving and exiting.")
-                    save_state(state)
+                    save_state(state, pass_num)
                     sys.exit(0)
                 print(f"  429 — waiting {retry_after}s...")
                 time.sleep(retry_after)
@@ -407,10 +515,23 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
                 print(f"  0 results")
                 queries_done += 1
                 state["completed_queries"].append(query_key)
-                save_state(state)
+                save_state(state, pass_num)
                 continue
 
-            print(f"  {total} total results, fetching {min(len(result_ids), RESULTS_PER_QUERY)}...")
+            # For multi-pass: offset into results to get different items
+            # Pass 1: first 20, Pass 2: 20-40, Pass 3: 40-60, etc.
+            offset = (pass_num - 1) * RESULTS_PER_QUERY
+            available_ids = result_ids[offset:offset + RESULTS_PER_QUERY]
+            if not available_ids:
+                # No more results at this offset
+                print(f"  {total} total results, no new results at offset {offset}")
+                queries_done += 1
+                state["completed_queries"].append(query_key)
+                save_state(state, pass_num)
+                continue
+
+            print(f"  {total} total results, fetching {len(available_ids)} "
+                  f"(offset {offset})...")
 
         except Exception as e:
             print(f"  Search error: {e}")
@@ -419,26 +540,33 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
             state["completed_queries"].append(query_key)
             continue
 
-        # Step 2: Fetch listings
-        fetch_ids = result_ids[:RESULTS_PER_QUERY]
-        try:
-            # Rate limit before fetch
-            trade_client._rate_limit()
-            time.sleep(max(0, MIN_INTERVAL - trade_client._min_interval))
+        # Step 2: Fetch listings (batched — API caps at 10 IDs per request)
+        listings = []
+        fetch_failed = False
+        for batch_start in range(0, len(available_ids), FETCH_BATCH_SIZE):
+            batch_ids = available_ids[batch_start:batch_start + FETCH_BATCH_SIZE]
+            try:
+                trade_client._rate_limit()
+                time.sleep(max(0, MIN_INTERVAL - trade_client._min_interval))
 
-            listings = trade_client._do_fetch(query_id, fetch_ids)
-            if not listings:
-                print(f"  Fetch returned no listings")
+                batch_listings = trade_client._do_fetch(query_id, batch_ids)
+                if batch_listings:
+                    listings.extend(batch_listings)
+            except Exception as e:
+                print(f"  Fetch error (batch {batch_start}): {e}")
+                errors += 1
+                fetch_failed = True
+                break
+
+        if not listings:
+            if fetch_failed:
                 queries_done += 1
                 state["completed_queries"].append(query_key)
-                save_state(state)
                 continue
-
-        except Exception as e:
-            print(f"  Fetch error: {e}")
-            errors += 1
+            print(f"  Fetch returned no listings")
             queries_done += 1
             state["completed_queries"].append(query_key)
+            save_state(state, pass_num)
             continue
 
         # Step 3: Score each listing and write calibration records
@@ -456,6 +584,9 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
             if item is None:
                 continue
 
+            # Count explicit mods for fake detection
+            n_explicit = len(listing.get("item", {}).get("explicitMods", []))
+
             # Parse mods
             parsed_mods = mod_parser.parse_mods(item)
             if not parsed_mods:
@@ -469,24 +600,17 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
                 logger.debug(f"Score error: {e}")
                 continue
 
-            # Sanity filter: reject listings where score and price
-            # wildly disagree — these are fake/price-fixer listings.
-            # JUNK items listed at 5+ divine, or C items at 50+ divine
-            # are almost certainly not real.
+            # Fake/price-fixer detection
             grade = score.grade.value
-            if grade == "JUNK" and price_div >= 5:
-                skipped_fake += 1
-                continue
-            if grade == "C" and price_div >= 50:
-                skipped_fake += 1
-                continue
-            if grade in ("JUNK", "C") and score.normalized_score < 0.3 and price_div >= 20:
+            if is_fake_listing(grade, score.normalized_score, price_div,
+                               n_explicit):
                 skipped_fake += 1
                 continue
 
-            # Write calibration record
+            # Write calibration record to shard output file
             try:
-                write_calibration_record(score, price_div, item_class)
+                write_calibration_record(score, price_div, item_class,
+                                         league, output_file)
                 last_grade = score.grade.value
                 batch_samples += 1
                 samples_this_run += 1
@@ -499,12 +623,12 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
 
         queries_done += 1
         state["completed_queries"].append(query_key)
-        save_state(state)
+        save_state(state, pass_num)
 
     # Final summary
     elapsed = time.time() - t_start
     print(f"\n{'='*50}")
-    print(f"Harvest complete!")
+    print(f"Harvest complete (pass {pass_num})!")
     print(f"  Queries: {queries_done}")
     print(f"  Samples collected: {samples_this_run}")
     print(f"  Total samples (all runs today): {state['total_samples']}")
@@ -513,10 +637,10 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
     print(f"  Skipped (fake/price-fixer): {skipped_fake}")
     print(f"  Errors: {errors}")
     print(f"  Time: {elapsed:.1f}s ({elapsed/60:.1f} min)")
-    print(f"  Output: {CALIBRATION_LOG_FILE}")
+    print(f"  Output: {output_file}")
     print(f"{'='*50}")
 
-    save_state(state)
+    save_state(state, pass_num)
 
 
 # ─── CLI Entry Point ─────────────────────────────────
@@ -533,6 +657,9 @@ def main():
                              "(default: all). Use --dry-run to see names.")
     parser.add_argument("--max-queries", type=int, default=0,
                         help="Max number of queries to run (0 = unlimited)")
+    parser.add_argument("--passes", type=int, default=1,
+                        help="Number of passes with different offsets "
+                             "(default: 1). Each pass samples deeper into listings.")
     parser.add_argument("--reset", action="store_true",
                         help="Reset today's state and start fresh")
     parser.add_argument("-v", "--verbose", action="store_true",
@@ -570,16 +697,29 @@ def main():
 
     # Reset state if requested
     if args.reset:
+        for p in range(1, args.passes + 1):
+            sf = HARVESTER_STATE_FILE.parent / f"harvester_state_p{p}.json"
+            if sf.exists():
+                sf.unlink()
+        # Also reset legacy state file
         if HARVESTER_STATE_FILE.exists():
             HARVESTER_STATE_FILE.unlink()
-            print("State reset.")
+        print("State reset.")
 
-    run_harvester(
-        league=args.league,
-        categories=cats,
-        dry_run=args.dry_run,
-        max_queries=args.max_queries,
-    )
+    # Run each pass
+    for pass_num in range(1, args.passes + 1):
+        if args.passes > 1:
+            print(f"\n{'#'*50}")
+            print(f"  PASS {pass_num} of {args.passes}")
+            print(f"{'#'*50}")
+
+        run_harvester(
+            league=args.league,
+            categories=cats,
+            dry_run=args.dry_run,
+            max_queries=args.max_queries,
+            pass_num=pass_num,
+        )
 
 
 if __name__ == "__main__":
