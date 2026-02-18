@@ -2174,7 +2174,10 @@
             }
             break;
           case "update_available":
-            setUpdateInfo({ current: msg.current, latest: msg.latest, url: msg.url });
+            setUpdateInfo({ current: msg.current, latest: msg.latest, url: msg.url, setup_url: msg.setup_url || "" });
+            break;
+          case "update_progress":
+            setUpdateInfo(prev => prev ? { ...prev, progress: msg.percent, installing: msg.installing || false } : prev);
             break;
         }
       }, []);
@@ -2252,15 +2255,33 @@
         <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 24px" }}>
           <Header wsConnected={connected} overlayState={status.state} />
           {updateInfo && (
-            <div style={{ background: "rgba(196,164,86,0.12)", border: `1px solid ${T.gold}`, borderRadius: 8, padding: "10px 16px", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ color: T.gold, fontSize: 13, fontWeight: 600 }}>
-                Update available: v{updateInfo.latest}
-                <span style={{ color: T.textSecond, fontWeight: 400, marginLeft: 8 }}>(current: v{updateInfo.current})</span>
-              </span>
-              <span style={{ display: "flex", gap: 8 }}>
-                <a href={updateInfo.url} target="_blank" rel="noopener noreferrer" style={{ ...BTN, background: T.gold, color: "#0d0b08", textDecoration: "none", padding: "5px 14px", fontSize: 11 }}>Download</a>
-                <button onClick={() => setUpdateInfo(null)} style={{ ...BTN, background: "transparent", border: `1px solid ${T.border}`, color: T.textSecond, padding: "5px 10px", fontSize: 11 }}>Dismiss</button>
-              </span>
+            <div style={{ background: "rgba(196,164,86,0.12)", border: `1px solid ${T.gold}`, borderRadius: 8, padding: "10px 16px", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ color: T.gold, fontSize: 13, fontWeight: 600 }}>
+                  {updateInfo.installing ? "Installing update..." : `Update available: v${updateInfo.latest}`}
+                  {!updateInfo.installing && <span style={{ color: T.textSecond, fontWeight: 400, marginLeft: 8 }}>(current: v{updateInfo.current})</span>}
+                </span>
+                <span style={{ display: "flex", gap: 8 }}>
+                  {updateInfo.installing ? null : updateInfo.progress != null ? null : updateInfo.setup_url ? (
+                    <button onClick={() => api("/api/apply-update", "POST")} style={{ ...BTN, background: T.gold, color: "#0d0b08", padding: "5px 14px", fontSize: 11 }}>Install Update</button>
+                  ) : (
+                    <a href={updateInfo.url} target="_blank" rel="noopener noreferrer" style={{ ...BTN, background: T.gold, color: "#0d0b08", textDecoration: "none", padding: "5px 14px", fontSize: 11 }}>Download</a>
+                  )}
+                  {!updateInfo.installing && updateInfo.progress == null && (
+                    <button onClick={() => setUpdateInfo(null)} style={{ ...BTN, background: "transparent", border: `1px solid ${T.border}`, color: T.textSecond, padding: "5px 10px", fontSize: 11 }}>Dismiss</button>
+                  )}
+                </span>
+              </div>
+              {updateInfo.progress != null && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 4, height: 6, overflow: "hidden" }}>
+                    <div style={{ background: T.gold, height: "100%", width: `${updateInfo.progress}%`, borderRadius: 4, transition: "width 0.3s ease" }} />
+                  </div>
+                  <div style={{ color: T.textSecond, fontSize: 11, marginTop: 4, textAlign: "center" }}>
+                    {updateInfo.installing ? "Launching installer..." : `Downloading: ${updateInfo.progress}%`}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <StatusPanel status={status} />
