@@ -14,6 +14,19 @@ A real-time price overlay for Path of Exile 2. Hover over any item in-game, it s
 
 ## Current Architecture
 
+**Two interfaces:**
+1. **Desktop Dashboard (primary)** — `python app.py` or `POE2 Dashboard.bat`
+   - PyWebView native window → FastAPI server (`server.py`) → React UI (`dashboard.html`)
+   - 3 tabs: Overlay (controls + live log), Loot Filter (strictness/styles), Watchlist (trade queries)
+   - Manages overlay subprocess (main.py) with start/stop/restart
+   - Real-time log streaming via WebSocket
+   - Settings persistence to `~/.poe2-price-overlay/dashboard_settings.json`
+   - Bug report submission (Discord webhook)
+   - Loot filter update trigger
+2. **CLI/Overlay mode** — `python main.py` or `START.bat`
+   - Direct overlay without dashboard (legacy mode)
+
+**Pricing pipeline (runs inside main.py):**
 ```
 Cursor stops over POE2 window (8 fps polling)
   → Sends Ctrl+C via keybd_event (Windows API)
@@ -48,8 +61,14 @@ Cursor stops over POE2 window (8 fps polling)
 | `overlay.py` | Transparent tkinter overlay + ConsoleOverlay fallback |
 | `clipboard_reader.py` | Windows clipboard reading via ctypes |
 | `screen_capture.py` | POE2 window detection via Win32 API |
-| `launcher.py` | GUI launcher (bat files call this) |
-| `START.bat` | Main launcher |
+| `app.py` | **Desktop dashboard shell** — pywebview native window hosting FastAPI server |
+| `server.py` | **FastAPI backend** — overlay process mgmt, WS log streaming, settings, watchlist, bug reports, filter updates, league API |
+| `dashboard.html` | **Single-file React UI** — POE2 dark theme, 3 tabs (Overlay, Loot Filter, Watchlist), KPI cards, real-time log console |
+| `watchlist.py` | Trade API polling worker for the Watchlist tab |
+| `launcher.py` | Legacy CLI launcher (bat files call this for non-GUI mode) |
+| `START.bat` | Main launcher (CLI mode) |
+| `POE2 Dashboard.bat` | **Launches the GUI dashboard** (`python app.py`) |
+| `SYNC.bat` | **Multi-machine sync** — pulls latest from GitHub, installs deps, verifies setup |
 | `DEBUG.bat` | Launches with `--debug` flag for verbose logging |
 | `REPORT_BUG.bat` | Zips logs to Desktop, opens GitHub issue page |
 | `LICENSE` | GPLv3 |
@@ -261,8 +280,8 @@ Make the price overlay look like it's actually part of the game UI (matching fon
 ### 5. Cross-Platform / Resolution Testing
 Test and ensure the tool works across different platforms, resolutions, and monitor setups (not just 3440x1440 ultrawide).
 
-### 6. True Desktop App
-Build it into a proper application (installer, system tray, settings GUI) instead of just PowerShell .bat launchers.
+### 6. Desktop App Polish
+Desktop dashboard exists (app.py + server.py + dashboard.html with pywebview). Next steps: installer/setup wizard, system tray icon, auto-start with Windows.
 
 ### 7. Auto-Launch with POE2
 Detect when POE2 launches and automatically start the overlay. Could use Windows Task Scheduler or a lightweight tray service.
@@ -280,11 +299,23 @@ Add a subtle "Buy me a coffee" button/link that connects to the user's accounts.
 
 ## How To Resume Development
 
+**First time on a new machine:**
 1. Clone: `git clone https://github.com/CarbonSMASH/POE2_OCR.git`
 2. `cd POE2_OCR`
-3. Run `claude` (Claude Code CLI)
-4. Say: "Read CLAUDE_CODE_HANDOFF.md and continue development"
-5. To test: `python main.py --debug` or double-click `DEBUG.bat`
-6. Run regression suite: `RUN_TESTS.bat` or `python -m pytest tests/ -v`
-7. Debug clipboard captures: `~/.poe2-price-overlay/debug/`
-8. Log file: `~/.poe2-price-overlay/overlay.log`
+3. `pip install -r requirements.txt`
+4. Run `claude` (Claude Code CLI)
+5. Say: "Read CLAUDE_CODE_HANDOFF.md and continue development"
+
+**Switching between machines:**
+1. `cd POE2_OCR` → double-click `SYNC.bat` (or run `git pull && pip install -r requirements.txt`)
+2. This pulls all latest code from GitHub and installs any new deps
+
+**Running the tool:**
+- **Dashboard GUI:** `python app.py` or double-click `POE2 Dashboard.bat`
+- **CLI mode:** `python main.py --debug` or double-click `DEBUG.bat`
+- **Tests:** `RUN_TESTS.bat` or `python -m pytest tests/ -v`
+
+**Debug files:**
+- Clipboard captures: `~/.poe2-price-overlay/debug/`
+- Log file: `~/.poe2-price-overlay/overlay.log`
+- Settings: `~/.poe2-price-overlay/dashboard_settings.json`

@@ -92,13 +92,15 @@ Subsequent launches skip setup and go straight to the overlay.
 
 ## Scripts
 
-| File             | Purpose                                        |
-|------------------|------------------------------------------------|
-| `START.bat`      | Main launcher — double-click to run            |
-| `DEBUG.bat`      | Launch with verbose logging to console         |
-| `SETTINGS.bat`   | Change league, view logs, run tests            |
-| `RUN_TESTS.bat`  | Run pytest suite — spawns a window per module  |
-| `REPORT_BUG.bat` | Zip logs and open a GitHub issue               |
+| File                   | Purpose                                        |
+|------------------------|------------------------------------------------|
+| `POE2 Dashboard.bat`  | **Dashboard GUI** — the main way to run        |
+| `SYNC.bat`            | **Multi-machine sync** — pull + install deps   |
+| `START.bat`            | CLI launcher (no dashboard)                    |
+| `DEBUG.bat`            | Launch with verbose logging to console         |
+| `SETTINGS.bat`         | Change league, view logs, run tests            |
+| `RUN_TESTS.bat`        | Run pytest suite — spawns a window per module  |
+| `REPORT_BUG.bat`       | Zip logs and open a GitHub issue               |
 
 ---
 
@@ -114,12 +116,18 @@ Alternatively, **double-click `REPORT_BUG.bat`** to zip logs and open a GitHub i
 
 ```
 POE2_OCR/
-├── START.bat              # Main launcher
+├── POE2 Dashboard.bat     # Dashboard GUI launcher (primary)
+├── SYNC.bat               # Multi-machine sync (git pull + pip install)
+├── START.bat              # CLI launcher (no dashboard)
 ├── DEBUG.bat              # Debug mode launcher
 ├── SETTINGS.bat           # Settings menu
 ├── REPORT_BUG.bat         # Bug report helper
-├── launcher.py            # Python launcher with first-run wizard
-├── main.py                # Entry point & orchestrator
+├── app.py                 # Desktop dashboard shell (pywebview)
+├── server.py              # FastAPI backend (overlay mgmt, WS, settings)
+├── dashboard.html         # Single-file React UI (3 tabs, POE2 theme)
+├── watchlist.py           # Trade API polling worker for Watchlist tab
+├── launcher.py            # Legacy CLI launcher
+├── main.py                # Overlay engine & pricing pipeline
 ├── config.py              # All tunable constants
 ├── clipboard_reader.py    # Clipboard monitoring
 ├── item_detection.py      # Item type detection from clipboard text
