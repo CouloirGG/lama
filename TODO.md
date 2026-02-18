@@ -21,6 +21,13 @@
 
 ## Completed
 
+### Session 16 (2026-02-17)
+- [x] File cleanup — deleted 8 superseded files (launcher.py, test_pipeline.py, SETUP_GUIDE.md, 5 .bat wrappers), moved 4 dev docs to `docs/`
+- [x] PyInstaller distributable exe — `bundle_paths.py` for frozen-mode paths, `--overlay-worker` flag for single-exe subprocess spawning, rewritten `build.spec` (app.py entry, proper hiddenimports, console=False)
+- [x] Auto-update check — `VERSION` file (1.0.0), server checks GitHub releases API on startup, dashboard shows dismissible gold update banner
+- [x] `BUILD.bat` fixed — `python -m pip`, `python -m PyInstaller` (works when scripts dir not on PATH)
+- [x] Verified: exe builds, dashboard launches, overlay subprocess starts from frozen exe
+
 ### Session 15 (2026-02-17)
 - [x] Automated regression test suite — 106 pytest tests across 4 modules: `test_item_parser` (21 tests), `test_mod_parser` (15 tests), `test_mod_database` (55 tests migrated from `__main__` + new), `test_trade_client` (15 tests)
 - [x] Test fixtures — 13 curated real clipboard captures (rares, uniques, currency, gems, magic) in `tests/fixtures/`
