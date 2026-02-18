@@ -1,0 +1,21 @@
+Item Class: Quivers
+Rarity: Unique
+Asphyxia's Wrath
+Broadhead Quiver
+--------
+Item Level: 80
+--------
+Adds 1 to 3 Physical Damage to Attacks (implicit)
+--------
+Adds 3 to 8 Cold damage to Attacks
+6% increased Attack Speed
++10% to Cold Resistance
+Enemies Chilled by your Hits increase damage taken by Chill Magnitude
+Attacks Gain 10% of Damage as Extra Cold Damage
+--------
+Mist of breath
+Icing to lips and throat
+As the warm ones choke and fall
+Upon the frozen wasteland.
+--------
+Can only be equipped if you are wielding a Bow.

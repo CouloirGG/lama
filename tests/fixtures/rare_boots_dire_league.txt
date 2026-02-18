@@ -1,0 +1,22 @@
+Item Class: Boots
+Rarity: Rare
+Dire League
+Sandsworn Sandals
+--------
+Quality: +20% (augmented)
+Energy Shield: 196 (augmented)
+--------
+Requires: Level 75, 101 Int
+--------
+Sockets: S 
+--------
+Item Level: 82
+--------
+18% increased Armour, Evasion and Energy Shield (rune)
+--------
+35% increased Movement Speed
+100% increased Energy Shield
++118 to maximum Mana
++41% to Fire Resistance
++40% to Cold Resistance
+44% increased Energy Shield Recharge Rate

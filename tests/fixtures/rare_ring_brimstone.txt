@@ -1,0 +1,19 @@
+Item Class: Rings
+Rarity: Rare
+Brimstone Knot
+Sapphire Ring
+--------
+Quality (Lightning Modifiers): +20% (augmented)
+--------
+Requires: Level 60
+--------
+Item Level: 79
+--------
++25% to Cold Resistance (implicit)
+--------
+Adds 4 to 72 Lightning damage to Attacks
+29% increased Chaos Damage
++19% to all Elemental Resistances
++36% to Fire Resistance
++44% to Lightning Resistance
++129 to maximum Mana (desecrated)

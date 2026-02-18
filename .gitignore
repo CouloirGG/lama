@@ -8,3 +8,6 @@ build/
 *.exe
 diag_capture.png
 Restart.txt
+archive/
+harvester_output.log
+nul

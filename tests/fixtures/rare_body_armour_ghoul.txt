@@ -1,0 +1,25 @@
+Item Class: Body Armours
+Rarity: Rare
+Ghoul Carapace
+Flowing Raiment
+--------
+Quality: +20% (augmented)
+Energy Shield: 882 (augmented)
+--------
+Requires: Level 70, 121 Int
+--------
+Sockets: S S S 
+--------
+Item Level: 82
+--------
+54% increased Armour, Evasion and Energy Shield (rune)
+--------
+46% increased Mana Regeneration Rate (implicit)
+--------
++103 to maximum Energy Shield
+133% increased Energy Shield
++42% to Cold Resistance
++44% to Lightning Resistance
+54% faster start of Energy Shield Recharge
+--------
+Corrupted

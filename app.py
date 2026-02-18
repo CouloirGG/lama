@@ -36,6 +36,20 @@ def start_server():
     )
 
 
+def wait_for_port_free(timeout=10):
+    """Block until the port is no longer in use (for restart handoff)."""
+    import socket
+    start = time.time()
+    while time.time() - start < timeout:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", PORT))
+                return True  # Port is free
+            except OSError:
+                time.sleep(0.3)
+    return False
+
+
 def wait_for_server(timeout=10):
     """Block until the server is accepting connections."""
     import urllib.request
@@ -62,6 +76,13 @@ def main():
         print("Then re-run: python app.py")
         print("=" * 50)
         sys.exit(1)
+
+    # If launched with --restart, wait for the old process to release the port
+    if "--restart" in sys.argv:
+        print("Restart requested — waiting for old process to release port...")
+        if not wait_for_port_free():
+            print("ERROR: Port not freed within 10 seconds.")
+            sys.exit(1)
 
     # Start the server in a daemon thread
     server_thread = threading.Thread(target=start_server, daemon=True)

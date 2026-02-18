@@ -36,9 +36,12 @@ import platform
 
 import requests
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
+from watchlist import WatchlistWorker
 
 logger = logging.getLogger("dashboard")
 
@@ -83,6 +86,10 @@ DEFAULT_SETTINGS = {
     "filter_strictness": "normal",
     "filter_tier_styles": {},
     "filter_section_visibility": {},
+    "filter_gear_classes": {},
+    "filter_color_preset": "default",
+    "watchlist_queries": [],
+    "watchlist_poll_interval": 300,
 }
 
 
@@ -360,6 +367,7 @@ class OverlayProcess:
 
 overlay = OverlayProcess()
 log_buffer: deque[dict] = deque(maxlen=500)
+watchlist_worker: Optional[WatchlistWorker] = None
 
 
 # ---------------------------------------------------------------------------
@@ -368,17 +376,32 @@ log_buffer: deque[dict] = deque(maxlen=500)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Set up the event loop reference and background tasks."""
+    global watchlist_worker
+
     loop = asyncio.get_running_loop()
     overlay.set_loop(loop)
 
     # Background task: periodic status push
     status_task = asyncio.create_task(status_broadcast_loop())
 
+    # Initialize watchlist worker
+    settings = load_settings()
+    league = settings.get("league", "Fate of the Vaal")
+    watchlist_worker = WatchlistWorker(league, broadcast_fn=ws_manager.broadcast,
+                                       log_buffer=log_buffer)
+    watchlist_worker.update_queries(
+        settings.get("watchlist_queries", []),
+        settings.get("watchlist_poll_interval", 300),
+    )
+    watchlist_worker.start(loop)
+
     logger.info("POE2 Dashboard server ready")
     try:
         yield
     finally:
         status_task.cancel()
+        if watchlist_worker:
+            watchlist_worker.stop()
         # Stop overlay if running
         overlay.stop()
 
@@ -423,6 +446,10 @@ class SettingsRequest(BaseModel):
     filter_strictness: Optional[str] = None
     filter_tier_styles: Optional[dict] = None
     filter_section_visibility: Optional[dict] = None
+    filter_gear_classes: Optional[dict] = None
+    filter_color_preset: Optional[str] = None
+    watchlist_queries: Optional[list] = None
+    watchlist_poll_interval: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -491,6 +518,27 @@ async def update_settings(req: SettingsRequest):
     deep_merge(settings, updates)
     save_settings(settings)
     await ws_manager.broadcast({"type": "settings", "settings": settings})
+
+    # Notify watchlist worker if queries or interval changed
+    if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates):
+        queries = settings.get("watchlist_queries", [])
+        watchlist_worker.update_queries(
+            queries,
+            settings.get("watchlist_poll_interval", 300),
+        )
+        # Force-refresh all enabled queries so results appear immediately
+        enabled = [q for q in queries if q.get("enabled", True) and q.get("id")]
+        for q in enabled:
+            watchlist_worker.force_refresh(q["id"])
+        # Log to dashboard console
+        log_entry = {
+            "time": time.strftime("%H:%M:%S"),
+            "message": f"Watchlist: {len(enabled)} queries queued for refresh",
+            "color": "#6b8f71",
+        }
+        log_buffer.append(log_entry)
+        await ws_manager.broadcast({"type": "log", **log_entry})
+
     return settings
 
 
@@ -532,6 +580,77 @@ async def get_leagues():
 async def get_log():
     """Return recent log lines for initial load."""
     return {"lines": list(log_buffer)}
+
+
+# ---------------------------------------------------------------------------
+# Watchlist endpoints
+# ---------------------------------------------------------------------------
+@app.get("/api/watchlist/results")
+async def get_watchlist_results():
+    """Return all cached watchlist results."""
+    if not watchlist_worker:
+        return {}
+    return watchlist_worker.get_results()
+
+
+@app.post("/api/watchlist/refresh/{query_id}")
+async def refresh_watchlist_query(query_id: str):
+    """Force-refresh a single watchlist query."""
+    if not watchlist_worker:
+        return {"error": "Watchlist not initialized"}
+    watchlist_worker.force_refresh(query_id)
+    return {"status": "queued", "query_id": query_id}
+
+
+@app.get("/api/trade-data/stats")
+async def get_trade_stats():
+    """Return flattened stat definitions from cache for autocomplete."""
+    if not TRADE_STATS_CACHE_FILE.exists():
+        return []
+    try:
+        with open(TRADE_STATS_CACHE_FILE) as f:
+            data = json.load(f)
+        stats = []
+        for group in data.get("result", []):
+            group_label = group.get("label", "")
+            for entry in group.get("entries", []):
+                stats.append({
+                    "id": entry.get("id", ""),
+                    "text": entry.get("text", ""),
+                    "type": group_label,
+                })
+        return stats
+    except Exception as e:
+        logger.warning(f"Failed to load trade stats: {e}")
+        return []
+
+
+@app.get("/api/trade-data/items")
+async def get_trade_items():
+    """Return base types grouped by category from cache."""
+    if not TRADE_ITEMS_CACHE_FILE.exists():
+        return []
+    try:
+        with open(TRADE_ITEMS_CACHE_FILE) as f:
+            data = json.load(f)
+        categories = []
+        for group in data.get("result", []):
+            entries = []
+            for entry in group.get("entries", []):
+                item = {"type": entry.get("type", "")}
+                if entry.get("name"):
+                    item["name"] = entry["name"]
+                if entry.get("text"):
+                    item["text"] = entry["text"]
+                entries.append(item)
+            categories.append({
+                "label": group.get("label", ""),
+                "entries": entries,
+            })
+        return categories
+    except Exception as e:
+        logger.warning(f"Failed to load trade items: {e}")
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -666,6 +785,7 @@ async def update_filter():
         "filter_strictness": settings.get("filter_strictness", "normal"),
         "filter_tier_styles": settings.get("filter_tier_styles", {}),
         "filter_section_visibility": settings.get("filter_section_visibility", {}),
+        "filter_gear_classes": settings.get("filter_gear_classes", {}),
     }
 
     cmd = [
@@ -734,9 +854,15 @@ async def restart_app():
     if not entry.exists():
         return {"error": "app.py not found — restart only works in standalone mode"}
 
+    # Spawn the new process with --restart so it waits for the port to
+    # be freed before binding.  Then kill the current process.
     def _do_restart():
-        time.sleep(0.5)
-        os.execv(sys.executable, [sys.executable, str(entry)])
+        subprocess.Popen(
+            [sys.executable, str(entry), "--restart"],
+            cwd=str(Path(__file__).parent),
+        )
+        time.sleep(0.3)
+        os._exit(0)
 
     threading.Thread(target=_do_restart, daemon=True).start()
     return {"status": "restarting"}
@@ -763,12 +889,15 @@ async def websocket_endpoint(ws: WebSocket):
     try:
         # Send initial state
         settings = load_settings()
-        await ws.send_json({
+        init_msg = {
             "type": "init",
             **overlay.get_status(),
             "settings": settings,
             "log": list(log_buffer),
-        })
+        }
+        if watchlist_worker:
+            init_msg["watchlist_results"] = watchlist_worker.get_results()
+        await ws.send_json(init_msg)
         # Keep alive
         while True:
             data = await ws.receive_text()

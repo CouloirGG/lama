@@ -1,0 +1,29 @@
+Item Class: Gloves
+Rarity: Rare
+Rage Paw
+Opulent Gloves
+--------
+Quality: +20% (augmented)
+Energy Shield: 99 (augmented)
+--------
+Requires: Level 70, 87 Int
+--------
+Sockets: S S S 
+--------
+Item Level: 79
+--------
+12% increased Cast Speed (rune)
+8% increased Curse Magnitudes (rune)
+Energy Shield Recharge starts after spending a total of (rune)
+2000 Mana, no more than once every 2 seconds (rune)
+--------
+79% increased Energy Shield (fractured)
+13% chance to Gain Arcane Surge when you deal a Critical Hit (desecrated)
+Adds 9 to 13 Physical Damage to Attacks
+Adds 18 to 29 Fire damage to Attacks
+25% increased Critical Damage Bonus
+60% increased effect of Socketed Items
+--------
+Corrupted
+--------
+Fractured Item
