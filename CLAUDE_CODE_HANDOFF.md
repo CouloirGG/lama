@@ -1,7 +1,7 @@
 # POE2 Price Overlay — Claude Code Handoff
 
-> **Last updated:** 2026-02-16
-> **Status:** Working prototype — local mod scoring + DPS/defense integration + trade API pricing
+> **Last updated:** 2026-02-17
+> **Status:** Working prototype — local mod scoring + DPS/defense integration + trade API pricing + 106-test regression suite
 
 ## What This Is
 
@@ -124,7 +124,7 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
   - Per-slot thresholds: body armours, shields, helmets, gloves, boots, bucklers, foci
   - Curve: below terrible → 0.6, up to 1.05 (narrower range than DPS)
 - **Overlay display:** shows "280dps" or "850def" when factor penalizes; star count when neutral
-- Test harness: `python mod_database.py` runs 34 test cases + DPS/defense factor diagnostics
+- Legacy test harness: `python mod_database.py` runs inline test cases (superseded by pytest suite)
 
 ### Trade Client (`trade_client.py`)
 - **Progressive search strategy:**
@@ -168,6 +168,25 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 - Thread-safe updates via `root.after()`
 - Color-coded by tier: high (orange), good (gold), decent (teal), low (grey)
 - 4-second display duration
+
+## Test Suite
+
+106 pytest tests across 4 modules in `tests/`:
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| `test_item_parser.py` | 21 | Clipboard parsing, combat stats, implicit separation, sockets, quality, currency/gem/unique detection |
+| `test_mod_parser.py` | 15 | `_template_to_regex`, opposite word matching, real fixture mod parsing, `resolve_base_type`, value extraction |
+| `test_mod_database.py` | 55 | 40 migrated from `__main__` (S/A/B/C/JUNK grading) + 15 new (SOMV, `_assign_grade` boundaries, DPS/defense factors) |
+| `test_trade_client.py` | 15 | Common mod patterns, stat filter building, value-dependent minimums, fractured mods, price tiers, filter classification |
+
+**Fixtures:** `tests/conftest.py` provides session-scoped `mod_parser` and `mod_database` (load once per run), plus `stat_ids` resolver, `make_item`/`make_mod` helpers, and `load_fixture` for reading clipboard captures from `tests/fixtures/`.
+
+**Running:**
+- `RUN_TESTS.bat` — spawns a PowerShell window per module (visual monitoring)
+- `python -m pytest tests/ -v` — all tests in one terminal
+- `python run_tests.py --module mod_database` — single module in PowerShell window
+- `python -m pytest tests/test_mod_database.py -v` — single module inline
 
 ## User's Setup
 - **OS:** Windows 11 Home (10.0.26200)
@@ -266,5 +285,6 @@ Add a subtle "Buy me a coffee" button/link that connects to the user's accounts.
 3. Run `claude` (Claude Code CLI)
 4. Say: "Read CLAUDE_CODE_HANDOFF.md and continue development"
 5. To test: `python main.py --debug` or double-click `DEBUG.bat`
-6. Debug clipboard captures: `~/.poe2-price-overlay/debug/`
-7. Log file: `~/.poe2-price-overlay/overlay.log`
+6. Run regression suite: `RUN_TESTS.bat` or `python -m pytest tests/ -v`
+7. Debug clipboard captures: `~/.poe2-price-overlay/debug/`
+8. Log file: `~/.poe2-price-overlay/overlay.log`

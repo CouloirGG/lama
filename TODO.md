@@ -14,12 +14,19 @@
 - [ ] **User-configurable mod classification UI** — When we build an app interface, expose the common/key mod lists as toggleable options (radio buttons or checkboxes). Lets users override our defaults, adapt to meta shifts, and adjust per-league without code changes. Also addresses the "we can't be right for everyone" problem.
 - [ ] **Scrap indicator for worthless items with quality/sockets** — Items dismissed as ✗ that have quality % or sockets should show a scrap icon (hammer 🔨) instead, reminding players to break them down. Scrapping quality/socketed items yields etchers, armour scraps, whetstones, baubles, gemcutters — all valuable for upgrades and worth trading on the currency exchange.
 - [x] **SOMV (Sum of Mod Values)** — Implemented as a universal roll quality factor (0.90-1.10) applied to all mods with tier data. Perfect rolls get ~10% boost, bottom rolls get ~10% penalty. Chaos resistance bumped to weight 0.5 (from 0.3) reflecting rarity and ES-bypass value. 6 new test cases, 40/40 pass.
-- [ ] **Automated regression test suite** — `python mod_database.py` runs 29 mock items covering S/A/B/C/JUNK grades, edge cases, and tier comparisons across item classes. Should be extended into a proper test framework (`pytest`) that runs against all major CLs: mod_database scoring, mod_parser stat matching, item_parser clipboard parsing, trade_client query building. CI integration to run on every commit.
+- [x] **Automated regression test suite** — 106 pytest tests across 4 modules (item_parser, mod_parser, mod_database, trade_client). Fixtures from real clipboard captures. `RUN_TESTS.bat` spawns a PowerShell window per module for visual monitoring. Also runnable via `python -m pytest tests/ -v`.
 - [ ] **Currency icons in overlay** — Show small currency images (Divine, Exalted, Chaos, etc.) next to the price text in the overlay instead of just the name string. Makes prices instantly recognizable at a glance.
 - [ ] **Chanceable base icons** — Show a Chance Orb icon and the target unique's icon (e.g., Headhunter) in the overlay for chanceable normal bases. Visual support alongside the text.
 - [ ] **Pre-built calibration data shard** — Ship a curated `calibration.jsonl` with the repo so new users get reasonable price estimates from day one instead of starting from scratch. Update periodically as more data is collected. Consider league-aware shards (calibration data from one league may not apply to another). Harvester (`calibration_harvester.py`) can now generate these shards automatically.
 
 ## Completed
+
+### Session 15 (2026-02-17)
+- [x] Automated regression test suite — 106 pytest tests across 4 modules: `test_item_parser` (21 tests), `test_mod_parser` (15 tests), `test_mod_database` (55 tests migrated from `__main__` + new), `test_trade_client` (15 tests)
+- [x] Test fixtures — 13 curated real clipboard captures (rares, uniques, currency, gems, magic) in `tests/fixtures/`
+- [x] `conftest.py` — session-scoped ModParser/ModDatabase fixtures, stat ID resolver, make_item/make_mod helpers
+- [x] `run_tests.py` + `RUN_TESTS.bat` — PowerShell window spawner per test module with visual pass/fail
+- [x] pytest added to requirements.txt
 
 ### Session 14 (2026-02-17)
 - [x] SOMV (Sum of Mod Values) roll quality factor — `ModScore.roll_quality` (0.0-1.0 within tier), `ItemScore.somv_factor` (0.90-1.10 multiplier based on avg roll quality across all mods with tier data)

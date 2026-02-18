@@ -37,6 +37,22 @@ First time it'll install a few packages automatically (takes ~30 seconds), then 
 - The **Loot Filter** tab lets you customize filter strictness, colors, and visibility
 - Click **Update Filter Now** to regenerate your filter from live prices
 
+## Running Tests
+
+Double-click **`RUN_TESTS.bat`** — it spawns a PowerShell window for each test module so you can see results side by side.
+
+Or run in a single terminal:
+
+```
+python -m pytest tests/ -v
+```
+
+To run just one module:
+
+```
+python run_tests.py --module mod_database
+```
+
 ## Updating
 
 Open PowerShell in the `POE2_OCR` folder and run:

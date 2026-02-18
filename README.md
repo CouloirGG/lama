@@ -97,6 +97,7 @@ Subsequent launches skip setup and go straight to the overlay.
 | `START.bat`      | Main launcher — double-click to run            |
 | `DEBUG.bat`      | Launch with verbose logging to console         |
 | `SETTINGS.bat`   | Change league, view logs, run tests            |
+| `RUN_TESTS.bat`  | Run pytest suite — spawns a window per module  |
 | `REPORT_BUG.bat` | Zip logs and open a GitHub issue               |
 
 ---
@@ -134,8 +135,42 @@ POE2_OCR/
 ├── screen_capture.py      # Screen region capture utilities
 ├── test_pipeline.py       # Pipeline validation tests
 ├── diagnose.py            # Diagnostic tool
+├── run_tests.py           # Test runner — spawns PowerShell per module
+├── RUN_TESTS.bat          # One-click test launcher
 ├── requirements.txt
-└── README.md
+├── README.md
+└── tests/
+    ├── conftest.py        # Shared pytest fixtures
+    ├── test_item_parser.py
+    ├── test_mod_parser.py
+    ├── test_mod_database.py
+    ├── test_trade_client.py
+    └── fixtures/          # Real clipboard captures for tests
+```
+
+---
+
+## Testing
+
+106 tests across 4 modules covering the full pricing pipeline:
+
+| Module | Tests | What it covers |
+|--------|-------|----------------|
+| `test_item_parser` | 21 | Clipboard parsing, combat stats, implicit separation |
+| `test_mod_parser` | 15 | Template-to-regex, mod matching, base type resolution |
+| `test_mod_database` | 55 | Grade scoring (S/A/B/C/JUNK), SOMV, DPS/defense factors |
+| `test_trade_client` | 15 | Stat filters, common mod classification, price tiers |
+
+**Run all tests:**
+```
+RUN_TESTS.bat              # Spawns a PowerShell window per module
+python -m pytest tests/ -v # All tests in one terminal
+```
+
+**Run a single module:**
+```
+python run_tests.py --module mod_database
+python -m pytest tests/test_mod_database.py -v
 ```
 
 ---
