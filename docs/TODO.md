@@ -23,6 +23,12 @@
 
 ## Completed
 
+### Session 19 (2026-02-18)
+- [x] Tooltip z-index fix — rewrote Tooltip component to use `position: fixed` with `getBoundingClientRect()`, preventing clipping inside scrollable containers (PT-27, PT-31)
+- [x] KPI card reorder — Divine→Exalted first, then Divine→Chaos, then Exalted→Chaos (PT-28)
+- [x] Window resize reflow — added `scrollbarGutter: stable` to prevent content shift when scrollbar appears/disappears (PT-29)
+- [x] Whisper button tooltip — added "Copy whisper message to clipboard" tooltip to Whisper button in watchlist (PT-30)
+
 ### Session 18 (2026-02-18)
 - [x] Frameless window — removed OS title bar, added custom title bar with drag region and min/max/close buttons (pywebview `frameless=True` + `WindowApi` via Win32 ctypes)
 - [x] Rounded app frame — `border-radius: 10px` with layered box-shadow replacing corner diamond pseudo-elements
