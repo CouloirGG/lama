@@ -590,10 +590,18 @@ STYLE_EXHIDE_TEST = [
     "\tSetBackgroundColor 0 0 0 150",
 ]
 
-# Rare/magic gear — small yellow text, nothing else
-STYLE_GEAR_PLAIN = [
+# Per-rarity gear defaults
+STYLE_GEAR_RARE = [
     "\tSetFontSize 28",
-    "\tSetTextColor 220 200 100 255",
+    "\tSetTextColor 220 200 100 255",       # yellow
+]
+STYLE_GEAR_MAGIC = [
+    "\tSetFontSize 28",
+    "\tSetTextColor 136 136 255 255",       # blue
+]
+STYLE_GEAR_NORMAL = [
+    "\tSetFontSize 28",
+    "\tSetTextColor 200 200 200 255",       # grey
 ]
 
 # Decorator blocks that use Continue — strip all styling, keep just Continue
@@ -701,9 +709,15 @@ def apply_styling_overrides(parsed: list, test_mode: bool = False,
         if not block.section_type:
             continue
 
-        # ── Rare/magic gear: small yellow text ──
+        # ── Rare/magic gear: rarity-colored text (with user overrides) ──
         if block.section_type in GEAR_SECTION_TYPES:
-            _replace_styling(block, STYLE_GEAR_PLAIN)
+            if block.section_type == "ut->rare":
+                gear_key, style = "gear_rare", STYLE_GEAR_RARE
+            else:
+                gear_key, style = "gear_magic", STYLE_GEAR_MAGIC
+            if user_styles and gear_key in user_styles:
+                style = _build_style_lines(user_styles[gear_key], style)
+            _replace_styling(block, style)
             continue
 
         # ── Rare decorators (Continue blocks): strip styling ──
@@ -711,9 +725,12 @@ def apply_styling_overrides(parsed: list, test_mode: bool = False,
             _replace_styling(block, STYLE_DECORATOR_EMPTY)
             continue
 
-        # ── Hide layers for remaining gear: convert to Show + small yellow ──
+        # ── Hide layers for remaining gear: convert to Show + grey text ──
         if block.section_type == "hidelayer" and block.tier in GEAR_HIDELAYER_TIERS:
-            _replace_styling(block, STYLE_GEAR_PLAIN, make_show=True)
+            style = STYLE_GEAR_NORMAL
+            if user_styles and "gear_normal" in user_styles:
+                style = _build_style_lines(user_styles["gear_normal"], style)
+            _replace_styling(block, style, make_show=True)
             continue
 
         # ── Economy sections: value-based styling ──
@@ -900,7 +917,8 @@ class FilterUpdater:
 
     def update_now(self, dry_run: bool = False, user_styles: dict = None,
                    section_visibility: dict = None,
-                   strictness: str = "normal") -> dict:
+                   strictness: str = "normal",
+                   gear_classes: dict = None) -> dict:
         """
         Run a filter update immediately.
 
@@ -909,6 +927,7 @@ class FilterUpdater:
             user_styles: Per-tier style overrides from dashboard UI.
             section_visibility: {section_id: bool} — False hides a section.
             strictness: Preset name from STRICTNESS_PRESETS.
+            gear_classes: {gear_key: {class_name: bool}} — per-class visibility.
 
         Returns the changes dict.
         """
@@ -923,6 +942,7 @@ class FilterUpdater:
                     user_styles = prefs.get("filter_tier_styles") or None
                     section_visibility = prefs.get("filter_section_visibility") or None
                     strictness = prefs.get("filter_strictness", strictness)
+                    gear_classes = prefs.get("filter_gear_classes") or None
                 except (ValueError, TypeError):
                     pass
 
@@ -964,6 +984,10 @@ class FilterUpdater:
         if not dry_run and section_visibility:
             _apply_section_visibility(parsed, section_visibility)
 
+        # Apply per-class gear visibility — remove hidden classes from blocks
+        if not dry_run and gear_classes:
+            _apply_gear_class_filters(parsed, gear_classes)
+
         if dry_run:
             _log_changes(changes, dry_run=True)
             return changes
@@ -989,17 +1013,91 @@ class FilterUpdater:
 
 def _apply_section_visibility(parsed: list, section_visibility: dict):
     """Comment out blocks belonging to hidden sections."""
+    # Map gear UI keys to actual section_type values
+    gear_map = {
+        "gear_rare": "ut->rare",
+        "gear_magic": "ut->magic",
+    }
+    # Resolve gear keys into their section_type equivalents
+    resolved = dict(section_visibility)
+    for ui_key, section_type in gear_map.items():
+        if ui_key in resolved:
+            resolved[section_type] = resolved.pop(ui_key)
+
     for kind, block in parsed:
         if kind != "block":
             continue
         if not block.section_type:
             continue
+
         # Check if this section is explicitly hidden
-        visible = section_visibility.get(block.section_type, True)
+        visible = resolved.get(block.section_type, True)
+
+        # Gear hide layers: check "gear_normal" key
+        if block.section_type == "hidelayer" and block.tier in GEAR_HIDELAYER_TIERS:
+            visible = resolved.get("gear_normal", True)
+
         if not visible and not block.is_commented:
             block.header_line = "#" + block.header_line
             block.body_lines = ["#" + bl for bl in block.body_lines]
             block.is_commented = True
+
+
+def _apply_gear_class_filters(parsed: list, gear_classes: dict):
+    """
+    Remove hidden item classes from gear blocks' Class conditions.
+
+    gear_classes: { "gear_rare": { "Bows": false, ... }, "gear_magic": {...}, ... }
+    If ALL classes in a block are hidden, the entire block is commented out.
+    """
+    for kind, block in parsed:
+        if kind != "block":
+            continue
+        if block.is_commented:
+            continue
+
+        # Map block to gear key
+        gear_key = None
+        if block.section_type == "ut->rare":
+            gear_key = "gear_rare"
+        elif block.section_type == "ut->magic":
+            gear_key = "gear_magic"
+        elif block.section_type == "hidelayer" and block.tier in GEAR_HIDELAYER_TIERS:
+            gear_key = "gear_normal"
+
+        if not gear_key or gear_key not in gear_classes:
+            continue
+
+        class_prefs = gear_classes[gear_key]
+        if not class_prefs:
+            continue
+
+        # Find the Class line in body
+        for i, line in enumerate(block.body_lines):
+            stripped = line.lstrip('#').strip()
+            if not stripped.startswith('Class'):
+                continue
+
+            current_classes = re.findall(r'"([^"]+)"', stripped)
+            if not current_classes:
+                break
+
+            # Filter out explicitly hidden classes (default is visible)
+            visible_classes = [c for c in current_classes
+                               if class_prefs.get(c, True) is not False]
+
+            if not visible_classes:
+                # All classes hidden — comment out entire block
+                block.header_line = "#" + block.header_line
+                block.body_lines = ["#" + bl for bl in block.body_lines]
+                block.is_commented = True
+            elif len(visible_classes) < len(current_classes):
+                # Some hidden — rebuild Class line with only visible ones
+                prefix_match = re.match(r'(\s*Class\s*==?\s*)', stripped)
+                prefix = prefix_match.group(1) if prefix_match else "\tClass == "
+                quoted = " ".join(f'"{c}"' for c in visible_classes)
+                block.body_lines[i] = f"{prefix}{quoted}"
+            break
 
 
 def _log_changes(changes: dict, dry_run: bool = False):

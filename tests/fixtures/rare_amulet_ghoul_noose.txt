@@ -1,0 +1,19 @@
+Item Class: Amulets
+Rarity: Rare
+Ghoul Noose
+Lunar Amulet
+--------
+Requires: Level 60
+--------
+Item Level: 82
+--------
+Allocates Endless Blizzard (enchant)
+--------
++27 to maximum Energy Shield (implicit)
+--------
++161 to maximum Mana
++50 to Spirit
+16% increased Rarity of Items found
++3 to Level of all Spell Skills
+16% of Damage taken Recouped as Life
+23% increased Critical Damage Bonus (desecrated)

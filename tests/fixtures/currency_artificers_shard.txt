@@ -1,0 +1,8 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Artificer's Shard
+--------
+Stack Size: 3/10
+--------
+A stack of 10 shards becomes an Artificer's Orb.
+Press and hold   to unstack.

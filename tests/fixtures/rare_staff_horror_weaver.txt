@@ -1,0 +1,24 @@
+Item Class: Staves
+Rarity: Rare
+Horror Weaver
+Sanctified Staff
+--------
+Quality: +20% (augmented)
+--------
+Requires: Level 78, 75 Str, 75 Int
+--------
+Sockets: S S 
+--------
+Item Level: 82
+--------
+30% increased Spell Damage (rune)
++1 to Level of all Spell Skills (rune)
+--------
+Grants Skill: Level 18 Consecrate
+--------
+Gain 51% of Damage as Extra Lightning Damage
+167% increased Spell Damage
++212 to maximum Mana
++7 to Level of all Cold Spell Skills
+95% increased Critical Hit Chance for Spells
+102% increased Mana Regeneration Rate

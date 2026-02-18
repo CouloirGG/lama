@@ -1,0 +1,18 @@
+Item Class: Skill Gems
+Rarity: Gem
+Archmage
+--------
+Buff, Persistent, Lightning
+Level: 17
+Reservation: 100 Spirit
+--------
+Requires: Level 72, 126 Int
+--------
+Sockets: G G 
+--------
+While active, causes your Non-Channelling Spells to cost additional mana and deal extra Lightning damage, both based on your maximum Mana.
+--------
+Non-Channelling Spells Gain 4% of Damage as extra Lightning damage for each 100 maximum Mana you have
+Non-Channelling Spells cost an additional 6.4% of your maximum Mana
+--------
+Skills can be managed in the Skills Panel.

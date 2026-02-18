@@ -1,0 +1,10 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Fracturing Orb
+--------
+Stack Size: 5/20
+--------
+Fracture a random modifier on a rare item with at least 4 modifiers, locking it in place.
+--------
+  to use, then   on a rare item to apply it. Cannot be used on Influenced, Synthesised or Fractured items.
+Press and hold   to unstack.
