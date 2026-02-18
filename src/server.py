@@ -1006,6 +1006,15 @@ async def restart_app():
             cwd=str(APP_DIR),
         )
         time.sleep(0.3)
+        # Close the pywebview window via Win32 so WebView2 cleans up
+        try:
+            import ctypes
+            hwnd = ctypes.windll.user32.FindWindowW(None, "POE2 Price Overlay")
+            if hwnd:
+                ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+                time.sleep(0.5)
+        except Exception:
+            pass
         os._exit(0)
 
     threading.Thread(target=_do_restart, daemon=True).start()
