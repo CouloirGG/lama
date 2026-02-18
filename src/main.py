@@ -168,11 +168,8 @@ class POE2PriceOverlay:
             if self.mod_database.load(self.mod_parser):
                 stats = self.mod_database.get_stats()
                 logger.info(f"Local scoring ready (bridge={stats['bridge_size']}, ladders={stats['ladder_count']})")
-                # Load calibration data for score→price estimation
-                from config import CALIBRATION_LOG_FILE
-                n = self.calibration.load(CALIBRATION_LOG_FILE)
-                if n:
-                    logger.info(f"Calibration: {n} samples loaded")
+                # Load calibration data: shard first (baseline), then user data (overrides)
+                self._load_calibration_data()
             else:
                 logger.warning("Local scoring disabled — falling back to trade API")
 
@@ -908,12 +905,35 @@ class POE2PriceOverlay:
                          name="DeepQueryPricer").start()
 
     def _log_calibration(self, score_result, trade_result, item):
-        """Append grade-vs-price calibration record and live-update engine."""
+        """Append grade-vs-price calibration record and live-update engine.
+
+        Write-time quality filters:
+        - Skip estimates (mod-dropped prices are unreliable)
+        - Skip prices above CALIBRATION_MAX_PRICE_DIVINE (price-fixers)
+        - Skip results with < CALIBRATION_MIN_RESULTS listings (too thin)
+        """
         import json
-        from config import CALIBRATION_LOG_FILE
+        from config import (CALIBRATION_LOG_FILE, CALIBRATION_MAX_PRICE_DIVINE,
+                            CALIBRATION_MIN_RESULTS)
         try:
+            # Write-time quality filters
+            if trade_result.estimate:
+                logger.debug("Calibration: skipping estimate (unreliable)")
+                return
+            if trade_result.min_price <= 0:
+                return
+            if trade_result.min_price > CALIBRATION_MAX_PRICE_DIVINE:
+                logger.debug(f"Calibration: skipping {trade_result.min_price:.1f}d "
+                             f"(>{CALIBRATION_MAX_PRICE_DIVINE}d cap)")
+                return
+            if trade_result.num_results < CALIBRATION_MIN_RESULTS:
+                logger.debug(f"Calibration: skipping {trade_result.num_results} results "
+                             f"(<{CALIBRATION_MIN_RESULTS} min)")
+                return
+
             record = {
                 "ts": int(time.time()),
+                "league": self.league,
                 "grade": score_result.grade.value,
                 "score": round(score_result.normalized_score, 3),
                 "item_class": getattr(item, "item_class", ""),
@@ -921,7 +941,7 @@ class POE2PriceOverlay:
                 "min_divine": trade_result.min_price,
                 "max_divine": trade_result.max_price,
                 "results": trade_result.num_results,
-                "estimate": trade_result.estimate,
+                "estimate": False,
                 "total_dps": round(score_result.total_dps, 1),
                 "total_defense": score_result.total_defense,
                 "dps_factor": round(score_result.dps_factor, 3),
@@ -933,14 +953,55 @@ class POE2PriceOverlay:
                 f.write(json.dumps(record) + "\n")
 
             # Live-update calibration engine so estimates improve within session
-            if trade_result.min_price > 0:
-                self.calibration.add_sample(
-                    score_result.normalized_score,
-                    trade_result.min_price,
-                    getattr(item, "item_class", ""),
-                    grade=score_result.grade.value)
+            self.calibration.add_sample(
+                score_result.normalized_score,
+                trade_result.min_price,
+                getattr(item, "item_class", ""),
+                grade=score_result.grade.value)
         except Exception as e:
             logger.warning(f"Calibration log failed: {e}")
+
+    def _load_calibration_data(self):
+        """Load calibration data in merge order: shard first, then user data.
+
+        1. Load bundled shard from resources/ (instant, offline fallback)
+        2. Attempt remote shard download (background, non-blocking)
+        3. Load user's personal calibration.jsonl (overrides shard data)
+        """
+        from config import CALIBRATION_LOG_FILE
+        from bundle_paths import get_resource
+
+        total = 0
+
+        # Step 1: Bundled shard (offline fallback)
+        bundled = get_resource("resources/calibration_shard.json.gz")
+        if bundled.exists():
+            n = self.calibration.load_shard(bundled)
+            total += n
+            if n:
+                logger.info(f"Calibration: {n} bundled shard samples loaded")
+
+        # Step 2: Remote shard (background, non-blocking)
+        def _fetch_remote():
+            try:
+                n = self.calibration.load_remote_shard(self.league)
+                if n:
+                    logger.info(f"Calibration: {n} remote shard samples loaded "
+                                 f"(total: {self.calibration.sample_count()})")
+            except Exception as e:
+                logger.debug(f"Remote shard fetch failed: {e}")
+
+        threading.Thread(target=_fetch_remote, daemon=True,
+                         name="ShardFetch").start()
+
+        # Step 3: User's personal calibration data (overrides/supplements shard)
+        n = self.calibration.load(CALIBRATION_LOG_FILE)
+        total += n
+
+        if total:
+            logger.info(f"Calibration: {self.calibration.sample_count()} total samples")
+        else:
+            logger.info("Calibration: no data yet (grade-only display)")
 
     def _calibration_queue_loop(self):
         """Process auto-queued items for trade API calibration."""
@@ -1040,11 +1101,16 @@ class POE2PriceOverlay:
                 hits = self.stats["successful_lookups"]
                 hit_rate = (hits / total * 100) if total > 0 else 0
 
+                cal_count = self.calibration.sample_count()
+                d2c = cache_stats.get('divine_to_chaos', 0)
+                d2e = cache_stats.get('divine_to_exalted', 0)
+
                 logger.info(
                     f"[Status] Uptime: {uptime/60:.0f}min | "
                     f"Triggers: {total} | Prices shown: {hits} ({hit_rate:.0f}%) | "
                     f"Cache: {cache_stats['total_items']} items | "
-                    f"Last refresh: {cache_stats['last_refresh']}"
+                    f"Last refresh: {cache_stats['last_refresh']} | "
+                    f"D2C: {d2c:.1f} | D2E: {d2e:.1f} | Cal: {cal_count}"
                 )
             except Exception:
                 pass
