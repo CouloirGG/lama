@@ -25,6 +25,7 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections import deque
@@ -451,11 +452,19 @@ async def check_for_updates():
             return tuple(int(p) for p in parts if p.isdigit())
         if _ver_tuple(latest_tag) > _ver_tuple(APP_VERSION):
             logger.info(f"Update available: v{latest_tag} (current: v{APP_VERSION})")
+            # Find Setup exe asset for one-click update
+            setup_url = ""
+            for asset in data.get("assets", []):
+                name = asset.get("name", "")
+                if "Setup" in name and name.endswith(".exe"):
+                    setup_url = asset.get("browser_download_url", "")
+                    break
             await ws_manager.broadcast({
                 "type": "update_available",
                 "current": APP_VERSION,
                 "latest": latest_tag,
                 "url": release_url,
+                "setup_url": setup_url,
             })
     except Exception as e:
         logger.debug(f"Update check failed: {e}")
@@ -922,6 +931,103 @@ async def restart_app():
 
     threading.Thread(target=_do_restart, daemon=True).start()
     return {"status": "restarting"}
+
+
+# ---------------------------------------------------------------------------
+# One-click auto-update
+# ---------------------------------------------------------------------------
+@app.post("/api/apply-update")
+async def apply_update():
+    """Download the latest Setup exe from GitHub and launch it silently."""
+    try:
+        from config import APP_VERSION
+        if APP_VERSION == "dev":
+            return {"error": "Cannot auto-update dev builds"}
+    except Exception:
+        return {"error": "Cannot determine app version"}
+
+    loop = asyncio.get_running_loop()
+
+    # 1. Fetch the latest release to find the Setup exe asset
+    try:
+        resp = await loop.run_in_executor(None, lambda: requests.get(
+            "https://api.github.com/repos/CarbonSMASH/POE2_OCR/releases/latest",
+            timeout=10,
+            headers={"Accept": "application/vnd.github.v3+json",
+                     "User-Agent": "POE2-Price-Overlay"},
+        ))
+        if resp.status_code != 200:
+            return {"error": f"GitHub API returned {resp.status_code}"}
+        data = resp.json()
+    except Exception as e:
+        return {"error": f"Failed to fetch release info: {e}"}
+
+    setup_url = ""
+    setup_name = ""
+    setup_size = 0
+    for asset in data.get("assets", []):
+        name = asset.get("name", "")
+        if "Setup" in name and name.endswith(".exe"):
+            setup_url = asset.get("browser_download_url", "")
+            setup_name = name
+            setup_size = asset.get("size", 0)
+            break
+
+    if not setup_url:
+        return {"error": "No Setup exe found in latest release"}
+
+    # 2. Download to temp dir with progress streaming
+    dest = Path(tempfile.gettempdir()) / setup_name
+
+    def _download():
+        r = requests.get(setup_url, stream=True, timeout=60,
+                         headers={"User-Agent": "POE2-Price-Overlay"})
+        r.raise_for_status()
+        total = setup_size or int(r.headers.get("content-length", 0))
+        downloaded = 0
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(chunk_size=256 * 1024):
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total > 0:
+                    pct = min(int(downloaded * 100 / total), 100)
+                    asyncio.run_coroutine_threadsafe(
+                        ws_manager.broadcast({
+                            "type": "update_progress",
+                            "percent": pct,
+                        }),
+                        loop,
+                    )
+        return dest
+
+    try:
+        await ws_manager.broadcast({
+            "type": "update_progress", "percent": 0,
+        })
+        installer_path = await loop.run_in_executor(None, _download)
+    except Exception as e:
+        return {"error": f"Download failed: {e}"}
+
+    # 3. Launch installer silently and shut down
+    logger.info(f"Launching installer: {installer_path}")
+    await ws_manager.broadcast({
+        "type": "update_progress", "percent": 100, "installing": True,
+    })
+
+    def _launch_and_exit():
+        try:
+            subprocess.Popen(
+                [str(installer_path), "/SILENT"],
+                creationflags=subprocess.DETACHED_PROCESS,
+            )
+        except Exception as e:
+            logger.error(f"Failed to launch installer: {e}")
+            return
+        time.sleep(0.5)
+        os._exit(0)
+
+    threading.Thread(target=_launch_and_exit, daemon=True).start()
+    return {"status": "installing"}
 
 
 # ---------------------------------------------------------------------------
