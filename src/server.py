@@ -868,6 +868,48 @@ async def submit_bug_report(req: BugReportRequest):
 
 
 # ---------------------------------------------------------------------------
+# Feedback endpoint (sends to Discord webhook)
+# ---------------------------------------------------------------------------
+class FeedbackRequest(BaseModel):
+    type: str = "feedback"  # "feedback" or "feature"
+    title: str = ""
+    description: str = ""
+
+
+@app.post("/api/feedback")
+async def submit_feedback(req: FeedbackRequest):
+    """Submit user feedback or feature request to Discord webhook."""
+    kind = "Feature Request" if req.type == "feature" else "Feedback"
+    title = req.title.strip() or f"{kind} {time.strftime('%Y-%m-%d %H:%M')}"
+    description = req.description.strip()
+
+    from config import APP_VERSION
+    emoji = "\U0001f4a1" if req.type == "feature" else "\U0001f4ac"
+    message = f"{emoji} **{kind}: {title}**"
+    if description:
+        message += f"\n{description}"
+    message += f"\n\n**Source:** Dashboard v{APP_VERSION}"
+    if len(message) > 2000:
+        message = message[:1997] + "..."
+
+    try:
+        resp = requests.post(
+            DISCORD_WEBHOOK_URL,
+            json={"content": message},
+            timeout=15,
+        )
+        if resp.status_code in range(200, 300):
+            logger.info(f"{kind} sent: {title}")
+            return {"status": "sent", "title": title}
+        else:
+            logger.error(f"{kind} failed: HTTP {resp.status_code}")
+            return {"error": f"Discord returned HTTP {resp.status_code}"}
+    except Exception as e:
+        logger.error(f"{kind} upload error: {e}")
+        return {"error": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # Filter update endpoint
 # ---------------------------------------------------------------------------
 @app.post("/api/update-filter")

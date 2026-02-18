@@ -538,7 +538,7 @@
 
     // Brand Footer
     // -----------------------------------------------------------------------
-    function BrandFooter({ leagues, selectedLeague, onLeagueChange, onBugReport, onRestartApp }) {
+    function BrandFooter({ leagues, selectedLeague, onLeagueChange, onBugReport, onFeedback, onFeatureRequest, onRestartApp }) {
       const [flyoutOpen, setFlyoutOpen] = useState(false);
       const flyoutRef = useRef(null);
 
@@ -572,6 +572,20 @@
               fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
               transition: "color 0.15s",
             }} onMouseEnter={e => e.target.style.color = T.amber} onMouseLeave={e => e.target.style.color = T.textMuted}>Bug Report</button>
+          </Tooltip>
+          <Tooltip text="Send us feedback or suggestions">
+            <button onClick={onFeedback} style={{
+              background: "transparent", border: "none", color: T.textMuted,
+              fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
+              transition: "color 0.15s",
+            }} onMouseEnter={e => e.target.style.color = T.gold} onMouseLeave={e => e.target.style.color = T.textMuted}>Feedback</button>
+          </Tooltip>
+          <Tooltip text="Request a new feature">
+            <button onClick={onFeatureRequest} style={{
+              background: "transparent", border: "none", color: T.textMuted,
+              fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
+              transition: "color 0.15s",
+            }} onMouseEnter={e => e.target.style.color = T.cyan} onMouseLeave={e => e.target.style.color = T.textMuted}>Feature Request</button>
           </Tooltip>
           <Tooltip text="Restart the entire app (server + overlay)">
             <button onClick={onRestartApp} style={{
@@ -910,7 +924,92 @@
     }
 
     // -----------------------------------------------------------------------
-    // ControlBar (no Update Filter button — moved to Filter tab)
+    // Feedback Modal (feedback + feature requests → Discord)
+    // -----------------------------------------------------------------------
+    function FeedbackModal({ open, onClose, feedbackType }) {
+      const [title, setTitle] = useState("");
+      const [desc, setDesc] = useState("");
+      const [sending, setSending] = useState(false);
+      const [result, setResult] = useState(null);
+
+      if (!open) return null;
+
+      const isFeature = feedbackType === "feature";
+      const heading = isFeature ? "Feature Request" : "Send Feedback";
+      const placeholder = isFeature
+        ? "Describe the feature you'd like to see..."
+        : "Tell us what's on your mind...";
+
+      const handleSend = async () => {
+        setSending(true);
+        setResult(null);
+        const res = await api("/api/feedback", "POST", { type: feedbackType, title, description: desc });
+        setSending(false);
+        if (res.error) {
+          setResult({ ok: false, msg: res.error });
+        } else {
+          setResult({ ok: true, msg: isFeature ? "Request submitted!" : "Feedback sent!" });
+          setTimeout(() => { onClose(); setTitle(""); setDesc(""); setResult(null); }, 1200);
+        }
+      };
+
+      return (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={onClose}>
+          <div style={{
+            background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 10,
+            padding: 24, width: 420, maxWidth: "90vw",
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, color: isFeature ? T.cyan : T.gold }}>
+              {heading}
+            </div>
+
+            <label style={FIELD_LABEL}>Title</label>
+            <input
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder={isFeature ? "Feature name..." : "Brief summary..."}
+              style={{ ...FIELD_INPUT, marginBottom: 12 }}
+              autoFocus
+              onKeyDown={e => e.key === "Enter" && document.getElementById("feedback-desc")?.focus()}
+            />
+
+            <label style={FIELD_LABEL}>{isFeature ? "What would this do?" : "Details"}</label>
+            <textarea
+              id="feedback-desc"
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              placeholder={placeholder}
+              rows={4}
+              style={{ ...FIELD_INPUT, resize: "vertical", marginBottom: 8 }}
+              onKeyDown={e => { if (e.ctrlKey && e.key === "Enter") handleSend(); }}
+            />
+
+            <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 16 }}>
+              Sent to our Discord. We read everything.
+            </div>
+
+            {result && (
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12, color: result.ok ? T.green : T.red }}>
+                {result.msg}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={onClose} style={{ ...BTN, background: T.input, border: `1px solid ${T.border}`, color: T.textSecond }}>Cancel</button>
+              <button onClick={handleSend} disabled={sending || !title.trim()} style={{
+                ...BTN_GOLD_ACTIVE, opacity: (sending || !title.trim()) ? 0.5 : 1,
+              }}>{sending ? "Sending..." : "Submit"}</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // ControlBar (legacy — controls now in title bar + footer)
     // -----------------------------------------------------------------------
     function ControlBar({ overlayState, settings, leagues, onStart, onStop, onRestart, onLeagueChange, onBugReport, onRestartApp }) {
       const isRunning = overlayState === "running" || overlayState === "starting";
@@ -2593,6 +2692,7 @@
       const [logs, setLogs] = useState([]);
       const [autoStartDone, setAutoStartDone] = useState(false);
       const [bugModalOpen, setBugModalOpen] = useState(false);
+      const [feedbackModal, setFeedbackModal] = useState(null); // null | "feedback" | "feature"
       const [filterUpdating, setFilterUpdating] = useState(false);
       const [activeTab, setActiveTab] = useState("overlay");
       const [watchlistResults, setWatchlistResults] = useState({});
@@ -2814,9 +2914,12 @@
             selectedLeague={settings.league}
             onLeagueChange={handleLeagueChange}
             onBugReport={() => setBugModalOpen(true)}
+            onFeedback={() => setFeedbackModal("feedback")}
+            onFeatureRequest={() => setFeedbackModal("feature")}
             onRestartApp={handleRestartApp}
           />
           <BugReportModal open={bugModalOpen} onClose={() => setBugModalOpen(false)} />
+          <FeedbackModal open={!!feedbackModal} feedbackType={feedbackModal || "feedback"} onClose={() => setFeedbackModal(null)} />
         </div>
       );
     }
