@@ -1,7 +1,7 @@
 # POE2 Price Overlay — Claude Code Handoff
 
 > **Last updated:** 2026-02-17
-> **Status:** Working prototype — local mod scoring + DPS/defense integration + trade API pricing + 106-test regression suite
+> **Status:** Working prototype — distributable exe build + local mod scoring + DPS/defense integration + trade API pricing + 106-test regression suite
 
 ## What This Is
 
@@ -14,8 +14,13 @@ A real-time price overlay for Path of Exile 2. Hover over any item in-game, it s
 
 ## Current Architecture
 
-**Two interfaces:**
-1. **Desktop Dashboard (primary)** — `python app.py` or `POE2 Dashboard.bat`
+**Three interfaces:**
+1. **Distributable exe** — `BUILD.bat` → `dist/POE2PriceOverlay/POE2PriceOverlay.exe`
+   - Single exe bundles everything (PyInstaller, `console=False`)
+   - `bundle_paths.py` provides IS_FROZEN/APP_DIR/get_resource() for path resolution
+   - Overlay subprocess uses `--overlay-worker` flag (app.py dispatches to main.main())
+   - Auto-update: checks GitHub releases API on startup, shows gold banner in dashboard
+2. **Desktop Dashboard (source)** — `python app.py` or `POE2 Dashboard.bat`
    - PyWebView native window → FastAPI server (`server.py`) → React UI (`dashboard.html`)
    - 3 tabs: Overlay (controls + live log), Loot Filter (strictness/styles), Watchlist (trade queries)
    - Manages overlay subprocess (main.py) with start/stop/restart
@@ -23,7 +28,7 @@ A real-time price overlay for Path of Exile 2. Hover over any item in-game, it s
    - Settings persistence to `~/.poe2-price-overlay/dashboard_settings.json`
    - Bug report submission (Discord webhook)
    - Loot filter update trigger
-2. **CLI/Overlay mode** — `python main.py` or `START.bat`
+3. **CLI/Overlay mode** — `python main.py` or `START.bat`
    - Direct overlay without dashboard (legacy mode)
 
 **Pricing pipeline (runs inside main.py):**
