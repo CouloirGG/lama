@@ -21,6 +21,12 @@
 
 ## Completed
 
+### Session 17 (2026-02-18)
+- [x] Inno Setup installer — `scripts/installer.iss` reads VERSION, bundles PyInstaller output, installs to `%LOCALAPPDATA%\POE2PriceOverlay`, creates desktop + Start Menu shortcuts
+- [x] BUILD.bat step 3 — auto-detects Inno Setup, builds `dist/POE2PriceOverlay-Setup-{version}.exe`
+- [x] One-click auto-update — `/api/apply-update` endpoint downloads Setup exe from GitHub releases with WebSocket progress streaming, launches `/SILENT` install
+- [x] Dashboard update banner — "Install Update" button with download progress bar and installing state
+
 ### Session 16 (2026-02-17)
 - [x] File cleanup — deleted 8 superseded files (launcher.py, test_pipeline.py, SETUP_GUIDE.md, 5 .bat wrappers), moved 4 dev docs to `docs/`
 - [x] PyInstaller distributable exe — `bundle_paths.py` for frozen-mode paths, `--overlay-worker` flag for single-exe subprocess spawning, rewritten `build.spec` (app.py entry, proper hiddenimports, console=False)

@@ -15,11 +15,12 @@ A real-time price overlay for Path of Exile 2. Hover over any item in-game, it s
 ## Current Architecture
 
 **Three interfaces:**
-1. **Distributable exe** — `scripts/BUILD.bat` → `dist/POE2PriceOverlay/POE2PriceOverlay.exe`
+1. **Distributable exe + installer** — `scripts/BUILD.bat` → `dist/POE2PriceOverlay/POE2PriceOverlay.exe` + `dist/POE2PriceOverlay-Setup-{version}.exe`
    - Single exe bundles everything (PyInstaller, `console=False`)
    - `bundle_paths.py` provides IS_FROZEN/APP_DIR/get_resource() for path resolution
    - Overlay subprocess uses `--overlay-worker` flag (app.py dispatches to main.main())
-   - Auto-update: checks GitHub releases API on startup, shows gold banner in dashboard
+   - Inno Setup installer (`scripts/installer.iss`): installs to `%LOCALAPPDATA%\POE2PriceOverlay`, desktop + Start Menu shortcuts
+   - Auto-update: checks GitHub releases API on startup, shows gold banner with "Install Update" button, downloads Setup exe with progress bar, launches `/SILENT` install
 2. **Desktop Dashboard (source)** — `python src/app.py` or `POE2 Dashboard.bat`
    - PyWebView native window → FastAPI server (`src/server.py`) → React UI (`resources/dashboard.html`)
    - 3 tabs: Overlay (controls + live log), Loot Filter (strictness/styles), Watchlist (trade queries)
@@ -81,9 +82,10 @@ Cursor stops over POE2 window (8 fps polling)
 ### Scripts (`scripts/`)
 | File | Purpose |
 |------|---------|
-| `BUILD.bat` | Build distributable exe via PyInstaller |
+| `BUILD.bat` | Build distributable exe via PyInstaller + Inno Setup installer |
 | `SYNC.bat` | **Multi-machine sync** — pulls latest from GitHub, installs deps, verifies setup |
 | `build.spec` | PyInstaller spec file |
+| `installer.iss` | Inno Setup installer script (reads VERSION, bundles dist output) |
 
 ### Root (user-facing launchers)
 | File | Purpose |
