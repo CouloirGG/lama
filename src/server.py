@@ -425,6 +425,30 @@ app.add_middleware(
 )
 
 
+def _get_github_headers() -> dict:
+    """Build GitHub API headers, including auth token if available."""
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "POE2-Price-Overlay",
+    }
+    # Try gh CLI token (works on dev machines with gh installed)
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True, text=True, timeout=5,
+        )
+        token = result.stdout.strip()
+        if token:
+            headers["Authorization"] = f"token {token}"
+    except Exception:
+        pass
+    # Also accept explicit env var
+    env_token = os.environ.get("GITHUB_TOKEN", "")
+    if env_token:
+        headers["Authorization"] = f"token {env_token}"
+    return headers
+
+
 async def check_for_updates():
     """After a short delay, check GitHub for a newer release."""
     await asyncio.sleep(5)
@@ -433,11 +457,11 @@ async def check_for_updates():
         if APP_VERSION == "dev":
             return
         loop = asyncio.get_running_loop()
+        gh_headers = _get_github_headers()
         resp = await loop.run_in_executor(None, lambda: requests.get(
             "https://api.github.com/repos/CarbonSMASH/POE2_OCR/releases/latest",
             timeout=10,
-            headers={"Accept": "application/vnd.github.v3+json",
-                     "User-Agent": "POE2-Price-Overlay"},
+            headers=gh_headers,
         ))
         if resp.status_code != 200:
             return
@@ -453,11 +477,12 @@ async def check_for_updates():
         if _ver_tuple(latest_tag) > _ver_tuple(APP_VERSION):
             logger.info(f"Update available: v{latest_tag} (current: v{APP_VERSION})")
             # Find Setup exe asset for one-click update
+            # Use API url (not browser_download_url) — works for private repos
             setup_url = ""
             for asset in data.get("assets", []):
                 name = asset.get("name", "")
                 if "Setup" in name and name.endswith(".exe"):
-                    setup_url = asset.get("browser_download_url", "")
+                    setup_url = asset.get("url", "") or asset.get("browser_download_url", "")
                     break
             await ws_manager.broadcast({
                 "type": "update_available",
@@ -950,11 +975,11 @@ async def apply_update():
 
     # 1. Fetch the latest release to find the Setup exe asset
     try:
+        gh_headers = _get_github_headers()
         resp = await loop.run_in_executor(None, lambda: requests.get(
             "https://api.github.com/repos/CarbonSMASH/POE2_OCR/releases/latest",
             timeout=10,
-            headers={"Accept": "application/vnd.github.v3+json",
-                     "User-Agent": "POE2-Price-Overlay"},
+            headers=gh_headers,
         ))
         if resp.status_code != 200:
             return {"error": f"GitHub API returned {resp.status_code}"}
@@ -968,7 +993,7 @@ async def apply_update():
     for asset in data.get("assets", []):
         name = asset.get("name", "")
         if "Setup" in name and name.endswith(".exe"):
-            setup_url = asset.get("browser_download_url", "")
+            setup_url = asset.get("url", "") or asset.get("browser_download_url", "")
             setup_name = name
             setup_size = asset.get("size", 0)
             break
@@ -980,8 +1005,10 @@ async def apply_update():
     dest = Path(tempfile.gettempdir()) / setup_name
 
     def _download():
+        dl_headers = _get_github_headers()
+        dl_headers["Accept"] = "application/octet-stream"
         r = requests.get(setup_url, stream=True, timeout=60,
-                         headers={"User-Agent": "POE2-Price-Overlay"})
+                         headers=dl_headers)
         r.raise_for_status()
         total = setup_size or int(r.headers.get("content-length", 0))
         downloaded = 0
@@ -1017,7 +1044,7 @@ async def apply_update():
     def _launch_and_exit():
         try:
             subprocess.Popen(
-                [str(installer_path), "/SILENT"],
+                [str(installer_path), "/VERYSILENT", "/FORCECLOSEAPPLICATIONS"],
                 creationflags=subprocess.DETACHED_PROCESS,
             )
         except Exception as e:
