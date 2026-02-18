@@ -558,7 +558,7 @@
             onChange={(e) => onLeagueChange(e.target.value)}
             style={{
               background: T.input, border: `1px solid ${T.border}`, borderRadius: 4,
-              color: T.textMuted, padding: "3px 8px", fontSize: 10, ...MONO,
+              color: T.textSecond, padding: "3px 8px", fontSize: 10, ...MONO,
               appearance: "auto", cursor: "pointer",
             }}
           >
@@ -568,31 +568,31 @@
           </select>
           <Tooltip text="Send bug report with logs to Discord">
             <button onClick={onBugReport} style={{
-              background: "transparent", border: "none", color: T.textMuted,
+              background: "transparent", border: "none", color: T.textSecond,
               fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
               transition: "color 0.15s",
-            }} onMouseEnter={e => e.target.style.color = T.amber} onMouseLeave={e => e.target.style.color = T.textMuted}>Bug Report</button>
+            }} onMouseEnter={e => e.target.style.color = T.amber} onMouseLeave={e => e.target.style.color = T.textSecond}>Bug Report</button>
           </Tooltip>
           <Tooltip text="Send us feedback or suggestions">
             <button onClick={onFeedback} style={{
-              background: "transparent", border: "none", color: T.textMuted,
+              background: "transparent", border: "none", color: T.textSecond,
               fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
               transition: "color 0.15s",
-            }} onMouseEnter={e => e.target.style.color = T.gold} onMouseLeave={e => e.target.style.color = T.textMuted}>Feedback</button>
+            }} onMouseEnter={e => e.target.style.color = T.gold} onMouseLeave={e => e.target.style.color = T.textSecond}>Feedback</button>
           </Tooltip>
           <Tooltip text="Request a new feature">
             <button onClick={onFeatureRequest} style={{
-              background: "transparent", border: "none", color: T.textMuted,
+              background: "transparent", border: "none", color: T.textSecond,
               fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
               transition: "color 0.15s",
-            }} onMouseEnter={e => e.target.style.color = T.cyan} onMouseLeave={e => e.target.style.color = T.textMuted}>Feature Request</button>
+            }} onMouseEnter={e => e.target.style.color = T.cyan} onMouseLeave={e => e.target.style.color = T.textSecond}>Feature Request</button>
           </Tooltip>
           <Tooltip text="Restart the entire app (server + overlay)">
             <button onClick={onRestartApp} style={{
-              background: "transparent", border: "none", color: T.textMuted,
+              background: "transparent", border: "none", color: T.textSecond,
               fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
               transition: "color 0.15s",
-            }} onMouseEnter={e => e.target.style.color = T.textSecond} onMouseLeave={e => e.target.style.color = T.textMuted}>Restart App</button>
+            }} onMouseEnter={e => e.target.style.color = T.text} onMouseLeave={e => e.target.style.color = T.textSecond}>Restart App</button>
           </Tooltip>
           <div style={{ flex: 1 }} />
           <a className="footer-email" href="mailto:hello@couloir.gg">hello@couloir.gg</a>
