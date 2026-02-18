@@ -475,73 +475,16 @@
     };
 
     // -----------------------------------------------------------------------
-    // About Modal
-    // -----------------------------------------------------------------------
-    function AboutModal({ open, onClose, version }) {
-      if (!open) return null;
-      return (
-        <div style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000,
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }} onClick={onClose}>
-          <div style={{
-            background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 10,
-            padding: "28px 32px", width: 340, maxWidth: "90vw", textAlign: "center",
-          }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: T.gold, letterSpacing: "0.04em" }}>
-              POE2 Price Overlay
-            </div>
-            <div style={{ fontSize: 11, color: T.textSecond, marginTop: 4, ...MONO }}>
-              {version ? `v${version}` : ""}
-            </div>
-            <div style={{
-              width: 40, height: 1, margin: "16px auto",
-              background: `linear-gradient(90deg, transparent, ${T.borderGold}, transparent)`,
-            }} />
-            <div style={{ fontSize: 12, color: T.textSecond, lineHeight: 1.6 }}>
-              Made by <span style={{ color: T.gold, fontWeight: 600 }}>Couloir</span>
-            </div>
-            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
-              cal schuss
-            </div>
-            <div style={{ marginTop: 16 }}>
-              <a
-                href="https://github.com/CarbonSMASH/POE2_OCR"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: 11, color: T.textSecond, textDecoration: "none", transition: "color 0.15s" }}
-                onMouseEnter={e => e.target.style.color = T.gold}
-                onMouseLeave={e => e.target.style.color = T.textSecond}
-              >
-                github.com/CarbonSMASH/POE2_OCR
-              </a>
-            </div>
-            <button
-              onClick={onClose}
-              style={{ ...BTN, marginTop: 20, background: T.input, border: `1px solid ${T.border}`, color: T.textSecond, padding: "6px 20px", fontSize: 11 }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      );
-    }
-
     // Window Title Bar (frameless mode)
     // -----------------------------------------------------------------------
-    function WindowTitleBar({ onAbout }) {
+    function WindowTitleBar() {
       const minimize = () => window.pywebview?.api?.minimize();
       const toggleMax = () => window.pywebview?.api?.toggle_maximize();
       const close = () => window.pywebview?.api?.close();
 
       return (
         <div className="window-titlebar pywebview-drag-region">
-          <div
-            style={{ fontSize: 11, color: T.textMuted, fontWeight: 500, cursor: "pointer", transition: "color 0.15s" }}
-            onClick={onAbout}
-            onMouseEnter={e => e.target.style.color = T.textSecond}
-            onMouseLeave={e => e.target.style.color = T.textMuted}
-          >
+          <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 500 }}>
             POE2 Price Overlay
           </div>
           <div style={{ flex: 1 }} />
@@ -2535,7 +2478,6 @@
       const [logs, setLogs] = useState([]);
       const [autoStartDone, setAutoStartDone] = useState(false);
       const [bugModalOpen, setBugModalOpen] = useState(false);
-      const [aboutOpen, setAboutOpen] = useState(false);
       const [filterUpdating, setFilterUpdating] = useState(false);
       const [activeTab, setActiveTab] = useState("overlay");
       const [watchlistResults, setWatchlistResults] = useState({});
@@ -2680,7 +2622,7 @@
 
       return (
         <div className="app-frame">
-          <WindowTitleBar onAbout={() => setAboutOpen(true)} />
+          <WindowTitleBar />
           <div style={{ flex: 1, overflowY: "auto" }}>
           <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 24px" }}>
           <Header wsConnected={connected} overlayState={status.state} />
@@ -2752,7 +2694,6 @@
 
           <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
           <BugReportModal open={bugModalOpen} onClose={() => setBugModalOpen(false)} />
-          <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} version={status.version} />
         </div>
         </div>
         <BrandFooter />
