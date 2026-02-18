@@ -24,6 +24,7 @@ from typing import Optional
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from bundle_paths import APP_DIR
 from config import (
     DEFAULT_LEAGUE,
     LOG_LEVEL,
@@ -87,8 +88,7 @@ class POE2PriceOverlay:
         self._calibration_queue = queue.Queue()
 
         # Filter updater
-        project_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-        template = find_template_filter(project_dir)
+        template = find_template_filter(APP_DIR)
         self.filter_updater = FilterUpdater(
             self.price_cache, template,
             test_mode=self._test_filter_update,

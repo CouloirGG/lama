@@ -116,4 +116,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--overlay-worker" in sys.argv:
+        # Frozen-mode dispatch: server.py spawns this exe with --overlay-worker
+        # to run the overlay subprocess within the single-exe bundle.
+        sys.argv = [sys.argv[0]] + [a for a in sys.argv[1:] if a != "--overlay-worker"]
+        from main import main as overlay_main
+        overlay_main()
+    elif "--restart" in sys.argv:
+        # Strip --restart so it doesn't confuse webview, but handle it in main()
+        main()
+    else:
+        main()

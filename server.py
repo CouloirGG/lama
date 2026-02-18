@@ -40,6 +40,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from watchlist import WatchlistWorker
 
@@ -193,7 +194,10 @@ class OverlayProcess:
 
         self.state = "starting"
 
-        cmd = [sys.executable, "main.py", "--league", league]
+        if IS_FROZEN:
+            cmd = [sys.executable, "--overlay-worker", "--league", league]
+        else:
+            cmd = [sys.executable, "main.py", "--league", league]
         if no_filter_update:
             cmd.append("--no-filter-update")
 
@@ -205,7 +209,7 @@ class OverlayProcess:
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                cwd=Path(__file__).parent,
+                cwd=str(APP_DIR),
                 env=env,
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
             )
@@ -395,11 +399,15 @@ async def lifespan(app: FastAPI):
     )
     watchlist_worker.start(loop)
 
+    # Background task: check for updates after a short delay
+    update_task = asyncio.create_task(check_for_updates())
+
     logger.info("POE2 Dashboard server ready")
     try:
         yield
     finally:
         status_task.cancel()
+        update_task.cancel()
         if watchlist_worker:
             watchlist_worker.stop()
         # Stop overlay if running
@@ -414,6 +422,43 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+async def check_for_updates():
+    """After a short delay, check GitHub for a newer release."""
+    await asyncio.sleep(5)
+    try:
+        from config import APP_VERSION
+        if APP_VERSION == "dev":
+            return
+        loop = asyncio.get_running_loop()
+        resp = await loop.run_in_executor(None, lambda: requests.get(
+            "https://api.github.com/repos/CarbonSMASH/POE2_OCR/releases/latest",
+            timeout=10,
+            headers={"Accept": "application/vnd.github.v3+json",
+                     "User-Agent": "POE2-Price-Overlay"},
+        ))
+        if resp.status_code != 200:
+            return
+        data = resp.json()
+        latest_tag = data.get("tag_name", "").lstrip("v")
+        release_url = data.get("html_url", "")
+        if not latest_tag:
+            return
+        # Simple version comparison (major.minor.patch)
+        def _ver_tuple(v):
+            parts = v.split(".")
+            return tuple(int(p) for p in parts if p.isdigit())
+        if _ver_tuple(latest_tag) > _ver_tuple(APP_VERSION):
+            logger.info(f"Update available: v{latest_tag} (current: v{APP_VERSION})")
+            await ws_manager.broadcast({
+                "type": "update_available",
+                "current": APP_VERSION,
+                "latest": latest_tag,
+                "url": release_url,
+            })
+    except Exception as e:
+        logger.debug(f"Update check failed: {e}")
 
 
 async def status_broadcast_loop():
@@ -515,6 +560,11 @@ async def get_settings():
 async def update_settings(req: SettingsRequest):
     settings = load_settings()
     updates = req.model_dump(exclude_none=True)
+    # Keys that should be replaced wholesale (client sends full object, not partial)
+    REPLACE_KEYS = {"filter_tier_styles", "filter_gear_classes", "watchlist_queries"}
+    for key in REPLACE_KEYS:
+        if key in updates:
+            settings[key] = updates.pop(key)
     deep_merge(settings, updates)
     save_settings(settings)
     await ws_manager.broadcast({"type": "settings", "settings": settings})
@@ -653,6 +703,7 @@ async def get_trade_items():
         return []
 
 
+
 # ---------------------------------------------------------------------------
 # Bug report endpoint
 # ---------------------------------------------------------------------------
@@ -788,11 +839,12 @@ async def update_filter():
         "filter_gear_classes": settings.get("filter_gear_classes", {}),
     }
 
-    cmd = [
-        sys.executable, "main.py",
-        "--league", league,
-        "--test-filter-update",
-    ]
+    if IS_FROZEN:
+        cmd = [sys.executable, "--overlay-worker",
+               "--league", league, "--test-filter-update"]
+    else:
+        cmd = [sys.executable, "main.py",
+               "--league", league, "--test-filter-update"]
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
     env["POE2_FILTER_PREFS"] = json.dumps(filter_prefs)
@@ -803,7 +855,7 @@ async def update_filter():
                 cmd,
                 capture_output=True,
                 text=True,
-                cwd=str(Path(__file__).parent),
+                cwd=str(APP_DIR),
                 env=env,
                 timeout=120,
             )
@@ -850,16 +902,20 @@ async def restart_app():
     """Stop overlay and restart the entire app process."""
     overlay.stop()
 
-    entry = Path(__file__).parent / "app.py"
-    if not entry.exists():
-        return {"error": "app.py not found — restart only works in standalone mode"}
+    if IS_FROZEN:
+        restart_cmd = [sys.executable, "--restart"]
+    else:
+        entry = Path(__file__).parent / "app.py"
+        if not entry.exists():
+            return {"error": "app.py not found — restart only works in standalone mode"}
+        restart_cmd = [sys.executable, str(entry), "--restart"]
 
     # Spawn the new process with --restart so it waits for the port to
     # be freed before binding.  Then kill the current process.
     def _do_restart():
         subprocess.Popen(
-            [sys.executable, str(entry), "--restart"],
-            cwd=str(Path(__file__).parent),
+            restart_cmd,
+            cwd=str(APP_DIR),
         )
         time.sleep(0.3)
         os._exit(0)
@@ -874,7 +930,7 @@ async def restart_app():
 @app.get("/dashboard", response_class=HTMLResponse)
 async def serve_dashboard():
     """Serve dashboard.html for standalone app mode."""
-    dashboard_path = Path(__file__).parent / "dashboard.html"
+    dashboard_path = get_resource("dashboard.html")
     if not dashboard_path.exists():
         return HTMLResponse("<h1>dashboard.html not found</h1>", status_code=404)
     return HTMLResponse(dashboard_path.read_text(encoding="utf-8"))
@@ -897,6 +953,7 @@ async def websocket_endpoint(ws: WebSocket):
         }
         if watchlist_worker:
             init_msg["watchlist_results"] = watchlist_worker.get_results()
+            init_msg["watchlist_states"] = watchlist_worker.get_query_states()
         await ws.send_json(init_msg)
         # Keep alive
         while True:

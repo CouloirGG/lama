@@ -36,6 +36,8 @@ class WatchlistResult:
     price_high: Optional[str] = None
     last_checked: Optional[float] = None
     error: Optional[str] = None
+    search_id: str = ""
+    trade_url: str = ""
 
 
 class WatchlistWorker:
@@ -56,17 +58,26 @@ class WatchlistWorker:
         self._force_refresh_ids: set[str] = set()
         self._session = requests.Session()
         self._session.headers["User-Agent"] = USER_AGENT
+        self.query_states: dict[str, dict] = {}  # per-query state tracking
 
     def update_queries(self, queries: list[dict], poll_interval: int = None):
         """Update the query list (called when settings change)."""
         self._queries = queries[:WATCHLIST_MAX_QUERIES]
         if poll_interval is not None:
             self._poll_interval = max(60, poll_interval)
-        # Remove results for deleted queries
+        # Remove results/states for deleted queries, init states for new ones
         active_ids = {q.get("id") for q in self._queries}
         for qid in list(self._results.keys()):
             if qid not in active_ids:
                 del self._results[qid]
+        for qid in list(self.query_states.keys()):
+            if qid not in active_ids:
+                del self.query_states[qid]
+        for q in self._queries:
+            qid = q.get("id")
+            if qid and qid not in self.query_states:
+                state = "idle" if q.get("enabled", True) else "disabled"
+                self.query_states[qid] = {"state": state}
 
     def start(self, loop: asyncio.AbstractEventLoop):
         """Start the async polling task."""
@@ -91,6 +102,21 @@ class WatchlistWorker:
         """Return all cached results as dicts."""
         return {qid: asdict(r) for qid, r in self._results.items()}
 
+    def get_query_states(self) -> dict[str, dict]:
+        """Return per-query state info for the frontend."""
+        return dict(self.query_states)
+
+    async def _set_query_state(self, qid: str, state: str, **kwargs):
+        """Update a query's state and broadcast to clients."""
+        self.query_states[qid] = {"state": state, **kwargs}
+        try:
+            await self._broadcast({
+                "type": "watchlist_state",
+                "states": self.get_query_states(),
+            })
+        except Exception:
+            pass
+
     async def _poll_loop(self):
         """Main polling loop — round-robins through enabled queries."""
         try:
@@ -107,11 +133,13 @@ class WatchlistWorker:
 
                 # Regular polling cycle
                 for query in self._queries:
-                    if not query.get("enabled", True):
-                        continue
-
                     qid = query.get("id")
                     if not qid:
+                        continue
+
+                    if not query.get("enabled", True):
+                        if self.query_states.get(qid, {}).get("state") != "disabled":
+                            await self._set_query_state(qid, "disabled")
                         continue
 
                     # Check if this query was polled recently enough
@@ -142,16 +170,23 @@ class WatchlistWorker:
         """Execute a query and broadcast the result."""
         qid = query["id"]
         label = query.get("label", qid)
+        # Set state to querying
+        await self._set_query_state(qid, "querying")
         # Log start to dashboard console
         await self._broadcast_log(f"Watchlist: searching \"{label}\"...")
         result = await self._loop.run_in_executor(None, self._execute_query, query)
         self._results[qid] = result
         # Log result to dashboard console
         if result.error:
+            await self._set_query_state(qid, "error", error=result.error)
             await self._broadcast_log(f"Watchlist: \"{label}\" — {result.error}", "#a83232")
         elif result.total == 0:
+            next_poll = time.time() + self._poll_interval
+            await self._set_query_state(qid, "cooldown", next_poll=next_poll)
             await self._broadcast_log(f"Watchlist: \"{label}\" — no results found", "#8c7a5c")
         else:
+            next_poll = time.time() + self._poll_interval
+            await self._set_query_state(qid, "cooldown", next_poll=next_poll)
             price_info = result.price_low or "N/A"
             await self._broadcast_log(
                 f"Watchlist: \"{label}\" — {result.total} listed, cheapest {price_info}",
@@ -238,9 +273,12 @@ class WatchlistWorker:
             result_ids = data.get("result", [])
             total = data.get("total", 0)
 
+            trade_url = f"https://www.pathofexile.com/trade2/search/poe2/{league_encoded}/{search_id}" if search_id else ""
+
             if not result_ids:
                 return WatchlistResult(query_id=qid, total=total,
-                                       last_checked=time.time())
+                                       last_checked=time.time(),
+                                       search_id=search_id, trade_url=trade_url)
 
             # Step 2: GET fetch (first N results)
             fetch_ids = result_ids[:WATCHLIST_FETCH_COUNT]
@@ -314,6 +352,8 @@ class WatchlistWorker:
                 price_low=price_low,
                 price_high=price_high,
                 last_checked=time.time(),
+                search_id=search_id,
+                trade_url=trade_url,
             )
 
         except Exception as e:

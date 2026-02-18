@@ -337,17 +337,31 @@
     // -----------------------------------------------------------------------
     function Tooltip({ text, children }) {
       const [show, setShow] = useState(false);
+      const [above, setAbove] = useState(true);
       const ref = useRef(null);
 
+      const handleEnter = () => {
+        if (ref.current) {
+          const rect = ref.current.getBoundingClientRect();
+          setAbove(rect.top > 50);
+        }
+        setShow(true);
+      };
+
+      const pos = above
+        ? { bottom: "100%", marginBottom: 6 }
+        : { top: "100%", marginTop: 6 };
+
       return (
-        <div ref={ref} onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)} style={{ position: "relative" }}>
+        <div ref={ref} onMouseEnter={handleEnter} onMouseLeave={() => setShow(false)} style={{ position: "relative" }}>
           {children}
           {show && text && (
             <div style={{
-              position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)",
+              position: "absolute", left: "50%", transform: "translateX(-50%)",
+              ...pos,
               background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 6,
               padding: "6px 10px", fontSize: 11, color: T.textSecond, whiteSpace: "nowrap",
-              zIndex: 100, marginBottom: 6, pointerEvents: "none",
+              zIndex: 100, pointerEvents: "none",
               boxShadow: "0 4px 12px rgba(0,0,0,0.6)",
             }}>{text}</div>
           )}
@@ -1617,7 +1631,7 @@
     // -----------------------------------------------------------------------
     // Watchlist — WatchlistListingsTable
     // -----------------------------------------------------------------------
-    function WatchlistListingsTable({ listings }) {
+    function WatchlistListingsTable({ listings, tradeUrl }) {
       const [copiedIdx, setCopiedIdx] = useState(null);
 
       if (!listings || listings.length === 0) return null;
@@ -1643,31 +1657,47 @@
       };
 
       return (
-        <div style={{ maxHeight: 200, overflowY: "auto", marginTop: 8 }}>
+        <div style={{ maxHeight: 220, overflowY: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, ...MONO }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${T.border}`, color: T.textMuted, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600 }}>Price</th>
-                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600 }}>Account</th>
-                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600 }}>Listed</th>
-                <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>Whisper</th>
+                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Price</th>
+                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Item</th>
+                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Account</th>
+                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Listed</th>
+                <th style={{ textAlign: "right", padding: "4px 6px", fontWeight: 600 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {listings.map((l, i) => (
                 <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
-                  <td style={{ padding: "5px 8px", color: T.gold, fontWeight: 600 }}>{l.price}</td>
-                  <td style={{ padding: "5px 8px", color: T.textSecond }}>{l.account}</td>
-                  <td style={{ padding: "5px 8px", color: T.textMuted }}>{formatTime(l.indexed)}</td>
-                  <td style={{ padding: "5px 8px", textAlign: "right" }}>
-                    {l.whisper && (
-                      <button onClick={() => copyWhisper(l.whisper, i)} style={{
-                        ...BTN, padding: "2px 10px", fontSize: 10,
-                        background: copiedIdx === i ? T.green : T.input,
-                        color: copiedIdx === i ? "#fff" : T.textSecond,
-                        border: `1px solid ${copiedIdx === i ? T.green : T.border}`,
-                      }}>{copiedIdx === i ? "Copied" : "Copy"}</button>
-                    )}
+                  <td style={{ padding: "4px 6px", color: T.gold, fontWeight: 600, whiteSpace: "nowrap" }}>{l.price}</td>
+                  <td style={{ padding: "4px 6px", color: T.text, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {l.item_name || "--"}
+                  </td>
+                  <td style={{ padding: "4px 6px", color: T.textSecond, maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.account}</td>
+                  <td style={{ padding: "4px 6px", color: T.textMuted, whiteSpace: "nowrap" }}>{formatTime(l.indexed)}</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "inline-flex", gap: 4 }}>
+                      {tradeUrl && (
+                        <Tooltip text="Open on trade site to visit hideout">
+                          <a href={tradeUrl} target="_blank" rel="noopener noreferrer" style={{
+                            ...BTN, padding: "2px 8px", fontSize: 10, textDecoration: "none",
+                            background: T.input, color: T.gold,
+                            border: `1px solid ${T.borderGold}`,
+                            display: "inline-block",
+                          }}>Buy</a>
+                        </Tooltip>
+                      )}
+                      {l.whisper && (
+                        <button onClick={() => copyWhisper(l.whisper, i)} style={{
+                          ...BTN, padding: "2px 8px", fontSize: 10,
+                          background: copiedIdx === i ? T.green : T.input,
+                          color: copiedIdx === i ? "#fff" : T.textSecond,
+                          border: `1px solid ${copiedIdx === i ? T.green : T.border}`,
+                        }}>{copiedIdx === i ? "Copied" : "Whisper"}</button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1680,19 +1710,65 @@
     // -----------------------------------------------------------------------
     // Watchlist — WatchlistQueryCard
     // -----------------------------------------------------------------------
-    function WatchlistQueryCard({ query, result, tradeStats, tradeItems, onUpdate, onDelete, onRefresh }) {
+    // -----------------------------------------------------------------------
+    // Watchlist — QueryStatusBadge
+    // -----------------------------------------------------------------------
+    function QueryStatusBadge({ queryState }) {
+      const st = queryState?.state || "idle";
+      const [countdown, setCountdown] = useState("");
+
+      useEffect(() => {
+        if (st !== "cooldown" || !queryState?.next_poll) { setCountdown(""); return; }
+        const tick = () => {
+          const remaining = Math.max(0, Math.floor(queryState.next_poll - Date.now() / 1000));
+          if (remaining <= 0) { setCountdown("Soon"); return; }
+          const m = Math.floor(remaining / 60);
+          const s = remaining % 60;
+          setCountdown(`${m}:${s.toString().padStart(2, "0")}`);
+        };
+        tick();
+        const iv = setInterval(tick, 1000);
+        return () => clearInterval(iv);
+      }, [st, queryState?.next_poll]);
+
+      const configs = {
+        querying: { label: "Querying...", color: T.amber, bg: "rgba(184,134,11,0.15)", animate: true },
+        cooldown: { label: countdown ? `Next: ${countdown}` : "Cooldown", color: T.cyan, bg: "rgba(107,143,113,0.12)", animate: false },
+        idle:     { label: "Idle", color: T.textMuted, bg: "rgba(92,79,61,0.1)", animate: false },
+        error:    { label: "Error", color: T.red, bg: "rgba(168,50,50,0.12)", animate: false },
+        disabled: { label: "Disabled", color: T.textMuted, bg: "rgba(92,79,61,0.08)", animate: false },
+      };
+      const c = configs[st] || configs.idle;
+
+      return (
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          background: c.bg, border: `1px solid ${c.color}33`,
+          borderRadius: 12, padding: "2px 8px", fontSize: 10, fontWeight: 600,
+          color: c.color, whiteSpace: "nowrap",
+        }}>
+          <span style={{
+            width: 5, height: 5, borderRadius: "50%", background: c.color,
+            animation: c.animate ? "pulse 1.2s infinite" : "none",
+            flexShrink: 0,
+          }} />
+          {c.label}
+        </div>
+      );
+    }
+
+    function WatchlistQueryCard({ query, result, queryState, tradeStats, tradeItems, onUpdate, onDelete, onRefresh }) {
       const [editing, setEditing] = useState(false);
-      const [expanded, setExpanded] = useState(false);
 
       const r = result || {};
       const hasResult = !!r.last_checked;
       const hasError = !!r.error;
-      const isWaiting = !hasResult && query.enabled !== false;
       const lastChecked = r.last_checked ? new Date(r.last_checked * 1000).toLocaleTimeString() : "";
+      const isDisabled = query.enabled === false;
 
       const priceRange = r.price_low && r.price_high
         ? (r.price_low === r.price_high ? r.price_low : `${r.price_low} — ${r.price_high}`)
-        : (hasResult && !hasError ? `${r.total || 0} found` : "--");
+        : null;
 
       const handleSave = (updated) => {
         onUpdate(updated);
@@ -1700,64 +1776,60 @@
       };
 
       return (
-        <div style={{ ...CARD, marginBottom: 10, padding: 0, overflow: "hidden" }}>
+        <div style={{
+          ...CARD, padding: 0, overflow: "hidden",
+          opacity: isDisabled ? 0.6 : 1,
+          display: "flex", flexDirection: "column", height: "100%",
+        }}>
           {/* Header row */}
           <div style={{
-            display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
-            borderBottom: (editing || expanded) ? `1px solid ${T.border}` : "none",
+            display: "flex", alignItems: "center", gap: 8, padding: "10px 12px",
+            borderBottom: `1px solid ${T.border}`,
+            background: T.input,
           }}>
             <div onClick={(e) => e.stopPropagation()}>
               <Toggle size="small" value={query.enabled !== false}
                 onChange={(v) => onUpdate({ ...query, enabled: v })} />
             </div>
 
-            <div style={{ flex: 1, cursor: "pointer", minWidth: 0 }} onClick={() => { if (!editing) setExpanded(!expanded); }}>
-              <div style={{ fontWeight: 600, fontSize: 13, color: query.enabled !== false ? T.text : T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: isDisabled ? T.textMuted : T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {query.label || "Untitled Query"}
               </div>
             </div>
 
-            {!editing && (
-              <>
-                <div style={{ textAlign: "right", minWidth: 90 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: isWaiting ? T.amber : hasError ? T.red : T.gold, ...MONO }}>
-                    {isWaiting ? "Searching..." : hasError ? "Error" : priceRange}
-                  </div>
-                  {hasResult && (
-                    <div style={{ fontSize: 9, color: T.textMuted }}>
-                      {r.total !== undefined ? `${r.total} listed` : ""}
-                    </div>
-                  )}
-                </div>
-                <div style={{ fontSize: 9, color: T.textMuted, minWidth: 55, textAlign: "right" }}>
-                  {lastChecked}
-                </div>
-
-                <Tooltip text="Refresh now">
-                  <button onClick={() => onRefresh(query.id)} style={{
-                    ...BTN, padding: "4px 8px", fontSize: 12, background: "transparent",
-                    border: `1px solid ${T.border}`, color: T.textSecond, lineHeight: 1,
-                  }}>&#8635;</button>
-                </Tooltip>
-                <Tooltip text="Edit query">
-                  <button onClick={() => setEditing(true)} style={{
-                    ...BTN, padding: "4px 8px", fontSize: 11, background: "transparent",
-                    border: `1px solid ${T.border}`, color: T.textSecond, lineHeight: 1,
-                  }}>&#9998;</button>
-                </Tooltip>
-                <Tooltip text="Delete query">
-                  <button onClick={() => onDelete(query.id)} style={{
-                    ...BTN, padding: "4px 8px", fontSize: 12, background: "transparent",
-                    border: `1px solid ${T.border}`, color: T.red, lineHeight: 1,
-                  }}>&#10005;</button>
-                </Tooltip>
-              </>
+            {r.trade_url && (
+              <Tooltip text="Open on trade site">
+                <a href={r.trade_url} target="_blank" rel="noopener noreferrer" style={{
+                  color: T.cyan, fontSize: 14, textDecoration: "none", lineHeight: 1,
+                  display: "inline-flex", alignItems: "center",
+                }}>&#8599;</a>
+              </Tooltip>
             )}
+
+            <Tooltip text="Refresh now">
+              <button onClick={() => onRefresh(query.id)} style={{
+                ...BTN, padding: "3px 7px", fontSize: 12, background: "transparent",
+                border: `1px solid ${T.border}`, color: T.textSecond, lineHeight: 1,
+              }}>&#8635;</button>
+            </Tooltip>
+            <Tooltip text="Edit query">
+              <button onClick={() => setEditing(!editing)} style={{
+                ...BTN, padding: "3px 7px", fontSize: 11, background: editing ? T.gold + "22" : "transparent",
+                border: `1px solid ${editing ? T.gold : T.border}`, color: editing ? T.gold : T.textSecond, lineHeight: 1,
+              }}>&#9998;</button>
+            </Tooltip>
+            <Tooltip text="Delete query">
+              <button onClick={() => onDelete(query.id)} style={{
+                ...BTN, padding: "3px 7px", fontSize: 12, background: "transparent",
+                border: `1px solid ${T.border}`, color: T.red, lineHeight: 1,
+              }}>&#10005;</button>
+            </Tooltip>
           </div>
 
           {/* Editor */}
           {editing && (
-            <div style={{ padding: "0 14px 14px" }}>
+            <div style={{ padding: "8px 12px 12px", borderBottom: `1px solid ${T.border}` }}>
               <WatchlistQueryEditor
                 query={query}
                 tradeStats={tradeStats}
@@ -1768,17 +1840,33 @@
             </div>
           )}
 
-          {/* Error message */}
-          {!editing && hasError && (
-            <div style={{ padding: "6px 14px", fontSize: 11, color: T.red }}>
-              {r.error}
+          {/* Price summary + status badge — always visible */}
+          {!editing && (
+            <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${T.border}22` }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {priceRange ? (
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.gold, ...MONO }}>{priceRange}</div>
+                ) : hasError ? (
+                  <div style={{ fontSize: 12, fontWeight: 600, color: T.red }}>{r.error}</div>
+                ) : hasResult ? (
+                  <div style={{ fontSize: 12, color: T.textMuted, ...MONO }}>No results</div>
+                ) : (
+                  <div style={{ fontSize: 12, color: T.textMuted }}>Waiting for first poll...</div>
+                )}
+                {hasResult && r.total !== undefined && (
+                  <div style={{ fontSize: 10, color: T.textMuted }}>
+                    {r.total} listed{lastChecked && ` · checked ${lastChecked}`}
+                  </div>
+                )}
+              </div>
+              <QueryStatusBadge queryState={queryState} />
             </div>
           )}
 
-          {/* Expanded listings */}
-          {!editing && expanded && r.listings && r.listings.length > 0 && (
-            <div style={{ padding: "0 14px 10px" }}>
-              <WatchlistListingsTable listings={r.listings} />
+          {/* Listings — always expanded when available */}
+          {!editing && r.listings && r.listings.length > 0 && (
+            <div style={{ padding: "0 12px 8px", flex: 1, minHeight: 0 }}>
+              <WatchlistListingsTable listings={r.listings} tradeUrl={r.trade_url} />
             </div>
           )}
         </div>
@@ -1788,14 +1876,15 @@
     // -----------------------------------------------------------------------
     // Watchlist — WatchlistTab
     // -----------------------------------------------------------------------
-    function WatchlistTab({ settings, watchlistResults, onSettingsUpdate, onRefresh }) {
+    function WatchlistTab({ settings, watchlistResults, queryStates, onSettingsUpdate, onRefresh }) {
       const [tradeStats, setTradeStats] = useState([]);
       const [tradeItems, setTradeItems] = useState([]);
       const [loaded, setLoaded] = useState(false);
-      const [adding, setAdding] = useState(false);
+      const [addingSlot, setAddingSlot] = useState(null); // index of slot being added to
 
       const queries = settings.watchlist_queries || [];
       const pollInterval = settings.watchlist_poll_interval || 300;
+      const TOTAL_SLOTS = 6;
 
       // Lazy-load trade data on first render
       useEffect(() => {
@@ -1825,13 +1914,25 @@
 
       const handleAdd = (newQuery) => {
         saveQueries([...queries, newQuery]);
-        setAdding(false);
+        setAddingSlot(null);
       };
 
       const handlePollIntervalChange = (val) => {
         const clamped = Math.max(60, Math.min(3600, parseInt(val) || 300));
         onSettingsUpdate({ watchlist_poll_interval: clamped });
       };
+
+      // Build slots: active queries first, then empty slots, then "adding" slot if any
+      const slots = [];
+      for (let i = 0; i < TOTAL_SLOTS; i++) {
+        if (i < queries.length) {
+          slots.push({ type: "query", query: queries[i] });
+        } else if (addingSlot === i) {
+          slots.push({ type: "adding" });
+        } else {
+          slots.push({ type: "empty", index: i });
+        }
+      }
 
       return (
         <div>
@@ -1850,54 +1951,70 @@
             </div>
             <div style={{ flex: 1 }} />
             <div style={{ fontSize: 11, color: T.textMuted }}>
-              {queries.length} / 6 queries
+              {queries.length} / {TOTAL_SLOTS} queries
             </div>
           </div>
 
-          {/* Query cards */}
-          {queries.map(query => (
-            <WatchlistQueryCard
-              key={query.id}
-              query={query}
-              result={watchlistResults[query.id]}
-              tradeStats={tradeStats}
-              tradeItems={tradeItems}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-              onRefresh={onRefresh}
-            />
-          ))}
-
-          {/* Add query */}
-          {adding ? (
-            <div style={{ ...CARD }}>
-              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: T.gold }}>New Query</div>
-              <WatchlistQueryEditor
-                query={null}
-                tradeStats={tradeStats}
-                tradeItems={tradeItems}
-                onSave={handleAdd}
-                onCancel={() => setAdding(false)}
-              />
-            </div>
-          ) : (
-            queries.length < 6 && (
-              <button onClick={() => setAdding(true)} style={{
-                ...BTN_GOLD, width: "100%", padding: "12px", marginTop: 4,
-                textAlign: "center", fontSize: 13,
-              }}>+ Add Query</button>
-            )
-          )}
-
-          {/* Empty state */}
-          {queries.length === 0 && !adding && (
-            <div style={{ ...CARD, textAlign: "center", padding: 32, marginTop: 8 }}>
-              <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 8 }}>No watchlist queries yet</div>
-              <div style={{ fontSize: 12, color: T.textMuted }}>
-                Add a query to track item prices on the trade market.
-              </div>
-            </div>
-          )}
+          {/* 6-slot grid */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: 12,
+          }}>
+            {slots.map((slot, idx) => {
+              if (slot.type === "query") {
+                return (
+                  <WatchlistQueryCard
+                    key={slot.query.id}
+                    query={slot.query}
+                    result={watchlistResults[slot.query.id]}
+                    queryState={queryStates[slot.query.id]}
+                    tradeStats={tradeStats}
+                    tradeItems={tradeItems}
+                    onUpdate={handleUpdate}
+                    onDelete={handleDelete}
+                    onRefresh={onRefresh}
+                  />
+                );
+              } else if (slot.type === "adding") {
+                return (
+                  <div key={`add-${idx}`} style={{ ...CARD, padding: 12 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: T.gold }}>New Query</div>
+                    <WatchlistQueryEditor
+                      query={null}
+                      tradeStats={tradeStats}
+                      tradeItems={tradeItems}
+                      onSave={handleAdd}
+                      onCancel={() => setAddingSlot(null)}
+                    />
+                  </div>
+                );
+              } else {
+                // Empty slot
+                return (
+                  <div
+                    key={`empty-${idx}`}
+                    onClick={() => { if (queries.length < TOTAL_SLOTS) setAddingSlot(slot.index); }}
+                    style={{
+                      border: `2px dashed ${T.border}`,
+                      borderRadius: 8,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      minHeight: 120,
+                      cursor: queries.length < TOTAL_SLOTS ? "pointer" : "default",
+                      transition: "border-color 0.15s, background 0.15s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = T.borderGold; e.currentTarget.style.background = T.card; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 24, color: T.textMuted, lineHeight: 1 }}>+</div>
+                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>Add Query</div>
+                    </div>
+                  </div>
+                );
+              }
+            })}
+          </div>
         </div>
       );
     }
@@ -1907,6 +2024,7 @@
     // -----------------------------------------------------------------------
     function LogPanel({ logs, logRef, onClear }) {
       const [copyLabel, setCopyLabel] = useState("COPY");
+      const [collapsed, setCollapsed] = useState(true);
 
       const copyLogs = () => {
         const text = logs.map(l => `${l.time || ""} ${l.message}`.trim()).join("\n");
@@ -1927,33 +2045,56 @@
 
       return (
         <div style={{ ...CARD, marginTop: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={LABEL}>Console Output</span>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={copyLogs} disabled={logs.length === 0} style={{
-                background: "transparent", border: "none", fontSize: 10, fontWeight: 600,
-                cursor: logs.length > 0 ? "pointer" : "default", letterSpacing: "0.06em",
-                color: copyLabel === "COPIED!" ? T.green : (logs.length > 0 ? T.gold : T.border),
-                transition: "color 0.15s",
-              }}>{copyLabel}</button>
-              <button onClick={onClear} disabled={logs.length === 0} style={{
-                background: "transparent", border: "none", color: logs.length > 0 ? T.textMuted : T.border,
-                fontSize: 10, fontWeight: 600, cursor: logs.length > 0 ? "pointer" : "default", letterSpacing: "0.06em",
-              }}>CLEAR</button>
+          <div
+            style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              cursor: "pointer", userSelect: "none",
+            }}
+            onClick={() => setCollapsed(!collapsed)}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={LABEL}>Console Output</span>
+              {logs.length > 0 && (
+                <span style={{ fontSize: 10, color: T.textMuted, ...MONO }}>{logs.length} lines</span>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {!collapsed && (
+                <>
+                  <button onClick={(e) => { e.stopPropagation(); copyLogs(); }} disabled={logs.length === 0} style={{
+                    background: "transparent", border: "none", fontSize: 10, fontWeight: 600,
+                    cursor: logs.length > 0 ? "pointer" : "default", letterSpacing: "0.06em",
+                    color: copyLabel === "COPIED!" ? T.green : (logs.length > 0 ? T.gold : T.border),
+                    transition: "color 0.15s",
+                  }}>{copyLabel}</button>
+                  <button onClick={(e) => { e.stopPropagation(); onClear(); }} disabled={logs.length === 0} style={{
+                    background: "transparent", border: "none", color: logs.length > 0 ? T.textMuted : T.border,
+                    fontSize: 10, fontWeight: 600, cursor: logs.length > 0 ? "pointer" : "default", letterSpacing: "0.06em",
+                  }}>CLEAR</button>
+                </>
+              )}
+              <div style={{
+                fontSize: 11, color: T.textSecond,
+                transform: collapsed ? "rotate(0deg)" : "rotate(180deg)",
+                transition: "transform 0.15s",
+              }}>&#9660;</div>
             </div>
           </div>
-          <div ref={logRef} style={{
-            background: T.input, border: `1px solid ${T.border}`, borderRadius: 6,
-            ...MONO, fontSize: 11.5, lineHeight: 1.7, height: 280, overflowY: "auto", padding: "12px 16px",
-          }}>
-            {logs.length === 0 && <div style={{ color: T.textMuted, fontStyle: "italic" }}>Waiting for overlay output...</div>}
-            {logs.map((log, i) => (
-              <div key={i} style={{ color: log.color || T.textSecond }}>
-                <span style={{ color: T.textMuted }}>{log.time}</span>{" "}
-                {log.message}
-              </div>
-            ))}
-          </div>
+          {!collapsed && (
+            <div ref={logRef} style={{
+              background: T.input, border: `1px solid ${T.border}`, borderRadius: 6,
+              ...MONO, fontSize: 11.5, lineHeight: 1.7, height: 280, overflowY: "auto", padding: "12px 16px",
+              marginTop: 8,
+            }}>
+              {logs.length === 0 && <div style={{ color: T.textMuted, fontStyle: "italic" }}>Waiting for overlay output...</div>}
+              {logs.map((log, i) => (
+                <div key={i} style={{ color: log.color || T.textSecond }}>
+                  <span style={{ color: T.textMuted }}>{log.time}</span>{" "}
+                  {log.message}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       );
     }
@@ -1971,6 +2112,8 @@
       const [filterUpdating, setFilterUpdating] = useState(false);
       const [activeTab, setActiveTab] = useState("overlay");
       const [watchlistResults, setWatchlistResults] = useState({});
+      const [queryStates, setQueryStates] = useState({});
+      const [updateInfo, setUpdateInfo] = useState(null);
       const logRef = useRef(null);
       const autoScrollRef = useRef(true);
 
@@ -2003,6 +2146,7 @@
               setLogs(msg.log);
             }
             if (msg.watchlist_results) setWatchlistResults(msg.watchlist_results);
+            if (msg.watchlist_states) setQueryStates(msg.watchlist_states);
             break;
           case "log":
             setLogs(prev => {
@@ -2023,6 +2167,14 @@
             if (msg.result) {
               setWatchlistResults(prev => ({ ...prev, [msg.result.query_id]: msg.result }));
             }
+            break;
+          case "watchlist_state":
+            if (msg.states) {
+              setQueryStates(msg.states);
+            }
+            break;
+          case "update_available":
+            setUpdateInfo({ current: msg.current, latest: msg.latest, url: msg.url });
             break;
         }
       }, []);
@@ -2099,6 +2251,18 @@
       return (
         <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 24px" }}>
           <Header wsConnected={connected} overlayState={status.state} />
+          {updateInfo && (
+            <div style={{ background: "rgba(196,164,86,0.12)", border: `1px solid ${T.gold}`, borderRadius: 8, padding: "10px 16px", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ color: T.gold, fontSize: 13, fontWeight: 600 }}>
+                Update available: v{updateInfo.latest}
+                <span style={{ color: T.textSecond, fontWeight: 400, marginLeft: 8 }}>(current: v{updateInfo.current})</span>
+              </span>
+              <span style={{ display: "flex", gap: 8 }}>
+                <a href={updateInfo.url} target="_blank" rel="noopener noreferrer" style={{ ...BTN, background: T.gold, color: "#0d0b08", textDecoration: "none", padding: "5px 14px", fontSize: 11 }}>Download</a>
+                <button onClick={() => setUpdateInfo(null)} style={{ ...BTN, background: "transparent", border: `1px solid ${T.border}`, color: T.textSecond, padding: "5px 10px", fontSize: 11 }}>Dismiss</button>
+              </span>
+            </div>
+          )}
           <StatusPanel status={status} />
           <ControlBar
             overlayState={status.state}
@@ -2128,6 +2292,7 @@
             <WatchlistTab
               settings={settings}
               watchlistResults={watchlistResults}
+              queryStates={queryStates}
               onSettingsUpdate={handleSettingsUpdate}
               onRefresh={handleWatchlistRefresh}
             />
