@@ -88,16 +88,67 @@
       hideable: { font_size: 32, text_color: "#c8c8c8", border_color: "#000000", bg_color: "#000000", sound_enabled: false, sound_id: 0, beam_enabled: false, beam_color: "Red", minimap_enabled: true },
     };
 
-    const FILTER_SECTIONS = [
-      { id: "currency", label: "Currency", tiers: ["s", "a", "b", "c", "d", "e"] },
-      { id: "currency->emotions", label: "Distilled Emotions", tiers: ["s", "a", "b", "c", "d", "e"] },
-      { id: "currency->catalysts", label: "Breach", tiers: ["s", "a", "b", "c", "d", "e"] },
-      { id: "currency->essence", label: "Essences", tiers: ["s", "a", "b", "c", "d", "e"] },
-      { id: "currency->omen", label: "Omens", tiers: ["s", "a", "b", "c", "d", "e"] },
-      { id: "sockets->general", label: "Runes & Sockets", tiers: ["s", "a", "b", "c", "d", "e"] },
-      { id: "uniques", label: "Uniques", tiers: ["t1", "t2", "t3", "hideable"] },
-      { id: "fragments->generic", label: "Fragments", tiers: ["a", "b", "c"] },
+    // Gear style defaults per rarity (mirrors filter_updater.py STYLE_GEAR_*)
+    const DEFAULT_GEAR_STYLES = {
+      gear_rare:   { font_size: 28, text_color: "#dcc864", border_color: "#000000", bg_color: "#000000", sound_enabled: false, sound_id: 0, beam_enabled: false, beam_color: "Red", minimap_enabled: false },
+      gear_magic:  { font_size: 28, text_color: "#8888ff", border_color: "#000000", bg_color: "#000000", sound_enabled: false, sound_id: 0, beam_enabled: false, beam_color: "Red", minimap_enabled: false },
+      gear_normal: { font_size: 28, text_color: "#c8c8c8", border_color: "#000000", bg_color: "#000000", sound_enabled: false, sound_id: 0, beam_enabled: false, beam_color: "Red", minimap_enabled: false },
+    };
+
+    const GEAR_SECTIONS = [
+      { id: "gear_rare", label: "Rare Gear" },
+      { id: "gear_magic", label: "Magic Gear" },
+      { id: "gear_normal", label: "Normal / Endgame Gear" },
     ];
+
+    const GEAR_CLASSES = [
+      { category: "Weapons", classes: [
+        "Bows", "Crossbows", "One Hand Swords", "Two Hand Swords",
+        "One Hand Axes", "Two Hand Axes", "One Hand Maces", "Two Hand Maces",
+        "Daggers", "Claws", "Flails", "Spears", "Wands", "Staves", "Sceptres",
+      ]},
+      { category: "Armour", classes: [
+        "Body Armours", "Helmets", "Gloves", "Boots",
+        "Shields", "Bucklers", "Foci",
+      ]},
+      { category: "Accessories", classes: [
+        "Rings", "Amulets", "Belts", "Quivers",
+      ]},
+    ];
+
+    // Uniques shown in Gear card (not Economy)
+    const UNIQUE_SECTION = { id: "uniques", label: "Uniques", tiers: ["t1", "t2", "t3", "hideable"], thresholdType: "unique" };
+
+    const ECONOMY_SECTIONS = [
+      { id: "currency", label: "Currency", tiers: ["s", "a", "b", "c", "d", "e"], thresholdType: "currency" },
+      { id: "currency->emotions", label: "Distilled Emotions", tiers: ["s", "a", "b", "c", "d", "e"], thresholdType: "currency" },
+      { id: "currency->catalysts", label: "Breach", tiers: ["s", "a", "b", "c", "d", "e"], thresholdType: "currency" },
+      { id: "currency->essence", label: "Essences", tiers: ["s", "a", "b", "c", "d", "e"], thresholdType: "currency" },
+      { id: "currency->omen", label: "Omens", tiers: ["s", "a", "b", "c", "d", "e"], thresholdType: "currency" },
+      { id: "sockets->general", label: "Runes & Sockets", tiers: ["s", "a", "b", "c", "d", "e"], thresholdType: "currency" },
+      { id: "fragments->generic", label: "Fragments", tiers: ["a", "b", "c"], thresholdType: "fragment" },
+    ];
+
+    // Base chaos thresholds (mirrors config.py FILTER_*_CHAOS_THRESHOLDS)
+    const BASE_THRESHOLDS = {
+      currency: { s: 25, a: 5, b: 2, c: 1, d: 1, e: 0 },
+      unique:   { t1: 25, t2: 3, t3: 0.5, hideable: 0 },
+      fragment: { a: 5, b: 1, c: 0 },
+    };
+    const STRICTNESS_MULT = { relaxed: 0.5, normal: 1.0, strict: 2.0, very_strict: 4.0 };
+
+    function getEffectiveThreshold(tier, thresholdType, strictness) {
+      const mult = STRICTNESS_MULT[strictness] || 1.0;
+      const base = BASE_THRESHOLDS[thresholdType];
+      if (!base || base[tier] === undefined) return null;
+      return base[tier] * mult;
+    }
+
+    function formatChaos(val) {
+      if (val === 0) return "all";
+      if (val >= 1) return `≥${Math.round(val * 10) / 10}c`;
+      return `≥${val.toFixed(1)}c`;
+    }
 
     const TIER_LABELS = {
       s: "S Tier", a: "A Tier", b: "B Tier", c: "C Tier", d: "D Tier", e: "E Tier",
@@ -106,6 +157,82 @@
 
     const BEAM_COLORS = ["Red", "Yellow", "Blue", "Orange", "Brown"];
     const SOUND_IDS = Array.from({ length: 17 }, (_, i) => i);
+
+    // Sample item names for style preview
+    const TIER_PREVIEW_NAMES = {
+      s: "Divine Orb", a: "Exalted Orb", b: "Chaos Orb",
+      c: "Regal Orb", d: "Alchemy Orb", e: "Transmutation Orb",
+      t1: "Headhunter", t2: "Goldrim", t3: "Unique Helm", hideable: "Cheap Unique",
+      gear_rare: "Rare Vaal Axe", gear_magic: "Magic Corsair Sword", gear_normal: "Iron Hat",
+    };
+
+    // Sample items for strictness visualization (values chosen to shift tiers visibly)
+    const STRICTNESS_SAMPLES = [
+      { name: "Exalted Orb",  chaos: 30 },
+      { name: "Regal Orb",    chaos: 8 },
+      { name: "Chaos Orb",    chaos: 2.5 },
+      { name: "Alchemy Orb",  chaos: 1.2 },
+      { name: "Transmute",    chaos: 0.3 },
+    ];
+
+    function getTierForValue(chaosValue, strictness) {
+      const mult = STRICTNESS_MULT[strictness] || 1.0;
+      const t = BASE_THRESHOLDS.currency;
+      if (chaosValue >= t.s * mult) return "s";
+      if (chaosValue >= t.a * mult) return "a";
+      if (chaosValue >= t.b * mult) return "b";
+      if (chaosValue >= t.c * mult) return "c";
+      return "e";
+    }
+
+    // -----------------------------------------------------------------------
+    // Color presets (applied to tier styles on selection)
+    // -----------------------------------------------------------------------
+    const COLOR_PRESETS = {
+      default: {
+        label: "Default",
+        desc: "Standard POE2 filter colors",
+        tiers: {}, // empty = use DEFAULT_TIER_STYLES as-is
+      },
+      colorblind: {
+        label: "Colorblind Safe",
+        desc: "Blue-orange palette (deuteranopia/protanopia)",
+        tiers: {
+          s:  { text_color: "#ffffff", border_color: "#0066ff", bg_color: "#0055dd" },
+          a:  { text_color: "#000000", border_color: "#ff8800", bg_color: "#ff8800" },
+          b:  { text_color: "#ffffff", border_color: "#7733cc", bg_color: "#6633aa" },
+          c:  { text_color: "#000000", border_color: "#ddbb00", bg_color: "#ddbb00" },
+          d:  { text_color: "#ffffff", border_color: "#008888", bg_color: "#007777" },
+          e:  { text_color: "#c8c8c8", border_color: "#000000", bg_color: "#000000" },
+          t1: { text_color: "#ffffff", border_color: "#0066ff", bg_color: "#0055dd" },
+          t2: { text_color: "#000000", border_color: "#ff8800", bg_color: "#ff8800" },
+          t3: { text_color: "#bc6025", border_color: "#bc6025", bg_color: "#000000" },
+          hideable: { text_color: "#c8c8c8", border_color: "#000000", bg_color: "#000000" },
+        },
+      },
+      high_contrast: {
+        label: "High Contrast",
+        desc: "Maximum visibility for all tiers",
+        tiers: {
+          s:  { text_color: "#ffffff", border_color: "#ff0000", bg_color: "#cc0000" },
+          a:  { text_color: "#000000", border_color: "#ffaa00", bg_color: "#ffaa00" },
+          b:  { text_color: "#000000", border_color: "#00cc00", bg_color: "#00cc00" },
+          c:  { text_color: "#ffffff", border_color: "#0088ff", bg_color: "#0066cc" },
+          d:  { text_color: "#000000", border_color: "#cc66ff", bg_color: "#aa44dd" },
+          e:  { text_color: "#999999", border_color: "#333333", bg_color: "#111111" },
+          t1: { text_color: "#ffffff", border_color: "#ff0000", bg_color: "#cc0000" },
+          t2: { text_color: "#000000", border_color: "#ffaa00", bg_color: "#ffaa00" },
+          t3: { text_color: "#ffffff", border_color: "#0088ff", bg_color: "#0066cc" },
+          hideable: { text_color: "#999999", border_color: "#333333", bg_color: "#111111" },
+        },
+      },
+    };
+
+    // Get effective tier style: preset base → user overrides on top
+    function getEffectiveTierStyle(tier, tierStyles, colorPreset) {
+      const presetColors = COLOR_PRESETS[colorPreset]?.tiers[tier] || {};
+      return { ...DEFAULT_TIER_STYLES[tier], ...presetColors, ...(tierStyles[tier] || {}) };
+    }
 
     // -----------------------------------------------------------------------
     // API helper
@@ -423,6 +550,7 @@
       const tabs = [
         { id: "overlay", label: "Overlay" },
         { id: "filter", label: "Loot Filter" },
+        { id: "watchlist", label: "Watchlist" },
       ];
 
       return (
@@ -496,12 +624,12 @@
     // -----------------------------------------------------------------------
     // StrictnessSelector
     // -----------------------------------------------------------------------
-    function StrictnessSelector({ value, onChange }) {
+    function StrictnessSelector({ value, onChange, colorPreset, tierStyles }) {
       const presets = [
-        { id: "relaxed", label: "Relaxed", desc: "0.5x thresholds" },
+        { id: "relaxed", label: "Relaxed", desc: "Show more items" },
         { id: "normal", label: "Normal", desc: "Default" },
-        { id: "strict", label: "Strict", desc: "2x thresholds" },
-        { id: "very_strict", label: "Very Strict", desc: "4x thresholds" },
+        { id: "strict", label: "Strict", desc: "Higher value only" },
+        { id: "very_strict", label: "Very Strict", desc: "Top items only" },
       ];
 
       return (
@@ -528,6 +656,56 @@
                 </button>
               );
             })}
+          </div>
+
+          {/* Dynamic sample items — items shift tiers as strictness changes */}
+          <div style={{
+            marginTop: 12, padding: "10px 14px",
+            background: T.input, border: `1px solid ${T.border}`, borderRadius: 6,
+          }}>
+            <div style={{ fontSize: 9, color: T.textMuted, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>
+              How items are classified at {presets.find(p => p.id === value)?.label || "Normal"}
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {STRICTNESS_SAMPLES.map(item => {
+                const tier = getTierForValue(item.chaos, value);
+                const s = getEffectiveTierStyle(tier, tierStyles || {}, colorPreset || "default");
+                const scaledFont = Math.max(9, Math.round(s.font_size * 0.32));
+                return (
+                  <div key={item.name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                    <div style={{
+                      display: "inline-flex", alignItems: "center",
+                      padding: "1px 8px",
+                      backgroundColor: s.bg_color || "#000",
+                      border: `2px solid ${s.border_color || "#000"}`,
+                      borderRadius: 2,
+                      color: s.text_color || "#fff",
+                      fontSize: scaledFont,
+                      fontWeight: 600,
+                      fontFamily: "'JetBrains Mono', monospace",
+                      whiteSpace: "nowrap", lineHeight: 1.4,
+                      transition: "all 0.2s ease",
+                    }}>{item.name}</div>
+                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                      <span style={{ fontSize: 9, color: T.gold, fontWeight: 600 }}>{TIER_LABELS[tier]}</span>
+                      <span style={{ fontSize: 9, color: T.textMuted, ...MONO }}>~{item.chaos}c</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Threshold reference row */}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, paddingTop: 8, borderTop: `1px solid ${T.border}33` }}>
+              {["s", "a", "b", "c", "e"].map(tier => {
+                const threshold = getEffectiveThreshold(tier, "currency", value);
+                return (
+                  <span key={tier} style={{ fontSize: 9, color: T.textMuted, ...MONO }}>
+                    {TIER_LABELS[tier]}: {threshold === 0 ? "all" : formatChaos(threshold)}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         </div>
       );
@@ -561,35 +739,98 @@
     }
 
     // -----------------------------------------------------------------------
+    // StylePreview — mimics a POE2 ground label with current style settings
+    // -----------------------------------------------------------------------
+    function StylePreview({ style: s, label }) {
+      // Scale font: filter uses 18-45, preview scales to ~40% for compact display
+      const scaledFont = Math.max(9, Math.round(s.font_size * 0.38));
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
+          <div style={{
+            display: "inline-flex", alignItems: "center",
+            padding: "1px 8px",
+            backgroundColor: s.bg_color || "#000",
+            border: `2px solid ${s.border_color || "#000"}`,
+            borderRadius: 2,
+            color: s.text_color || "#fff",
+            fontSize: scaledFont,
+            fontWeight: 600,
+            fontFamily: "'JetBrains Mono', monospace",
+            whiteSpace: "nowrap",
+            lineHeight: 1.4,
+            minWidth: 60,
+          }}>
+            {label}
+          </div>
+          <div style={{ display: "flex", gap: 4, alignItems: "center", height: 12 }}>
+            {s.sound_enabled && (
+              <Tooltip text={`Sound #${s.sound_id}`}>
+                <span style={{ fontSize: 10, cursor: "default" }}>&#128264;</span>
+              </Tooltip>
+            )}
+            {s.beam_enabled && (
+              <Tooltip text={`${s.beam_color} beam`}>
+                <span style={{
+                  display: "inline-block", width: 3, height: 10, borderRadius: 1,
+                  background: s.beam_color === "Red" ? "#ff4444" : s.beam_color === "Yellow" ? "#ffdd44" :
+                    s.beam_color === "Blue" ? "#4488ff" : s.beam_color === "Orange" ? "#ff8844" :
+                    s.beam_color === "Brown" ? "#aa7744" : "#888",
+                  boxShadow: `0 0 4px ${s.beam_color === "Red" ? "#ff4444" : s.beam_color === "Yellow" ? "#ffdd44" :
+                    s.beam_color === "Blue" ? "#4488ff" : s.beam_color === "Orange" ? "#ff8844" :
+                    s.beam_color === "Brown" ? "#aa7744" : "#888"}`,
+                }} />
+              </Tooltip>
+            )}
+            {s.minimap_enabled && (
+              <Tooltip text="Minimap icon">
+                <span style={{ fontSize: 8, color: T.textSecond }}>&#9670;</span>
+              </Tooltip>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
     // TierRow — per-tier controls within a section accordion
     // -----------------------------------------------------------------------
-    function TierRow({ tier, style: tierStyle, onChange }) {
-      const s = { ...DEFAULT_TIER_STYLES[tier], ...tierStyle };
+    function TierRow({ tier, style: tierStyle, onChange, thresholdType, strictness, colorPreset }) {
+      const s = getEffectiveTierStyle(tier, { [tier]: tierStyle }, colorPreset || "default");
 
       const updateField = (field, val) => {
         onChange({ ...tierStyle, [field]: val });
       };
 
+      const threshold = thresholdType ? getEffectiveThreshold(tier, thresholdType, strictness || "normal") : null;
       const cellStyle = { display: "flex", alignItems: "center", gap: 6, minWidth: 0 };
       const miniLabel = { fontSize: 9, color: T.textMuted, letterSpacing: "0.05em", textTransform: "uppercase" };
 
       return (
         <div style={{
           display: "grid",
-          gridTemplateColumns: "70px 80px 1fr 1fr 1fr 50px",
+          gridTemplateColumns: "55px minmax(80px, auto) 60px 1fr 1fr 1fr 50px",
           gap: 10, alignItems: "center",
           padding: "8px 0",
           borderBottom: `1px solid ${T.border}22`,
         }}>
-          {/* Tier label */}
-          <div style={{ fontWeight: 600, fontSize: 12, color: T.gold }}>{TIER_LABELS[tier] || tier}</div>
+          {/* Tier label + threshold */}
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 12, color: T.gold }}>{TIER_LABELS[tier] || tier}</div>
+            {threshold !== null && (
+              <div style={{ fontSize: 9, color: T.textMuted, ...MONO }}>{threshold === 0 ? "all" : formatChaos(threshold)}</div>
+            )}
+          </div>
+
+          {/* Preview */}
+          <StylePreview style={s} label={TIER_PREVIEW_NAMES[tier] || "Item"} />
 
           {/* Font size */}
           <div>
             <input
               type="number" min={18} max={45} value={s.font_size}
               onChange={e => updateField("font_size", parseInt(e.target.value) || 32)}
-              style={{ ...FIELD_INPUT, width: 60, padding: "4px 6px", fontSize: 11, textAlign: "center" }}
+              style={{ ...FIELD_INPUT, width: 52, padding: "4px 6px", fontSize: 11, textAlign: "center" }}
             />
           </div>
 
@@ -650,7 +891,7 @@
     // -----------------------------------------------------------------------
     // SectionRow — accordion for one economy category
     // -----------------------------------------------------------------------
-    function SectionRow({ section, visible, tierStyles, onVisibilityChange, onTierStyleChange }) {
+    function SectionRow({ section, visible, tierStyles, onVisibilityChange, onTierStyleChange, strictness, colorPreset }) {
       const [expanded, setExpanded] = useState(false);
 
       return (
@@ -684,11 +925,12 @@
               {/* Column headers */}
               <div style={{
                 display: "grid",
-                gridTemplateColumns: "70px 80px 1fr 1fr 1fr 50px",
+                gridTemplateColumns: "55px minmax(80px, auto) 60px 1fr 1fr 1fr 50px",
                 gap: 10, padding: "4px 0 6px",
                 fontSize: 9, color: T.textMuted, letterSpacing: "0.08em", textTransform: "uppercase",
               }}>
                 <div>Tier</div>
+                <div>Preview</div>
                 <div>Font</div>
                 <div>Sound</div>
                 <div>Beam</div>
@@ -702,7 +944,162 @@
                   tier={tier}
                   style={tierStyles[tier] || {}}
                   onChange={(newStyle) => onTierStyleChange(tier, newStyle)}
+                  thresholdType={section.thresholdType}
+                  strictness={strictness}
+                  colorPreset={colorPreset}
                 />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // GearRow — accordion with style controls + per-class toggles
+    // -----------------------------------------------------------------------
+    function GearRow({ section, visible, style: gearStyle, classVisibility, onVisibilityChange, onStyleChange, onClassToggle }) {
+      const [expanded, setExpanded] = useState(false);
+      const s = { ...(DEFAULT_GEAR_STYLES[section.id] || DEFAULT_GEAR_STYLES.gear_rare), ...gearStyle };
+
+      const updateField = (field, val) => {
+        onStyleChange({ ...gearStyle, [field]: val });
+      };
+
+      const cellStyle = { display: "flex", alignItems: "center", gap: 6, minWidth: 0 };
+      const miniLabel = { fontSize: 9, color: T.textMuted, letterSpacing: "0.05em", textTransform: "uppercase" };
+
+      const hiddenCount = GEAR_CLASSES.reduce((sum, cat) =>
+        sum + cat.classes.filter(c => classVisibility[c] === false).length, 0);
+
+      return (
+        <div style={{ border: `1px solid ${T.border}`, borderRadius: 6, marginBottom: 8, overflow: "hidden" }}>
+          {/* Header row */}
+          <div
+            style={{
+              display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+              background: expanded ? T.input : "transparent",
+              cursor: "pointer", userSelect: "none",
+            }}
+            onClick={() => setExpanded(!expanded)}
+          >
+            <div onClick={e => e.stopPropagation()}>
+              <Toggle size="small" value={visible !== false}
+                onChange={(v) => onVisibilityChange(v)} />
+            </div>
+            <div style={{ fontWeight: 600, fontSize: 13, color: visible !== false ? T.text : T.textMuted, minWidth: 160 }}>
+              {section.label}
+            </div>
+            {hiddenCount > 0 && (
+              <div style={{ fontSize: 10, color: T.amber, fontWeight: 500 }}>
+                {hiddenCount} class{hiddenCount > 1 ? "es" : ""} hidden
+              </div>
+            )}
+            <div style={{ flex: 1 }} />
+            <div style={{
+              fontSize: 11, color: T.textSecond,
+              transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+              transition: "transform 0.15s",
+            }}>&#9660;</div>
+          </div>
+
+          {/* Expanded content */}
+          {expanded && (
+            <div style={{ borderTop: `1px solid ${T.border}`, padding: "12px 14px" }}>
+              {/* Style controls row */}
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(80px, auto) 60px 1fr 1fr 1fr 50px",
+                gap: 10, alignItems: "center",
+                padding: "0 0 12px",
+                borderBottom: `1px solid ${T.border}22`,
+                marginBottom: 12,
+              }}>
+                <div>
+                  <div style={miniLabel}>Preview</div>
+                  <StylePreview style={s} label={TIER_PREVIEW_NAMES[section.id] || "Item"} />
+                </div>
+                <div>
+                  <div style={miniLabel}>Font</div>
+                  <input
+                    type="number" min={18} max={45} value={s.font_size}
+                    onChange={e => updateField("font_size", parseInt(e.target.value) || 28)}
+                    style={{ ...FIELD_INPUT, width: 52, padding: "4px 6px", fontSize: 11, textAlign: "center" }}
+                  />
+                </div>
+
+                <div style={cellStyle}>
+                  <Toggle size="small" value={s.sound_enabled} onChange={v => updateField("sound_enabled", v)} />
+                  <select
+                    value={s.sound_id}
+                    onChange={e => updateField("sound_id", parseInt(e.target.value))}
+                    disabled={!s.sound_enabled}
+                    style={{ ...FIELD_INPUT, width: 52, padding: "3px 4px", fontSize: 10, opacity: s.sound_enabled ? 1 : 0.4 }}
+                  >
+                    {SOUND_IDS.map(id => <option key={id} value={id}>#{id}</option>)}
+                  </select>
+                  <span style={miniLabel}>Sound</span>
+                </div>
+
+                <div style={cellStyle}>
+                  <Toggle size="small" value={s.beam_enabled} onChange={v => updateField("beam_enabled", v)} />
+                  <select
+                    value={s.beam_color}
+                    onChange={e => updateField("beam_color", e.target.value)}
+                    disabled={!s.beam_enabled}
+                    style={{ ...FIELD_INPUT, width: 70, padding: "3px 4px", fontSize: 10, opacity: s.beam_enabled ? 1 : 0.4 }}
+                  >
+                    {BEAM_COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <span style={miniLabel}>Beam</span>
+                </div>
+
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  <Tooltip text="Text color">
+                    <input type="color" value={s.text_color} onChange={e => updateField("text_color", e.target.value)}
+                      style={{ width: 24, height: 24, border: `1px solid ${T.border}`, borderRadius: 3, cursor: "pointer", padding: 0, background: "transparent" }} />
+                  </Tooltip>
+                  <Tooltip text="Border color">
+                    <input type="color" value={s.border_color} onChange={e => updateField("border_color", e.target.value)}
+                      style={{ width: 24, height: 24, border: `1px solid ${T.border}`, borderRadius: 3, cursor: "pointer", padding: 0, background: "transparent" }} />
+                  </Tooltip>
+                  <Tooltip text="Background color">
+                    <input type="color" value={s.bg_color} onChange={e => updateField("bg_color", e.target.value)}
+                      style={{ width: 24, height: 24, border: `1px solid ${T.border}`, borderRadius: 3, cursor: "pointer", padding: 0, background: "transparent" }} />
+                  </Tooltip>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <Toggle size="small" value={s.minimap_enabled} onChange={v => updateField("minimap_enabled", v)} />
+                  <span style={miniLabel}>Map</span>
+                </div>
+              </div>
+
+              {/* Per-class toggles */}
+              {GEAR_CLASSES.map(cat => (
+                <div key={cat.category} style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: T.textSecond, letterSpacing: "0.06em", marginBottom: 6 }}>{cat.category}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
+                    {cat.classes.map(cls => {
+                      const isVisible = classVisibility[cls] !== false;
+                      return (
+                        <label key={cls} style={{
+                          display: "flex", alignItems: "center", gap: 5, cursor: "pointer",
+                          fontSize: 11, color: isVisible ? T.text : T.textMuted,
+                          padding: "3px 0", minWidth: 140,
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={isVisible}
+                            onChange={e => onClassToggle(cls, e.target.checked)}
+                            style={{ accentColor: T.gold, cursor: "pointer" }}
+                          />
+                          {cls}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -717,6 +1114,8 @@
       const strictness = settings.filter_strictness || "normal";
       const tierStyles = settings.filter_tier_styles || {};
       const sectionVisibility = settings.filter_section_visibility || {};
+      const gearClasses = settings.filter_gear_classes || {};
+      const colorPreset = settings.filter_color_preset || "default";
 
       const handleStrictnessChange = (val) => {
         onUpdate({ filter_strictness: val });
@@ -730,11 +1129,78 @@
         onUpdate({ filter_tier_styles: { ...tierStyles, [tier]: style } });
       };
 
+      const handleGearClassToggle = (gearId, className, visible) => {
+        const current = gearClasses[gearId] || {};
+        onUpdate({ filter_gear_classes: { ...gearClasses, [gearId]: { ...current, [className]: visible } } });
+      };
+
+      const handleColorPreset = (presetId) => {
+        const preset = COLOR_PRESETS[presetId];
+        if (!preset) return;
+        const newStyles = { ...tierStyles };
+        if (presetId === "default") {
+          // Clear color overrides, keep sound/beam/minimap/font settings
+          for (const tier of Object.keys(newStyles)) {
+            if (!newStyles[tier]) continue;
+            const { text_color, border_color, bg_color, ...rest } = newStyles[tier];
+            newStyles[tier] = Object.keys(rest).length > 0 ? rest : undefined;
+          }
+          // Remove undefined entries
+          for (const k of Object.keys(newStyles)) { if (!newStyles[k]) delete newStyles[k]; }
+        } else {
+          // Apply preset colors on top of existing settings
+          for (const [tier, colors] of Object.entries(preset.tiers)) {
+            newStyles[tier] = { ...(tierStyles[tier] || {}), ...colors };
+          }
+        }
+        onUpdate({ filter_tier_styles: newStyles, filter_color_preset: presetId });
+      };
+
       return (
         <div>
-          {/* Strictness selector */}
+          {/* Strictness + Color Preset */}
           <div style={{ ...CARD, marginBottom: 20 }}>
-            <StrictnessSelector value={strictness} onChange={handleStrictnessChange} />
+            <StrictnessSelector value={strictness} onChange={handleStrictnessChange} colorPreset={colorPreset} tierStyles={tierStyles} />
+
+            {/* Color preset selector */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ ...LABEL, marginBottom: 10 }}>Color Preset</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {Object.entries(COLOR_PRESETS).map(([id, preset]) => {
+                  const active = colorPreset === id;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => handleColorPreset(id)}
+                      style={{
+                        ...BTN,
+                        background: active ? T.gold : T.input,
+                        color: active ? "#0d0b08" : T.textSecond,
+                        border: `1px solid ${active ? T.gold : T.border}`,
+                        padding: "6px 14px",
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: 11 }}>{preset.label}</div>
+                      <div style={{ fontSize: 9, opacity: 0.7, marginTop: 1 }}>{preset.desc}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Mini preview of preset colors */}
+              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                {["s", "a", "b", "c", "d", "e"].map(tier => {
+                  const s = getEffectiveTierStyle(tier, tierStyles, colorPreset);
+                  return (
+                    <div key={tier} style={{
+                      padding: "1px 6px", borderRadius: 2,
+                      backgroundColor: s.bg_color, border: `2px solid ${s.border_color}`,
+                      color: s.text_color, fontSize: 9, fontWeight: 600,
+                      fontFamily: "'JetBrains Mono', monospace", lineHeight: 1.5,
+                    }}>{TIER_LABELS[tier]}</div>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Auto-update toggle */}
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -747,10 +1213,40 @@
             </div>
           </div>
 
-          {/* Section accordions */}
+          {/* Gear & Uniques */}
+          <div style={{ ...CARD, marginBottom: 20 }}>
+            <div style={{ ...LABEL, marginBottom: 12 }}>Gear & Uniques</div>
+
+            {/* Uniques — tier accordion like economy sections */}
+            <SectionRow
+              section={UNIQUE_SECTION}
+              visible={sectionVisibility[UNIQUE_SECTION.id]}
+              tierStyles={tierStyles}
+              onVisibilityChange={(v) => handleSectionVisibility(UNIQUE_SECTION.id, v)}
+              onTierStyleChange={handleTierStyleChange}
+              strictness={strictness}
+              colorPreset={colorPreset}
+            />
+
+            {/* Gear categories — accordion with class toggles */}
+            {GEAR_SECTIONS.map(section => (
+              <GearRow
+                key={section.id}
+                section={section}
+                visible={sectionVisibility[section.id]}
+                style={tierStyles[section.id] || {}}
+                classVisibility={gearClasses[section.id] || {}}
+                onVisibilityChange={(v) => handleSectionVisibility(section.id, v)}
+                onStyleChange={(style) => handleTierStyleChange(section.id, style)}
+                onClassToggle={(cls, vis) => handleGearClassToggle(section.id, cls, vis)}
+              />
+            ))}
+          </div>
+
+          {/* Economy section accordions */}
           <div style={{ ...CARD, marginBottom: 20 }}>
             <div style={{ ...LABEL, marginBottom: 12 }}>Economy Sections</div>
-            {FILTER_SECTIONS.map(section => (
+            {ECONOMY_SECTIONS.map(section => (
               <SectionRow
                 key={section.id}
                 section={section}
@@ -758,6 +1254,8 @@
                 tierStyles={tierStyles}
                 onVisibilityChange={(v) => handleSectionVisibility(section.id, v)}
                 onTierStyleChange={handleTierStyleChange}
+                strictness={strictness}
+                colorPreset={colorPreset}
               />
             ))}
           </div>
@@ -782,6 +1280,624 @@
               </div>
             </div>
           </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Watchlist — BaseTypeDropdown
+    // -----------------------------------------------------------------------
+    function BaseTypeDropdown({ categories, value, onChange }) {
+      const [search, setSearch] = useState("");
+      const [open, setOpen] = useState(false);
+      const ref = useRef(null);
+
+      useEffect(() => {
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+      }, []);
+
+      const matches = [];
+      if (search.length >= 1) {
+        const lower = search.toLowerCase();
+        for (const cat of categories) {
+          for (const entry of cat.entries) {
+            const label = entry.name ? `${entry.name} ${entry.type}` : entry.type;
+            if (label.toLowerCase().includes(lower)) {
+              matches.push({ label, type: entry.type, name: entry.name, category: cat.label });
+              if (matches.length >= 30) break;
+            }
+          }
+          if (matches.length >= 30) break;
+        }
+      }
+
+      return (
+        <div ref={ref} style={{ position: "relative" }}>
+          <input
+            value={search || value || ""}
+            onChange={(e) => { setSearch(e.target.value); setOpen(true); if (!e.target.value) onChange("", ""); }}
+            onFocus={() => { if (search.length >= 1) setOpen(true); }}
+            placeholder="Search base types..."
+            style={FIELD_INPUT}
+          />
+          {open && matches.length > 0 && (
+            <div style={{
+              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 200,
+              background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 6,
+              maxHeight: 250, overflowY: "auto", marginTop: 2,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.7)",
+            }}>
+              {matches.map((m, i) => (
+                <div key={i}
+                  onClick={() => { onChange(m.type, m.name || ""); setSearch(m.label); setOpen(false); }}
+                  style={{
+                    padding: "6px 12px", cursor: "pointer", fontSize: 12,
+                    borderBottom: `1px solid ${T.border}22`,
+                    color: T.text,
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = T.input}
+                  onMouseLeave={(e) => e.target.style.background = "transparent"}
+                >
+                  <span>{m.label}</span>
+                  <span style={{ float: "right", fontSize: 10, color: T.textMuted }}>{m.category}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Watchlist — StatFilterAutocomplete
+    // -----------------------------------------------------------------------
+    function StatFilterAutocomplete({ stats, filters, onChange }) {
+      const [search, setSearch] = useState("");
+      const [open, setOpen] = useState(false);
+      const ref = useRef(null);
+
+      useEffect(() => {
+        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+      }, []);
+
+      const matches = [];
+      if (search.length >= 2) {
+        const lower = search.toLowerCase();
+        const usedIds = new Set(filters.map(f => f.id));
+        for (const stat of stats) {
+          if (usedIds.has(stat.id)) continue;
+          if (stat.text.toLowerCase().includes(lower)) {
+            matches.push(stat);
+            if (matches.length >= 20) break;
+          }
+        }
+      }
+
+      const addFilter = (stat) => {
+        if (filters.length >= 5) return;
+        onChange([...filters, { id: stat.id, text: stat.text, min: "", max: "" }]);
+        setSearch("");
+        setOpen(false);
+      };
+
+      const removeFilter = (idx) => {
+        onChange(filters.filter((_, i) => i !== idx));
+      };
+
+      const updateFilter = (idx, field, value) => {
+        const updated = [...filters];
+        updated[idx] = { ...updated[idx], [field]: value };
+        onChange(updated);
+      };
+
+      return (
+        <div>
+          {/* Existing filters */}
+          {filters.map((f, i) => (
+            <div key={f.id} style={{
+              display: "flex", alignItems: "center", gap: 8, marginBottom: 6,
+              background: T.input, border: `1px solid ${T.border}`, borderRadius: 5, padding: "5px 10px",
+            }}>
+              <span style={{ flex: 1, fontSize: 11, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {f.text}
+              </span>
+              <input
+                type="number" placeholder="min" value={f.min}
+                onChange={(e) => updateFilter(i, "min", e.target.value)}
+                style={{ ...FIELD_INPUT, width: 60, padding: "3px 6px", fontSize: 11, textAlign: "center" }}
+              />
+              <input
+                type="number" placeholder="max" value={f.max}
+                onChange={(e) => updateFilter(i, "max", e.target.value)}
+                style={{ ...FIELD_INPUT, width: 60, padding: "3px 6px", fontSize: 11, textAlign: "center" }}
+              />
+              <button onClick={() => removeFilter(i)} style={{
+                background: "transparent", border: "none", color: T.red, cursor: "pointer",
+                fontSize: 14, fontWeight: 700, padding: "0 4px", lineHeight: 1,
+              }}>×</button>
+            </div>
+          ))}
+
+          {/* Search input */}
+          {filters.length < 5 && (
+            <div ref={ref} style={{ position: "relative" }}>
+              <input
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setOpen(true); }}
+                onFocus={() => { if (search.length >= 2) setOpen(true); }}
+                placeholder="Search stat filters... (min 2 chars)"
+                style={FIELD_INPUT}
+              />
+              {open && matches.length > 0 && (
+                <div style={{
+                  position: "absolute", top: "100%", left: 0, right: 0, zIndex: 200,
+                  background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 6,
+                  maxHeight: 200, overflowY: "auto", marginTop: 2,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.7)",
+                }}>
+                  {matches.map((stat) => (
+                    <div key={stat.id}
+                      onClick={() => addFilter(stat)}
+                      style={{
+                        padding: "6px 12px", cursor: "pointer", fontSize: 11,
+                        borderBottom: `1px solid ${T.border}22`, color: T.text,
+                      }}
+                      onMouseEnter={(e) => e.target.style.background = T.input}
+                      onMouseLeave={(e) => e.target.style.background = "transparent"}
+                    >
+                      <span>{stat.text}</span>
+                      <span style={{ float: "right", fontSize: 9, color: T.textMuted }}>{stat.type}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Watchlist — WatchlistQueryEditor
+    // -----------------------------------------------------------------------
+    function WatchlistQueryEditor({ query, tradeStats, tradeItems, onSave, onCancel }) {
+      const [label, setLabel] = useState(query?.label || "");
+      const [itemName, setItemName] = useState(query?.item_name || "");
+      const [baseType, setBaseType] = useState(query?.base_type || "");
+      const [rarity, setRarity] = useState(query?.rarity || "any");
+      const [ilvlMin, setIlvlMin] = useState(query?.ilvl_min || "");
+      const [qualityMin, setQualityMin] = useState(query?.quality_min || "");
+      const [socketsMin, setSocketsMin] = useState(query?.sockets_min || "");
+      const [onlineOnly, setOnlineOnly] = useState(query?.online_only !== false);
+      const [statFilters, setStatFilters] = useState(query?.stat_filters || []);
+
+      const buildQueryBody = () => {
+        const q = { status: { option: onlineOnly ? "online" : "any" } };
+        const filters = {};
+
+        if (itemName) q.name = itemName;
+        if (baseType) q.type = baseType;
+
+        // Rarity filter
+        if (rarity !== "any") {
+          filters.type_filters = { filters: { rarity: { option: rarity === "unique" ? "unique" : rarity } } };
+        }
+
+        // Equipment filters
+        const equipFilters = {};
+        if (socketsMin) equipFilters.rune_sockets = { min: parseInt(socketsMin) };
+        if (Object.keys(equipFilters).length > 0) {
+          filters.equipment_filters = { filters: equipFilters };
+        }
+
+        // Misc filters
+        const miscFilters = {};
+        if (ilvlMin) miscFilters.ilvl = { min: parseInt(ilvlMin) };
+        if (qualityMin) miscFilters.quality = { min: parseInt(qualityMin) };
+        if (Object.keys(miscFilters).length > 0) {
+          filters.misc_filters = { filters: miscFilters };
+        }
+
+        if (Object.keys(filters).length > 0) q.filters = filters;
+
+        // Stat filters
+        if (statFilters.length > 0) {
+          const statGroup = { type: "and", filters: [] };
+          for (const sf of statFilters) {
+            const val = {};
+            if (sf.min !== "" && sf.min !== undefined) val.min = parseFloat(sf.min);
+            if (sf.max !== "" && sf.max !== undefined) val.max = parseFloat(sf.max);
+            if (Object.keys(val).length > 0) {
+              statGroup.filters.push({ id: sf.id, value: val });
+            } else {
+              statGroup.filters.push({ id: sf.id });
+            }
+          }
+          q.stats = [statGroup];
+        }
+
+        return { query: q, sort: { price: "asc" } };
+      };
+
+      const handleSave = () => {
+        const body = buildQueryBody();
+        onSave({
+          id: query?.id || crypto.randomUUID(),
+          label: label || "Untitled Query",
+          enabled: query?.enabled !== false,
+          item_name: itemName,
+          base_type: baseType,
+          rarity,
+          ilvl_min: ilvlMin,
+          quality_min: qualityMin,
+          sockets_min: socketsMin,
+          online_only: onlineOnly,
+          stat_filters: statFilters,
+          body,
+        });
+      };
+
+      return (
+        <div style={{ padding: "12px 0" }}>
+          {/* Row 1: Label */}
+          <div style={{ marginBottom: 10 }}>
+            <label style={FIELD_LABEL}>Label</label>
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Headhunter, ilvl 82 bases..."
+              style={FIELD_INPUT} autoFocus />
+          </div>
+
+          {/* Row 2: Item Name + Base Type */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
+            <div>
+              <label style={FIELD_LABEL}>Item Name (for uniques)</label>
+              <input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="e.g. Headhunter"
+                style={FIELD_INPUT} />
+            </div>
+            <div>
+              <label style={FIELD_LABEL}>Base Type</label>
+              <BaseTypeDropdown categories={tradeItems} value={baseType}
+                onChange={(type, name) => { setBaseType(type); if (name && !itemName) setItemName(name); }} />
+            </div>
+          </div>
+
+          {/* Row 3: Rarity, ilvl, Quality, Sockets */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
+            <div>
+              <label style={FIELD_LABEL}>Rarity</label>
+              <select value={rarity} onChange={(e) => setRarity(e.target.value)} style={{ ...FIELD_INPUT, appearance: "auto" }}>
+                <option value="any">Any</option>
+                <option value="unique">Unique</option>
+                <option value="rare">Rare</option>
+                <option value="magic">Magic</option>
+                <option value="normal">Normal</option>
+              </select>
+            </div>
+            <div>
+              <label style={FIELD_LABEL}>Min Item Level</label>
+              <input type="number" value={ilvlMin} onChange={(e) => setIlvlMin(e.target.value)} placeholder="--"
+                min={1} max={100} style={FIELD_INPUT} />
+            </div>
+            <div>
+              <label style={FIELD_LABEL}>Min Quality</label>
+              <input type="number" value={qualityMin} onChange={(e) => setQualityMin(e.target.value)} placeholder="--"
+                min={0} max={30} style={FIELD_INPUT} />
+            </div>
+            <div>
+              <label style={FIELD_LABEL}>Min Sockets</label>
+              <input type="number" value={socketsMin} onChange={(e) => setSocketsMin(e.target.value)} placeholder="--"
+                min={1} max={3} style={FIELD_INPUT} />
+            </div>
+          </div>
+
+          {/* Row 4: Online toggle */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <Toggle value={onlineOnly} onChange={setOnlineOnly} size="small" />
+            <span style={{ fontSize: 12, color: T.text }}>Online only</span>
+          </div>
+
+          {/* Row 5: Stat Filters */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={FIELD_LABEL}>Stat Filters (up to 5)</label>
+            <StatFilterAutocomplete stats={tradeStats} filters={statFilters} onChange={setStatFilters} />
+          </div>
+
+          {/* Row 6: Save / Cancel */}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button onClick={onCancel} style={{ ...BTN, background: T.input, border: `1px solid ${T.border}`, color: T.textSecond }}>Cancel</button>
+            <button onClick={handleSave} style={BTN_GOLD_ACTIVE}>Save Query</button>
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Watchlist — WatchlistListingsTable
+    // -----------------------------------------------------------------------
+    function WatchlistListingsTable({ listings }) {
+      const [copiedIdx, setCopiedIdx] = useState(null);
+
+      if (!listings || listings.length === 0) return null;
+
+      const copyWhisper = (whisper, idx) => {
+        navigator.clipboard.writeText(whisper).then(() => {
+          setCopiedIdx(idx);
+          setTimeout(() => setCopiedIdx(null), 1200);
+        }).catch(() => {});
+      };
+
+      const formatTime = (indexed) => {
+        if (!indexed) return "--";
+        try {
+          const d = new Date(indexed);
+          const now = new Date();
+          const diffMs = now - d;
+          const diffH = Math.floor(diffMs / 3600000);
+          if (diffH < 1) return `${Math.floor(diffMs / 60000)}m ago`;
+          if (diffH < 24) return `${diffH}h ago`;
+          return `${Math.floor(diffH / 24)}d ago`;
+        } catch { return "--"; }
+      };
+
+      return (
+        <div style={{ maxHeight: 200, overflowY: "auto", marginTop: 8 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, ...MONO }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${T.border}`, color: T.textMuted, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600 }}>Price</th>
+                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600 }}>Account</th>
+                <th style={{ textAlign: "left", padding: "4px 8px", fontWeight: 600 }}>Listed</th>
+                <th style={{ textAlign: "right", padding: "4px 8px", fontWeight: 600 }}>Whisper</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listings.map((l, i) => (
+                <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
+                  <td style={{ padding: "5px 8px", color: T.gold, fontWeight: 600 }}>{l.price}</td>
+                  <td style={{ padding: "5px 8px", color: T.textSecond }}>{l.account}</td>
+                  <td style={{ padding: "5px 8px", color: T.textMuted }}>{formatTime(l.indexed)}</td>
+                  <td style={{ padding: "5px 8px", textAlign: "right" }}>
+                    {l.whisper && (
+                      <button onClick={() => copyWhisper(l.whisper, i)} style={{
+                        ...BTN, padding: "2px 10px", fontSize: 10,
+                        background: copiedIdx === i ? T.green : T.input,
+                        color: copiedIdx === i ? "#fff" : T.textSecond,
+                        border: `1px solid ${copiedIdx === i ? T.green : T.border}`,
+                      }}>{copiedIdx === i ? "Copied" : "Copy"}</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Watchlist — WatchlistQueryCard
+    // -----------------------------------------------------------------------
+    function WatchlistQueryCard({ query, result, tradeStats, tradeItems, onUpdate, onDelete, onRefresh }) {
+      const [editing, setEditing] = useState(false);
+      const [expanded, setExpanded] = useState(false);
+
+      const r = result || {};
+      const hasResult = !!r.last_checked;
+      const hasError = !!r.error;
+      const isWaiting = !hasResult && query.enabled !== false;
+      const lastChecked = r.last_checked ? new Date(r.last_checked * 1000).toLocaleTimeString() : "";
+
+      const priceRange = r.price_low && r.price_high
+        ? (r.price_low === r.price_high ? r.price_low : `${r.price_low} — ${r.price_high}`)
+        : (hasResult && !hasError ? `${r.total || 0} found` : "--");
+
+      const handleSave = (updated) => {
+        onUpdate(updated);
+        setEditing(false);
+      };
+
+      return (
+        <div style={{ ...CARD, marginBottom: 10, padding: 0, overflow: "hidden" }}>
+          {/* Header row */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+            borderBottom: (editing || expanded) ? `1px solid ${T.border}` : "none",
+          }}>
+            <div onClick={(e) => e.stopPropagation()}>
+              <Toggle size="small" value={query.enabled !== false}
+                onChange={(v) => onUpdate({ ...query, enabled: v })} />
+            </div>
+
+            <div style={{ flex: 1, cursor: "pointer", minWidth: 0 }} onClick={() => { if (!editing) setExpanded(!expanded); }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: query.enabled !== false ? T.text : T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {query.label || "Untitled Query"}
+              </div>
+            </div>
+
+            {!editing && (
+              <>
+                <div style={{ textAlign: "right", minWidth: 90 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: isWaiting ? T.amber : hasError ? T.red : T.gold, ...MONO }}>
+                    {isWaiting ? "Searching..." : hasError ? "Error" : priceRange}
+                  </div>
+                  {hasResult && (
+                    <div style={{ fontSize: 9, color: T.textMuted }}>
+                      {r.total !== undefined ? `${r.total} listed` : ""}
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: 9, color: T.textMuted, minWidth: 55, textAlign: "right" }}>
+                  {lastChecked}
+                </div>
+
+                <Tooltip text="Refresh now">
+                  <button onClick={() => onRefresh(query.id)} style={{
+                    ...BTN, padding: "4px 8px", fontSize: 12, background: "transparent",
+                    border: `1px solid ${T.border}`, color: T.textSecond, lineHeight: 1,
+                  }}>&#8635;</button>
+                </Tooltip>
+                <Tooltip text="Edit query">
+                  <button onClick={() => setEditing(true)} style={{
+                    ...BTN, padding: "4px 8px", fontSize: 11, background: "transparent",
+                    border: `1px solid ${T.border}`, color: T.textSecond, lineHeight: 1,
+                  }}>&#9998;</button>
+                </Tooltip>
+                <Tooltip text="Delete query">
+                  <button onClick={() => onDelete(query.id)} style={{
+                    ...BTN, padding: "4px 8px", fontSize: 12, background: "transparent",
+                    border: `1px solid ${T.border}`, color: T.red, lineHeight: 1,
+                  }}>&#10005;</button>
+                </Tooltip>
+              </>
+            )}
+          </div>
+
+          {/* Editor */}
+          {editing && (
+            <div style={{ padding: "0 14px 14px" }}>
+              <WatchlistQueryEditor
+                query={query}
+                tradeStats={tradeStats}
+                tradeItems={tradeItems}
+                onSave={handleSave}
+                onCancel={() => setEditing(false)}
+              />
+            </div>
+          )}
+
+          {/* Error message */}
+          {!editing && hasError && (
+            <div style={{ padding: "6px 14px", fontSize: 11, color: T.red }}>
+              {r.error}
+            </div>
+          )}
+
+          {/* Expanded listings */}
+          {!editing && expanded && r.listings && r.listings.length > 0 && (
+            <div style={{ padding: "0 14px 10px" }}>
+              <WatchlistListingsTable listings={r.listings} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // Watchlist — WatchlistTab
+    // -----------------------------------------------------------------------
+    function WatchlistTab({ settings, watchlistResults, onSettingsUpdate, onRefresh }) {
+      const [tradeStats, setTradeStats] = useState([]);
+      const [tradeItems, setTradeItems] = useState([]);
+      const [loaded, setLoaded] = useState(false);
+      const [adding, setAdding] = useState(false);
+
+      const queries = settings.watchlist_queries || [];
+      const pollInterval = settings.watchlist_poll_interval || 300;
+
+      // Lazy-load trade data on first render
+      useEffect(() => {
+        if (loaded) return;
+        setLoaded(true);
+        Promise.all([
+          api("/api/trade-data/stats"),
+          api("/api/trade-data/items"),
+        ]).then(([stats, items]) => {
+          if (Array.isArray(stats)) setTradeStats(stats);
+          if (Array.isArray(items)) setTradeItems(items);
+        });
+      }, [loaded]);
+
+      const saveQueries = (newQueries) => {
+        onSettingsUpdate({ watchlist_queries: newQueries });
+      };
+
+      const handleUpdate = (updated) => {
+        const newQueries = queries.map(q => q.id === updated.id ? updated : q);
+        saveQueries(newQueries);
+      };
+
+      const handleDelete = (id) => {
+        saveQueries(queries.filter(q => q.id !== id));
+      };
+
+      const handleAdd = (newQuery) => {
+        saveQueries([...queries, newQuery]);
+        setAdding(false);
+      };
+
+      const handlePollIntervalChange = (val) => {
+        const clamped = Math.max(60, Math.min(3600, parseInt(val) || 300));
+        onSettingsUpdate({ watchlist_poll_interval: clamped });
+      };
+
+      return (
+        <div>
+          {/* Settings row */}
+          <div style={{ ...CARD, marginBottom: 16, display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={FIELD_LABEL}>Poll Interval</span>
+              <select value={pollInterval} onChange={(e) => handlePollIntervalChange(e.target.value)}
+                style={{ ...FIELD_INPUT, width: "auto", minWidth: 120, padding: "5px 10px", appearance: "auto" }}>
+                <option value={60}>1 minute</option>
+                <option value={120}>2 minutes</option>
+                <option value={300}>5 minutes</option>
+                <option value={600}>10 minutes</option>
+                <option value={900}>15 minutes</option>
+              </select>
+            </div>
+            <div style={{ flex: 1 }} />
+            <div style={{ fontSize: 11, color: T.textMuted }}>
+              {queries.length} / 6 queries
+            </div>
+          </div>
+
+          {/* Query cards */}
+          {queries.map(query => (
+            <WatchlistQueryCard
+              key={query.id}
+              query={query}
+              result={watchlistResults[query.id]}
+              tradeStats={tradeStats}
+              tradeItems={tradeItems}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+              onRefresh={onRefresh}
+            />
+          ))}
+
+          {/* Add query */}
+          {adding ? (
+            <div style={{ ...CARD }}>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: T.gold }}>New Query</div>
+              <WatchlistQueryEditor
+                query={null}
+                tradeStats={tradeStats}
+                tradeItems={tradeItems}
+                onSave={handleAdd}
+                onCancel={() => setAdding(false)}
+              />
+            </div>
+          ) : (
+            queries.length < 6 && (
+              <button onClick={() => setAdding(true)} style={{
+                ...BTN_GOLD, width: "100%", padding: "12px", marginTop: 4,
+                textAlign: "center", fontSize: 13,
+              }}>+ Add Query</button>
+            )
+          )}
+
+          {/* Empty state */}
+          {queries.length === 0 && !adding && (
+            <div style={{ ...CARD, textAlign: "center", padding: 32, marginTop: 8 }}>
+              <div style={{ fontSize: 14, color: T.textMuted, marginBottom: 8 }}>No watchlist queries yet</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>
+                Add a query to track item prices on the trade market.
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -847,13 +1963,14 @@
     // -----------------------------------------------------------------------
     function Dashboard() {
       const [status, setStatus] = useState({ state: "stopped", uptime: 0, stats: { uptime_min: 0, triggers: 0, prices_shown: 0, success_rate: 0, cache_items: 0, last_refresh: "never" } });
-      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {} });
+      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {}, filter_gear_classes: {}, filter_color_preset: "default" });
       const [leagues, setLeagues] = useState([{ value: "Fate of the Vaal", label: "Fate of the Vaal" }]);
       const [logs, setLogs] = useState([]);
       const [autoStartDone, setAutoStartDone] = useState(false);
       const [bugModalOpen, setBugModalOpen] = useState(false);
       const [filterUpdating, setFilterUpdating] = useState(false);
       const [activeTab, setActiveTab] = useState("overlay");
+      const [watchlistResults, setWatchlistResults] = useState({});
       const logRef = useRef(null);
       const autoScrollRef = useRef(true);
 
@@ -885,6 +2002,7 @@
             if (msg.log && msg.log.length > 0) {
               setLogs(msg.log);
             }
+            if (msg.watchlist_results) setWatchlistResults(msg.watchlist_results);
             break;
           case "log":
             setLogs(prev => {
@@ -900,6 +2018,11 @@
             break;
           case "settings":
             if (msg.settings) setSettings(msg.settings);
+            break;
+          case "watchlist_result":
+            if (msg.result) {
+              setWatchlistResults(prev => ({ ...prev, [msg.result.query_id]: msg.result }));
+            }
             break;
         }
       }, []);
@@ -960,6 +2083,10 @@
 
       const handleRestartApp = () => api("/api/restart-app", "POST");
 
+      const handleWatchlistRefresh = (queryId) => {
+        api(`/api/watchlist/refresh/${queryId}`, "POST");
+      };
+
       const handleUpdateFilter = async () => {
         setFilterUpdating(true);
         const res = await api("/api/update-filter", "POST");
@@ -995,6 +2122,14 @@
               onUpdate={handleSettingsUpdate}
               onUpdateFilter={handleUpdateFilter}
               filterUpdating={filterUpdating}
+            />
+          )}
+          {activeTab === "watchlist" && (
+            <WatchlistTab
+              settings={settings}
+              watchlistResults={watchlistResults}
+              onSettingsUpdate={handleSettingsUpdate}
+              onRefresh={handleWatchlistRefresh}
             />
           )}
 

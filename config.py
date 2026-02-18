@@ -88,6 +88,14 @@ TRADE_ITEMS_URL = f"{TRADE_API_BASE}/data/items"
 TRADE_ITEMS_CACHE_FILE = CACHE_DIR / "trade_items.json"
 
 # ─────────────────────────────────────────────
+# Trade Watchlist
+# ─────────────────────────────────────────────
+WATCHLIST_DEFAULT_POLL_INTERVAL = 300   # 5 min between polls per query
+WATCHLIST_MIN_REQUEST_INTERVAL = 2.0    # seconds between any watchlist API calls
+WATCHLIST_FETCH_COUNT = 10              # listings to fetch per query
+WATCHLIST_MAX_QUERIES = 6
+
+# ─────────────────────────────────────────────
 # Loot Filter Updater
 # ─────────────────────────────────────────────
 # POE2 game filter directory (OneDrive-synced Documents)
