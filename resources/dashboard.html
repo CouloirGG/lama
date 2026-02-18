@@ -9,14 +9,122 @@
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
     @keyframes spin { to { transform: rotate(360deg); } }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 100%; height: 100%; overflow: hidden; }
-    body { background: #0d0b08; color: #d4c9a8; font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif; }
-    #root { width: 100%; height: 100%; overflow-y: auto; }
+    html, body { width: 100%; height: 100%; overflow: hidden; margin: 0; padding: 0; }
+    body { background: radial-gradient(ellipse at center, #1a1510 0%, #0d0b08 70%); color: #d4c9a8; font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif; }
+    #root { width: 100%; height: 100%; }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #3a3128; border-radius: 3px; }
     input:focus, select:focus { outline: none; border-color: #c4a456 !important; }
     select option { background: #12100c; color: #d4c9a8; }
+
+    /* POE2 App Frame */
+    .app-frame {
+      position: relative;
+      border: 1px solid #6b5a3e;
+      box-shadow:
+        inset 0 0 60px rgba(196,164,86,0.04),
+        0 0 0 4px #0d0b08,
+        0 0 0 5px #3a3128,
+        0 0 40px rgba(0,0,0,0.5);
+      margin: 8px;
+      height: calc(100vh - 16px);
+      display: flex;
+      flex-direction: column;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    /* Custom window title bar */
+    .window-titlebar {
+      display: flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 4px 0 12px;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    .window-btn {
+      width: 36px; height: 28px;
+      border: none; background: transparent;
+      color: #8c7a5c; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 14px; line-height: 1;
+      transition: background 0.15s, color 0.15s;
+      border-radius: 4px;
+    }
+    .window-btn:hover { background: rgba(196,164,86,0.12); color: #c4a456; }
+    .window-btn-close:hover { background: rgba(200,50,50,0.4); color: #ff6666; }
+
+    /* Gold header divider */
+    .gold-divider {
+      position: relative; height: 1px;
+      background: linear-gradient(90deg, transparent, #6b5a3e 20%, #6b5a3e 80%, transparent);
+      margin: 0;
+    }
+    .gold-divider::after {
+      content: ''; position: absolute;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%) rotate(45deg);
+      width: 6px; height: 6px;
+      background: #c4a456; border: 1px solid #6b5a3e;
+    }
+
+    /* Panel corner accents */
+    .panel {
+      position: relative;
+      transition: box-shadow 0.25s ease;
+    }
+    .panel:hover {
+      box-shadow: 0 0 12px rgba(196,164,86,0.08);
+    }
+    .panel::before, .panel::after {
+      content: ''; position: absolute;
+      width: 10px; height: 10px;
+      pointer-events: none; z-index: 1;
+    }
+    .panel::before {
+      top: -1px; left: -1px;
+      border-top: 1.5px solid #6b5a3e;
+      border-left: 1.5px solid #6b5a3e;
+    }
+    .panel::after {
+      bottom: -1px; right: -1px;
+      border-bottom: 1.5px solid #6b5a3e;
+      border-right: 1.5px solid #6b5a3e;
+    }
+
+    /* Tab styling */
+    .poe-tab {
+      position: relative;
+      border-radius: 6px 6px 0 0 !important;
+      transition: all 0.2s ease !important;
+      border: 1px solid transparent !important;
+      border-bottom: none !important;
+      margin-bottom: -1px;
+    }
+    .poe-tab:hover { background: rgba(196,164,86,0.06) !important; }
+    .poe-tab-active {
+      background: rgba(196,164,86,0.15) !important;
+      border-color: #3a3128 !important;
+      border-bottom: 1px solid #0d0b08 !important;
+    }
+
+    /* Button hover effects */
+    .btn-gold-hover:hover { box-shadow: 0 0 12px rgba(196,164,86,0.2); }
+    .btn-danger-hover:hover { box-shadow: 0 0 12px rgba(168,50,50,0.25); }
+
+    /* Accordion expanded gold accent */
+    .accordion-expanded {
+      border-left: 2px solid #c4a456 !important;
+    }
+
+    /* Shimmer animation */
+    @keyframes goldShimmer {
+      0%, 100% { box-shadow: inset 0 0 60px rgba(196,164,86,0.04), 0 0 0 4px #0d0b08, 0 0 0 5px #3a3128, 0 0 40px rgba(0,0,0,0.5); }
+      50% { box-shadow: inset 0 0 60px rgba(196,164,86,0.07), 0 0 0 4px #0d0b08, 0 0 0 5px #3a3128, 0 0 40px rgba(0,0,0,0.5); }
+    }
+    .app-frame { animation: goldShimmer 8s ease-in-out infinite; }
   </style>
 </head>
 <body>
@@ -300,34 +408,138 @@
     }
 
     // -----------------------------------------------------------------------
+    // Gold Divider
+    // -----------------------------------------------------------------------
+    function GoldDivider({ style: extraStyle }) {
+      return <div className="gold-divider" style={{ marginBottom: 20, ...extraStyle }} />;
+    }
+
+    // -----------------------------------------------------------------------
+    // Flavor text constants
+    // -----------------------------------------------------------------------
+    const WATCHLIST_QUOTES = [
+      "Still sane, Exile?",
+      "The trade board awaits...",
+      "Fortune favors the bold, Exile.",
+      "What are you searching for?",
+    ];
+    const TAB_SUBTITLES = {
+      overlay: "Your Eyes in Wraeclast",
+      filter: "Separate Treasure from Trash",
+      watchlist: "The Trade Board",
+    };
+
+    // -----------------------------------------------------------------------
+    // About Modal
+    // -----------------------------------------------------------------------
+    function AboutModal({ open, onClose, version }) {
+      if (!open) return null;
+      return (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={onClose}>
+          <div style={{
+            background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 10,
+            padding: "28px 32px", width: 340, maxWidth: "90vw", textAlign: "center",
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: T.gold, letterSpacing: "0.04em" }}>
+              POE2 Price Overlay
+            </div>
+            <div style={{ fontSize: 11, color: T.textSecond, marginTop: 4, ...MONO }}>
+              {version ? `v${version}` : ""}
+            </div>
+            <div style={{
+              width: 40, height: 1, margin: "16px auto",
+              background: `linear-gradient(90deg, transparent, ${T.borderGold}, transparent)`,
+            }} />
+            <div style={{ fontSize: 12, color: T.textSecond, lineHeight: 1.6 }}>
+              Made by <span style={{ color: T.gold, fontWeight: 600 }}>Couloir</span>
+            </div>
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
+              cal schuss
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <a
+                href="https://github.com/CarbonSMASH/POE2_OCR"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 11, color: T.textSecond, textDecoration: "none", transition: "color 0.15s" }}
+                onMouseEnter={e => e.target.style.color = T.gold}
+                onMouseLeave={e => e.target.style.color = T.textSecond}
+              >
+                github.com/CarbonSMASH/POE2_OCR
+              </a>
+            </div>
+            <button
+              onClick={onClose}
+              style={{ ...BTN, marginTop: 20, background: T.input, border: `1px solid ${T.border}`, color: T.textSecond, padding: "6px 20px", fontSize: 11 }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Window Title Bar (frameless mode)
+    // -----------------------------------------------------------------------
+    function WindowTitleBar({ onAbout }) {
+      const minimize = () => window.pywebview?.api?.minimize();
+      const toggleMax = () => window.pywebview?.api?.toggle_maximize();
+      const close = () => window.pywebview?.api?.close();
+
+      return (
+        <div className="window-titlebar pywebview-drag-region">
+          <div
+            style={{ fontSize: 11, color: T.textMuted, fontWeight: 500, cursor: "pointer", transition: "color 0.15s" }}
+            onClick={onAbout}
+            onMouseEnter={e => e.target.style.color = T.textSecond}
+            onMouseLeave={e => e.target.style.color = T.textMuted}
+          >
+            POE2 Price Overlay
+          </div>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", gap: 0 }}>
+            <button className="window-btn" onClick={minimize}>&#8211;</button>
+            <button className="window-btn" onClick={toggleMax}>&#9633;</button>
+            <button className="window-btn window-btn-close" onClick={close}>&#10005;</button>
+          </div>
+        </div>
+      );
+    }
+
     // Header
     // -----------------------------------------------------------------------
     function Header({ wsConnected, overlayState }) {
       const st = OVERLAY_STATES[overlayState] || OVERLAY_STATES.stopped;
       return (
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 0", borderBottom: `1px solid ${T.border}`, marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: T.gold }}>POE2 Price Overlay</div>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: T.gold, textShadow: "0 0 12px rgba(196,164,86,0.3)" }}>POE2 Price Overlay</div>
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                background: wsConnected ? "rgba(74,124,89,0.15)" : "rgba(168,50,50,0.1)",
+                border: `1px solid ${wsConnected ? T.green + "44" : T.red + "44"}`,
+                borderRadius: 20, padding: "3px 10px", fontSize: 10, fontWeight: 600,
+                color: wsConnected ? T.green : T.red,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: wsConnected ? T.green : T.red, animation: wsConnected ? "none" : "pulse 1.5s infinite" }} />
+                {wsConnected ? "Connected" : "Reconnecting"}
+              </div>
+            </div>
             <div style={{
               display: "inline-flex", alignItems: "center", gap: 6,
-              background: wsConnected ? "rgba(74,124,89,0.15)" : "rgba(168,50,50,0.1)",
-              border: `1px solid ${wsConnected ? T.green + "44" : T.red + "44"}`,
-              borderRadius: 20, padding: "3px 10px", fontSize: 10, fontWeight: 600,
-              color: wsConnected ? T.green : T.red,
+              background: st.bg, border: `1px solid ${st.color}44`,
+              borderRadius: 20, padding: "4px 14px", fontSize: 11, fontWeight: 700,
+              color: st.color, letterSpacing: "0.06em",
             }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: wsConnected ? T.green : T.red, animation: wsConnected ? "none" : "pulse 1.5s infinite" }} />
-              {wsConnected ? "Connected" : "Reconnecting"}
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.color, animation: overlayState === "running" ? "pulse 2s infinite" : "none" }} />
+              {st.label}
             </div>
           </div>
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            background: st.bg, border: `1px solid ${st.color}44`,
-            borderRadius: 20, padding: "4px 14px", fontSize: 11, fontWeight: 700,
-            color: st.color, letterSpacing: "0.06em",
-          }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.color, animation: overlayState === "running" ? "pulse 2s infinite" : "none" }} />
-            {st.label}
-          </div>
+          <GoldDivider />
         </div>
       );
     }
@@ -372,11 +584,19 @@
     // -----------------------------------------------------------------------
     // StatCard
     // -----------------------------------------------------------------------
-    function StatCard({ label, value, sub, color, tooltip }) {
+    function CurrencyIcon({ src, size = 24 }) {
+      return <img src={src} alt="" style={{ width: size, height: size, objectFit: "contain", imageRendering: "auto", verticalAlign: "middle" }} />;
+    }
+
+    function StatCard({ label, value, sub, color, tooltip, iconLeft, iconRight }) {
       const card = (
-        <div style={{ ...CARD, textAlign: "center", minWidth: 0 }}>
+        <div className="panel" style={{ ...CARD, textAlign: "center", minWidth: 0 }}>
           <div style={{ ...LABEL, marginBottom: 8 }}>{label}</div>
-          <div style={{ ...MONO, fontSize: 22, fontWeight: 700, color: color || T.text, lineHeight: 1.2 }}>{value}</div>
+          <div style={{ ...MONO, fontSize: 22, fontWeight: 700, color: color || T.text, lineHeight: 1.2, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            {iconLeft && <CurrencyIcon src={iconLeft} size={28} />}
+            <span>{value}</span>
+            {iconRight && <CurrencyIcon src={iconRight} size={28} />}
+          </div>
           {sub && <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{sub}</div>}
         </div>
       );
@@ -386,18 +606,41 @@
     // -----------------------------------------------------------------------
     // StatusPanel
     // -----------------------------------------------------------------------
+    // Currency icon paths (served by /img/ endpoint)
+    const ICON = {
+      divine: "/img/divine_orb.png",
+      exalted: "/img/exalted_orb.png",
+      chaos: "/img/chaos_orb.png",
+    };
+
     function StatusPanel({ status }) {
       const { stats, uptime, state } = status;
       const isRunning = state === "running";
 
+      const d2c = stats.divine_to_chaos || 0;
+      const d2e = stats.divine_to_exalted || 0;
+      const e2c = d2e > 0 ? (d2c / d2e) : 0;
+      const calSamples = stats.calibration_samples || 0;
+
+      // Refresh age coloring
+      const refreshColor = stats.last_refresh === "never" ? T.textSecond : T.green;
+
       return (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 20 }}>
-          <StatCard label="Uptime" value={formatUptime(uptime)} color={isRunning ? T.green : T.textSecond} tooltip="Time since overlay was started" />
-          <StatCard label="Scans" value={stats.triggers} color={T.gold} tooltip="Number of item tooltips scanned via Ctrl+C" />
-          <StatCard label="Prices Shown" value={stats.prices_shown} color={T.purple} tooltip="Items that matched a price in the cache" />
-          <StatCard label="Success Rate" value={`${stats.success_rate}%`} color={stats.success_rate >= 50 ? T.green : stats.success_rate > 0 ? T.amber : T.textSecond} tooltip="Percentage of scans that found a price" />
-          <StatCard label="Cache Items" value={stats.cache_items} color={T.textSecond} tooltip="Total priced items from poe2scout + poe.ninja" />
-          <StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={T.textSecond} tooltip="When price data was last fetched (refreshes every 15 min)" />
+        <div>
+          {/* Row 1: Market Data */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 12, marginBottom: 10 }}>
+            <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} sub={d2c > 0 ? "Chaos" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
+            <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
+            <StatCard label="1 Exalted" value={e2c > 0 ? `${e2c.toFixed(2)}` : "--"} sub={e2c > 0 ? "Chaos" : null} color={T.amber} iconLeft={ICON.exalted} iconRight={ICON.chaos} tooltip="1 Exalted Orb = X Chaos Orbs" />
+            <StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={refreshColor} tooltip="When price data was last fetched (refreshes every 15 min)" />
+          </div>
+          {/* Row 2: Tool Health */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginBottom: 20 }}>
+            <StatCard label="Scans" value={stats.triggers} color={T.textSecond} tooltip="Number of item tooltips scanned via Ctrl+C" />
+            <StatCard label="Hit Rate" value={`${stats.success_rate}%`} color={stats.success_rate >= 50 ? T.green : stats.success_rate > 0 ? T.amber : T.textSecond} tooltip="Percentage of scans that found a price" />
+            <StatCard label="Calibration" value={calSamples > 0 ? calSamples.toLocaleString() : "--"} sub={calSamples > 0 ? "samples" : null} color={calSamples >= 1000 ? T.green : calSamples > 0 ? T.amber : T.textSecond} tooltip="Calibration data points for score-to-price estimation" />
+            <StatCard label="Uptime" value={formatUptime(uptime)} color={isRunning ? T.green : T.textSecond} tooltip="Time since overlay was started" />
+          </div>
         </div>
       );
     }
@@ -487,10 +730,11 @@
       const selectedLeague = settings.league || "Fate of the Vaal";
 
       return (
-        <div style={{ ...CARD, display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+        <div className="panel" style={{ ...CARD, display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
           <button
             onClick={onStart}
             disabled={isRunning}
+            className={!isRunning ? "btn-gold-hover" : ""}
             style={{
               ...BTN,
               background: isRunning ? T.input : T.green,
@@ -502,6 +746,7 @@
           <button
             onClick={onStop}
             disabled={!isRunning}
+            className={isRunning ? "btn-danger-hover" : ""}
             style={{
               ...BTN,
               background: !isRunning ? T.input : T.red,
@@ -527,6 +772,7 @@
           <Tooltip text="Send a bug report with logs to Discord">
             <button
               onClick={onBugReport}
+              className="btn-gold-hover"
               style={{ ...BTN, background: T.amber, color: "#000", border: `1px solid ${T.amber}` }}
             >Report Bug</button>
           </Tooltip>
@@ -568,21 +814,30 @@
       ];
 
       return (
-        <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: `1px solid ${T.border}` }}>
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              style={{
-                background: "transparent", border: "none",
-                borderBottom: `2px solid ${activeTab === tab.id ? T.gold : "transparent"}`,
-                color: activeTab === tab.id ? T.gold : T.textSecond,
-                padding: "10px 24px", fontSize: 13, fontWeight: 600,
-                cursor: "pointer", letterSpacing: "0.04em",
-                transition: "all 0.15s",
-              }}
-            >{tab.label}</button>
-          ))}
+        <div style={{ display: "flex", gap: 2, marginBottom: 20, borderBottom: `1px solid ${T.border}` }}>
+          {tabs.map(tab => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                className={`poe-tab ${active ? "poe-tab-active" : ""}`}
+                onClick={() => onTabChange(tab.id)}
+                style={{
+                  background: active ? "rgba(196,164,86,0.15)" : "transparent",
+                  border: "none",
+                  color: active ? T.gold : T.textSecond,
+                  padding: "10px 24px 8px", fontSize: 13, fontWeight: 600,
+                  cursor: "pointer", letterSpacing: "0.04em",
+                  borderRadius: "6px 6px 0 0",
+                }}
+              >
+                <div>{tab.label}</div>
+                <div style={{ fontSize: 8, color: active ? T.textSecond : T.textMuted, marginTop: 2, fontWeight: 400, letterSpacing: "0.06em" }}>
+                  {TAB_SUBTITLES[tab.id]}
+                </div>
+              </button>
+            );
+          })}
         </div>
       );
     }
@@ -613,7 +868,7 @@
       );
 
       return (
-        <div style={{ ...CARD, marginBottom: 20 }}>
+        <div className="panel" style={{ ...CARD, marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
             <span style={{ ...LABEL, marginBottom: 0 }}>Overlay Settings</span>
             {isRunning && (
@@ -702,7 +957,7 @@
                     }}>{item.name}</div>
                     <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                       <span style={{ fontSize: 9, color: T.gold, fontWeight: 600 }}>{TIER_LABELS[tier]}</span>
-                      <span style={{ fontSize: 9, color: T.textMuted, ...MONO }}>~{item.chaos}c</span>
+                      <span style={{ fontSize: 9, color: T.textMuted, ...MONO, display: "inline-flex", alignItems: "center", gap: 1 }}>~{item.chaos}<CurrencyIcon src={ICON.chaos} size={9} /></span>
                     </div>
                   </div>
                 );
@@ -714,8 +969,8 @@
               {["s", "a", "b", "c", "e"].map(tier => {
                 const threshold = getEffectiveThreshold(tier, "currency", value);
                 return (
-                  <span key={tier} style={{ fontSize: 9, color: T.textMuted, ...MONO }}>
-                    {TIER_LABELS[tier]}: {threshold === 0 ? "all" : formatChaos(threshold)}
+                  <span key={tier} style={{ fontSize: 9, color: T.textMuted, ...MONO, display: "inline-flex", alignItems: "center", gap: 2 }}>
+                    {TIER_LABELS[tier]}: {threshold === 0 ? "all" : (<><CurrencyIcon src={ICON.chaos} size={11} /> {formatChaos(threshold).replace(/^≥/, "")}</>)}
                   </span>
                 );
               })}
@@ -732,6 +987,7 @@
       const w = size === "small" ? 28 : 36;
       const h = size === "small" ? 16 : 20;
       const dot = size === "small" ? 12 : 16;
+      const goldDot = size === "small" ? 4 : 5;
       return (
         <div
           onClick={() => onChange(!value)}
@@ -747,7 +1003,10 @@
             position: "absolute", top: (h - dot) / 2,
             left: value ? w - dot - (h - dot) / 2 : (h - dot) / 2,
             transition: "left 0.2s",
-          }} />
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            {value && <div style={{ width: goldDot, height: goldDot, borderRadius: "50%", background: T.gold }} />}
+          </div>
         </div>
       );
     }
@@ -832,7 +1091,9 @@
           <div>
             <div style={{ fontWeight: 600, fontSize: 12, color: T.gold }}>{TIER_LABELS[tier] || tier}</div>
             {threshold !== null && (
-              <div style={{ fontSize: 9, color: T.textMuted, ...MONO }}>{threshold === 0 ? "all" : formatChaos(threshold)}</div>
+              <div style={{ fontSize: 9, color: T.textMuted, ...MONO, display: "flex", alignItems: "center", gap: 2 }}>
+                {threshold === 0 ? "all" : (<><CurrencyIcon src={ICON.chaos} size={10} /> {formatChaos(threshold).replace(/^≥/, "")}</>)}
+              </div>
             )}
           </div>
 
@@ -909,7 +1170,7 @@
       const [expanded, setExpanded] = useState(false);
 
       return (
-        <div style={{ border: `1px solid ${T.border}`, borderRadius: 6, marginBottom: 8, overflow: "hidden" }}>
+        <div className={expanded ? "accordion-expanded" : ""} style={{ border: `1px solid ${T.border}`, borderRadius: 6, marginBottom: 8, overflow: "hidden", transition: "border-color 0.2s" }}>
           {/* Header row */}
           <div
             style={{
@@ -987,7 +1248,7 @@
         sum + cat.classes.filter(c => classVisibility[c] === false).length, 0);
 
       return (
-        <div style={{ border: `1px solid ${T.border}`, borderRadius: 6, marginBottom: 8, overflow: "hidden" }}>
+        <div className={expanded ? "accordion-expanded" : ""} style={{ border: `1px solid ${T.border}`, borderRadius: 6, marginBottom: 8, overflow: "hidden", transition: "border-color 0.2s" }}>
           {/* Header row */}
           <div
             style={{
@@ -1173,7 +1434,7 @@
       return (
         <div>
           {/* Strictness + Color Preset */}
-          <div style={{ ...CARD, marginBottom: 20 }}>
+          <div className="panel" style={{ ...CARD, marginBottom: 20 }}>
             <StrictnessSelector value={strictness} onChange={handleStrictnessChange} colorPreset={colorPreset} tierStyles={tierStyles} />
 
             {/* Color preset selector */}
@@ -1228,7 +1489,7 @@
           </div>
 
           {/* Gear & Uniques */}
-          <div style={{ ...CARD, marginBottom: 20 }}>
+          <div className="panel" style={{ ...CARD, marginBottom: 20 }}>
             <div style={{ ...LABEL, marginBottom: 12 }}>Gear & Uniques</div>
 
             {/* Uniques — tier accordion like economy sections */}
@@ -1258,7 +1519,7 @@
           </div>
 
           {/* Economy section accordions */}
-          <div style={{ ...CARD, marginBottom: 20 }}>
+          <div className="panel" style={{ ...CARD, marginBottom: 20 }}>
             <div style={{ ...LABEL, marginBottom: 12 }}>Economy Sections</div>
             {ECONOMY_SECTIONS.map(section => (
               <SectionRow
@@ -1275,12 +1536,13 @@
           </div>
 
           {/* Update button */}
-          <div style={{ ...CARD }}>
+          <div className="panel" style={{ ...CARD }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <Tooltip text="Update loot filter tiers from current prices + your customizations">
                 <button
                   onClick={onUpdateFilter}
                   disabled={filterUpdating}
+                  className="btn-gold-hover"
                   style={{
                     ...BTN_GOLD_ACTIVE,
                     opacity: filterUpdating ? 0.5 : 1,
@@ -1671,7 +1933,14 @@
             <tbody>
               {listings.map((l, i) => (
                 <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
-                  <td style={{ padding: "4px 6px", color: T.gold, fontWeight: 600, whiteSpace: "nowrap" }}>{l.price}</td>
+                  <td style={{ padding: "4px 6px", color: T.gold, fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                      {l.price && l.price.toLowerCase().includes("divine") && <CurrencyIcon src={ICON.divine} size={14} />}
+                      {l.price && l.price.toLowerCase().includes("exalted") && <CurrencyIcon src={ICON.exalted} size={14} />}
+                      {l.price && l.price.toLowerCase().includes("chaos") && <CurrencyIcon src={ICON.chaos} size={14} />}
+                      {l.price ? l.price.replace(/\s*(divine|exalted|chaos)\s*/gi, " ").trim() : "--"}
+                    </span>
+                  </td>
                   <td style={{ padding: "4px 6px", color: T.text, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {l.item_name || "--"}
                   </td>
@@ -1776,7 +2045,7 @@
       };
 
       return (
-        <div style={{
+        <div className="panel" style={{
           ...CARD, padding: 0, overflow: "hidden",
           opacity: isDisabled ? 0.6 : 1,
           display: "flex", flexDirection: "column", height: "100%",
@@ -1820,7 +2089,7 @@
               }}>&#9998;</button>
             </Tooltip>
             <Tooltip text="Delete query">
-              <button onClick={() => onDelete(query.id)} style={{
+              <button onClick={() => onDelete(query.id)} className="btn-danger-hover" style={{
                 ...BTN, padding: "3px 7px", fontSize: 12, background: "transparent",
                 border: `1px solid ${T.border}`, color: T.red, lineHeight: 1,
               }}>&#10005;</button>
@@ -1845,7 +2114,12 @@
             <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${T.border}22` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {priceRange ? (
-                  <div style={{ fontSize: 14, fontWeight: 700, color: T.gold, ...MONO }}>{priceRange}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.gold, ...MONO, display: "flex", alignItems: "center", gap: 4 }}>
+                    {priceRange.toLowerCase().includes("divine") && <CurrencyIcon src={ICON.divine} size={16} />}
+                    {priceRange.toLowerCase().includes("exalted") && <CurrencyIcon src={ICON.exalted} size={16} />}
+                    {priceRange.toLowerCase().includes("chaos") && <CurrencyIcon src={ICON.chaos} size={16} />}
+                    {priceRange.replace(/\s*(divine|exalted|chaos)\s*/gi, " ").trim()}
+                  </div>
                 ) : hasError ? (
                   <div style={{ fontSize: 12, fontWeight: 600, color: T.red }}>{r.error}</div>
                 ) : hasResult ? (
@@ -1937,7 +2211,7 @@
       return (
         <div>
           {/* Settings row */}
-          <div style={{ ...CARD, marginBottom: 16, display: "flex", alignItems: "center", gap: 16 }}>
+          <div className="panel" style={{ ...CARD, marginBottom: 16, display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={FIELD_LABEL}>Poll Interval</span>
               <select value={pollInterval} onChange={(e) => handlePollIntervalChange(e.target.value)}
@@ -1990,7 +2264,8 @@
                   </div>
                 );
               } else {
-                // Empty slot
+                // Empty slot with rotating POE2 quote
+                const quote = WATCHLIST_QUOTES[(idx - queries.length) % WATCHLIST_QUOTES.length];
                 return (
                   <div
                     key={`empty-${idx}`}
@@ -2008,7 +2283,7 @@
                   >
                     <div style={{ textAlign: "center" }}>
                       <div style={{ fontSize: 24, color: T.textMuted, lineHeight: 1 }}>+</div>
-                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4 }}>Add Query</div>
+                      <div style={{ fontSize: 11, color: T.textMuted, marginTop: 6, fontStyle: "italic" }}>{quote}</div>
                     </div>
                   </div>
                 );
@@ -2044,7 +2319,7 @@
       };
 
       return (
-        <div style={{ ...CARD, marginTop: 20 }}>
+        <div className="panel" style={{ ...CARD, marginTop: 20 }}>
           <div
             style={{
               display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -2086,7 +2361,7 @@
               ...MONO, fontSize: 11.5, lineHeight: 1.7, height: 280, overflowY: "auto", padding: "12px 16px",
               marginTop: 8,
             }}>
-              {logs.length === 0 && <div style={{ color: T.textMuted, fontStyle: "italic" }}>Waiting for overlay output...</div>}
+              {logs.length === 0 && <div style={{ color: T.textMuted, fontStyle: "italic" }}>The Atlas is quiet... for now.</div>}
               {logs.map((log, i) => (
                 <div key={i} style={{ color: log.color || T.textSecond }}>
                   <span style={{ color: T.textMuted }}>{log.time}</span>{" "}
@@ -2103,12 +2378,13 @@
     // Main App
     // -----------------------------------------------------------------------
     function Dashboard() {
-      const [status, setStatus] = useState({ state: "stopped", uptime: 0, stats: { uptime_min: 0, triggers: 0, prices_shown: 0, success_rate: 0, cache_items: 0, last_refresh: "never" } });
+      const [status, setStatus] = useState({ state: "stopped", uptime: 0, stats: { uptime_min: 0, triggers: 0, prices_shown: 0, success_rate: 0, cache_items: 0, last_refresh: "never", divine_to_chaos: 0, divine_to_exalted: 0, calibration_samples: 0 } });
       const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {}, filter_gear_classes: {}, filter_color_preset: "default" });
       const [leagues, setLeagues] = useState([{ value: "Fate of the Vaal", label: "Fate of the Vaal" }]);
       const [logs, setLogs] = useState([]);
       const [autoStartDone, setAutoStartDone] = useState(false);
       const [bugModalOpen, setBugModalOpen] = useState(false);
+      const [aboutOpen, setAboutOpen] = useState(false);
       const [filterUpdating, setFilterUpdating] = useState(false);
       const [activeTab, setActiveTab] = useState("overlay");
       const [watchlistResults, setWatchlistResults] = useState({});
@@ -2252,12 +2528,16 @@
       };
 
       return (
-        <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 24px" }}>
+        <div className="app-frame">
+          <WindowTitleBar onAbout={() => setAboutOpen(true)} />
+          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 24px" }}>
           <Header wsConnected={connected} overlayState={status.state} />
           {updateInfo && (
             <div style={{ background: "rgba(196,164,86,0.12)", border: `1px solid ${T.gold}`, borderRadius: 8, padding: "10px 16px", marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ color: T.gold, fontSize: 13, fontWeight: 600 }}>
+                <span style={{ color: T.gold, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ display: "inline-block", width: 5, height: 5, background: T.gold, transform: "rotate(45deg)", flexShrink: 0 }} />
                   {updateInfo.installing ? "Installing update..." : `Update available: v${updateInfo.latest}`}
                   {!updateInfo.installing && <span style={{ color: T.textSecond, fontWeight: 400, marginLeft: 8 }}>(current: v{updateInfo.current})</span>}
                 </span>
@@ -2321,6 +2601,9 @@
 
           <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
           <BugReportModal open={bugModalOpen} onClose={() => setBugModalOpen(false)} />
+          <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} version={status.version} />
+        </div>
+        </div>
         </div>
       );
     }

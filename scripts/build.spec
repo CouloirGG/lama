@@ -33,6 +33,10 @@ a = Analysis(
         (str(project_dir / 'resources' / 'VERSION'), 'resources'),
         # Include .filter template if present
         *((str(f), 'resources') for f in (project_dir / 'resources').glob('*.filter') if 'updated' not in f.name),
+        # Include calibration shards if present
+        *((str(f), 'resources') for f in (project_dir / 'resources').glob('*.json.gz')),
+        # Include image assets
+        *((str(f), 'resources/img') for f in (project_dir / 'resources' / 'img').glob('*.png') if (project_dir / 'resources' / 'img').exists()),
     ],
     hiddenimports=[
         # FastAPI + uvicorn

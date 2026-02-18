@@ -142,9 +142,10 @@ POE2_OCR/
 │   ├── bug_reporter.py    # Discord webhook bug reporting
 │   └── ...
 ├── resources/             # Bundled resource files
-│   ├── dashboard.html     # Single-file React UI (3 tabs, POE2 theme)
+│   ├── dashboard.html     # Single-file React UI (frameless, 3 tabs, POE2 theme)
 │   ├── VERSION            # App version string
-│   └── NewBooBoo.filter   # Loot filter template
+│   ├── NewBooBoo.filter   # Loot filter template
+│   └── calibration_shard.json.gz  # Pre-built calibration data
 ├── scripts/               # Build & maintenance scripts
 │   ├── BUILD.bat          # PyInstaller exe build
 │   ├── SYNC.bat           # Multi-machine sync (git pull + pip install)
@@ -200,6 +201,12 @@ This tool is designed to be fully compliant with GGG's third-party tool policy:
 - ONLY reads text from the clipboard (Ctrl+C is a manual player action)
 - ONLY displays information in a separate overlay window
 - Same approach used by Awakened PoE Trade, Exiled Exchange, etc.
+
+---
+
+## Credits
+
+Made by **Couloir** (cal schuss).
 
 ---
 

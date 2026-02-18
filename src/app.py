@@ -66,6 +66,31 @@ def wait_for_server(timeout=10):
     return False
 
 
+class WindowApi:
+    """JS-callable window controls for frameless mode."""
+
+    def minimize(self):
+        import ctypes
+        hwnd = ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
+
+    def toggle_maximize(self):
+        import ctypes
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, WINDOW_TITLE)
+        if hwnd:
+            if user32.IsZoomed(hwnd):
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            else:
+                user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+
+    def close(self):
+        import webview
+        if webview.windows:
+            webview.windows[0].destroy()
+
+
 def main():
     try:
         import webview
@@ -100,6 +125,7 @@ def main():
     print("Server ready. Opening window...")
 
     # Open the native window pointing at the dashboard
+    api = WindowApi()
     window = webview.create_window(
         WINDOW_TITLE,
         url=f"http://127.0.0.1:{PORT}/dashboard",
@@ -108,6 +134,9 @@ def main():
         min_size=(900, 600),
         background_color="#0d0b08",
         text_select=True,
+        frameless=True,
+        easy_drag=False,
+        js_api=api,
     )
 
     # This blocks until the window is closed

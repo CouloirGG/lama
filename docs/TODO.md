@@ -21,6 +21,19 @@
 
 ## Completed
 
+### Session 18 (2026-02-18)
+- [x] Frameless window — removed OS title bar, added custom title bar with drag region and min/max/close buttons (pywebview `frameless=True` + `WindowApi` via Win32 ctypes)
+- [x] Rounded app frame — `border-radius: 10px` with layered box-shadow replacing corner diamond pseudo-elements
+- [x] Scrollable content area — title bar stays pinned, content scrolls beneath via flex layout
+- [x] Hide console on dashboard launch — `POE2 Dashboard.bat` uses `pythonw` + `start ""` to detach
+- [x] About modal — Couloir branding, version display, GitHub link; opens from title bar click
+- [x] Calibration shards — pre-built compressed JSON for instant accuracy from first launch; shard loading in CalibrationEngine
+- [x] Calibration write-time quality filters — skip estimates, price-fixers, thin results
+- [x] Harvester multi-pass + shard output — generates distributable `.json.gz` shard files
+- [x] Status line extended — divine-to-chaos, divine-to-exalted, calibration sample count parsed by server
+- [x] Build spec updated — bundles calibration shards (`.json.gz`) and image assets (`resources/img/`)
+- [x] Version exposed in `/api/status` response
+
 ### Session 17 (2026-02-18)
 - [x] Inno Setup installer — `scripts/installer.iss` reads VERSION, bundles PyInstaller output, installs to `%LOCALAPPDATA%\POE2PriceOverlay`, creates desktop + Start Menu shortcuts
 - [x] BUILD.bat step 3 — auto-detects Inno Setup, builds `dist/POE2PriceOverlay-Setup-{version}.exe`
