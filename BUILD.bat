@@ -15,13 +15,13 @@ if errorlevel 1 (
 )
 
 :: Install build dependencies
-echo [1/3] Installing dependencies...
-pip install -r requirements.txt --quiet
-pip install pyinstaller --quiet
+echo [1/2] Installing dependencies...
+python -m pip install -r requirements.txt --quiet
+python -m pip install pyinstaller --quiet
 
 :: Build with PyInstaller
-echo [2/3] Building executable...
-pyinstaller build.spec --noconfirm --clean
+echo [2/2] Building executable...
+python -m PyInstaller build.spec --noconfirm --clean
 
 if errorlevel 1 (
     echo.
@@ -30,10 +30,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: Copy launcher
-echo [3/3] Finalizing...
-copy /Y launcher.py dist\POE2PriceOverlay\ >nul 2>&1
-
 echo.
 echo ================================================
 echo   Build complete!
@@ -41,8 +37,5 @@ echo ================================================
 echo.
 echo   Output: dist\POE2PriceOverlay\
 echo   Run:    dist\POE2PriceOverlay\POE2PriceOverlay.exe
-echo.
-echo   You can copy the POE2PriceOverlay folder
-echo   anywhere and run it standalone.
 echo.
 pause
