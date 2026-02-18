@@ -1,0 +1,17 @@
+Item Class: Mana Flasks
+Rarity: Magic
+Potent Ultimate Mana Flask of the Brewer
+--------
+Quality: +23% (augmented)
+Recovers 660 (augmented) Mana over 3 Seconds
+Consumes 7 (augmented) of 75 Charges on use
+Currently has 75 Charges
+--------
+Requires: Level 60
+--------
+Item Level: 79
+--------
+73% increased Amount Recovered
+27% reduced Charges per use
+--------
+Bind Flasks to buttons to drink during combat to replenish Life or Mana. Refill at Wells or by killing monsters.

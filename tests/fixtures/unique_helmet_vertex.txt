@@ -1,0 +1,29 @@
+Item Class: Helmets
+Rarity: Unique
+The Vertex
+Tribal Mask
+--------
+Quality: +20% (augmented)
+Evasion Rating: 200 (augmented)
+Energy Shield: 85 (augmented)
+--------
+Requires: Level 33
+--------
+Sockets: S S 
+--------
+Item Level: 82
+--------
++1 to Maximum Power Charges (enchant)
+--------
+36% increased Armour, Evasion and Energy Shield (rune)
+--------
+Has no Attribute Requirements
+116% increased Evasion and Energy Shield
+24% increased Critical Hit Chance
+26% increased chance to inflict Ailments (mutated)
++4 to Level of all Skills (mutated)
+--------
+"A queen should be seen, admired, but never touched."
+- Atziri, Queen of the Vaal
+--------
+Corrupted

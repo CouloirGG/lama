@@ -1,0 +1,24 @@
+Item Class: Foci
+Rarity: Rare
+Pain Emblem
+Tasalian Focus
+--------
+Quality: +20% (augmented)
+Energy Shield: 202 (augmented)
+--------
+Requires: Level 80, 115 Int
+--------
+Sockets: S S 
+--------
+Item Level: 81
+--------
++70 to maximum Mana (rune)
+--------
+88% increased Spell Damage (fractured)
++83 to maximum Energy Shield
++92 to maximum Mana
++2 to Level of all Spell Skills
++35% to Lightning Resistance
+55% increased Critical Hit Chance for Spells (desecrated)
+--------
+Fractured Item
