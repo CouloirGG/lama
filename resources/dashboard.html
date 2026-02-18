@@ -1019,7 +1019,7 @@
       const isRunning = overlayState === "running";
 
       const Field = ({ label, field, type = "number", step, min, max, helpText }) => (
-        <div style={{ marginBottom: 12 }}>
+        <div>
           <label style={FIELD_LABEL}>{label}</label>
           <input
             type={type}
@@ -1038,23 +1038,37 @@
       );
 
       return (
-        <div className="panel" style={{ ...CARD, padding: 12, marginTop: 12, marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <span style={{ ...LABEL, marginBottom: 0 }}>Overlay Settings</span>
+        <div style={{ marginTop: 12, marginBottom: 12 }}>
+          {/* Toggles row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Toggle value={settings.auto_start !== false} onChange={(v) => onUpdate({ auto_start: v })} size="small" />
+              <span style={{ fontSize: 11, color: T.textSecond }}>Auto-start overlay on launch</span>
+            </div>
             {isRunning && (
-              <span style={{ fontSize: 10, color: T.amber, fontWeight: 500 }}>
-                Restart to apply changes
+              <span style={{ fontSize: 10, color: T.amber, fontWeight: 500, marginLeft: "auto" }}>
+                Restart to apply setting changes
               </span>
             )}
           </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0 20px" }}>
-            <Field label="Font Size" field="font_size" min={8} max={24} step={1} helpText="Overlay text size (px)" />
-            <Field label="Display Duration" field="overlay_duration" min={0.5} max={10} step={0.5} helpText="Seconds to show price" />
-            <Field label="Scan FPS" field="scan_fps" min={1} max={30} step={1} helpText="Cursor checks per second" />
-            <Field label="Detection Cooldown" field="detection_cooldown" min={0.1} max={5} step={0.1} helpText="Seconds between detections" />
-            <Field label="Cursor Still Radius" field="cursor_still_radius" min={5} max={50} step={1} helpText="Max movement pixels" />
-            <Field label="Cursor Still Frames" field="cursor_still_frames" min={1} max={10} step={1} helpText="Frames cursor must be still" />
+          {/* Display & Detection settings — two grouped columns */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="panel" style={{ ...CARD, padding: 12 }}>
+              <div style={{ ...LABEL, marginBottom: 8 }}>Display</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
+                <Field label="Font Size" field="font_size" min={8} max={24} step={1} helpText="Text size (px)" />
+                <Field label="Duration" field="overlay_duration" min={0.5} max={10} step={0.5} helpText="Seconds shown" />
+              </div>
+            </div>
+            <div className="panel" style={{ ...CARD, padding: 12 }}>
+              <div style={{ ...LABEL, marginBottom: 8 }}>Detection</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
+                <Field label="Scan FPS" field="scan_fps" min={1} max={30} step={1} helpText="Checks per second" />
+                <Field label="Cooldown" field="detection_cooldown" min={0.1} max={5} step={0.1} helpText="Seconds between" />
+                <Field label="Still Radius" field="cursor_still_radius" min={5} max={50} step={1} helpText="Max px movement" />
+                <Field label="Still Frames" field="cursor_still_frames" min={1} max={10} step={1} helpText="Frames to wait" />
+              </div>
+            </div>
           </div>
         </div>
       );
