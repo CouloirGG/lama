@@ -208,6 +208,10 @@ This tool is designed to be fully compliant with GGG's third-party tool policy:
 
 Made by **Couloir** (cal schuss).
 
+- **Jira:** [couloirgg.atlassian.net/...PT/boards/36](https://couloirgg.atlassian.net/jira/software/projects/PT/boards/36)
+- **Email:** hello@couloir.gg
+- **Web:** [couloir.gg](https://couloir.gg)
+
 ---
 
 ## License

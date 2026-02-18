@@ -1,5 +1,7 @@
 # POE2 Price Overlay — Bug & Work Tracker
 
+**Jira Board:** [couloirgg.atlassian.net/jira/software/projects/PT/boards/36](https://couloirgg.atlassian.net/jira/software/projects/PT/boards/36)
+
 ## Bugs
 - [x] **Stale clipboard spam** — Fixed: distance-guarded reshow only allows re-fire when cursor returns near the original item position; stale cached data at new positions is suppressed. Also added clipboard retry (30ms) for slow game responses.
 - [x] **"Terminate batch job?" on START.bat** — Fixed: Ctrl+C is now gated on `is_poe2_foreground()` check — keystrokes only sent when POE2 has focus, preventing console from receiving them. Removed trailing echo/pause from START.bat for clean exit.
