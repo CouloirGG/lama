@@ -5,8 +5,8 @@ Single-exe architecture: app.py is the entry point.
   - Default mode: launches FastAPI server + pywebview dashboard
   - --overlay-worker: runs the overlay subprocess (main.py:main)
 
-Build command:
-    pyinstaller build.spec --noconfirm --clean
+Build command (from project root):
+    pyinstaller scripts/build.spec --noconfirm --clean
 
 Output: dist/POE2PriceOverlay/
 """
@@ -14,25 +14,25 @@ Output: dist/POE2PriceOverlay/
 from pathlib import Path
 
 block_cipher = None
-app_dir = Path(SPECPATH)
+project_dir = Path(SPECPATH).parent  # SPECPATH is scripts/, go up to project root
+src_dir = project_dir / 'src'
 
 # All .py source files to bundle as data (so imports work in frozen mode)
 py_sources = [
-    (str(app_dir / f), '.')
-    for f in app_dir.glob('*.py')
-    if f.name not in ('build.spec',)
+    (str(src_dir / f), '.')
+    for f in src_dir.glob('*.py')
 ]
 
 a = Analysis(
-    [str(app_dir / 'app.py')],
-    pathex=[str(app_dir)],
+    [str(src_dir / 'app.py')],
+    pathex=[str(src_dir)],
     binaries=[],
     datas=[
         *py_sources,
-        (str(app_dir / 'dashboard.html'), '.'),
-        (str(app_dir / 'VERSION'), '.'),
+        (str(project_dir / 'resources' / 'dashboard.html'), 'resources'),
+        (str(project_dir / 'resources' / 'VERSION'), 'resources'),
         # Include .filter template if present
-        *((str(f), '.') for f in app_dir.glob('*.filter') if 'updated' not in f.name),
+        *((str(f), 'resources') for f in (project_dir / 'resources').glob('*.filter') if 'updated' not in f.name),
     ],
     hiddenimports=[
         # FastAPI + uvicorn

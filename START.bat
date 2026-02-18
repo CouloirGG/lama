@@ -83,4 +83,4 @@ echo  Close window to stop
 echo.
 
 cd /d "%~dp0"
-python main.py --league "%LEAGUE%"
+python src\main.py --league "%LEAGUE%"

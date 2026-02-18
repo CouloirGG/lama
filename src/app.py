@@ -16,6 +16,9 @@ import sys
 import threading
 import time
 
+# Ensure src/ is on sys.path so bare imports and uvicorn "server:app" work
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------

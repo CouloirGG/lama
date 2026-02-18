@@ -88,7 +88,7 @@ class POE2PriceOverlay:
         self._calibration_queue = queue.Queue()
 
         # Filter updater
-        template = find_template_filter(APP_DIR)
+        template = find_template_filter(APP_DIR / "resources")
         self.filter_updater = FilterUpdater(
             self.price_cache, template,
             test_mode=self._test_filter_update,

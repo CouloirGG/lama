@@ -1,6 +1,6 @@
 @echo off
 title POE2 Price Overlay - Sync
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo ============================================================
 echo   POE2 Price Overlay - Multi-Machine Sync
@@ -73,7 +73,7 @@ git log --oneline -1
 echo.
 echo   Files: %CD%
 echo.
-echo   To run the dashboard:  python app.py
+echo   To run the dashboard:  python src\app.py
 echo   Or double-click:       POE2 Dashboard.bat
 echo.
 echo ============================================================

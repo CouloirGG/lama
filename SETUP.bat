@@ -215,7 +215,7 @@ echo  ║     Setup complete. Launching dashboard...   ║
 echo  ╚══════════════════════════════════════════════╝
 echo.
 
-!PYTHON_CMD! "%~dp0app.py"
+!PYTHON_CMD! "%~dp0src\app.py"
 
 :: If dashboard exits with error, pause so user can read it
 if errorlevel 1 (

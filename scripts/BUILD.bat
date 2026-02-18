@@ -1,5 +1,6 @@
 @echo off
 title POE2 Price Overlay - Build
+cd /d "%~dp0.."
 echo.
 echo ================================================
 echo   Building POE2 Price Overlay
@@ -21,7 +22,7 @@ python -m pip install pyinstaller --quiet
 
 :: Build with PyInstaller
 echo [2/2] Building executable...
-python -m PyInstaller build.spec --noconfirm --clean
+python -m PyInstaller scripts\build.spec --noconfirm --clean
 
 if errorlevel 1 (
     echo.

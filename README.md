@@ -95,12 +95,13 @@ Subsequent launches skip setup and go straight to the overlay.
 | File                   | Purpose                                        |
 |------------------------|------------------------------------------------|
 | `POE2 Dashboard.bat`  | **Dashboard GUI** — the main way to run        |
-| `SYNC.bat`            | **Multi-machine sync** — pull + install deps   |
 | `START.bat`            | CLI launcher (no dashboard)                    |
 | `DEBUG.bat`            | Launch with verbose logging to console         |
 | `SETTINGS.bat`         | Change league, view logs, run tests            |
 | `RUN_TESTS.bat`        | Run pytest suite — spawns a window per module  |
 | `REPORT_BUG.bat`       | Zip logs and open a GitHub issue               |
+| `scripts/SYNC.bat`     | **Multi-machine sync** — pull + install deps   |
+| `scripts/BUILD.bat`    | Build distributable exe via PyInstaller        |
 
 ---
 
@@ -117,43 +118,47 @@ Alternatively, **double-click `REPORT_BUG.bat`** to zip logs and open a GitHub i
 ```
 POE2_OCR/
 ├── POE2 Dashboard.bat     # Dashboard GUI launcher (primary)
-├── SYNC.bat               # Multi-machine sync (git pull + pip install)
 ├── START.bat              # CLI launcher (no dashboard)
-├── DEBUG.bat              # Debug mode launcher
-├── SETTINGS.bat           # Settings menu
-├── REPORT_BUG.bat         # Bug report helper
-├── app.py                 # Desktop dashboard shell (pywebview)
-├── server.py              # FastAPI backend (overlay mgmt, WS, settings)
-├── dashboard.html         # Single-file React UI (3 tabs, POE2 theme)
-├── watchlist.py           # Trade API polling worker for Watchlist tab
-├── launcher.py            # Legacy CLI launcher
-├── main.py                # Overlay engine & pricing pipeline
-├── config.py              # All tunable constants
-├── clipboard_reader.py    # Clipboard monitoring
-├── item_detection.py      # Item type detection from clipboard text
-├── item_parser.py         # Parse item text into structured data
-├── mod_parser.py          # Mod parsing for rare item pricing
-├── mod_database.py        # Local mod scoring engine (RePoE tier data)
-├── calibration.py         # Score-to-price calibration engine
-├── price_cache.py         # poe.ninja data fetcher & local cache
-├── trade_client.py        # POE2 trade API client for rare items
-├── bug_reporter.py        # Discord webhook bug reporting
-├── filter_updater.py      # Loot filter economy re-tiering
-├── overlay.py             # Transparent overlay window
-├── screen_capture.py      # Screen region capture utilities
-├── test_pipeline.py       # Pipeline validation tests
-├── diagnose.py            # Diagnostic tool
-├── run_tests.py           # Test runner — spawns PowerShell per module
-├── RUN_TESTS.bat          # One-click test launcher
+├── SETUP.bat              # One-click setup & install
 ├── requirements.txt
 ├── README.md
-└── tests/
-    ├── conftest.py        # Shared pytest fixtures
-    ├── test_item_parser.py
-    ├── test_mod_parser.py
-    ├── test_mod_database.py
-    ├── test_trade_client.py
-    └── fixtures/          # Real clipboard captures for tests
+├── LICENSE
+├── src/                   # All Python source files
+│   ├── app.py             # Desktop dashboard shell (pywebview)
+│   ├── server.py          # FastAPI backend (overlay mgmt, WS, settings)
+│   ├── main.py            # Overlay engine & pricing pipeline
+│   ├── config.py          # All tunable constants
+│   ├── bundle_paths.py    # Frozen-mode path resolution
+│   ├── item_detection.py  # Cursor tracking, Ctrl+C, POE2 window detection
+│   ├── item_parser.py     # Clipboard text → ParsedItem
+│   ├── mod_parser.py      # Mod text → trade API stat IDs
+│   ├── mod_database.py    # Local mod scoring (RePoE tier data)
+│   ├── calibration.py     # Score-to-price calibration engine
+│   ├── price_cache.py     # poe2scout data fetcher & local cache
+│   ├── trade_client.py    # POE2 trade API client for rares
+│   ├── filter_updater.py  # Loot filter economy re-tiering
+│   ├── overlay.py         # Transparent overlay window
+│   ├── watchlist.py       # Trade watchlist polling engine
+│   ├── bug_reporter.py    # Discord webhook bug reporting
+│   └── ...
+├── resources/             # Bundled resource files
+│   ├── dashboard.html     # Single-file React UI (3 tabs, POE2 theme)
+│   ├── VERSION            # App version string
+│   └── NewBooBoo.filter   # Loot filter template
+├── scripts/               # Build & maintenance scripts
+│   ├── BUILD.bat          # PyInstaller exe build
+│   ├── SYNC.bat           # Multi-machine sync (git pull + pip install)
+│   └── build.spec         # PyInstaller spec file
+├── tests/
+│   ├── conftest.py        # Shared pytest fixtures
+│   ├── test_item_parser.py
+│   ├── test_mod_parser.py
+│   ├── test_mod_database.py
+│   ├── test_trade_client.py
+│   └── fixtures/          # Real clipboard captures for tests
+└── docs/                  # Developer documentation
+    ├── CLAUDE_CODE_HANDOFF.md
+    └── TODO.md
 ```
 
 ---

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-# Ensure the project root is importable
+# Ensure src/ is importable
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from item_parser import ItemParser, ParsedItem
 from mod_parser import ModParser, ParsedMod

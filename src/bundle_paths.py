@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 IS_FROZEN = getattr(sys, "frozen", False)
-APP_DIR = Path(sys._MEIPASS) if IS_FROZEN else Path(__file__).resolve().parent
+APP_DIR = Path(sys._MEIPASS) if IS_FROZEN else Path(__file__).resolve().parent.parent
 
 
 def get_resource(relative_path: str) -> Path:

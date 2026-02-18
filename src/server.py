@@ -197,7 +197,7 @@ class OverlayProcess:
         if IS_FROZEN:
             cmd = [sys.executable, "--overlay-worker", "--league", league]
         else:
-            cmd = [sys.executable, "main.py", "--league", league]
+            cmd = [sys.executable, str(Path(__file__).parent / "main.py"), "--league", league]
         if no_filter_update:
             cmd.append("--no-filter-update")
 
@@ -843,7 +843,7 @@ async def update_filter():
         cmd = [sys.executable, "--overlay-worker",
                "--league", league, "--test-filter-update"]
     else:
-        cmd = [sys.executable, "main.py",
+        cmd = [sys.executable, str(Path(__file__).parent / "main.py"),
                "--league", league, "--test-filter-update"]
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
@@ -930,7 +930,7 @@ async def restart_app():
 @app.get("/dashboard", response_class=HTMLResponse)
 async def serve_dashboard():
     """Serve dashboard.html for standalone app mode."""
-    dashboard_path = get_resource("dashboard.html")
+    dashboard_path = get_resource("resources/dashboard.html")
     if not dashboard_path.exists():
         return HTMLResponse("<h1>dashboard.html not found</h1>", status_code=404)
     return HTMLResponse(dashboard_path.read_text(encoding="utf-8"))
@@ -968,6 +968,8 @@ async def websocket_endpoint(ws: WebSocket):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
     logging.basicConfig(
         level=logging.INFO,

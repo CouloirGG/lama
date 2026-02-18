@@ -9,5 +9,5 @@ if errorlevel 1 (
     python -m pip install -r "%~dp0requirements.txt" --quiet --disable-pip-version-check
 )
 
-python app.py
+python src\app.py
 if errorlevel 1 pause

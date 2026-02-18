@@ -13,7 +13,8 @@ import time
 import argparse
 import subprocess
 
-TESTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests")
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TESTS_DIR = os.path.join(PROJECT_DIR, "tests")
 
 
 def discover_test_modules():
@@ -83,7 +84,7 @@ def main():
     )
     args = parser.parse_args()
 
-    project_dir = os.path.dirname(os.path.abspath(__file__))
+    project_dir = PROJECT_DIR
     modules = discover_test_modules()
 
     if not modules:

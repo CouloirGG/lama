@@ -15,20 +15,20 @@ A real-time price overlay for Path of Exile 2. Hover over any item in-game, it s
 ## Current Architecture
 
 **Three interfaces:**
-1. **Distributable exe** — `BUILD.bat` → `dist/POE2PriceOverlay/POE2PriceOverlay.exe`
+1. **Distributable exe** — `scripts/BUILD.bat` → `dist/POE2PriceOverlay/POE2PriceOverlay.exe`
    - Single exe bundles everything (PyInstaller, `console=False`)
    - `bundle_paths.py` provides IS_FROZEN/APP_DIR/get_resource() for path resolution
    - Overlay subprocess uses `--overlay-worker` flag (app.py dispatches to main.main())
    - Auto-update: checks GitHub releases API on startup, shows gold banner in dashboard
-2. **Desktop Dashboard (source)** — `python app.py` or `POE2 Dashboard.bat`
-   - PyWebView native window → FastAPI server (`server.py`) → React UI (`dashboard.html`)
+2. **Desktop Dashboard (source)** — `python src/app.py` or `POE2 Dashboard.bat`
+   - PyWebView native window → FastAPI server (`src/server.py`) → React UI (`resources/dashboard.html`)
    - 3 tabs: Overlay (controls + live log), Loot Filter (strictness/styles), Watchlist (trade queries)
    - Manages overlay subprocess (main.py) with start/stop/restart
    - Real-time log streaming via WebSocket
    - Settings persistence to `~/.poe2-price-overlay/dashboard_settings.json`
    - Bug report submission (Discord webhook)
    - Loot filter update trigger
-3. **CLI/Overlay mode** — `python main.py` or `START.bat`
+3. **CLI/Overlay mode** — `python src/main.py` or `START.bat`
    - Direct overlay without dashboard (legacy mode)
 
 **Pricing pipeline (runs inside main.py):**
@@ -49,8 +49,9 @@ Cursor stops over POE2 window (8 fps polling)
   → Overlay shows color-coded price near cursor
 ```
 
-## File Inventory (root level, NOT in src/)
+## File Inventory
 
+### Source (`src/`)
 | File | Purpose |
 |------|---------|
 | `main.py` | Entry point & orchestrator. Pipeline, threading, startup |
@@ -68,14 +69,28 @@ Cursor stops over POE2 window (8 fps polling)
 | `screen_capture.py` | POE2 window detection via Win32 API |
 | `app.py` | **Desktop dashboard shell** — pywebview native window hosting FastAPI server |
 | `server.py` | **FastAPI backend** — overlay process mgmt, WS log streaming, settings, watchlist, bug reports, filter updates, league API |
-| `dashboard.html` | **Single-file React UI** — POE2 dark theme, 3 tabs (Overlay, Loot Filter, Watchlist), KPI cards, real-time log console |
 | `watchlist.py` | Trade API polling worker for the Watchlist tab |
-| `launcher.py` | Legacy CLI launcher (bat files call this for non-GUI mode) |
-| `START.bat` | Main launcher (CLI mode) |
-| `POE2 Dashboard.bat` | **Launches the GUI dashboard** (`python app.py`) |
+
+### Resources (`resources/`)
+| File | Purpose |
+|------|---------|
+| `dashboard.html` | **Single-file React UI** — POE2 dark theme, 3 tabs (Overlay, Loot Filter, Watchlist), KPI cards, real-time log console |
+| `VERSION` | App version string (read by config.py → APP_VERSION) |
+| `NewBooBoo.filter` | Loot filter template for filter updater |
+
+### Scripts (`scripts/`)
+| File | Purpose |
+|------|---------|
+| `BUILD.bat` | Build distributable exe via PyInstaller |
 | `SYNC.bat` | **Multi-machine sync** — pulls latest from GitHub, installs deps, verifies setup |
-| `DEBUG.bat` | Launches with `--debug` flag for verbose logging |
-| `REPORT_BUG.bat` | Zips logs to Desktop, opens GitHub issue page |
+| `build.spec` | PyInstaller spec file |
+
+### Root (user-facing launchers)
+| File | Purpose |
+|------|---------|
+| `POE2 Dashboard.bat` | **Launches the GUI dashboard** (`python src/app.py`) |
+| `START.bat` | Main launcher (CLI mode) |
+| `SETUP.bat` | One-click install + launch |
 | `LICENSE` | GPLv3 |
 | `.gitignore` | Standard Python gitignore |
 
@@ -209,7 +224,7 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 **Running:**
 - `RUN_TESTS.bat` — spawns a PowerShell window per module (visual monitoring)
 - `python -m pytest tests/ -v` — all tests in one terminal
-- `python run_tests.py --module mod_database` — single module in PowerShell window
+- `python src/run_tests.py --module mod_database` — single module in PowerShell window
 - `python -m pytest tests/test_mod_database.py -v` — single module inline
 
 ## User's Setup
@@ -312,12 +327,12 @@ Add a subtle "Buy me a coffee" button/link that connects to the user's accounts.
 5. Say: "Read CLAUDE_CODE_HANDOFF.md and continue development"
 
 **Switching between machines:**
-1. `cd POE2_OCR` → double-click `SYNC.bat` (or run `git pull && pip install -r requirements.txt`)
+1. `cd POE2_OCR` → double-click `scripts/SYNC.bat` (or run `git pull && pip install -r requirements.txt`)
 2. This pulls all latest code from GitHub and installs any new deps
 
 **Running the tool:**
-- **Dashboard GUI:** `python app.py` or double-click `POE2 Dashboard.bat`
-- **CLI mode:** `python main.py --debug` or double-click `DEBUG.bat`
+- **Dashboard GUI:** `python src/app.py` or double-click `POE2 Dashboard.bat`
+- **CLI mode:** `python src/main.py --debug` or double-click `DEBUG.bat`
 - **Tests:** `RUN_TESTS.bat` or `python -m pytest tests/ -v`
 
 **Debug files:**

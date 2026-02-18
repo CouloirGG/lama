@@ -11,7 +11,7 @@ from bundle_paths import get_resource
 # ─────────────────────────────────────────────
 # Version
 # ─────────────────────────────────────────────
-_version_file = get_resource("VERSION")
+_version_file = get_resource("resources/VERSION")
 APP_VERSION = _version_file.read_text().strip() if _version_file.exists() else "dev"
 
 # ─────────────────────────────────────────────
