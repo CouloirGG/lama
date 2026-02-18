@@ -33,11 +33,11 @@ echo   Checking dependencies...
 python -c "import requests" >nul 2>&1
 if errorlevel 1 (
     echo   Installing required packages...
-    pip install -r "%~dp0requirements.txt" --quiet
+    python -m pip install -r "%~dp0requirements.txt" --quiet
     if errorlevel 1 (
         echo.
         echo   Failed to install dependencies.
-        echo   Try manually: pip install -r requirements.txt
+        echo   Try manually: python -m pip install -r requirements.txt
         pause
         exit /b 1
     )
