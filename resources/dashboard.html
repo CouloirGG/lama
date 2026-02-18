@@ -642,32 +642,34 @@
     // Tooltip wrapper
     // -----------------------------------------------------------------------
     function Tooltip({ text, children }) {
-      const [show, setShow] = useState(false);
-      const [above, setAbove] = useState(true);
+      const [pos, setPos] = useState(null);
       const ref = useRef(null);
 
       const handleEnter = () => {
         if (ref.current) {
           const rect = ref.current.getBoundingClientRect();
-          setAbove(rect.top > 50);
+          const above = rect.top > 50;
+          setPos({
+            left: rect.left + rect.width / 2,
+            top: above ? rect.top - 6 : rect.bottom + 6,
+            above,
+          });
         }
-        setShow(true);
       };
 
-      const pos = above
-        ? { bottom: "100%", marginBottom: 6 }
-        : { top: "100%", marginTop: 6 };
-
       return (
-        <div ref={ref} onMouseEnter={handleEnter} onMouseLeave={() => setShow(false)} style={{ position: "relative" }}>
+        <div ref={ref} onMouseEnter={handleEnter} onMouseLeave={() => setPos(null)} style={{ position: "relative" }}>
           {children}
-          {show && text && (
+          {pos && text && (
             <div style={{
-              position: "absolute", left: "50%", transform: "translateX(-50%)",
-              ...pos,
+              position: "fixed",
+              left: pos.left,
+              top: pos.above ? "auto" : pos.top,
+              bottom: pos.above ? `calc(100vh - ${pos.top}px)` : "auto",
+              transform: "translateX(-50%)",
               background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 6,
               padding: "6px 10px", fontSize: 11, color: T.textSecond, whiteSpace: "nowrap",
-              zIndex: 100, pointerEvents: "none",
+              zIndex: 9999, pointerEvents: "none",
               boxShadow: "0 4px 12px rgba(0,0,0,0.6)",
             }}>{text}</div>
           )}
@@ -723,8 +725,8 @@
         <div>
           {/* Row 1: Market Data */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 12, marginBottom: 10 }}>
-            <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} sub={d2c > 0 ? "Chaos" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
             <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
+            <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} sub={d2c > 0 ? "Chaos" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
             <StatCard label="1 Exalted" value={e2c > 0 ? `${e2c.toFixed(2)}` : "--"} sub={e2c > 0 ? "Chaos" : null} color={T.amber} iconLeft={ICON.exalted} iconRight={ICON.chaos} tooltip="1 Exalted Orb = X Chaos Orbs" />
             <StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={refreshColor} tooltip="When price data was last fetched (refreshes every 15 min)" />
           </div>
@@ -2053,12 +2055,14 @@
                         </Tooltip>
                       )}
                       {l.whisper && (
-                        <button onClick={() => copyWhisper(l.whisper, i)} style={{
-                          ...BTN, padding: "2px 8px", fontSize: 10,
-                          background: copiedIdx === i ? T.green : T.input,
-                          color: copiedIdx === i ? "#fff" : T.textSecond,
-                          border: `1px solid ${copiedIdx === i ? T.green : T.border}`,
-                        }}>{copiedIdx === i ? "Copied" : "Whisper"}</button>
+                        <Tooltip text="Copy whisper message to clipboard">
+                          <button onClick={() => copyWhisper(l.whisper, i)} style={{
+                            ...BTN, padding: "2px 8px", fontSize: 10,
+                            background: copiedIdx === i ? T.green : T.input,
+                            color: copiedIdx === i ? "#fff" : T.textSecond,
+                            border: `1px solid ${copiedIdx === i ? T.green : T.border}`,
+                          }}>{copiedIdx === i ? "Copied" : "Whisper"}</button>
+                        </Tooltip>
                       )}
                     </div>
                   </td>
@@ -2623,7 +2627,7 @@
       return (
         <div className="app-frame">
           <WindowTitleBar />
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto", scrollbarGutter: "stable" }}>
           <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 24px" }}>
           <Header wsConnected={connected} overlayState={status.state} />
           {updateInfo && (
