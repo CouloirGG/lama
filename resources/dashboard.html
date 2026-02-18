@@ -39,7 +39,7 @@
     .window-titlebar {
       display: flex;
       align-items: center;
-      height: 32px;
+      height: 36px;
       padding: 0 4px 0 12px;
       flex-shrink: 0;
       user-select: none;
@@ -477,17 +477,56 @@
     // -----------------------------------------------------------------------
     // Window Title Bar (frameless mode)
     // -----------------------------------------------------------------------
-    function WindowTitleBar() {
+    function WindowTitleBar({ wsConnected, overlayState, onStart, onStop, onRestart }) {
       const minimize = () => window.pywebview?.api?.minimize();
       const toggleMax = () => window.pywebview?.api?.toggle_maximize();
       const close = () => window.pywebview?.api?.close();
+      const st = OVERLAY_STATES[overlayState] || OVERLAY_STATES.stopped;
+      const isRunning = overlayState === "running" || overlayState === "starting";
 
       return (
-        <div className="window-titlebar pywebview-drag-region">
-          <div style={{ fontSize: 11, color: T.textMuted, fontWeight: 500 }}>
+        <div className="window-titlebar pywebview-drag-region" style={{ height: 36 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.gold, textShadow: "0 0 12px rgba(196,164,86,0.3)" }}>
             POE2 Price Overlay
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10 }}>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              fontSize: 9, fontWeight: 600, color: wsConnected ? T.green : T.red,
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: wsConnected ? T.green : T.red, animation: wsConnected ? "none" : "pulse 1.5s infinite" }} />
+              {wsConnected ? "Connected" : "Reconnecting"}
+            </div>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              background: st.bg, borderRadius: 10, padding: "1px 8px",
+              fontSize: 9, fontWeight: 700, color: st.color, letterSpacing: "0.04em",
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: st.color, animation: overlayState === "running" ? "pulse 2s infinite" : "none" }} />
+              {st.label}
+            </div>
+          </div>
           <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 8 }}>
+            {!isRunning ? (
+              <button onClick={onStart} className="btn-gold-hover" style={{
+                border: "none", borderRadius: 4, padding: "3px 12px", fontSize: 10, fontWeight: 600,
+                cursor: "pointer", background: T.green, color: "#fff",
+              }}>&#9654; Start</button>
+            ) : (
+              <button onClick={onStop} className="btn-danger-hover" style={{
+                border: "none", borderRadius: 4, padding: "3px 12px", fontSize: 10, fontWeight: 600,
+                cursor: "pointer", background: T.red, color: "#fff",
+              }}>&#9632; Stop</button>
+            )}
+            <Tooltip text="Restart overlay">
+              <button onClick={onRestart} disabled={!isRunning} style={{
+                border: "none", borderRadius: 4, padding: "3px 8px", fontSize: 10, fontWeight: 600,
+                cursor: isRunning ? "pointer" : "default",
+                background: "transparent", color: isRunning ? T.textSecond : T.border,
+              }}>&#8635;</button>
+            </Tooltip>
+          </div>
           <div style={{ display: "flex", gap: 0 }}>
             <button className="window-btn" onClick={minimize}>&#8211;</button>
             <button className="window-btn" onClick={toggleMax}>&#9633;</button>
@@ -499,7 +538,7 @@
 
     // Brand Footer
     // -----------------------------------------------------------------------
-    function BrandFooter() {
+    function BrandFooter({ leagues, selectedLeague, onLeagueChange, onBugReport, onRestartApp }) {
       const [flyoutOpen, setFlyoutOpen] = useState(false);
       const flyoutRef = useRef(null);
 
@@ -514,6 +553,34 @@
 
       return (
         <div className="app-footer" style={{ position: "relative" }} ref={flyoutRef}>
+          <select
+            value={selectedLeague || "Fate of the Vaal"}
+            onChange={(e) => onLeagueChange(e.target.value)}
+            style={{
+              background: T.input, border: `1px solid ${T.border}`, borderRadius: 4,
+              color: T.textMuted, padding: "3px 8px", fontSize: 10, ...MONO,
+              appearance: "auto", cursor: "pointer",
+            }}
+          >
+            {(leagues || []).map(lg => (
+              <option key={lg.value} value={lg.value}>{lg.label}</option>
+            ))}
+          </select>
+          <Tooltip text="Send bug report with logs to Discord">
+            <button onClick={onBugReport} style={{
+              background: "transparent", border: "none", color: T.textMuted,
+              fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
+              transition: "color 0.15s",
+            }} onMouseEnter={e => e.target.style.color = T.amber} onMouseLeave={e => e.target.style.color = T.textMuted}>Bug Report</button>
+          </Tooltip>
+          <Tooltip text="Restart the entire app (server + overlay)">
+            <button onClick={onRestartApp} style={{
+              background: "transparent", border: "none", color: T.textMuted,
+              fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
+              transition: "color 0.15s",
+            }} onMouseEnter={e => e.target.style.color = T.textSecond} onMouseLeave={e => e.target.style.color = T.textMuted}>Restart App</button>
+          </Tooltip>
+          <div style={{ flex: 1 }} />
           <a className="footer-email" href="mailto:hello@couloir.gg">hello@couloir.gg</a>
           <span style={{ fontSize: 11, fontWeight: 800, color: "#5c4f3d", letterSpacing: "0.08em", textTransform: "uppercase" }}>
             Couloir
@@ -686,14 +753,14 @@
 
     function StatCard({ label, value, sub, color, tooltip, iconLeft, iconRight }) {
       const card = (
-        <div className="panel" style={{ ...CARD, textAlign: "center", minWidth: 0 }}>
-          <div style={{ ...LABEL, marginBottom: 8 }}>{label}</div>
-          <div style={{ ...MONO, fontSize: 22, fontWeight: 700, color: color || T.text, lineHeight: 1.2, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-            {iconLeft && <CurrencyIcon src={iconLeft} size={28} />}
+        <div className="panel" style={{ ...CARD, padding: 10, textAlign: "center", minWidth: 0 }}>
+          <div style={{ ...LABEL, marginBottom: 4, fontSize: 9 }}>{label}</div>
+          <div style={{ ...MONO, fontSize: 18, fontWeight: 700, color: color || T.text, lineHeight: 1.2, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
+            {iconLeft && <CurrencyIcon src={iconLeft} size={22} />}
             <span>{value}</span>
-            {iconRight && <CurrencyIcon src={iconRight} size={28} />}
+            {iconRight && <CurrencyIcon src={iconRight} size={22} />}
           </div>
-          {sub && <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>{sub}</div>}
+          {sub && <div style={{ fontSize: 9, color: T.textMuted, marginTop: 2 }}>{sub}</div>}
         </div>
       );
       return tooltip ? <Tooltip text={tooltip}>{card}</Tooltip> : card;
@@ -718,24 +785,31 @@
       const e2c = d2e > 0 ? (d2c / d2e) : 0;
       const calSamples = stats.calibration_samples || 0;
 
-      // Refresh age coloring
       const refreshColor = stats.last_refresh === "never" ? T.textSecond : T.green;
 
       return (
-        <div>
-          {/* Row 1: Market Data */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px, 1fr))", gap: 12, marginBottom: 10 }}>
+        <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px" }}>
+          {/* Market KPIs — compact single row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 8 }}>
             <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
             <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} sub={d2c > 0 ? "Chaos" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
             <StatCard label="1 Exalted" value={e2c > 0 ? `${e2c.toFixed(2)}` : "--"} sub={e2c > 0 ? "Chaos" : null} color={T.amber} iconLeft={ICON.exalted} iconRight={ICON.chaos} tooltip="1 Exalted Orb = X Chaos Orbs" />
             <StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={refreshColor} tooltip="When price data was last fetched (refreshes every 15 min)" />
           </div>
-          {/* Row 2: Tool Health */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginBottom: 20 }}>
-            <StatCard label="Scans" value={stats.triggers} color={T.textSecond} tooltip="Number of item tooltips scanned via Ctrl+C" />
-            <StatCard label="Hit Rate" value={`${stats.success_rate}%`} color={stats.success_rate >= 50 ? T.green : stats.success_rate > 0 ? T.amber : T.textSecond} tooltip="Percentage of scans that found a price" />
-            <StatCard label="Calibration" value={calSamples > 0 ? calSamples.toLocaleString() : "--"} sub={calSamples > 0 ? "samples" : null} color={calSamples >= 1000 ? T.green : calSamples > 0 ? T.amber : T.textSecond} tooltip="Calibration data points for score-to-price estimation" />
-            <StatCard label="Uptime" value={formatUptime(uptime)} color={isRunning ? T.green : T.textSecond} tooltip="Time since overlay was started" />
+          {/* Health stats — compact inline strip */}
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 10, padding: "4px 0" }}>
+            <Tooltip text="Number of item tooltips scanned via Ctrl+C">
+              <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Scans: <span style={{ color: T.textSecond, fontWeight: 600 }}>{stats.triggers}</span></span>
+            </Tooltip>
+            <Tooltip text="Percentage of scans that found a price">
+              <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Hit Rate: <span style={{ color: stats.success_rate >= 50 ? T.green : stats.success_rate > 0 ? T.amber : T.textSecond, fontWeight: 600 }}>{stats.success_rate}%</span></span>
+            </Tooltip>
+            <Tooltip text="Calibration data points for score-to-price estimation">
+              <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Calibration: <span style={{ color: calSamples >= 1000 ? T.green : calSamples > 0 ? T.amber : T.textSecond, fontWeight: 600 }}>{calSamples > 0 ? calSamples.toLocaleString() : "--"}</span></span>
+            </Tooltip>
+            <Tooltip text="Time since overlay was started">
+              <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Uptime: <span style={{ color: isRunning ? T.green : T.textSecond, fontWeight: 600 }}>{formatUptime(uptime)}</span></span>
+            </Tooltip>
           </div>
         </div>
       );
@@ -910,7 +984,7 @@
       ];
 
       return (
-        <div style={{ display: "flex", gap: 2, marginBottom: 20, borderBottom: `1px solid ${T.border}` }}>
+        <div style={{ display: "flex", gap: 2, marginBottom: 0, borderBottom: `1px solid ${T.border}` }}>
           {tabs.map(tab => {
             const active = activeTab === tab.id;
             return (
@@ -964,8 +1038,8 @@
       );
 
       return (
-        <div className="panel" style={{ ...CARD, marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <div className="panel" style={{ ...CARD, padding: 12, marginTop: 12, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <span style={{ ...LABEL, marginBottom: 0 }}>Overlay Settings</span>
             {isRunning && (
               <span style={{ fontSize: 10, color: T.amber, fontWeight: 500 }}>
@@ -2417,7 +2491,7 @@
       };
 
       return (
-        <div className="panel" style={{ ...CARD, marginTop: 20 }}>
+        <div className="panel" style={{ ...CARD, padding: 12, marginTop: 0, marginBottom: 0 }}>
           <div
             style={{
               display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -2626,81 +2700,86 @@
 
       return (
         <div className="app-frame">
-          <WindowTitleBar />
-          <div style={{ flex: 1, overflowY: "auto", scrollbarGutter: "stable" }}>
-          <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 24px" }}>
-          <Header wsConnected={connected} overlayState={status.state} />
-          {updateInfo && (
-            <div style={{ background: "rgba(196,164,86,0.12)", border: `1px solid ${T.gold}`, borderRadius: 8, padding: "10px 16px", marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ color: T.gold, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ display: "inline-block", width: 5, height: 5, background: T.gold, transform: "rotate(45deg)", flexShrink: 0 }} />
-                  {updateInfo.installing ? "Installing update..." : `Update available: v${updateInfo.latest}`}
-                  {!updateInfo.installing && <span style={{ color: T.textSecond, fontWeight: 400, marginLeft: 8 }}>(current: v{updateInfo.current})</span>}
-                </span>
-                <span style={{ display: "flex", gap: 8 }}>
-                  {updateInfo.installing ? null : updateInfo.progress != null ? null : updateInfo.setup_url ? (
-                    <button onClick={() => api("/api/apply-update", "POST")} style={{ ...BTN, background: T.gold, color: "#0d0b08", padding: "5px 14px", fontSize: 11 }}>Install Update</button>
-                  ) : (
-                    <a href={updateInfo.url} target="_blank" rel="noopener noreferrer" style={{ ...BTN, background: T.gold, color: "#0d0b08", textDecoration: "none", padding: "5px 14px", fontSize: 11 }}>Download</a>
-                  )}
-                  {!updateInfo.installing && updateInfo.progress == null && (
-                    <button onClick={() => setUpdateInfo(null)} style={{ ...BTN, background: "transparent", border: `1px solid ${T.border}`, color: T.textSecond, padding: "5px 10px", fontSize: 11 }}>Dismiss</button>
-                  )}
-                </span>
-              </div>
-              {updateInfo.progress != null && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 4, height: 6, overflow: "hidden" }}>
-                    <div style={{ background: T.gold, height: "100%", width: `${updateInfo.progress}%`, borderRadius: 4, transition: "width 0.3s ease" }} />
-                  </div>
-                  <div style={{ color: T.textSecond, fontSize: 11, marginTop: 4, textAlign: "center" }}>
-                    {updateInfo.installing ? "Launching installer..." : `Downloading: ${updateInfo.progress}%`}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          <StatusPanel status={status} />
-          <ControlBar
+          <WindowTitleBar
+            wsConnected={connected}
             overlayState={status.state}
-            settings={settings}
-            leagues={leagues}
             onStart={handleStart}
             onStop={handleStop}
             onRestart={handleRestart}
+          />
+          <GoldDivider />
+          {updateInfo && (
+            <div style={{ maxWidth: 1050, margin: "0 auto", padding: "4px 24px" }}>
+              <div style={{ background: "rgba(196,164,86,0.12)", border: `1px solid ${T.gold}`, borderRadius: 8, padding: "8px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span style={{ color: T.gold, fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ display: "inline-block", width: 5, height: 5, background: T.gold, transform: "rotate(45deg)", flexShrink: 0 }} />
+                    {updateInfo.installing ? "Installing update..." : `Update available: v${updateInfo.latest}`}
+                    {!updateInfo.installing && <span style={{ color: T.textSecond, fontWeight: 400, marginLeft: 8 }}>(current: v{updateInfo.current})</span>}
+                  </span>
+                  <span style={{ display: "flex", gap: 8 }}>
+                    {updateInfo.installing ? null : updateInfo.progress != null ? null : updateInfo.setup_url ? (
+                      <button onClick={() => api("/api/apply-update", "POST")} style={{ ...BTN, background: T.gold, color: "#0d0b08", padding: "4px 12px", fontSize: 10 }}>Install Update</button>
+                    ) : (
+                      <a href={updateInfo.url} target="_blank" rel="noopener noreferrer" style={{ ...BTN, background: T.gold, color: "#0d0b08", textDecoration: "none", padding: "4px 12px", fontSize: 10 }}>Download</a>
+                    )}
+                    {!updateInfo.installing && updateInfo.progress == null && (
+                      <button onClick={() => setUpdateInfo(null)} style={{ ...BTN, background: "transparent", border: `1px solid ${T.border}`, color: T.textSecond, padding: "4px 8px", fontSize: 10 }}>Dismiss</button>
+                    )}
+                  </span>
+                </div>
+                {updateInfo.progress != null && (
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 4, height: 5, overflow: "hidden" }}>
+                      <div style={{ background: T.gold, height: "100%", width: `${updateInfo.progress}%`, borderRadius: 4, transition: "width 0.3s ease" }} />
+                    </div>
+                    <div style={{ color: T.textSecond, fontSize: 10, marginTop: 3, textAlign: "center" }}>
+                      {updateInfo.installing ? "Launching installer..." : `Downloading: ${updateInfo.progress}%`}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <StatusPanel status={status} />
+          <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px" }}>
+            <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", scrollbarGutter: "stable", minHeight: 0 }}>
+            <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 16px" }}>
+              {activeTab === "overlay" && (
+                <>
+                  <OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} />
+                  <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
+                </>
+              )}
+              {activeTab === "filter" && (
+                <FilterTab
+                  settings={settings}
+                  onUpdate={handleSettingsUpdate}
+                  onUpdateFilter={handleUpdateFilter}
+                  filterUpdating={filterUpdating}
+                />
+              )}
+              {activeTab === "watchlist" && (
+                <WatchlistTab
+                  settings={settings}
+                  watchlistResults={watchlistResults}
+                  queryStates={queryStates}
+                  onSettingsUpdate={handleSettingsUpdate}
+                  onRefresh={handleWatchlistRefresh}
+                />
+              )}
+            </div>
+          </div>
+          <BrandFooter
+            leagues={leagues}
+            selectedLeague={settings.league}
             onLeagueChange={handleLeagueChange}
             onBugReport={() => setBugModalOpen(true)}
             onRestartApp={handleRestartApp}
           />
-          <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
-
-          {activeTab === "overlay" && (
-            <OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} />
-          )}
-          {activeTab === "filter" && (
-            <FilterTab
-              settings={settings}
-              onUpdate={handleSettingsUpdate}
-              onUpdateFilter={handleUpdateFilter}
-              filterUpdating={filterUpdating}
-            />
-          )}
-          {activeTab === "watchlist" && (
-            <WatchlistTab
-              settings={settings}
-              watchlistResults={watchlistResults}
-              queryStates={queryStates}
-              onSettingsUpdate={handleSettingsUpdate}
-              onRefresh={handleWatchlistRefresh}
-            />
-          )}
-
-          <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
           <BugReportModal open={bugModalOpen} onClose={() => setBugModalOpen(false)} />
-        </div>
-        </div>
-        <BrandFooter />
         </div>
       );
     }
