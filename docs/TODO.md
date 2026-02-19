@@ -23,6 +23,20 @@
 
 ## Completed
 
+### Session 20 (2026-02-18)
+- [x] **Fix Restart App** — server broadcasts `app_restart` via WebSocket so dashboard calls `pywebview.api.close()` for clean WebView2 shutdown; `TerminateProcess` fallback
+- [x] **Mirror KPI** — added Mirror-to-Divine exchange rate card to dashboard; pipeline through price_cache → main.py status line → server.py → dashboard (PT-41)
+- [x] **Item names in filter tiers** — new `/api/filter-items` endpoint reads price cache, computes tier assignments per economy section; SectionRow shows item name badges with chaos values under each tier (PT-38)
+- [x] **No-scroll dashboard layout** — fixed header/KPIs/tabs/footer with scrollable tab content (PT-40)
+- [x] **Title bar overlay controls** — Start/Stop/Restart buttons + connection/state badges in title bar (PT-32)
+- [x] **De-emphasized Bug/Restart** — moved to footer as text links (PT-33)
+- [x] **League in footer** — dropdown moved from prominent header to footer (PT-37)
+- [x] **Settings overhaul** — grouped Display/Detection panels, auto-start toggle (PT-35)
+- [x] **Disclaimers** — accuracy warnings on status panel, filter tab, watchlist tab (PT-36)
+- [x] **Credits flyout** — "Thanks To" section: GGG, poe.ninja, NeverSink, RePoE, community (PT-42)
+- [x] **Feedback/Feature Request** — modal dialog + Discord webhook endpoint, footer buttons (PT-34)
+- [x] **Footer readability** — bumped button/select colors from `textMuted` to `textSecond`
+
 ### Session 19 (2026-02-18)
 - [x] Tooltip z-index fix — rewrote Tooltip component to use `position: fixed` with `getBoundingClientRect()`, preventing clipping inside scrollable containers (PT-27, PT-31)
 - [x] KPI card reorder — Divine→Exalted first, then Divine→Chaos, then Exalted→Chaos (PT-28)
