@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LAMA</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
@@ -1160,10 +1161,14 @@
       return (
         <div style={{ marginTop: 12, marginBottom: 12 }}>
           {/* Toggles row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 12, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Toggle value={settings.auto_start !== false} onChange={(v) => onUpdate({ auto_start: v })} size="small" />
               <span style={{ fontSize: 11, color: T.textSecond }}>Auto-start overlay on launch</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Toggle value={settings.start_with_windows === true} onChange={(v) => onUpdate({ start_with_windows: v })} size="small" />
+              <span style={{ fontSize: 11, color: T.textSecond }}>Launch LAMA on Windows startup</span>
             </div>
             {isRunning && (
               <span style={{ fontSize: 10, color: T.amber, fontWeight: 500, marginLeft: "auto" }}>
@@ -2722,7 +2727,7 @@
     // -----------------------------------------------------------------------
     function Dashboard() {
       const [status, setStatus] = useState({ state: "stopped", uptime: 0, stats: { uptime_min: 0, triggers: 0, prices_shown: 0, success_rate: 0, cache_items: 0, last_refresh: "never", divine_to_chaos: 0, divine_to_exalted: 0, mirror_to_divine: 0, calibration_samples: 0 } });
-      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {}, filter_gear_classes: {}, filter_color_preset: "default" });
+      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, start_with_windows: false, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {}, filter_gear_classes: {}, filter_color_preset: "default" });
       const [leagues, setLeagues] = useState([{ value: "Fate of the Vaal", label: "Fate of the Vaal" }]);
       const [logs, setLogs] = useState([]);
       const [autoStartDone, setAutoStartDone] = useState(false);
@@ -2799,8 +2804,11 @@
             setUpdateInfo(prev => prev ? { ...prev, progress: msg.percent, installing: msg.installing || false } : prev);
             break;
           case "app_restart":
-            // Server is restarting — close the pywebview window so the old process exits cleanly
-            if (window.pywebview && window.pywebview.api) {
+            // Server is restarting — force-close the pywebview window so the old process exits
+            // (close() just hides to tray, force_close() actually destroys the window)
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.force_close) {
+              window.pywebview.api.force_close();
+            } else if (window.pywebview && window.pywebview.api) {
               window.pywebview.api.close();
             } else {
               window.close();
