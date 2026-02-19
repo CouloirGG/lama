@@ -69,21 +69,50 @@ def wait_for_server(timeout=10):
 class WindowApi:
     """JS-callable window controls for frameless mode."""
 
+    def __init__(self):
+        self._saved_rect = None
+
+    def _get_hwnd(self):
+        import ctypes
+        return ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
+
+    def save_bounds(self):
+        """Save current window position and size (call once after window loads)."""
+        import ctypes
+        import ctypes.wintypes
+        hwnd = self._get_hwnd()
+        if hwnd:
+            rect = ctypes.wintypes.RECT()
+            ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            self._saved_rect = (rect.left, rect.top,
+                                rect.right - rect.left,
+                                rect.bottom - rect.top)
+
+    def restore_bounds(self):
+        """Re-apply saved window bounds (fixes frameless resize glitch)."""
+        import ctypes
+        hwnd = self._get_hwnd()
+        if hwnd and self._saved_rect:
+            x, y, w, h = self._saved_rect
+            SWP_NOZORDER = 0x0004
+            ctypes.windll.user32.SetWindowPos(hwnd, 0, x, y, w, h, SWP_NOZORDER)
+
     def minimize(self):
         import ctypes
-        hwnd = ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
+        hwnd = self._get_hwnd()
         if hwnd:
             ctypes.windll.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
 
     def toggle_maximize(self):
         import ctypes
-        user32 = ctypes.windll.user32
-        hwnd = user32.FindWindowW(None, WINDOW_TITLE)
+        hwnd = self._get_hwnd()
         if hwnd:
-            if user32.IsZoomed(hwnd):
-                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            if ctypes.windll.user32.IsZoomed(hwnd):
+                ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
             else:
-                user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+                ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+            # Update saved bounds after maximize/restore
+            self.save_bounds()
 
     def close(self):
         import webview

@@ -2844,10 +2844,28 @@
         return () => clearTimeout(timer);
       }, [connected, autoStartDone]);
 
+      // Save window bounds on load and after manual resizes (for frameless fix)
+      useEffect(() => {
+        const t = setTimeout(() => window.pywebview?.api?.save_bounds(), 500);
+        let debounce;
+        const onResize = () => {
+          clearTimeout(debounce);
+          debounce = setTimeout(() => window.pywebview?.api?.save_bounds(), 300);
+        };
+        window.addEventListener("resize", onResize);
+        return () => { clearTimeout(t); clearTimeout(debounce); window.removeEventListener("resize", onResize); };
+      }, []);
+
+      // After overlay actions, restore bounds to prevent frameless shrink glitch
+      const guardedAction = (action) => {
+        action();
+        setTimeout(() => window.pywebview?.api?.restore_bounds(), 200);
+      };
+
       // Handlers
-      const handleStart = () => api("/api/start", "POST");
-      const handleStop = () => api("/api/stop", "POST");
-      const handleRestart = () => api("/api/restart", "POST");
+      const handleStart = () => guardedAction(() => api("/api/start", "POST"));
+      const handleStop = () => guardedAction(() => api("/api/stop", "POST"));
+      const handleRestart = () => guardedAction(() => api("/api/restart", "POST"));
 
       const handleLeagueChange = (league) => {
         const newSettings = { ...settings, league };
