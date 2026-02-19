@@ -1097,14 +1097,18 @@ async def restart_app():
             return {"error": "app.py not found — restart only works in standalone mode"}
         restart_cmd = [sys.executable, str(entry), "--restart"]
 
-    # Tell the dashboard to close the pywebview window, then spawn new process
+    # Spawn the new process FIRST — it has --restart which waits for the port
+    # to be freed before binding.  This must happen before we tell the dashboard
+    # to close, because closing pywebview triggers os._exit(0) in app.py which
+    # would kill our daemon threads before Popen runs.
+    subprocess.Popen(restart_cmd, cwd=str(APP_DIR))
+
+    # Now tell the dashboard to close the pywebview window
     await ws_manager.broadcast({"type": "app_restart"})
 
-    def _do_restart():
-        time.sleep(0.5)
-        subprocess.Popen(restart_cmd, cwd=str(APP_DIR))
-        time.sleep(0.5)
-        # Belt-and-suspenders: force kill our own process if webview didn't exit
+    def _kill_self():
+        time.sleep(1.5)
+        # Belt-and-suspenders: force kill if webview didn't exit cleanly
         try:
             import ctypes
             ctypes.windll.kernel32.TerminateProcess(
@@ -1113,7 +1117,7 @@ async def restart_app():
         except Exception:
             os._exit(0)
 
-    threading.Thread(target=_do_restart, daemon=True).start()
+    threading.Thread(target=_kill_self, daemon=True).start()
     return {"status": "restarting"}
 
 
