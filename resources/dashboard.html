@@ -3328,6 +3328,42 @@
       );
     }
 
+    function MarketSignals() {
+      return (
+        <div className="panel" style={{
+          ...CARD,
+          padding: "10px 14px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}>
+          {/* Header row */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ ...LABEL, fontSize: 9, letterSpacing: 1.2 }}>MARKET SIGNALS</span>
+            <span style={{
+              fontSize: 9,
+              color: T.gold,
+              background: "rgba(196,164,86,0.1)",
+              border: `1px solid ${T.borderGold}`,
+              borderRadius: 4,
+              padding: "2px 7px",
+              fontWeight: 600,
+            }}>@MarketMonkey 🐒</span>
+          </div>
+          {/* Coming soon body */}
+          <div style={{
+            fontSize: 11,
+            color: T.textMuted,
+            fontStyle: "italic",
+            textAlign: "center",
+            padding: "6px 0 2px",
+          }}>
+            Coming soon — curated market signals from trusted community analysts on Discord.
+          </div>
+        </div>
+      );
+    }
+
     function MarketsTab() {
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(true);
@@ -3340,6 +3376,12 @@
         }
         setLoading(false);
       };
+
+      // Future: fetch market signals when Discord bot is connected
+      // const fetchSignals = async () => {
+      //   const result = await api("/api/market-signals");
+      //   if (result && !result.error) setSignals(result.signals);
+      // };
 
       useEffect(() => {
         fetchData();
@@ -3414,6 +3456,9 @@
 
           {/* Featured Chart */}
           <FeaturedChart history={history} currencies={currencies} rates={rates} oldestHistoryTs={data?.oldest_history_ts || 0} />
+
+          {/* Market Signals */}
+          <MarketSignals />
 
           {/* Exchange Rate Table */}
           <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden" }}>
@@ -3572,6 +3617,9 @@
             break;
           case "update_progress":
             setUpdateInfo(prev => prev ? { ...prev, progress: msg.percent, installing: msg.installing || false } : prev);
+            break;
+          case "market_signal":
+            // Future: append signal to market signals feed
             break;
           case "app_restart":
             // Server is restarting — force-close the pywebview window so the old process exits
