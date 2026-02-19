@@ -3345,7 +3345,7 @@
       const hinekora = findCurrency("Hinekora's Lock");
       const fracturing = findCurrency("Fracturing Orb");
       const omenLight = findCurrency("Omen of Light");
-      const omenAbyss = findCurrency("Omen of the Abyss");
+      const omenAbyss = findCurrency("Essence of the Abyss");
       const divToEx = rates.divine_to_exalted || 0;
 
       // Filter currencies by category (case-insensitive: poe2scout uses lowercase, pills use PascalCase)
@@ -3388,7 +3388,7 @@
               iconRight={ICON.divine}
             />
             <MarketKPICard
-              label="Omen of the Abyss"
+              label="Essence of the Abyss"
               value={omenAbyss.divine_value && divToEx ? `${Math.round(omenAbyss.divine_value * divToEx)}` : "--"}
               sub="Exalted Orbs"
               change={omenAbyss.sparkline_change}
