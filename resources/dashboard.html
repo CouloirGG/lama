@@ -2845,10 +2845,12 @@
         return () => clearTimeout(timer);
       }, [connected, autoStartDone]);
 
-      // Handlers
-      const handleStart = () => api("/api/start", "POST");
-      const handleStop = () => api("/api/stop", "POST");
-      const handleRestart = () => api("/api/restart", "POST");
+      // Handlers — begin_guard() installs a Win32 hook that silently blocks
+      // window resize for 1 second, preventing the pywebview frameless glitch
+      const guardedAction = (fn) => { window.pywebview?.api?.begin_guard(); fn(); };
+      const handleStart = () => guardedAction(() => api("/api/start", "POST"));
+      const handleStop = () => guardedAction(() => api("/api/stop", "POST"));
+      const handleRestart = () => guardedAction(() => api("/api/restart", "POST"));
 
       const handleLeagueChange = (league) => {
         const newSettings = { ...settings, league };

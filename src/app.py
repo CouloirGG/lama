@@ -69,9 +69,59 @@ def wait_for_server(timeout=10):
 class WindowApi:
     """JS-callable window controls for frameless mode."""
 
+    def __init__(self):
+        self._guard_until = 0.0
+        self._original_proc = None
+        self._hook_ref = None  # prevent garbage collection
+
     def _get_hwnd(self):
         import ctypes
         return ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
+
+    def _install_hook(self):
+        """Install a Win32 hook that silently blocks resize during guard periods."""
+        import ctypes
+        from ctypes import wintypes, WINFUNCTYPE, POINTER, c_int, c_uint, c_long
+
+        hwnd = self._get_hwnd()
+        if not hwnd or self._original_proc:
+            return
+
+        WM_WINDOWPOSCHANGING = 0x0046
+        SWP_NOSIZE = 0x0001
+        GWL_WNDPROC = -4
+
+        class WINDOWPOS(ctypes.Structure):
+            _fields_ = [
+                ("hwnd", wintypes.HWND),
+                ("hwndInsertAfter", wintypes.HWND),
+                ("x", c_int), ("y", c_int),
+                ("cx", c_int), ("cy", c_int),
+                ("flags", c_uint),
+            ]
+
+        WNDPROC = WINFUNCTYPE(c_long, wintypes.HWND, c_uint,
+                              wintypes.WPARAM, wintypes.LPARAM)
+        user32 = ctypes.windll.user32
+        api_ref = self
+
+        @WNDPROC
+        def hook_proc(hwnd, msg, wparam, lparam):
+            if msg == WM_WINDOWPOSCHANGING and time.time() < api_ref._guard_until:
+                pos = ctypes.cast(lparam, POINTER(WINDOWPOS)).contents
+                pos.flags |= SWP_NOSIZE  # silently prevent resize
+            return user32.CallWindowProcW(api_ref._original_proc,
+                                          hwnd, msg, wparam, lparam)
+
+        self._hook_ref = hook_proc
+        self._original_proc = user32.SetWindowLongPtrW(hwnd, GWL_WNDPROC,
+                                                        hook_proc)
+
+    def begin_guard(self):
+        """Block window resizes for the next second (called from JS before actions)."""
+        if not self._original_proc:
+            self._install_hook()
+        self._guard_until = time.time() + 1.0
 
     def minimize(self):
         import ctypes
@@ -83,6 +133,7 @@ class WindowApi:
         import ctypes
         hwnd = self._get_hwnd()
         if hwnd:
+            self._guard_until = 0  # allow maximize resize
             if ctypes.windll.user32.IsZoomed(hwnd):
                 ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
             else:
