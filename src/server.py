@@ -912,6 +912,103 @@ async def submit_feedback(req: FeedbackRequest):
 
 
 # ---------------------------------------------------------------------------
+# Filter items endpoint — returns items grouped by economy section and tier
+# ---------------------------------------------------------------------------
+_SECTION_CATEGORIES = {
+    "currency": ["currency"],
+    "currency->emotions": ["delirium"],
+    "currency->catalysts": ["breach"],
+    "currency->essence": ["essences"],
+    "currency->omen": ["ritual"],
+    "sockets->general": ["runes", "ultimatum", "idol", "abyss"],
+    "fragments->generic": ["fragments", "vaultkeys"],
+    "uniques": [
+        "unique/accessory", "unique/armour", "unique/flask",
+        "unique/jewel", "unique/map", "unique/weapon", "unique/sanctum",
+    ],
+}
+
+_SECTION_THRESHOLD_TYPE = {
+    "currency": "currency",
+    "currency->emotions": "currency",
+    "currency->catalysts": "currency",
+    "currency->essence": "currency",
+    "currency->omen": "currency",
+    "sockets->general": "currency",
+    "fragments->generic": "fragment",
+    "uniques": "unique",
+}
+
+_CHAOS_THRESHOLDS = {
+    "currency": {"s": 25.0, "a": 5.0, "b": 2.0, "c": 1.0, "d": 1.0, "e": 0.0},
+    "unique": {"t1": 25.0, "t2": 3.0, "t3": 0.5, "hideable": 0.0},
+    "fragment": {"a": 5.0, "b": 1.0, "c": 0.0},
+}
+
+
+@app.get("/api/filter-items")
+async def get_filter_items():
+    """Return items grouped by economy section and tier based on current prices."""
+    settings = load_settings()
+    league = settings.get("league", "Fate of the Vaal")
+    cache_file = SETTINGS_DIR / "cache" / f"prices_{league.lower().replace(' ', '_')}.json"
+
+    if not cache_file.exists():
+        return {"items": {}, "divine_to_chaos": 0}
+
+    try:
+        with open(cache_file) as f:
+            cache = json.load(f)
+    except Exception:
+        return {"items": {}, "divine_to_chaos": 0}
+
+    prices = cache.get("prices", {})
+    d2c = cache.get("divine_to_chaos", 68.0)
+
+    # Convert chaos thresholds to divine
+    divine_thresholds = {}
+    for ttype, table in _CHAOS_THRESHOLDS.items():
+        divine_thresholds[ttype] = {
+            tier: (v / d2c if d2c > 0 else 0) for tier, v in table.items()
+        }
+
+    result = {}
+    for section, cats in _SECTION_CATEGORIES.items():
+        items_by_tier = {}
+        ttype = _SECTION_THRESHOLD_TYPE[section]
+        table = divine_thresholds[ttype]
+
+        for key, data in prices.items():
+            cat = data.get("category", "")
+            if cat not in cats:
+                continue
+            dv = data.get("divine_value", 0)
+            chaos = dv * d2c
+
+            # Assign tier (highest matching threshold)
+            assigned = list(table.keys())[-1]  # fallback to lowest
+            for tier_name, threshold in sorted(table.items(), key=lambda x: -x[1]):
+                if dv >= threshold:
+                    assigned = tier_name
+                    break
+
+            if assigned not in items_by_tier:
+                items_by_tier[assigned] = []
+            items_by_tier[assigned].append({
+                "name": data.get("name", key),
+                "chaos": round(chaos, 1),
+            })
+
+        # Sort items within each tier by value descending
+        for tier in items_by_tier:
+            items_by_tier[tier].sort(key=lambda x: -x["chaos"])
+
+        result[section] = items_by_tier
+
+    return {"items": result, "divine_to_chaos": d2c}
+
+
+# ---------------------------------------------------------------------------
 # Filter update endpoint
 # ---------------------------------------------------------------------------
 @app.post("/api/update-filter")
