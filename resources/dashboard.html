@@ -171,17 +171,20 @@
       50% { box-shadow: inset 0 0 60px rgba(196,164,86,0.07), 0 0 0 4px #0d0b08, 0 0 0 5px #3a3128, 0 0 40px rgba(0,0,0,0.5); }
     }
     .app-frame { animation: goldShimmer 8s ease-in-out infinite; }
+    /* Hide TradingView Lightweight Charts attribution watermark */
+    [class*="attribution"], a[href*="tradingview.com"] { display: none !important; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
+  <script src="https://unpkg.com/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback } = React;
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
     // -----------------------------------------------------------------------
     // Config
@@ -473,6 +476,7 @@
       overlay: "Your Eyes in Wraeclast",
       filter: "Separate Treasure from Trash",
       watchlist: "The Trade Board",
+      markets: "The Exchange Floor",
     };
 
     // -----------------------------------------------------------------------
@@ -1102,6 +1106,7 @@
         { id: "overlay", label: "Overlay" },
         { id: "filter", label: "Loot Filter" },
         { id: "watchlist", label: "Watchlist" },
+        { id: "markets", label: "Markets" },
       ];
 
       return (
@@ -2723,6 +2728,758 @@
     }
 
     // -----------------------------------------------------------------------
+    // Markets Tab — Currency exchange rates, sparklines, TradingView chart
+    // -----------------------------------------------------------------------
+    const MARKET_CATEGORIES = ["All", "Currency", "Fragments", "Essences", "Runes", "Expedition", "SoulCores", "UncutGems", "Ultimatum", "Breach", "Delirium", "Ritual"];
+
+    function SparklineSVG({ data, width = 80, height = 24, color = T.gold }) {
+      if (!data || data.length < 2) return null;
+      // data is cumulative % changes — convert to relative values
+      const values = data.map((d, i) => 100 + (d || 0));
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = max - min || 1;
+      const points = values.map((v, i) => {
+        const x = (i / (values.length - 1)) * width;
+        const y = height - ((v - min) / range) * (height - 2) - 1;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(" ");
+      const fillPoints = `0,${height} ${points} ${width},${height}`;
+      const gradId = `sg${Math.random().toString(36).slice(2, 8)}`;
+      return (
+        <svg width={width} height={height} style={{ display: "block" }}>
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+              <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+          <polygon points={fillPoints} fill={`url(#${gradId})`} />
+          <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    }
+
+    function MarketKPICard({ label, value, sub, change, sparklineData, color = T.gold, iconLeft, iconRight }) {
+      const isUp = change > 0;
+      const isDown = change < 0;
+      const changeColor = isUp ? "#4ade80" : isDown ? "#ef4444" : T.textMuted;
+      const arrow = isUp ? "\u25B2" : isDown ? "\u25BC" : "";
+      return (
+        <div className="panel" style={{ ...CARD, padding: 12, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ ...LABEL, marginBottom: 4, fontSize: 9 }}>{label}</div>
+            <div style={{ ...MONO, fontSize: 20, fontWeight: 700, color, lineHeight: 1.2, display: "flex", alignItems: "center", gap: 4 }}>
+              {iconLeft && <CurrencyIcon src={iconLeft} size={20} />}
+              <span>{value}</span>
+              {iconRight && <CurrencyIcon src={iconRight} size={20} />}
+            </div>
+            {sub && <div style={{ fontSize: 9, color: T.textMuted, marginTop: 2 }}>{sub}</div>}
+            {change != null && (
+              <div style={{ fontSize: 10, fontWeight: 600, color: changeColor, marginTop: 3, ...MONO }}>
+                {arrow} {Math.abs(change).toFixed(1)}% <span style={{ fontWeight: 400, color: T.textMuted }}>7d</span>
+              </div>
+            )}
+          </div>
+          {sparklineData && sparklineData.length >= 2 && (
+            <div style={{ flexShrink: 0 }}>
+              <SparklineSVG data={sparklineData} width={64} height={28} color={changeColor !== T.textMuted ? changeColor : color} />
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ─── Chart constants ─────────────────────────────────────────────
+    const DENOMINATOR_OPTIONS = [
+      { key: "chaos", label: "Chaos" },
+      { key: "divine", label: "Divine" },
+      { key: "exalted", label: "Exalted" },
+    ];
+    const CHART_COLORS = ["#c4a456", "#8bb47a", "#7a9ec4", "#b898a0", "#d4a054", "#c47a7a", "#7ab5a8", "#c9a87a"];
+    const TIME_RANGES = [
+      { key: "7d", days: 7, label: "7d" },
+      { key: "14d", days: 14, label: "14d" },
+      { key: "30d", days: 30, label: "30d" },
+    ];
+    const DEFAULT_CURRENCIES = ["Divine Orb"];
+
+    function FeaturedChart({ history, currencies, rates, oldestHistoryTs }) {
+      const chartRef = useRef(null);
+      const seriesMapRef = useRef([]);
+      const containerRef = useRef(null);
+      const markerDataRef = useRef([]);
+      const [selectedCurrencies, setSelectedCurrencies] = useState(DEFAULT_CURRENCIES);
+      const [denominator, setDenominator] = useState("chaos");
+      const [timeRange, setTimeRange] = useState("7d");
+      const [markerOverlays, setMarkerOverlays] = useState([]);
+
+      // Compute pixel positions for currency icon markers from chart coordinate API
+      const computeOverlayPositions = useCallback(() => {
+        if (!chartRef.current || markerDataRef.current.length === 0) {
+          setMarkerOverlays([]);
+          return;
+        }
+        const overlays = [];
+        markerDataRef.current.forEach(m => {
+          const series = seriesMapRef.current[m.seriesIdx];
+          if (!series) return;
+          try {
+            const x = chartRef.current.timeScale().timeToCoordinate(m.time);
+            const y = series.priceToCoordinate(m.value);
+            if (x !== null && y !== null && !isNaN(x) && !isNaN(y)) {
+              overlays.push({ x, y, imgUrl: m.imgUrl, isAbove: m.isAbove, text: m.text });
+            }
+          } catch(e) {}
+        });
+        setMarkerOverlays(overlays);
+      }, []);
+
+      // Available currencies (those with sparkline data, sorted by volume)
+      const availableCurrencies = useMemo(() => {
+        if (!currencies || currencies.length === 0) return [];
+        return currencies.filter(c => c.sparkline_data && c.sparkline_data.length >= 2)
+          .sort((a, b) => (b.volume || 0) - (a.volume || 0));
+      }, [currencies]);
+
+      const hasData = availableCurrencies.length > 0 || (history && history.length > 1);
+
+      // Short display name for pills
+      const shortName = (name) => name.replace(" Orb", "").replace(" of Kalandra", "");
+
+      // Top currencies for the "Show" row (top 8 by volume)
+      const showCurrencies = useMemo(() => {
+        return availableCurrencies.slice(0, 8).map(c => c.name);
+      }, [availableCurrencies]);
+
+      // Handle currency pill click
+      const handleCurrencyClick = (name, e) => {
+        if (e.ctrlKey || e.metaKey) {
+          // Toggle (multi-select)
+          setSelectedCurrencies(prev => {
+            if (prev.includes(name)) {
+              return prev.length > 1 ? prev.filter(n => n !== name) : prev;
+            }
+            return [...prev, name];
+          });
+        } else {
+          // Single select
+          setSelectedCurrencies([name]);
+        }
+      };
+
+      // Top 5 by volume
+      const handleTop5 = () => {
+        const top5 = availableCurrencies.slice(0, 5).map(c => c.name);
+        if (top5.length > 0) setSelectedCurrencies(top5);
+      };
+
+      // Check if a time range has enough history data
+      const hasEnoughHistory = (days) => {
+        if (days <= 7) return true; // sparkline always available
+        if (!oldestHistoryTs || oldestHistoryTs <= 0) return false;
+        const now = Date.now() / 1000;
+        return (now - oldestHistoryTs) >= (days - 2) * 86400;
+      };
+
+      // Convert divine_value to the selected denomination
+      const convertValue = (divineValue, snapshotRates) => {
+        const d2c = (snapshotRates && snapshotRates.divine_to_chaos) || (rates && rates.divine_to_chaos) || 68;
+        const d2e = (snapshotRates && snapshotRates.divine_to_exalted) || (rates && rates.divine_to_exalted) || 387;
+        if (denominator === "chaos") return divineValue * d2c;
+        if (denominator === "exalted") return divineValue * d2e;
+        return divineValue; // divine
+      };
+
+      // Build label string
+      const buildLabel = () => {
+        const denomName = DENOMINATOR_OPTIONS.find(d => d.key === denominator)?.label || "Chaos";
+        if (selectedCurrencies.length === 1) {
+          return `${selectedCurrencies[0]} in ${denomName}`;
+        }
+        return `${selectedCurrencies.length} currencies — relative change`;
+      };
+
+      // Create chart once on mount
+      useEffect(() => {
+        if (!containerRef.current || typeof LightweightCharts === "undefined") return;
+        try {
+          const chart = LightweightCharts.createChart(containerRef.current, {
+            width: containerRef.current.clientWidth,
+            height: 260,
+            layout: { background: { color: "#0d0b08" }, textColor: "#8c7a5c", fontSize: 11, fontFamily: "'DM Sans', sans-serif" },
+            grid: { vertLines: { color: "rgba(58,49,40,0.3)" }, horzLines: { color: "rgba(58,49,40,0.3)" } },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal, vertLine: { color: "rgba(196,164,86,0.3)", labelBackgroundColor: "#1c1814" }, horzLine: { color: "rgba(196,164,86,0.3)", labelBackgroundColor: "#1c1814" } },
+            rightPriceScale: { borderColor: "#3a3128", autoScale: true },
+            localization: { priceFormatter: (price) => { const abs = Math.abs(price); if (abs >= 100000) return (price / 1000).toFixed(0) + "k"; if (abs >= 10000) return (price / 1000).toFixed(1) + "k"; if (abs >= 1000) return Math.round(price).toLocaleString(); if (abs >= 10) return Math.round(price).toString(); if (abs >= 1) return price.toFixed(1); return price.toFixed(2); } },
+            timeScale: { borderColor: "#3a3128", timeVisible: false, secondsVisible: false, fixLeftEdge: true, fixRightEdge: true, rightOffset: 0 },
+            handleScroll: false,
+            handleScale: false,
+          });
+          chartRef.current = chart;
+
+          const handleResize = () => {
+            if (containerRef.current && chartRef.current) {
+              try { chartRef.current.applyOptions({ width: containerRef.current.clientWidth }); } catch(e) {}
+              requestAnimationFrame(() => computeOverlayPositions());
+            }
+          };
+          window.addEventListener("resize", handleResize);
+          return () => {
+            window.removeEventListener("resize", handleResize);
+            try { chart.remove(); } catch(e) {}
+            chartRef.current = null;
+            seriesMapRef.current = [];
+          };
+        } catch(e) {
+          console.warn("Chart init failed:", e);
+        }
+      }, []);
+
+      // Update series when selection, denomination, timeRange, or data changes
+      useEffect(() => {
+        if (!chartRef.current) return;
+        try {
+          // Remove all existing series
+          seriesMapRef.current.forEach(s => {
+            try { chartRef.current.removeSeries(s); } catch(e) {}
+          });
+          seriesMapRef.current = [];
+
+          const isMulti = selectedCurrencies.length > 1;
+          const rangeDays = TIME_RANGES.find(r => r.key === timeRange)?.days || 7;
+          const useHistory = rangeDays > 7;
+          const d2c = (rates && rates.divine_to_chaos) || 68;
+          const d2e = (rates && rates.divine_to_exalted) || 387;
+
+          // Switch price formatter between absolute and % change modes
+          const absFmt = (price) => { const abs = Math.abs(price); if (abs >= 100000) return (price / 1000).toFixed(0) + "k"; if (abs >= 10000) return (price / 1000).toFixed(1) + "k"; if (abs >= 1000) return Math.round(price).toLocaleString(); if (abs >= 10) return Math.round(price).toString(); if (abs >= 1) return price.toFixed(1); return price.toFixed(2); };
+          const pctFmt = (price) => (price >= 0 ? "+" : "") + price.toFixed(1) + "%";
+          chartRef.current.applyOptions({ localization: { priceFormatter: isMulti ? pctFmt : absFmt } });
+
+          // Helper: format chart values for markers
+          const fmtVal = (v) => {
+            if (isMulti) return (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
+            const abs = Math.abs(v);
+            if (abs >= 100000) return (v / 1000).toFixed(0) + "k";
+            if (abs >= 10000) return (v / 1000).toFixed(1) + "k";
+            if (abs >= 1000) return Math.round(v).toLocaleString();
+            if (abs >= 10) return Math.round(v).toString();
+            if (abs >= 1) return v.toFixed(1);
+            return v.toFixed(2);
+          };
+
+          // Helper: find local peaks and lulls (returns raw data for icon overlays)
+          const findPeaksLulls = (data) => {
+            if (data.length < 3) return [];
+            const markers = [];
+            for (let i = 1; i < data.length - 1; i++) {
+              const prev = data[i - 1].value, cur = data[i].value, next = data[i + 1].value;
+              if (cur > prev && cur > next) {
+                markers.push({ time: data[i].time, value: cur, isAbove: true, text: fmtVal(cur) });
+              } else if (cur < prev && cur < next) {
+                markers.push({ time: data[i].time, value: cur, isAbove: false, text: fmtVal(cur) });
+              }
+            }
+            // Limit to most significant peaks/lulls to avoid clutter
+            if (markers.length > 6) {
+              const values = markers.map(m => m.value);
+              const range = Math.max(...values) - Math.min(...values);
+              const threshold = range * 0.15;
+              const allVals = data.map(d => d.value);
+              const avg = allVals.reduce((a, b) => a + b, 0) / allVals.length;
+              return markers.filter(m => Math.abs(m.value - avg) > threshold).slice(0, 6);
+            }
+            return markers;
+          };
+
+          const allRawMarkers = [];
+
+          selectedCurrencies.forEach((currName, idx) => {
+            const color = CHART_COLORS[idx % CHART_COLORS.length];
+            let series;
+
+            if (isMulti) {
+              series = chartRef.current.addLineSeries({
+                color: color,
+                lineWidth: 2,
+                lineType: 2,
+                crosshairMarkerVisible: true,
+                crosshairMarkerRadius: 2,
+                crosshairMarkerBackgroundColor: color,
+                title: shortName(currName),
+              });
+            } else {
+              series = chartRef.current.addAreaSeries({
+                topColor: color + "66",
+                bottomColor: color + "05",
+                lineColor: color,
+                lineWidth: 2,
+                lineType: 2,
+                crosshairMarkerVisible: true,
+                crosshairMarkerRadius: 2,
+                crosshairMarkerBackgroundColor: color,
+              });
+            }
+            seriesMapRef.current.push(series);
+
+            let chartData = [];
+
+            if (!useHistory) {
+              // 7d: use poe.ninja sparkline
+              if (currencies) {
+                const cur = currencies.find(c => c.name === currName);
+                if (cur && cur.sparkline_data && cur.sparkline_data.length >= 2) {
+                  const now = Math.floor(Date.now() / 1000);
+                  const dayStart = now - (now % 86400);
+                  const baseVal = cur.divine_value;
+                  const totalChange = cur.sparkline_data[cur.sparkline_data.length - 1] || 0;
+                  const basePrice = totalChange !== -100 ? baseVal / (1 + totalChange / 100) : baseVal;
+                  chartData = cur.sparkline_data.map((pctChange, i) => {
+                    const divPrice = basePrice * (1 + (pctChange || 0) / 100);
+                    const displayVal = convertValue(divPrice, { divine_to_chaos: d2c, divine_to_exalted: d2e });
+                    return {
+                      time: dayStart - (cur.sparkline_data.length - 1 - i) * 86400,
+                      value: displayVal,
+                    };
+                  });
+                }
+              }
+            }
+
+            // Use rate_history for 14d/30d, or as fallback for 7d
+            if ((useHistory || chartData.length < 2) && history && history.length > 1) {
+              const now = Date.now() / 1000;
+              const cutoff = now - rangeDays * 86400;
+              chartData = history.filter(h => h.ts >= cutoff).map(h => {
+                let divVal = 0;
+                const hd2c = h.divine_to_chaos || d2c;
+                const hd2e = h.divine_to_exalted || d2e;
+                // Get divine_value for this currency from history
+                if (currName === "Divine Orb") divVal = 1;
+                else if (currName === "Exalted Orb") divVal = hd2e > 0 ? 1 / hd2e : 0;
+                else if (currName === "Chaos Orb") divVal = hd2c > 0 ? 1 / hd2c : 0;
+                else divVal = (h.currencies || {})[currName] || 0;
+                if (divVal <= 0) return null;
+                // Convert using that snapshot's own rates for period-accurate conversion
+                const displayVal = convertValue(divVal, { divine_to_chaos: hd2c, divine_to_exalted: hd2e });
+                return { time: h.ts, value: displayVal };
+              }).filter(Boolean);
+            }
+
+            // Deduplicate and sort
+            if (chartData.length > 0) {
+              const seen = new Set();
+              chartData = chartData.filter(d => {
+                if (seen.has(d.time)) return false;
+                seen.add(d.time);
+                return true;
+              });
+              chartData.sort((a, b) => a.time - b.time);
+              // Normalize to % change when multi-select (so different-valued currencies are comparable)
+              if (isMulti && chartData.length >= 2) {
+                const firstVal = chartData[0].value;
+                if (firstVal > 0) {
+                  chartData = chartData.map(d => ({ time: d.time, value: ((d.value / firstVal) - 1) * 100 }));
+                }
+              }
+              series.setData(chartData);
+              // Collect peak/lull data for icon overlays
+              const cur = currencies?.find(c => c.name === currName);
+              const imgUrl = cur?.image_url || "";
+              const markers = findPeaksLulls(chartData);
+              markers.forEach(m => allRawMarkers.push({ ...m, seriesIdx: idx, imgUrl }));
+            } else {
+              series.setData([]);
+            }
+          });
+
+          markerDataRef.current = allRawMarkers;
+          if (chartRef.current) chartRef.current.timeScale().fitContent();
+          // Compute overlay positions after chart renders
+          requestAnimationFrame(() => computeOverlayPositions());
+        } catch(e) {
+          console.warn("Chart data update failed:", e);
+        }
+      }, [selectedCurrencies, denominator, timeRange, history, currencies, rates]);
+
+      const isMulti = selectedCurrencies.length > 1;
+      const denomLabel = isMulti ? "% change" : (DENOMINATOR_OPTIONS.find(d => d.key === denominator)?.label || "Chaos");
+
+      return (
+        <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden", marginBottom: 12 }}>
+          {/* Row 1: SHOW currency pills + Top 5 */}
+          <div style={{ padding: "10px 14px 4px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: T.textMuted, letterSpacing: "0.1em", marginRight: 2 }}>SHOW</span>
+            {showCurrencies.map((name, idx) => {
+              const active = selectedCurrencies.includes(name);
+              const colorDot = isMulti && active ? CHART_COLORS[selectedCurrencies.indexOf(name) % CHART_COLORS.length] : null;
+              return (
+                <button
+                  key={name}
+                  onClick={(e) => handleCurrencyClick(name, e)}
+                  title={`Click to select, Ctrl+Click to multi-select`}
+                  style={{
+                    ...BTN,
+                    padding: "4px 10px",
+                    fontSize: 10,
+                    background: active ? "rgba(196,164,86,0.2)" : "transparent",
+                    border: `1px solid ${active ? T.borderGold : T.border}`,
+                    color: active ? T.gold : T.textSecond,
+                    display: "flex", alignItems: "center", gap: 4,
+                  }}
+                >
+                  {colorDot && <span style={{ width: 6, height: 6, borderRadius: "50%", background: colorDot, flexShrink: 0 }} />}
+                  {shortName(name)}
+                </button>
+              );
+            })}
+            <button
+              onClick={handleTop5}
+              style={{
+                ...BTN,
+                padding: "4px 10px",
+                fontSize: 10,
+                background: selectedCurrencies.length === 5 ? "rgba(196,164,86,0.15)" : "transparent",
+                border: `1px solid ${T.border}`,
+                color: T.textSecond,
+                fontStyle: "italic",
+              }}
+            >
+              Top 5
+            </button>
+          </div>
+          {/* Row 2: PRICED IN denomination + time range */}
+          <div style={{ padding: "2px 14px 8px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: T.textMuted, letterSpacing: "0.1em", marginRight: 2 }}>PRICED IN</span>
+            {DENOMINATOR_OPTIONS.map(opt => {
+              const active = denominator === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => setDenominator(opt.key)}
+                  style={{
+                    ...BTN,
+                    padding: "3px 10px",
+                    fontSize: 10,
+                    background: active ? "rgba(196,164,86,0.2)" : "transparent",
+                    border: `1px solid ${active ? T.borderGold : T.border}`,
+                    color: active ? T.gold : T.textSecond,
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4 }}>
+              {TIME_RANGES.map(tr => {
+                const active = timeRange === tr.key;
+                const enabled = hasEnoughHistory(tr.days);
+                return (
+                  <button
+                    key={tr.key}
+                    onClick={() => enabled && setTimeRange(tr.key)}
+                    title={!enabled ? `Need ${tr.days - 2}+ days of history` : `Show ${tr.label} of data`}
+                    style={{
+                      ...BTN,
+                      padding: "3px 8px",
+                      fontSize: 10,
+                      background: active ? "rgba(196,164,86,0.2)" : "transparent",
+                      border: `1px solid ${active ? T.borderGold : T.border}`,
+                      color: active ? T.gold : enabled ? T.textSecond : T.textMuted,
+                      opacity: enabled ? 1 : 0.4,
+                      cursor: enabled ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    {tr.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* Chart area */}
+          <div style={{ position: "relative" }}>
+            {/* Y-axis unit label */}
+            <div style={{
+              position: "absolute", top: 8, left: 10, zIndex: 2,
+              fontSize: 9, color: T.textMuted, letterSpacing: "0.05em",
+              pointerEvents: "none",
+            }}>
+              {denomLabel}
+            </div>
+            {/* Description label */}
+            <div style={{
+              position: "absolute", top: 8, right: 60, zIndex: 2,
+              fontSize: 9, color: T.textMuted, letterSpacing: "0.03em",
+              pointerEvents: "none", fontStyle: "italic",
+            }}>
+              {buildLabel()}
+            </div>
+            {/* Time range label */}
+            <div style={{
+              position: "absolute", bottom: 4, right: 12, zIndex: 2,
+              fontSize: 9, color: T.textMuted, letterSpacing: "0.05em",
+              pointerEvents: "none",
+            }}>
+              {timeRange} trend
+            </div>
+            <div ref={containerRef} style={{ width: "100%", height: 260 }}>
+              {!hasData && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: T.textMuted, fontSize: 12 }}>
+                  Waiting for price data...
+                </div>
+              )}
+            </div>
+            {/* Currency icon markers at peaks/lulls */}
+            {markerOverlays.map((m, i) => (
+              <div key={i} style={{
+                position: "absolute",
+                left: m.x,
+                top: m.isAbove ? m.y - 26 : m.y + 4,
+                transform: "translateX(-50%)",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+                pointerEvents: "none", zIndex: 3,
+              }}>
+                {m.isAbove && <span style={{ fontSize: 7, color: T.textSecond, ...MONO, lineHeight: 1, whiteSpace: "nowrap" }}>{m.text}</span>}
+                {m.imgUrl ? (
+                  <img src={m.imgUrl} alt="" style={{ width: 12, height: 12, objectFit: "contain" }} onError={e => e.target.style.display = "none"} />
+                ) : (
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: T.textSecond, display: "inline-block" }} />
+                )}
+                {!m.isAbove && <span style={{ fontSize: 7, color: T.textSecond, ...MONO, lineHeight: 1, whiteSpace: "nowrap" }}>{m.text}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function CurrencyRow({ currency, rates, index }) {
+      const { name, divine_value, chaos_value, sparkline_data, sparkline_change, volume, image_url, category } = currency;
+      const isUp = sparkline_change > 0;
+      const isDown = sparkline_change < 0;
+      const changeColor = isUp ? "#4ade80" : isDown ? "#ef4444" : T.textMuted;
+      const arrow = isUp ? "\u25B2" : isDown ? "\u25BC" : "";
+      const bg = index % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)";
+
+      // Format value
+      let valueStr = "";
+      if (divine_value >= 1) valueStr = `${divine_value.toFixed(divine_value >= 10 ? 0 : 1)} div`;
+      else if (chaos_value >= 1) valueStr = `${chaos_value.toFixed(chaos_value >= 10 ? 0 : 1)} chaos`;
+      else valueStr = `${chaos_value.toFixed(2)} chaos`;
+
+      // Exchange rate string
+      let exchangeStr = "";
+      if (divine_value > 0 && divine_value < 1) {
+        const perDiv = 1 / divine_value;
+        exchangeStr = `~${perDiv.toFixed(0)} = 1 Divine`;
+      }
+
+      return (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "28px 1fr 100px 70px 80px 50px",
+          alignItems: "center",
+          padding: "6px 10px",
+          background: bg,
+          gap: 8,
+          fontSize: 12,
+          transition: "background 0.1s",
+          cursor: "default",
+        }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(196,164,86,0.06)"}
+          onMouseLeave={e => e.currentTarget.style.background = bg}
+        >
+          <div style={{ width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {image_url ? (
+              <img src={image_url} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} onError={e => e.target.style.display = "none"} />
+            ) : (
+              <div style={{ width: 22, height: 22, borderRadius: 4, background: T.border }} />
+            )}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: T.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+            {exchangeStr && <div style={{ fontSize: 9, color: T.textMuted, ...MONO }}>{exchangeStr}</div>}
+          </div>
+          <div style={{ ...MONO, fontWeight: 600, color: T.gold, textAlign: "right" }}>{valueStr}</div>
+          <div style={{ ...MONO, fontWeight: 600, color: changeColor, textAlign: "right", fontSize: 11 }}>
+            {sparkline_change !== 0 ? `${arrow} ${Math.abs(sparkline_change).toFixed(1)}%` : "--"}
+          </div>
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <SparklineSVG data={sparkline_data} width={70} height={20} color={changeColor !== T.textMuted ? changeColor : T.textSecond} />
+          </div>
+          <div style={{ ...MONO, fontSize: 10, color: T.textMuted, textAlign: "right" }}>
+            {volume > 0 ? (volume >= 1000 ? `${(volume/1000).toFixed(1)}k` : volume.toFixed(0)) : "--"}
+          </div>
+        </div>
+      );
+    }
+
+    function MarketsTab() {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [filter, setFilter] = useState("All");
+
+      const fetchData = async () => {
+        const result = await api("/api/market-data");
+        if (result && !result.error) {
+          setData(result);
+        }
+        setLoading(false);
+      };
+
+      useEffect(() => {
+        fetchData();
+        // Poll faster (5s) while waiting for data, then slow down to 60s
+        const interval = setInterval(fetchData, hasCurrencies ? 60000 : 5000);
+        return () => clearInterval(interval);
+      }, [hasCurrencies]);
+
+      const currencies = (data && data.currencies) || [];
+      const rates = (data && data.rates) || {};
+      const history = (data && data.history) || [];
+      const hasCurrencies = currencies.length > 0;
+
+      // Find specific currencies for KPI cards
+      const findCurrency = (name) => currencies.find(c => c.name === name) || {};
+      const hinekora = findCurrency("Hinekora's Lock");
+      const fracturing = findCurrency("Fracturing Orb");
+      const omenLight = findCurrency("Omen of Light");
+      const omenAbyss = findCurrency("Omen of the Abyss");
+      const divToEx = rates.divine_to_exalted || 0;
+
+      // Filter currencies by category (case-insensitive: poe2scout uses lowercase, pills use PascalCase)
+      const filtered = filter === "All"
+        ? currencies
+        : currencies.filter(c => (c.category || "").toLowerCase() === filter.toLowerCase());
+
+      return (
+        <div style={{ paddingTop: 12 }}>
+          {/* KPI Hero Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
+            <MarketKPICard
+              label="Hinekora's Lock"
+              value={hinekora.divine_value ? (hinekora.divine_value >= 10 ? `${Math.round(hinekora.divine_value)}` : `${hinekora.divine_value.toFixed(1)}`) : "--"}
+              sub="Divine Orbs"
+              change={hinekora.sparkline_change}
+              sparklineData={hinekora.sparkline_data}
+              color="#c084fc"
+              iconLeft={hinekora.image_url}
+              iconRight={ICON.divine}
+            />
+            <MarketKPICard
+              label="Fracturing Orb"
+              value={fracturing.divine_value ? (fracturing.divine_value >= 10 ? `${Math.round(fracturing.divine_value)}` : `${fracturing.divine_value.toFixed(1)}`) : "--"}
+              sub="Divine Orbs"
+              change={fracturing.sparkline_change}
+              sparklineData={fracturing.sparkline_data}
+              color="#f59e0b"
+              iconLeft={fracturing.image_url}
+              iconRight={ICON.divine}
+            />
+            <MarketKPICard
+              label="Omen of Light"
+              value={omenLight.divine_value ? (omenLight.divine_value >= 10 ? `${Math.round(omenLight.divine_value)}` : `${omenLight.divine_value.toFixed(1)}`) : "--"}
+              sub="Divine Orbs"
+              change={omenLight.sparkline_change}
+              sparklineData={omenLight.sparkline_data}
+              color="#8bb47a"
+              iconLeft={omenLight.image_url}
+              iconRight={ICON.divine}
+            />
+            <MarketKPICard
+              label="Omen of the Abyss"
+              value={omenAbyss.divine_value && divToEx ? `${Math.round(omenAbyss.divine_value * divToEx)}` : "--"}
+              sub="Exalted Orbs"
+              change={omenAbyss.sparkline_change}
+              sparklineData={omenAbyss.sparkline_data}
+              color="#7a9ec4"
+              iconLeft={omenAbyss.image_url}
+              iconRight={ICON.exalted}
+            />
+          </div>
+
+          {/* Featured Chart */}
+          <FeaturedChart history={history} currencies={currencies} rates={rates} oldestHistoryTs={data?.oldest_history_ts || 0} />
+
+          {/* Exchange Rate Table */}
+          <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden" }}>
+            {/* Category filter pills */}
+            <div style={{ padding: "10px 14px 6px", display: "flex", gap: 4, flexWrap: "wrap", borderBottom: `1px solid ${T.border}` }}>
+              {MARKET_CATEGORIES.map(cat => {
+                const active = filter === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setFilter(cat)}
+                    style={{
+                      ...BTN,
+                      padding: "3px 10px",
+                      fontSize: 10,
+                      background: active ? "rgba(196,164,86,0.2)" : "transparent",
+                      border: `1px solid ${active ? T.borderGold : "transparent"}`,
+                      color: active ? T.gold : T.textSecond,
+                    }}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Table header */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "28px 1fr 100px 70px 80px 50px",
+              padding: "6px 10px",
+              gap: 8,
+              borderBottom: `1px solid ${T.border}`,
+            }}>
+              <div />
+              <div style={{ ...LABEL, fontSize: 8 }}>Currency</div>
+              <div style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>Value</div>
+              <div style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>7d %</div>
+              <div style={{ ...LABEL, fontSize: 8, textAlign: "center" }}>Trend</div>
+              <div style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>Vol</div>
+            </div>
+            {/* Table rows */}
+            <div style={{ maxHeight: 400, overflowY: "auto" }}>
+              {filtered.map((cur, i) => (
+                <CurrencyRow key={cur.name} currency={cur} rates={rates} index={i} />
+              ))}
+              {filtered.length === 0 && (
+                <div style={{ padding: 20, textAlign: "center", color: T.textMuted, fontSize: 12 }}>
+                  {!hasCurrencies ? (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                      <div style={{ width: 14, height: 14, border: `2px solid ${T.border}`, borderTopColor: T.gold, borderRadius: "50%", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+                      Fetching exchange rates from poe.ninja...
+                    </div>
+                  ) : "No items in this category"}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, padding: "0 4px" }}>
+            <div style={{ fontSize: 9, color: T.textMuted, fontStyle: "italic" }}>
+              Live rates from poe.ninja — refreshed every 15 minutes
+            </div>
+            <a
+              href="https://www.tradingview.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 9, color: T.textMuted, textDecoration: "none" }}
+              onMouseEnter={e => e.target.style.color = T.textSecond}
+              onMouseLeave={e => e.target.style.color = T.textMuted}
+            >
+              Charts by TradingView
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
     // Main App
     // -----------------------------------------------------------------------
     function Dashboard() {
@@ -2959,6 +3716,9 @@
                   onSettingsUpdate={handleSettingsUpdate}
                   onRefresh={handleWatchlistRefresh}
                 />
+              )}
+              {activeTab === "markets" && (
+                <MarketsTab />
               )}
             </div>
           </div>
