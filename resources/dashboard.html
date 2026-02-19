@@ -507,23 +507,24 @@
             </div>
           </div>
           <div style={{ flex: 1 }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 8 }}>
-            {!isRunning ? (
-              <button onClick={onStart} className="btn-gold-hover" style={{
-                border: "none", borderRadius: 4, padding: "3px 12px", fontSize: 10, fontWeight: 600,
-                cursor: "pointer", background: T.green, color: "#fff",
-              }}>&#9654; Start</button>
-            ) : (
-              <button onClick={onStop} className="btn-danger-hover" style={{
-                border: "none", borderRadius: 4, padding: "3px 12px", fontSize: 10, fontWeight: 600,
-                cursor: "pointer", background: T.red, color: "#fff",
-              }}>&#9632; Stop</button>
-            )}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 8, position: "relative", minWidth: 90 }}>
+            <button onClick={onStart} className="btn-gold-hover" style={{
+              border: "none", borderRadius: 4, padding: "3px 12px", fontSize: 10, fontWeight: 600,
+              cursor: "pointer", background: T.green, color: "#fff",
+              visibility: isRunning ? "hidden" : "visible",
+            }}>&#9654; Start</button>
+            <button onClick={onStop} className="btn-danger-hover" style={{
+              border: "none", borderRadius: 4, padding: "3px 12px", fontSize: 10, fontWeight: 600,
+              cursor: "pointer", background: T.red, color: "#fff",
+              position: "absolute", left: 0,
+              visibility: isRunning ? "visible" : "hidden",
+            }}>&#9632; Stop</button>
             <Tooltip text="Restart overlay">
               <button onClick={onRestart} disabled={!isRunning} style={{
                 border: "none", borderRadius: 4, padding: "3px 8px", fontSize: 10, fontWeight: 600,
                 cursor: isRunning ? "pointer" : "default",
                 background: "transparent", color: isRunning ? T.textSecond : T.border,
+                marginLeft: 4,
               }}>&#8635;</button>
             </Tooltip>
           </div>
@@ -2844,14 +2845,10 @@
         return () => clearTimeout(timer);
       }, [connected, autoStartDone]);
 
-      // Handlers — begin_guard() tells Python to revert any resize in the next second
-      const guardedAction = (action) => {
-        window.pywebview?.api?.begin_guard();
-        action();
-      };
-      const handleStart = () => guardedAction(() => api("/api/start", "POST"));
-      const handleStop = () => guardedAction(() => api("/api/stop", "POST"));
-      const handleRestart = () => guardedAction(() => api("/api/restart", "POST"));
+      // Handlers
+      const handleStart = () => api("/api/start", "POST");
+      const handleStop = () => api("/api/stop", "POST");
+      const handleRestart = () => api("/api/restart", "POST");
 
       const handleLeagueChange = (league) => {
         const newSettings = { ...settings, league };
