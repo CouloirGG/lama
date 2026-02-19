@@ -813,7 +813,7 @@
 
       const d2c = stats.divine_to_chaos || 0;
       const d2e = stats.divine_to_exalted || 0;
-      const e2c = d2e > 0 ? (d2c / d2e) : 0;
+      const e2c = d2c > 0 ? (d2e / d2c) : 0;
       const m2d = stats.mirror_to_divine || 0;
       const calSamples = stats.calibration_samples || 0;
 
@@ -825,7 +825,7 @@
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 8 }}>
             <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
             <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} sub={d2c > 0 ? "Chaos" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
-            <StatCard label="1 Exalted" value={e2c > 0 ? `${e2c.toFixed(2)}` : "--"} sub={e2c > 0 ? "Chaos" : null} color={T.amber} iconLeft={ICON.exalted} iconRight={ICON.chaos} tooltip="1 Exalted Orb = X Chaos Orbs" />
+            <StatCard label="1 Chaos" value={e2c > 0 ? `${e2c.toFixed(0)}` : "--"} sub={e2c > 0 ? "Exalted" : null} color={T.amber} iconLeft={ICON.chaos} iconRight={ICON.exalted} tooltip="1 Chaos Orb = X Exalted Orbs" />
             <StatCard label="1 Mirror" value={m2d > 0 ? `${m2d.toFixed(0)}` : "--"} sub={m2d > 0 ? "Divine" : null} color="#c084fc" iconLeft={ICON.mirror} iconRight={ICON.divine} tooltip="1 Mirror of Kalandra = X Divine Orbs" />
             <StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={refreshColor} tooltip="When price data was last fetched (refreshes every 15 min)" />
           </div>
