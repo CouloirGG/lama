@@ -233,3 +233,57 @@ class TestParseMods:
         mods = engine.parse_mods(item)
         assert isinstance(mods, list)
         # Currency items have no matchable mods
+
+
+class TestModuleOverrides:
+    """Test that PricingEngine injects GameConfig values into module constants."""
+
+    def test_item_parser_overrides(self):
+        """Verify CURRENCY_KEYWORDS and VALUABLE_BASES are set on the module."""
+        from core import PricingEngine
+        from games.poe2 import create_poe2_config
+
+        cfg = create_poe2_config()
+        engine = PricingEngine(cfg)
+        # Call _init_item_parser which does the override
+        engine._init_item_parser()
+
+        import item_parser as ip_module
+        assert ip_module.CURRENCY_KEYWORDS == cfg.currency_keywords
+        assert ip_module.VALUABLE_BASES == cfg.valuable_bases
+
+    def test_mod_database_overrides(self):
+        """Verify _WEIGHT_TABLE, _DEFENCE_GROUP_MARKERS, _DISPLAY_NAMES are set."""
+        from core import PricingEngine
+        from games.poe2 import create_poe2_config
+
+        cfg = create_poe2_config()
+        engine = PricingEngine(cfg)
+        # Must init mod_parser first (mod_database depends on it)
+        engine._init_mod_parser()
+        engine._init_mod_database()
+
+        import mod_database as md_module
+        assert md_module._WEIGHT_TABLE == cfg.weight_table
+        assert md_module._DEFENCE_GROUP_MARKERS == cfg.defence_group_markers
+        assert md_module._DISPLAY_NAMES == cfg.display_names
+
+    def test_price_cache_overrides(self):
+        """Verify URL, categories, and delay are set on the module."""
+        from core import PricingEngine
+        from games.poe2 import create_poe2_config
+
+        cfg = create_poe2_config()
+        engine = PricingEngine(cfg)
+
+        try:
+            engine._init_price_cache()
+        except Exception:
+            pass  # PriceCache init may fail without network
+
+        import price_cache as pc_module
+        assert pc_module.POE2_EXCHANGE_URL == cfg.poe_ninja_exchange_url
+        assert pc_module.EXCHANGE_CATEGORIES == cfg.exchange_categories
+        assert pc_module.POE2SCOUT_UNIQUE_CATEGORIES == cfg.poe2scout_unique_categories
+        assert pc_module.POE2SCOUT_CURRENCY_CATEGORIES == cfg.poe2scout_currency_categories
+        assert pc_module.REQUEST_DELAY == cfg.price_request_delay

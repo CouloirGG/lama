@@ -64,5 +64,21 @@ class GameConfig:
     shard_refresh_interval: int = 86400   # seconds
     shard_github_repo: str = ""           # e.g. "CouloirGG/lama"
 
+    # ── Mod Database scoring ─────────────────────────────────
+    weight_table: List[Tuple[float, List[str]]] = field(default_factory=list)
+    defence_group_markers: Tuple[str, ...] = ()
+    display_names: List[Tuple[str, str]] = field(default_factory=list)
+
+    # ── Item Parser classification ────────────────────────────
+    currency_keywords: FrozenSet[str] = field(default_factory=frozenset)
+    valuable_bases: FrozenSet[str] = field(default_factory=frozenset)
+
+    # ── Price Cache endpoints & categories ────────────────────
+    poe_ninja_exchange_url: str = ""
+    exchange_categories: List[str] = field(default_factory=list)
+    poe2scout_unique_categories: List[str] = field(default_factory=list)
+    poe2scout_currency_categories: List[str] = field(default_factory=list)
+    price_request_delay: float = 0.0
+
     # ── Grade display mapping ───────────────────────────────
     grade_tier_map: Dict[str, str] = field(default_factory=dict)

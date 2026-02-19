@@ -239,7 +239,14 @@ class PricingEngine:
     # ── Internal initialization ─────────────────────────────
 
     def _init_item_parser(self):
-        """ItemParser has zero config imports — just instantiate."""
+        """Configure item_parser module constants, then instantiate."""
+        import item_parser as ip_module
+
+        if self.config.currency_keywords:
+            ip_module.CURRENCY_KEYWORDS = self.config.currency_keywords
+        if self.config.valuable_bases:
+            ip_module.VALUABLE_BASES = self.config.valuable_bases
+
         from item_parser import ItemParser
         self._item_parser = ItemParser()
 
@@ -274,6 +281,12 @@ class PricingEngine:
         md_module.DPS_BRACKETS_2H = self.config.dps_brackets_2h
         md_module.DPS_BRACKETS_1H = self.config.dps_brackets_1h
         md_module.DEFENSE_THRESHOLDS = self.config.defense_thresholds
+        if self.config.weight_table:
+            md_module._WEIGHT_TABLE = self.config.weight_table
+        if self.config.defence_group_markers:
+            md_module._DEFENCE_GROUP_MARKERS = self.config.defence_group_markers
+        if self.config.display_names:
+            md_module._DISPLAY_NAMES = self.config.display_names
 
         from mod_database import ModDatabase
         self._mod_database = ModDatabase()
@@ -308,6 +321,16 @@ class PricingEngine:
                 pc_module.RATE_HISTORY_FILE = self.config.rate_history_file
             if self.config.rate_history_backup:
                 pc_module.RATE_HISTORY_BACKUP = self.config.rate_history_backup
+            if self.config.poe_ninja_exchange_url:
+                pc_module.POE2_EXCHANGE_URL = self.config.poe_ninja_exchange_url
+            if self.config.exchange_categories:
+                pc_module.EXCHANGE_CATEGORIES = self.config.exchange_categories
+            if self.config.poe2scout_unique_categories:
+                pc_module.POE2SCOUT_UNIQUE_CATEGORIES = self.config.poe2scout_unique_categories
+            if self.config.poe2scout_currency_categories:
+                pc_module.POE2SCOUT_CURRENCY_CATEGORIES = self.config.poe2scout_currency_categories
+            if self.config.price_request_delay > 0:
+                pc_module.REQUEST_DELAY = self.config.price_request_delay
 
             from price_cache import PriceCache
             self._price_cache = PriceCache(league=self.config.default_league)

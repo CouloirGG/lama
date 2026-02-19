@@ -144,6 +144,89 @@ class TestPoe2Config:
         assert cfg.grade_tier_map["S"] == "high"
         assert cfg.grade_tier_map["A"] == "good"
 
+    def test_weight_table(self):
+        from games.poe2 import create_poe2_config
+        cfg = create_poe2_config()
+
+        assert len(cfg.weight_table) == 6  # 6 tiers
+        weights = [w for w, _ in cfg.weight_table]
+        assert weights[0] == 3.0   # premium
+        assert weights[-1] == 0.1  # near-zero
+        # Spot-check: "movespeed" in first tier
+        assert "movespeed" in cfg.weight_table[0][1]
+
+    def test_defence_group_markers(self):
+        from games.poe2 import create_poe2_config
+        cfg = create_poe2_config()
+
+        assert len(cfg.defence_group_markers) == 3
+        assert "reductionrating" in cfg.defence_group_markers
+        assert "evasionrating" in cfg.defence_group_markers
+        assert "energyshield" in cfg.defence_group_markers
+
+    def test_display_names(self):
+        from games.poe2 import create_poe2_config
+        cfg = create_poe2_config()
+
+        assert len(cfg.display_names) >= 50
+        # Spot-check a few mappings
+        dn_dict = dict(cfg.display_names)
+        assert dn_dict["movespeed"] == "MoveSpd"
+        assert dn_dict["criticalstrikemultiplier"] == "CritMulti"
+        assert dn_dict["maximumlife"] == "Life"
+        assert dn_dict["fireresist"] == "FireRes"
+
+    def test_currency_keywords(self):
+        from games.poe2 import create_poe2_config
+        cfg = create_poe2_config()
+
+        assert isinstance(cfg.currency_keywords, frozenset)
+        assert len(cfg.currency_keywords) >= 23
+        assert "divine orb" in cfg.currency_keywords
+        assert "chaos orb" in cfg.currency_keywords
+        assert "mirror of kalandra" in cfg.currency_keywords
+
+    def test_valuable_bases(self):
+        from games.poe2 import create_poe2_config
+        cfg = create_poe2_config()
+
+        assert isinstance(cfg.valuable_bases, frozenset)
+        assert len(cfg.valuable_bases) >= 19
+        assert "stellar amulet" in cfg.valuable_bases
+        assert "astral plate" in cfg.valuable_bases
+        assert "opal ring" in cfg.valuable_bases
+
+    def test_exchange_categories(self):
+        from games.poe2 import create_poe2_config
+        cfg = create_poe2_config()
+
+        assert len(cfg.exchange_categories) == 14
+        assert "Currency" in cfg.exchange_categories
+        assert "Fragments" in cfg.exchange_categories
+
+    def test_poe2scout_categories(self):
+        from games.poe2 import create_poe2_config
+        cfg = create_poe2_config()
+
+        assert len(cfg.poe2scout_unique_categories) == 7
+        assert "armour" in cfg.poe2scout_unique_categories
+        assert "weapon" in cfg.poe2scout_unique_categories
+        assert len(cfg.poe2scout_currency_categories) >= 14
+        assert "currency" in cfg.poe2scout_currency_categories
+
+    def test_poe_ninja_exchange_url(self):
+        from games.poe2 import create_poe2_config
+        cfg = create_poe2_config()
+
+        assert "poe.ninja" in cfg.poe_ninja_exchange_url
+        assert "exchange" in cfg.poe_ninja_exchange_url
+
+    def test_price_request_delay(self):
+        from games.poe2 import create_poe2_config
+        cfg = create_poe2_config()
+
+        assert cfg.price_request_delay == 0.3
+
     def test_all_required_fields_populated(self):
         """Verify no required field is left empty/None."""
         from games.poe2 import create_poe2_config
