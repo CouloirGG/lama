@@ -69,56 +69,9 @@ def wait_for_server(timeout=10):
 class WindowApi:
     """JS-callable window controls for frameless mode."""
 
-    def __init__(self):
-        self._saved_rect = None
-        self._guard_until = 0.0  # timestamp — resizes are reverted during guard
-
     def _get_hwnd(self):
         import ctypes
         return ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
-
-    def save_bounds(self):
-        """Save current window position and size."""
-        import ctypes
-        import ctypes.wintypes
-        hwnd = self._get_hwnd()
-        if hwnd:
-            rect = ctypes.wintypes.RECT()
-            ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
-            self._saved_rect = (rect.left, rect.top,
-                                rect.right - rect.left,
-                                rect.bottom - rect.top)
-
-    def restore_bounds(self):
-        """Re-apply saved window bounds."""
-        import ctypes
-        hwnd = self._get_hwnd()
-        if hwnd and self._saved_rect:
-            x, y, w, h = self._saved_rect
-            SWP_NOZORDER = 0x0004
-            ctypes.windll.user32.SetWindowPos(hwnd, 0, x, y, w, h, SWP_NOZORDER)
-
-    def begin_guard(self):
-        """Start a guard period — any resize in the next second gets reverted."""
-        self._guard_until = time.time() + 1.0
-
-    def on_resized(self, width, height):
-        """Called by pywebview resized event. Reverts glitch resizes during guard."""
-        if time.time() < self._guard_until and self._saved_rect:
-            _, _, saved_w, saved_h = self._saved_rect
-            if width != saved_w or height != saved_h:
-                self.restore_bounds()
-        elif self._saved_rect is None or time.time() >= self._guard_until:
-            # Outside guard period — user is manually resizing, update saved rect
-            import ctypes
-            import ctypes.wintypes
-            hwnd = self._get_hwnd()
-            if hwnd:
-                rect = ctypes.wintypes.RECT()
-                ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
-                self._saved_rect = (rect.left, rect.top,
-                                    rect.right - rect.left,
-                                    rect.bottom - rect.top)
 
     def minimize(self):
         import ctypes
@@ -134,8 +87,6 @@ class WindowApi:
                 ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
             else:
                 ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
-            self._guard_until = 0  # don't revert maximize
-            self.save_bounds()
 
     def close(self):
         import webview
@@ -211,14 +162,6 @@ def main():
         easy_drag=False,
         js_api=api,
     )
-
-    # Save initial bounds once loaded; revert glitch resizes via event
-    def on_loaded():
-        time.sleep(0.5)
-        api.save_bounds()
-
-    window.events.loaded += on_loaded
-    window.events.resized += api.on_resized
 
     # This blocks until the window is closed
     webview.start()
