@@ -40,6 +40,7 @@ _GRADE_FROM_NUM = {v: k for k, v in _GRADE_NUM.items()}
 # Quality filter thresholds
 MAX_PRICE_DIVINE = 300.0
 MIN_PRICE_DIVINE = 0.01
+OUTLIER_THRESHOLD = 3.0  # max ratio from median within (grade, class) group
 
 
 def load_raw_records(input_paths: List[str]) -> List[dict]:
@@ -111,8 +112,44 @@ def quality_filter(records: List[dict]) -> Tuple[List[dict], dict]:
     return filtered, stats
 
 
+def remove_outliers(records: List[dict]) -> Tuple[List[dict], int]:
+    """Remove price outliers within each (grade, item_class) group.
+
+    For groups with >= 3 records, compute median price and remove records
+    where max(price/median, median/price) > OUTLIER_THRESHOLD.
+    """
+    from collections import defaultdict
+
+    groups: Dict[Tuple[str, str], List[dict]] = defaultdict(list)
+    for rec in records:
+        grade = rec.get("grade", "C")
+        item_class = rec.get("item_class", "")
+        groups[(grade, item_class)].append(rec)
+
+    kept = []
+    removed = 0
+    for key, group in groups.items():
+        if len(group) < 3:
+            kept.extend(group)
+            continue
+        prices = sorted(r["min_divine"] for r in group)
+        median = prices[len(prices) // 2]
+        if median <= 0:
+            kept.extend(group)
+            continue
+        for rec in group:
+            price = rec["min_divine"]
+            ratio = max(price / median, median / price)
+            if ratio > OUTLIER_THRESHOLD:
+                removed += 1
+            else:
+                kept.append(rec)
+
+    return kept, removed
+
+
 def dedup_records(records: List[dict]) -> Tuple[List[dict], int]:
-    """Remove duplicate (score, price, item_class) entries."""
+    """Remove duplicate (score, price, item_class, grade) entries."""
     seen = set()
     deduped = []
     dup_count = 0
@@ -122,6 +159,7 @@ def dedup_records(records: List[dict]) -> Tuple[List[dict], int]:
             round(rec["score"], 3),
             round(rec["min_divine"], 2),
             rec.get("item_class", ""),
+            rec.get("grade", ""),
         )
         if key in seen:
             dup_count += 1
@@ -156,9 +194,14 @@ def generate_shard(records: List[dict], league: str, output_path: str):
           f"{qstats['price_too_high']} price_cap, {qstats['price_too_low']} too_low, "
           f"{qstats['estimate']} estimates)")
 
+    # Outlier removal
+    cleaned, outlier_count = remove_outliers(filtered)
+    print(f"  Outlier removal: {len(filtered)} -> {len(cleaned)} "
+          f"({outlier_count} outliers removed, threshold={OUTLIER_THRESHOLD}x)")
+
     # Dedup
-    deduped, dup_count = dedup_records(filtered)
-    print(f"  Dedup: {len(filtered)} -> {len(deduped)} ({dup_count} duplicates removed)")
+    deduped, dup_count = dedup_records(cleaned)
+    print(f"  Dedup: {len(cleaned)} -> {len(deduped)} ({dup_count} duplicates removed)")
 
     # Compact format
     samples = [compact_record(r) for r in deduped]
@@ -261,6 +304,7 @@ def validate_shard(shard_path: str, seed: int = 42):
     within_3x = 0
     total_tested = 0
     errors_by_class: Dict[str, List[float]] = {}
+    errors_by_grade: Dict[str, List[float]] = {}
 
     for i in test_idx:
         s = samples[i]
@@ -286,6 +330,10 @@ def validate_shard(shard_path: str, seed: int = 42):
         if item_class not in errors_by_class:
             errors_by_class[item_class] = []
         errors_by_class[item_class].append(ratio)
+
+        if grade not in errors_by_grade:
+            errors_by_grade[grade] = []
+        errors_by_grade[grade].append(ratio)
 
     if total_tested == 0:
         print("  ERROR: No estimates produced (insufficient samples per class?)")
@@ -314,6 +362,21 @@ def validate_shard(shard_path: str, seed: int = 42):
         status = "OK" if pct >= 70 else "!!"
         print(f"    {status} {cls:20s}: {pct:5.1f}% ({n:4d} samples, "
               f"median error: {median:.2f}x)")
+
+    # Per-grade breakdown
+    print(f"\n  Per-grade accuracy (within 2x):")
+    for g in ["S", "A", "B", "C", "JUNK"]:
+        ratios = errors_by_grade.get(g, [])
+        if not ratios:
+            print(f"    -- {g:5s}: no samples")
+            continue
+        n = len(ratios)
+        n_2x = sum(1 for r in ratios if r <= 2.0)
+        pct = n_2x / n * 100
+        median_ratio = sorted(ratios)[len(ratios) // 2]
+        status = "OK" if pct >= 50 else "!!"
+        print(f"    {status} {g:5s}: {pct:5.1f}% ({n:4d} samples, "
+              f"median error: {median_ratio:.2f}x)")
 
 
 # ─── CLI Entry Point ─────────────────────────────────
