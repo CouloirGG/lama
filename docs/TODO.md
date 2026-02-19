@@ -26,6 +26,17 @@
 
 ## Completed
 
+### Session 22 (2026-02-19)
+- [x] **Overlay tier customization** — Per-tier color pickers (text, border, background) in dashboard with live preview; custom styles persist in `overlay_tier_styles` setting and apply in overlay subprocess
+- [x] **In-game inventory mockup** — Expanded overlay preview shows 12x5 inventory grid with filler items, highlighted item under cursor, POE2 tooltip, and LAMA overlay tag; click any tier to preview
+- [x] **Collapsible overlay preview** — Collapsed state shows 3 representative chips; expanded shows full preview + tier editor + "Reset to defaults"
+- [x] **Sound toggle UI** — Per-tier sound toggle rendered (UI only, not wired to audio)
+- [x] **Compact scanner card** — Stopped state reduced to single inline row (red dot + text + Start button)
+- [x] **Compact detection panel** — 4-column single-row layout with tighter padding
+- [x] **Overlay display presets with toggles** — format_overlay_text accepts show_grade/show_price/show_stars/show_mods/show_dps flags from dashboard settings
+- [x] **Item lookup endpoint** — `/api/item-lookup` POST endpoint + ItemLookup class for paste-and-score in dashboard
+- [x] **Shortcut AppUserModelID** — create_shortcut.py stamps System.AppUserModel.ID so pinned taskbar icon matches running app
+
 ### Session 21 (2026-02-18)
 - [x] **Enhanced Markets chart selectors** — Currency multi-select (click/Ctrl+Click), denomination picker (Chaos/Divine/Exalted), time range pills (7d/14d/30d), Top 5 button, smooth curved lines, currency icon markers at peaks/lulls
 - [x] **Multi-series normalization** — Multi-select uses % change so currencies with different values are comparable; Y-axis and crosshair switch to % mode

@@ -43,6 +43,7 @@ from pydantic import BaseModel
 
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
+from item_lookup import ItemLookup
 from price_cache import PriceCache
 from watchlist import WatchlistWorker
 
@@ -101,6 +102,13 @@ DEFAULT_SETTINGS = {
     "watchlist_queries": [],
     "watchlist_poll_interval": 300,
     "start_with_windows": False,
+    "overlay_show_grade": True,
+    "overlay_show_price": True,
+    "overlay_show_stars": True,
+    "overlay_show_mods": False,
+    "overlay_show_dps": True,
+    "overlay_display_preset": "standard",
+    "overlay_tier_styles": {},
 }
 
 
@@ -454,6 +462,7 @@ overlay = OverlayProcess()
 log_buffer: deque[dict] = deque(maxlen=500)
 watchlist_worker: Optional[WatchlistWorker] = None
 price_cache: Optional[PriceCache] = None
+item_lookup: Optional[ItemLookup] = None
 
 
 # ---------------------------------------------------------------------------
@@ -462,7 +471,7 @@ price_cache: Optional[PriceCache] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Set up the event loop reference and background tasks."""
-    global watchlist_worker, price_cache
+    global watchlist_worker, price_cache, item_lookup
 
     loop = asyncio.get_running_loop()
     overlay.set_loop(loop)
@@ -484,6 +493,16 @@ async def lifespan(app: FastAPI):
     # Server-side PriceCache for Markets tab (works without overlay running)
     price_cache = PriceCache(league=league)
     price_cache.start()
+
+    # Initialize item lookup in background thread (loads RePoE data)
+    item_lookup = ItemLookup()
+    _il = item_lookup
+    def _init_lookup():
+        try:
+            _il.initialize()
+        except Exception as e:
+            logger.warning(f"Item lookup init failed: {e}")
+    threading.Thread(target=_init_lookup, daemon=True).start()
 
     # Background task: check for updates after a short delay
     update_task = asyncio.create_task(check_for_updates())
@@ -624,6 +643,13 @@ class SettingsRequest(BaseModel):
     watchlist_queries: Optional[list] = None
     watchlist_poll_interval: Optional[int] = None
     start_with_windows: Optional[bool] = None
+    overlay_show_grade: Optional[bool] = None
+    overlay_show_price: Optional[bool] = None
+    overlay_show_stars: Optional[bool] = None
+    overlay_show_mods: Optional[bool] = None
+    overlay_show_dps: Optional[bool] = None
+    overlay_display_preset: Optional[str] = None
+    overlay_tier_styles: Optional[dict] = None
 
 
 # ---------------------------------------------------------------------------
@@ -690,7 +716,7 @@ async def update_settings(req: SettingsRequest):
     settings = load_settings()
     updates = req.model_dump(exclude_none=True)
     # Keys that should be replaced wholesale (client sends full object, not partial)
-    REPLACE_KEYS = {"filter_tier_styles", "filter_gear_classes", "watchlist_queries"}
+    REPLACE_KEYS = {"filter_tier_styles", "filter_gear_classes", "watchlist_queries", "overlay_tier_styles"}
     for key in REPLACE_KEYS:
         if key in updates:
             settings[key] = updates.pop(key)
@@ -768,6 +794,29 @@ async def get_leagues():
 async def get_log():
     """Return recent log lines for initial load."""
     return {"lines": list(log_buffer)}
+
+
+# ---------------------------------------------------------------------------
+# Item Lookup
+# ---------------------------------------------------------------------------
+class ItemLookupRequest(BaseModel):
+    text: str
+
+@app.post("/api/item-lookup")
+async def post_item_lookup(req: ItemLookupRequest):
+    """Parse and score pasted item text."""
+    if not item_lookup or not item_lookup.ready:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Item lookup is still initializing, try again in a moment"},
+        )
+    result = item_lookup.lookup(req.text)
+    if result is None:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Could not parse item text"},
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------

@@ -103,6 +103,14 @@ class LAMA:
         else:
             self.overlay = PriceOverlay()
 
+        # Load overlay display settings from dashboard config
+        self._display_settings = self._load_display_settings()
+
+        # Apply custom tier styles to overlay (if any)
+        if hasattr(self.overlay, 'load_custom_styles'):
+            self.overlay.load_custom_styles(
+                self._display_settings.get("overlay_tier_styles", {}))
+
         # Trade query cancellation: increment on each new detection so
         # stale trade queries abort before wasting API calls.
         self._trade_generation = 0
@@ -128,6 +136,30 @@ class LAMA:
         # Wire up detection callbacks
         self.item_detector.set_callback(self._on_change_detected)
         self.item_detector.set_hide_callback(self.overlay.hide)
+
+    @staticmethod
+    def _load_display_settings() -> dict:
+        """Load overlay display flags from dashboard settings file."""
+        import json
+        settings_file = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "dashboard_settings.json"
+        defaults = {
+            "overlay_show_grade": True,
+            "overlay_show_price": True,
+            "overlay_show_stars": True,
+            "overlay_show_mods": False,
+            "overlay_show_dps": True,
+            "overlay_tier_styles": {},
+        }
+        try:
+            if settings_file.exists():
+                with open(settings_file) as f:
+                    saved = json.load(f)
+                for key in defaults:
+                    if key in saved:
+                        defaults[key] = saved[key]
+        except Exception:
+            pass
+        return defaults
 
     def start(self):
         """
@@ -739,8 +771,16 @@ class LAMA:
             score.normalized_score, getattr(item, "item_class", "") or "",
             grade=score.grade.value)
         d2c = self.price_cache.divine_to_chaos
-        text = score.format_overlay_text(price_estimate=price_est,
-                                         divine_to_chaos=d2c)
+        ds = self._display_settings
+        text = score.format_overlay_text(
+            price_estimate=price_est,
+            divine_to_chaos=d2c,
+            show_grade=ds.get("overlay_show_grade", True),
+            show_price=ds.get("overlay_show_price", True),
+            show_stars=ds.get("overlay_show_stars", True),
+            show_mods=ds.get("overlay_show_mods", True),
+            show_dps=ds.get("overlay_show_dps", True),
+        )
 
         # If we have a price estimate, use price-based tier instead of grade-based.
         # Only override for B+ grades — C/JUNK calibration estimates are unreliable
@@ -769,8 +809,11 @@ class LAMA:
                      f"(score={score.normalized_score:.3f}{log_extra}) "
                      f"{score.top_mods_summary}")
 
+        # Borderless mode: when all display toggles are off, text is just "★"
+        is_borderless = (text == "\u2605")
         self.overlay.show_price(text=text, tier=overlay_tier,
-                                cursor_x=cursor_x, cursor_y=cursor_y)
+                                cursor_x=cursor_x, cursor_y=cursor_y,
+                                borderless=is_borderless)
         if score.grade.value not in ("C", "JUNK"):
             self.stats["successful_lookups"] += 1
 
