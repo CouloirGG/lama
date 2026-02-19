@@ -11,6 +11,7 @@ and serves as a fallback data source for currency-type items.
 """
 
 import json
+import shutil
 import time
 import logging
 import threading
@@ -24,6 +25,8 @@ from config import (
     CACHE_DIR,
     DEFAULT_LEAGUE,
     POE2SCOUT_BASE_URL,
+    RATE_HISTORY_FILE,
+    RATE_HISTORY_BACKUP,
 )
 
 logger = logging.getLogger(__name__)
@@ -218,6 +221,144 @@ class PriceCache:
                 "league": self.league,
             }
 
+    # ─── Market Data (Markets tab) ──────────────────────
+
+    def get_market_data(self) -> dict:
+        """Return all poe.ninja currencies with sparkline data for the Markets tab."""
+        with self._lock:
+            currencies = []
+            for key, data in self.prices.items():
+                # Include items that have sparkline data (from poe.ninja, possibly overwritten by poe2scout)
+                if not data.get("sparkline_data"):
+                    continue
+                currencies.append({
+                    "name": data.get("name", key),
+                    "divine_value": data.get("divine_value", 0),
+                    "chaos_value": data.get("chaos_value", 0),
+                    "category": data.get("category", ""),
+                    "sparkline_data": data.get("sparkline_data", []),
+                    "sparkline_change": data.get("sparkline_change", 0),
+                    "volume": data.get("volume", 0),
+                    "image_url": data.get("image_url", ""),
+                })
+
+            # Sort expensive → cheap
+            currencies.sort(key=lambda c: -c["divine_value"])
+
+            rates = {
+                "divine_to_chaos": self.divine_to_chaos,
+                "divine_to_exalted": self.divine_to_exalted,
+            }
+
+            last_refresh = (
+                time.strftime("%H:%M:%S", time.localtime(self.last_refresh))
+                if self.last_refresh else "Never"
+            )
+
+        # Load rate history from disk (outside lock)
+        history = self._load_rate_history()
+
+        # Oldest timestamp so frontend can grey out 14d/30d when insufficient data
+        oldest_history_ts = min((h["ts"] for h in history), default=0) if history else 0
+
+        return {
+            "currencies": currencies,
+            "rates": rates,
+            "history": history,
+            "oldest_history_ts": oldest_history_ts,
+            "last_refresh": last_refresh,
+            "league": self.league,
+        }
+
+    def _track_rate_history(self):
+        """Append a rate snapshot to the history file, pruning entries > 30 days old."""
+        try:
+            now = time.time()
+            cutoff = now - 30 * 86400  # 30 days
+
+            # Build snapshot of top currencies by volume
+            with self._lock:
+                top_currencies = {}
+                items = sorted(
+                    self.prices.values(),
+                    key=lambda x: x.get("volume", 0),
+                    reverse=True,
+                )
+                for item in items[:30]:
+                    name = item.get("name", "")
+                    if name:
+                        top_currencies[name] = round(item.get("divine_value", 0), 6)
+
+                entry = {
+                    "ts": int(now),
+                    "divine_to_chaos": round(self.divine_to_chaos, 2),
+                    "divine_to_exalted": round(self.divine_to_exalted, 2),
+                    "currencies": top_currencies,
+                }
+
+            # Read existing entries, prune old ones, append new
+            existing = []
+            if RATE_HISTORY_FILE.exists():
+                try:
+                    with open(RATE_HISTORY_FILE, "r") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                rec = json.loads(line)
+                                if rec.get("ts", 0) > cutoff:
+                                    existing.append(line)
+                            except json.JSONDecodeError:
+                                continue
+                except Exception:
+                    pass
+
+            existing.append(json.dumps(entry))
+
+            with open(RATE_HISTORY_FILE, "w") as f:
+                f.write("\n".join(existing) + "\n")
+
+            # Backup to OneDrive
+            try:
+                RATE_HISTORY_BACKUP.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(RATE_HISTORY_FILE, RATE_HISTORY_BACKUP)
+            except Exception as be:
+                logger.debug(f"Rate history backup failed: {be}")
+
+        except Exception as e:
+            logger.debug(f"Rate history tracking failed: {e}")
+
+    def _load_rate_history(self) -> list:
+        """Load rate history entries from disk. Restores from OneDrive backup if primary missing."""
+        history = []
+        # Restore from backup if primary is missing
+        if not RATE_HISTORY_FILE.exists() and RATE_HISTORY_BACKUP.exists():
+            try:
+                RATE_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(RATE_HISTORY_BACKUP, RATE_HISTORY_FILE)
+                logger.info("Restored rate history from OneDrive backup")
+            except Exception as e:
+                logger.debug(f"Rate history restore failed: {e}")
+        if not RATE_HISTORY_FILE.exists():
+            return history
+        try:
+            cutoff = time.time() - 30 * 86400
+            with open(RATE_HISTORY_FILE, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                        if rec.get("ts", 0) > cutoff:
+                            history.append(rec)
+                    except json.JSONDecodeError:
+                        continue
+        except Exception as e:
+            logger.debug(f"Failed to load rate history: {e}")
+        return history
+
     # ─── Fetch ───────────────────────────────────────
 
     def _refresh_loop(self):
@@ -225,6 +366,7 @@ class PriceCache:
             try:
                 self._fetch_all()
                 self._save_to_disk()
+                self._track_rate_history()
                 self.last_refresh = time.time()
                 logger.info(f"Cache refreshed: {len(self.prices)} items "
                             f"(1 div = {self.divine_to_chaos:.0f}c / {self.divine_to_exalted:.0f}ex)")
@@ -392,13 +534,20 @@ class PriceCache:
         chaos_value = divine_value * self.divine_to_chaos
 
         key = name.lower()
-        prices[key] = {
+        entry = {
             "divine_value": divine_value,
             "chaos_value": chaos_value,
             "name": name,
             "category": category,
             "source": "poe2scout",
         }
+        # Preserve sparkline/image data from poe.ninja if it was fetched first
+        existing = prices.get(key)
+        if existing and existing.get("source") == "poe.ninja":
+            for field in ("sparkline_data", "sparkline_change", "volume", "image_url"):
+                if field in existing:
+                    entry[field] = existing[field]
+        prices[key] = entry
         return 1
 
     # ─── poe.ninja (secondary) ────────────────────────
@@ -429,6 +578,7 @@ class PriceCache:
         """
         Parse the poe.ninja exchange endpoint. Adds currency items and updates
         conversion rates. poe2scout will overwrite these if it has the same items.
+        Also preserves sparkline, volume, and image data for the Markets tab.
         """
         core = data.get("core", {})
         lines = data.get("lines", [])
@@ -442,13 +592,19 @@ class PriceCache:
         if rates.get("exalted"):
             self.divine_to_exalted = rates["exalted"]
 
-        # Build id → name map
+        # Build id → name map and id → image map
         id_map = {}
+        image_map = {}
         for item in items:
             iid = item.get("id", "")
             name = item.get("name", "")
             if iid and name:
                 id_map[iid] = name
+            img = item.get("icon") or item.get("image")
+            if iid and img:
+                if img.startswith("/"):
+                    img = "https://web.poecdn.com" + img
+                image_map[iid] = img
 
         count = 0
         for line in lines:
@@ -459,6 +615,11 @@ class PriceCache:
             if not name or divine_value == 0:
                 continue
 
+            # Extract sparkline data (7-day cumulative % changes)
+            sparkline = line.get("sparkline", {}) or {}
+            sparkline_data = sparkline.get("data") or []
+            sparkline_change = sparkline.get("totalChange", 0)
+
             key = name.lower()
             prices[key] = {
                 "divine_value": divine_value,
@@ -466,6 +627,10 @@ class PriceCache:
                 "name": name,
                 "category": category,
                 "source": "poe.ninja",
+                "sparkline_data": sparkline_data,
+                "sparkline_change": sparkline_change,
+                "volume": line.get("volumePrimaryValue", 0),
+                "image_url": image_map.get(lid, ""),
             }
             count += 1
 

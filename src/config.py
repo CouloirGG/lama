@@ -217,6 +217,10 @@ GRADE_TIER_MAP = {
     "JUNK": "low",
 }
 
+# Rate history file (market tab time series)
+RATE_HISTORY_FILE = CACHE_DIR / "rate_history.jsonl"
+RATE_HISTORY_BACKUP = Path(os.path.expanduser("~")) / "OneDrive" / "POE2PriceOverlay" / "rate_history.jsonl"
+
 # Calibration log file (grade vs actual trade price)
 CALIBRATION_LOG_FILE = CACHE_DIR / "calibration.jsonl"
 

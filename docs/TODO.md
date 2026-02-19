@@ -26,6 +26,17 @@
 
 ## Completed
 
+### Session 21 (2026-02-18)
+- [x] **Enhanced Markets chart selectors** — Currency multi-select (click/Ctrl+Click), denomination picker (Chaos/Divine/Exalted), time range pills (7d/14d/30d), Top 5 button, smooth curved lines, currency icon markers at peaks/lulls
+- [x] **Multi-series normalization** — Multi-select uses % change so currencies with different values are comparable; Y-axis and crosshair switch to % mode
+- [x] **Rate history extended to 30 days** — History retention `7d → 30d`, `oldest_history_ts` exposed so frontend can grey out unavailable time ranges
+- [x] **OneDrive backup for rate history** — `rate_history.jsonl` auto-copies to `~/OneDrive/POE2PriceOverlay/` on every write; restores from backup on load if primary missing
+- [x] **KPI cards updated** — Hinekora's Lock→Divine, Fracturing→Divine, Omen of Light→Divine, Omen of the Abyss→Exalted; currency icons from poe.ninja
+- [x] **Category filter fix** — Case-insensitive comparison (poe2scout lowercase vs PascalCase pills)
+- [x] **Chart edge padding** — Lines extend to chart edges with `fixLeftEdge`/`fixRightEdge`
+- [x] **Number formatting** — Large values abbreviated (54.4k), decimals dropped on whole numbers, theme-matched chart colors
+- [x] **TradingView watermark hidden** — CSS rule hides attribution link
+
 ### Session 20 (2026-02-18)
 - [x] **Fix Restart App** — server broadcasts `app_restart` via WebSocket so dashboard calls `pywebview.api.close()` for clean WebView2 shutdown; `TerminateProcess` fallback
 - [x] **Mirror KPI** — added Mirror-to-Divine exchange rate card to dashboard; pipeline through price_cache → main.py status line → server.py → dashboard (PT-41)
