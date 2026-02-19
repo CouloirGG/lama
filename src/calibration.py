@@ -42,10 +42,10 @@ Sample = Tuple[float, float, int, float, float, int, bool]
 class CalibrationEngine:
     MIN_CLASS_SAMPLES = 10
     MIN_GLOBAL_SAMPLES = 50
-    _EPSILON = 1e-6  # prevents division by zero in distance weighting
+    _EPSILON = 0.02  # smoothing floor; exact match gets ~50x weight vs dist=1.0
 
     # Distance metric weights
-    GRADE_PENALTY = 0.15       # per grade step
+    GRADE_PENALTY = 0.40       # per grade step (crossing one grade = 0.40 score distance)
     DPS_WEIGHT = 0.3           # DPS factor difference weight
     DEFENSE_WEIGHT = 0.2       # defense factor difference weight
 
@@ -116,7 +116,7 @@ class CalibrationEngine:
                         continue
 
                     # Dedup: same item scanned multiple times
-                    dedup_key = (round(score, 3), round(divine, 2), item_class)
+                    dedup_key = (round(score, 3), round(divine, 2), item_class, grade)
                     if dedup_key in seen:
                         skipped += 1
                         continue
@@ -342,11 +342,11 @@ class CalibrationEngine:
                      defense_factor: float = 1.0) -> float:
         """k-NN inverse-distance-weighted interpolation in log-price space.
 
-        Distance = |score_diff| + 0.15*|grade_diff| + 0.3*|dps_diff| + 0.2*|def_diff|
+        Distance = |score_diff| + 0.40*|grade_diff| + 0.3*|dps_diff| + 0.2*|def_diff|
 
         1. Compute multi-dimensional distance
         2. Sort by distance, take k nearest
-        3. Weight by 1 / (distance + epsilon), with recency bonus for user data
+        3. Weight by 1 / (distance + 0.02), with recency bonus for user data
         4. Weighted average of log(divine), then exp() back
         """
         k = self._k
