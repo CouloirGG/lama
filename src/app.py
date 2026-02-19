@@ -152,13 +152,14 @@ def _ensure_deps():
         pass
     import subprocess
     req = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "requirements.txt")
-    flags = 0
-    if sys.platform == "win32":
-        flags = subprocess.CREATE_NO_WINDOW
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = 0  # SW_HIDE
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "-r", req,
          "--quiet", "--disable-pip-version-check"],
-        creationflags=flags,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+        startupinfo=si,
     )
 
 
