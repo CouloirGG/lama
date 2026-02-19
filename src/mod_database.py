@@ -127,6 +127,8 @@ class ItemScore:
     somv_factor: float = 1.0   # roll quality multiplier (0.90-1.10)
     total_dps: float = 0.0
     total_defense: int = 0
+    quality: int = 0
+    sockets: int = 0
 
     def format_overlay_text(self, price_estimate: float = None,
                             divine_to_chaos: float = 0,
@@ -145,6 +147,8 @@ class ItemScore:
         Display flags control which parts are included.
         """
         if self.grade in (Grade.JUNK, Grade.C):
+            if self.quality > 0 or self.sockets > 0:
+                return "SCRAP"
             return "\u2717"
 
         parts = []
@@ -689,6 +693,8 @@ class ModDatabase:
             somv_factor=round(somv_factor, 3),
             total_dps=round(total_dps, 1),
             total_defense=total_defense,
+            quality=getattr(item, 'quality', 0) or 0,
+            sockets=getattr(item, 'sockets', 0) or 0,
         )
 
     def get_tier_info(self, stat_id: str, value: float,

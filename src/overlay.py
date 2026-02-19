@@ -10,12 +10,20 @@ On Windows, this creates a layered window that:
 - Shows a small price tag with color coding
 """
 
+import re
 import time
 import logging
 import threading
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# PIL for currency icon loading (optional — falls back to text-only)
+try:
+    from PIL import Image, ImageTk
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
 
 try:
     import tkinter as tk
@@ -34,6 +42,7 @@ from config import (
     PRICE_COLOR_GOOD,
     PRICE_COLOR_DECENT,
     PRICE_COLOR_LOW,
+    PRICE_COLOR_SCRAP,
 )
 
 
@@ -48,6 +57,18 @@ class PriceOverlay:
     """
 
     _NORMAL_BORDER_COLOR = "#333355"
+
+    # Currency detection patterns for inline icon rendering
+    _CURRENCY_SHORT_RE = re.compile(r'(?<=\d)(d|c)\b')
+    _CURRENCY_LONG_RE = re.compile(r'\b(Divine|Chaos|Exalted|Mirror)s?\b', re.IGNORECASE)
+
+    # Maps icon keys → resource filenames
+    _CURRENCY_ICON_FILES = {
+        "divine": "resources/img/divine_orb.png",
+        "chaos": "resources/img/chaos_orb.png",
+        "exalted": "resources/img/exalted_orb.png",
+        "mirror": "resources/img/mirror_of_kalandra.png",
+    }
 
     # Value-based border effects:
     #   (min_divine, colors, pulse_ms, border_width, text_cycle)
@@ -94,6 +115,10 @@ class PriceOverlay:
         self._custom_text_colors: dict = {}
         self._custom_bg_colors: dict = {}
         self._custom_border_colors: dict = {}
+        # Currency icon labels (created in initialize, packed on demand)
+        self._icon_label: Optional[tk.Label] = None
+        self._suffix_label: Optional[tk.Label] = None
+        self._currency_icons: dict = {}  # key → ImageTk.PhotoImage (must persist)
 
     def initialize(self):
         """
@@ -142,7 +167,32 @@ class PriceOverlay:
             relief="flat",
             borderwidth=0,
         )
-        self._label.pack()
+        self._label.pack(side="left")
+
+        # Currency icon label (packed between prefix and suffix on demand)
+        self._icon_label = tk.Label(
+            self._frame,
+            bg=OVERLAY_BG_COLOR,
+            padx=1,
+            pady=0,
+            borderwidth=0,
+        )
+        # Suffix label (text after the currency icon)
+        self._suffix_label = tk.Label(
+            self._frame,
+            text="",
+            font=("Segoe UI", OVERLAY_FONT_SIZE, "bold"),
+            fg=PRICE_COLOR_GOOD,
+            bg=OVERLAY_BG_COLOR,
+            padx=OVERLAY_PADDING,
+            pady=OVERLAY_PADDING // 2,
+            relief="flat",
+            borderwidth=0,
+        )
+        # Neither icon_label nor suffix_label packed initially
+
+        # Pre-load currency icons
+        self._load_currency_icons()
 
         # Force window realization so we get a valid HWND
         self._root.update_idletasks()
@@ -232,6 +282,80 @@ class PriceOverlay:
 
     # ─── Internal Methods ────────────────────────────
 
+    def _load_currency_icons(self):
+        """Pre-load currency icon PNGs, resized to match font size."""
+        if not PIL_AVAILABLE:
+            logger.debug("PIL not available — currency icons disabled")
+            return
+
+        from bundle_paths import get_resource
+
+        icon_size = OVERLAY_FONT_SIZE + 4  # ~18px at default font size
+        for key, rel_path in self._CURRENCY_ICON_FILES.items():
+            try:
+                img_path = get_resource(rel_path)
+                if not img_path.exists():
+                    continue
+                img = Image.open(img_path).convert("RGBA")
+                img = img.resize((icon_size, icon_size), Image.LANCZOS)
+                photo = ImageTk.PhotoImage(img)
+                self._currency_icons[key] = photo
+            except Exception as e:
+                logger.debug(f"Failed to load currency icon {key}: {e}")
+
+        if self._currency_icons:
+            logger.info(f"Loaded {len(self._currency_icons)} currency icon(s)")
+
+    def _parse_currency(self, text: str):
+        """Find a currency token in text and return (prefix, icon_key, suffix) or None."""
+        # Short forms: "~130d" → ("~130", "divine", " ★3: ..."),  "~45c" → chaos
+        m = self._CURRENCY_SHORT_RE.search(text)
+        if m:
+            key = "divine" if m.group(1) == "d" else "chaos"
+            if key in self._currency_icons:
+                return text[:m.start()], key, text[m.end():]
+
+        # Long forms: "2-5 Divine", "100 Chaos", "2 Exalted", "1 Mirror"
+        m = self._CURRENCY_LONG_RE.search(text)
+        if m:
+            word = m.group(1).lower()
+            if word in self._currency_icons:
+                return text[:m.start()], word, text[m.end():]
+
+        return None
+
+    def _render_with_icon(self, prefix: str, icon_key: str, suffix: str,
+                          color: str, bg_color: str):
+        """Render as [prefix text][icon][suffix text] labels packed left-to-right."""
+        # Unpack all to ensure correct ordering
+        self._label.pack_forget()
+        self._icon_label.pack_forget()
+        self._suffix_label.pack_forget()
+
+        self._label.configure(text=f" {prefix}", fg=color, bg=bg_color,
+                              padx=(OVERLAY_PADDING, 2))
+        self._label.pack(side="left")
+
+        icon = self._currency_icons.get(icon_key)
+        if icon:
+            self._icon_label.configure(image=icon, bg=bg_color)
+            self._icon_label.pack(side="left")
+
+        if suffix and suffix.strip():
+            self._suffix_label.configure(text=f"{suffix} ", fg=color, bg=bg_color,
+                                         padx=(2, OVERLAY_PADDING))
+            self._suffix_label.pack(side="left")
+
+    def _render_text_only(self, text: str, color: str, bg_color: str):
+        """Render as a single text label (original behavior)."""
+        self._icon_label.pack_forget()
+        self._suffix_label.pack_forget()
+        self._label.pack_forget()
+
+        self._label.configure(text=f" {text} ", fg=color, bg=bg_color,
+                              padx=OVERLAY_PADDING)
+        self._label.pack(side="left")
+
     def _process_pending(self):
         """Process pending UI updates from other threads."""
         with self._lock:
@@ -266,10 +390,8 @@ class PriceOverlay:
             "good": PRICE_COLOR_GOOD,
             "decent": PRICE_COLOR_DECENT,
             "low": PRICE_COLOR_LOW,
+            "scrap": PRICE_COLOR_SCRAP,
         }.get(tier, PRICE_COLOR_LOW)
-
-        # Update label
-        self._label.configure(text=f" {text} ", fg=color)
 
         # Stop any existing pulse animation
         if self._pulse_timer:
@@ -278,14 +400,12 @@ class PriceOverlay:
 
         if borderless:
             # Borderless mode: floating colored icon, no box
+            bg_color = self._transparent_color
             self._frame.configure(
                 bg=self._transparent_color, padx=0, pady=0)
-            self._label.configure(bg=self._transparent_color)
             self._is_estimate = False
         else:
-            # Restore normal label background (in case previous was borderless)
             bg_color = OVERLAY_BG_COLOR
-            self._label.configure(bg=bg_color)
 
             # Determine border effect from divine price
             border_colors = None
@@ -307,10 +427,10 @@ class PriceOverlay:
             if matched_threshold is not None:
                 custom_text = self._custom_text_colors.get(matched_threshold)
                 if custom_text:
-                    self._label.configure(fg=custom_text)
+                    color = custom_text
                 custom_bg = self._custom_bg_colors.get(matched_threshold)
                 if custom_bg:
-                    self._label.configure(bg=custom_bg)
+                    bg_color = custom_bg
                 custom_border = self._custom_border_colors.get(matched_threshold)
                 if custom_border:
                     border_colors = (custom_border,)
@@ -338,23 +458,31 @@ class PriceOverlay:
                 self._frame.configure(bg=self._NORMAL_BORDER_COLOR)
                 self._is_estimate = False
 
+        # Render label content (with or without currency icon)
+        currency = self._parse_currency(text) if self._currency_icons else None
+        if currency:
+            prefix, icon_key, suffix = currency
+            self._render_with_icon(prefix, icon_key, suffix, color, bg_color)
+        else:
+            self._render_text_only(text, color, bg_color)
+
         # Position near cursor
         x = cursor_x + OVERLAY_OFFSET_X
         y = cursor_y + OVERLAY_OFFSET_Y
 
-        # Ensure it stays on screen
+        # Ensure it stays on screen (use frame width for multi-label support)
         screen_w = self._root.winfo_screenwidth()
         screen_h = self._root.winfo_screenheight()
         self._root.update_idletasks()
-        label_w = self._label.winfo_reqwidth()
-        label_h = self._label.winfo_reqheight()
+        frame_w = self._frame.winfo_reqwidth()
+        frame_h = self._frame.winfo_reqheight()
 
-        if x + label_w > screen_w:
-            x = cursor_x - label_w - 10
+        if x + frame_w > screen_w:
+            x = cursor_x - frame_w - 10
         if y < 0:
             y = cursor_y + 30
-        if y + label_h > screen_h:
-            y = screen_h - label_h
+        if y + frame_h > screen_h:
+            y = screen_h - frame_h
 
         self._root.geometry(f"+{x}+{y}")
 
@@ -398,10 +526,14 @@ class PriceOverlay:
         self._pulse_index = (self._pulse_index + 1) % len(self._pulse_colors)
         self._frame.configure(bg=self._pulse_colors[self._pulse_index])
         # Mirror tier: cycle text color too (offset by half for contrast)
-        if self._text_pulse and self._label:
+        if self._text_pulse:
             n = len(self._pulse_colors)
             text_idx = (self._pulse_index + n // 2) % n
-            self._label.configure(fg=self._pulse_colors[text_idx])
+            pulse_fg = self._pulse_colors[text_idx]
+            if self._label:
+                self._label.configure(fg=pulse_fg)
+            if self._suffix_label and self._suffix_label.winfo_ismapped():
+                self._suffix_label.configure(fg=pulse_fg)
         self._pulse_timer = self._root.after(self._pulse_ms, self._start_pulse)
 
     def _do_hide(self):

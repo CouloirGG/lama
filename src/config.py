@@ -73,6 +73,7 @@ PRICE_COLOR_HIGH = "#ff6b35"       # Orange - very valuable (>= 50 Exalted)
 PRICE_COLOR_GOOD = "#ffd700"       # Gold - worth picking up (>= 5 Exalted)
 PRICE_COLOR_DECENT = "#4ecdc4"     # Teal - decent value (>= 1 Exalted)
 PRICE_COLOR_LOW = "#95a5a6"        # Grey - low value (< 1 Exalted)
+PRICE_COLOR_SCRAP = "#CD7F32"      # Bronze - salvageable junk (quality/sockets)
 
 # Price display thresholds (in Exalted Orb equivalent)
 PRICE_TIER_HIGH = 50.0

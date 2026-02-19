@@ -796,6 +796,10 @@ class LAMA:
             else:
                 overlay_tier = "low"
 
+        # Scrap override: JUNK/C items with quality/sockets → bronze "SCRAP"
+        if text == "SCRAP":
+            overlay_tier = "scrap"
+
         # Log factors when they modify the score
         if score.dps_factor != 1.0:
             logger.info(f"DPS factor: {score.dps_factor:.2f} (dps={score.total_dps:.0f})")
