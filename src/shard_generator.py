@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Calibration Shard Generator
+LAMA - Calibration Shard Generator
 
 Pipeline: raw harvester JSONL -> quality filters -> dedup -> compact gzipped JSON shard.
 

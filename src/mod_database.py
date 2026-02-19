@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Mod Database & Scoring Engine
+LAMA - Mod Database & Scoring Engine
 
 Evaluates rare items locally by identifying mod tiers and computing a
 weighted score.  Zero API calls — uses static RePoE data cached on disk.
@@ -764,7 +764,7 @@ class ModDatabase:
         try:
             logger.info(f"ModDatabase: downloading {filename}...")
             resp = requests.get(url, timeout=30,
-                                headers={"User-Agent": "POE2PriceOverlay/1.0"})
+                                headers={"User-Agent": "LAMA/1.0"})
             if resp.status_code != 200:
                 logger.warning(f"ModDatabase: HTTP {resp.status_code} for {url}")
                 # Fall back to stale cache

@@ -1,10 +1,10 @@
-; POE2 Price Overlay — Inno Setup installer script
-; Reads version from resources\VERSION, bundles dist\POE2PriceOverlay\
+; LAMA (Live Auction Market Assessor) — Inno Setup installer script
+; Reads version from resources\VERSION, bundles dist\LAMA\
 
-#define AppName "POE2 Price Overlay"
-#define AppPublisher "CarbonSMASH"
-#define AppURL "https://github.com/CarbonSMASH/POE2_OCR"
-#define AppExeName "POE2PriceOverlay.exe"
+#define AppName "LAMA"
+#define AppPublisher "Couloir"
+#define AppURL "https://github.com/CouloirGG/lama"
+#define AppExeName "LAMA.exe"
 
 ; Read version from resources\VERSION (relative to this .iss file's parent)
 #define VersionFile AddBackslash(SourcePath) + "..\resources\VERSION"
@@ -27,11 +27,11 @@ AppVerName={#AppName} v{#AppVersion}
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}/issues
-DefaultDirName={localappdata}\POE2PriceOverlay
+DefaultDirName={localappdata}\LAMA
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=POE2PriceOverlay-Setup-{#AppVersion}
+OutputBaseFilename=LAMA-Setup-{#AppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=lowest
@@ -49,8 +49,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 ; Bundle the entire PyInstaller output directory
-Source: "..\dist\POE2PriceOverlay\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\dist\POE2PriceOverlay\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\LAMA\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\LAMA\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

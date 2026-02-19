@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Item Detection via Clipboard
+LAMA - Item Detection via Clipboard
 Monitors cursor position, sends Ctrl+C when cursor stops over POE2,
 and reads the resulting item data from clipboard.
 

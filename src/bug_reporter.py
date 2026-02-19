@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Bug Reporter
+LAMA - Bug Reporter
 Discord webhook-based bug reporting triggered by Ctrl+Shift+B.
 Opens a dark-themed dialog, collects logs + system info, uploads to Discord.
 """

@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Item Parser
+LAMA - Item Parser
 Takes raw OCR text from tooltips/nameplates and extracts structured item data.
 
 POE2 Tooltip Structure (when hovering):

@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Calibration Harvester
+LAMA - Calibration Harvester
 
 Standalone CLI script that queries the trade API for listed rare items,
 scores them locally using ModDatabase, and records (score, actual_price)

@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Mod Parser
+LAMA - Mod Parser
 Matches item mod text to trade API stat IDs for rare item pricing.
 
 On startup, fetches stat filter definitions from the POE2 trade API
@@ -268,7 +268,7 @@ class ModParser:
             resp = requests.get(
                 TRADE_ITEMS_URL,
                 timeout=15,
-                headers={"User-Agent": "POE2PriceOverlay/1.0"},
+                headers={"User-Agent": "LAMA/1.0"},
             )
             if resp.status_code != 200:
                 logger.warning(f"ModParser: items API returned HTTP {resp.status_code}")
@@ -333,7 +333,7 @@ class ModParser:
             resp = requests.get(
                 TRADE_STATS_URL,
                 timeout=15,
-                headers={"User-Agent": "POE2PriceOverlay/1.0"},
+                headers={"User-Agent": "LAMA/1.0"},
             )
             if resp.status_code != 200:
                 logger.warning(f"ModParser: trade stats API returned HTTP {resp.status_code}")

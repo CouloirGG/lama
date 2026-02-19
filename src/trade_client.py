@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Trade API Client
+LAMA - Trade API Client
 Queries the POE2 trade API for rare item pricing based on mod filters.
 
 Pipeline:
@@ -64,7 +64,7 @@ class TradeClient:
         self._divine_to_chaos_fn = divine_to_chaos_fn or (lambda: 68.0)
         self._divine_to_exalted_fn = divine_to_exalted_fn or (lambda: 300.0)
         self._session = requests.Session()
-        self._session.headers.update({"User-Agent": "POE2PriceOverlay/1.0"})
+        self._session.headers.update({"User-Agent": "LAMA/1.0"})
 
         # Rate limiting
         self._last_request_time = 0.0

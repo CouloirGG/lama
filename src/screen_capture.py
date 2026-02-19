@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Cursor Tracking & Game Window Detection
+LAMA - Cursor Tracking & Game Window Detection
 Provides cursor position tracking and POE2 window detection for the
 clipboard-based item detection pipeline.
 """

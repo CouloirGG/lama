@@ -1,4 +1,4 @@
-# POE2 Price Overlay - Dependencies
+# LAMA - Dependencies
 # Install: pip install -r requirements.txt
 
 # HTTP for price API

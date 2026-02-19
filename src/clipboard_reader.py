@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Clipboard Reader
+LAMA - Clipboard Reader
 Sends Ctrl+C to POE2 to copy item data, then reads the clipboard.
 Uses only ctypes (no extra dependencies).
 

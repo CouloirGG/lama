@@ -1,5 +1,5 @@
 """
-server.py — FastAPI backend for POE2 Price Overlay dashboard.
+server.py — FastAPI backend for LAMA dashboard.
 
 Manages the overlay subprocess (main.py), streams logs over WebSocket,
 exposes status/settings APIs, and serves the dashboard HTML.
@@ -424,7 +424,7 @@ async def lifespan(app: FastAPI):
     # Background task: check for updates after a short delay
     update_task = asyncio.create_task(check_for_updates())
 
-    logger.info("POE2 Dashboard server ready")
+    logger.info("LAMA dashboard server ready")
     try:
         yield
     finally:
@@ -436,7 +436,7 @@ async def lifespan(app: FastAPI):
         overlay.stop()
 
 
-app = FastAPI(title="POE2 Dashboard API", lifespan=lifespan)
+app = FastAPI(title="LAMA API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -481,7 +481,7 @@ async def check_for_updates():
         loop = asyncio.get_running_loop()
         gh_headers = _get_github_headers()
         resp = await loop.run_in_executor(None, lambda: requests.get(
-            "https://api.github.com/repos/CarbonSMASH/POE2_OCR/releases/latest",
+            "https://api.github.com/repos/CouloirGG/lama/releases/latest",
             timeout=10,
             headers=gh_headers,
         ))
@@ -1149,7 +1149,7 @@ async def apply_update():
     try:
         gh_headers = _get_github_headers()
         resp = await loop.run_in_executor(None, lambda: requests.get(
-            "https://api.github.com/repos/CarbonSMASH/POE2_OCR/releases/latest",
+            "https://api.github.com/repos/CouloirGG/lama/releases/latest",
             timeout=10,
             headers=gh_headers,
         ))
@@ -1292,7 +1292,7 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    logger.info(f"Starting POE2 Dashboard server on port {PORT}")
+    logger.info(f"Starting LAMA dashboard server on port {PORT}")
     uvicorn.run(
         "server:app",
         host="127.0.0.1",

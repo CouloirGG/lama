@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Loot Filter Updater
+LAMA - Loot Filter Updater
 
 Parses a NeverSink-style .filter file, re-tiers economy blocks based on
 live price data from PriceCache, and writes the updated filter to the

@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec for POE2 Price Overlay.
+PyInstaller spec for LAMA (Live Auction Market Assessor).
 Single-exe architecture: app.py is the entry point.
   - Default mode: launches FastAPI server + pywebview dashboard
   - --overlay-worker: runs the overlay subprocess (main.py:main)
@@ -8,7 +8,7 @@ Single-exe architecture: app.py is the entry point.
 Build command (from project root):
     pyinstaller scripts/build.spec --noconfirm --clean
 
-Output: dist/POE2PriceOverlay/
+Output: dist/LAMA/
 """
 
 from pathlib import Path
@@ -93,7 +93,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='POE2PriceOverlay',
+    name='LAMA',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -114,5 +114,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='POE2PriceOverlay',
+    name='LAMA',
 )

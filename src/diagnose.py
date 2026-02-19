@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Diagnostics
+LAMA - Diagnostics
 Run this WITH POE2 open to test each pipeline step independently.
 Reports exactly where the pipeline is failing.
 
@@ -222,7 +222,7 @@ def test_price_cache():
     try:
         resp = requests.get(poe2_url,
             params={"league": saved_league, "type": "Currency"},
-            timeout=15, headers={"User-Agent": "POE2PriceOverlay/1.0"})
+            timeout=15, headers={"User-Agent": "LAMA/1.0"})
         info(f"POE2 API HTTP status: {resp.status_code}")
 
         if resp.status_code == 200 and resp.content:
@@ -266,7 +266,7 @@ def test_price_cache():
             for test_league in ["Fate of the Vaal", "Standard", "Hardcore"]:
                 r = requests.get(poe2_url,
                     params={"league": test_league, "type": "Currency"},
-                    timeout=10, headers={"User-Agent": "POE2PriceOverlay/1.0"})
+                    timeout=10, headers={"User-Agent": "LAMA/1.0"})
                 if r.status_code == 200 and r.content:
                     d = r.json()
                     n = len(d.get("lines", []))
@@ -347,7 +347,7 @@ def test_overlay():
 def main():
     print()
     print(f"{C.BOLD}╔══════════════════════════════════════════════════════╗{C.END}")
-    print(f"{C.BOLD}║       POE2 Price Overlay — Diagnostic Tool          ║{C.END}")
+    print(f"{C.BOLD}║       LAMA — Diagnostic Tool          ║{C.END}")
     print(f"{C.BOLD}╚══════════════════════════════════════════════════════╝{C.END}")
     print()
     print("  This will test each component of the overlay pipeline.")

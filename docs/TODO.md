@@ -1,12 +1,15 @@
-# POE2 Price Overlay — Bug & Work Tracker
+# LAMA (Live Auction Market Assessor) — Bug & Work Tracker
 
 **Jira Board:** [couloirgg.atlassian.net/jira/software/projects/PT/boards/36](https://couloirgg.atlassian.net/jira/software/projects/PT/boards/36)
 
 ## Bugs
+- [x] **KPI card currency icon swap** — Fixed: chaos_orb.png and exalted_orb.png filenames were swapped
+- [x] **Mirror KPI missing icon** — Fixed: added mirror_of_kalandra.png and wired into Mirror KPI card
 - [x] **Stale clipboard spam** — Fixed: distance-guarded reshow only allows re-fire when cursor returns near the original item position; stale cached data at new positions is suppressed. Also added clipboard retry (30ms) for slow game responses.
 - [x] **"Terminate batch job?" on START.bat** — Fixed: Ctrl+C is now gated on `is_poe2_foreground()` check — keystrokes only sent when POE2 has focus, preventing console from receiving them. Removed trailing echo/pause from START.bat for clean exit.
 
 ## Backlog
+- [ ] **Process name in Task Manager** — `pythonw.exe` is hard to find; set a custom process/app name so the app shows properly in Task Manager's Apps list (e.g., "POE2 Price Overlay")
 - [ ] **ilvl breakpoint tables** — ilvl is now included in trade API queries for base items, but different slots have different ilvl breakpoints (bows need 82 for top phys%, wands only need 81). Could build per-slot breakpoint tables and consider ilvl in loot filter tiering for exceptional bases.
 - [ ] **Common mod classification** — Heuristic-based; may occasionally misclassify an unusual valuable mod as "common". Mitigated by hybrid queries that always require key mods.
 - [ ] **"Grants Skill:" edge cases** — Unusual skill grant formats might not be stripped by `_SKIP_LINE_RE`, leaking into trade queries.

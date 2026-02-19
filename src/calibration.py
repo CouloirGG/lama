@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Calibration Engine
+LAMA - Calibration Engine
 
 Reads calibration data (from shards and/or calibration.jsonl) and produces
 divine-value estimates from local scoring data alone.

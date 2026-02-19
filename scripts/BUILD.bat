@@ -1,9 +1,9 @@
 @echo off
-title POE2 Price Overlay - Build
+title LAMA - Build
 cd /d "%~dp0.."
 echo.
 echo ================================================
-echo   Building POE2 Price Overlay
+echo   Building LAMA
 echo ================================================
 echo.
 
@@ -67,7 +67,7 @@ if errorlevel 1 (
     echo.
     echo   WARNING: Installer build failed. The portable exe is still available.
 ) else (
-    echo   Installer: dist\POE2PriceOverlay-Setup-%APP_VERSION%.exe
+    echo   Installer: dist\LAMA-Setup-%APP_VERSION%.exe
 )
 
 :done
@@ -76,7 +76,7 @@ echo ================================================
 echo   Build complete!
 echo ================================================
 echo.
-echo   Portable:  dist\POE2PriceOverlay\POE2PriceOverlay.exe
-if defined ISCC_EXE echo   Installer: dist\POE2PriceOverlay-Setup-%APP_VERSION%.exe
+echo   Portable:  dist\LAMA\LAMA.exe
+if defined ISCC_EXE echo   Installer: dist\LAMA-Setup-%APP_VERSION%.exe
 echo.
 pause

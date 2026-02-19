@@ -1,12 +1,12 @@
 @echo off
 chcp 65001 >nul 2>&1
-title POE2 Price Overlay
+title LAMA
 color 0A
 
 
 echo.
-echo  POE2 Price Overlay
-echo  Real-time item pricing
+echo  LAMA — Live Auction Market Assessor
+echo  Real-time item pricing for POE2
 echo.
 
 :: ─── Check Python ───────────────────────────────────

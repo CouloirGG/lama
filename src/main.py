@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Main Application
+LAMA (Live Auction Market Assessor) - Main Application
 Orchestrates all components:
     Cursor Stop → Ctrl+C → Clipboard Parse → Price Lookup → Overlay Display
 
@@ -44,7 +44,7 @@ from bug_reporter import BugReporter
 logger = logging.getLogger("poe2-overlay")
 
 
-class POE2PriceOverlay:
+class LAMA:
     """
     Main application class.
 
@@ -62,7 +62,7 @@ class POE2PriceOverlay:
         self._test_filter_update = test_filter_update
 
         # Initialize components
-        logger.info("Initializing POE2 Price Overlay...")
+        logger.info("Initializing LAMA...")
         logger.info(f"League: {self.league}")
 
         self.price_cache = PriceCache(league=self.league)
@@ -134,7 +134,7 @@ class POE2PriceOverlay:
         Start all components and begin monitoring.
         """
         logger.info("=" * 50)
-        logger.info("  POE2 Price Overlay - Starting")
+        logger.info("  LAMA - Starting")
         logger.info("=" * 50)
 
         self.stats["start_time"] = time.time()
@@ -1180,14 +1180,14 @@ def main():
         ctypes.windll.kernel32.SetConsoleCtrlHandler(None, True)
         # Resize console window — find by title for Windows Terminal compatibility
         user32 = ctypes.windll.user32
-        hwnd = user32.FindWindowW(None, "POE2 Price Overlay")
+        hwnd = user32.FindWindowW(None, "LAMA")
         if hwnd:
             user32.MoveWindow(hwnd, 100, 100, 650, 500, True)
     except Exception:
         pass
 
     parser = argparse.ArgumentParser(
-        description="POE2 Price Overlay - Real-time item pricing",
+        description="LAMA - Live Auction Market Assessor",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1227,7 +1227,7 @@ Examples:
     setup_logging(debug=args.debug)
 
     try:
-        app = POE2PriceOverlay(
+        app = LAMA(
             league=args.league,
             use_console=args.console,
             no_filter_update=args.no_filter_update,

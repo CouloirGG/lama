@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Configuration
+LAMA (Live Auction Market Assessor) - Configuration
 All tunable constants in one place.
 """
 
@@ -232,7 +232,7 @@ CALIBRATION_MIN_RESULTS = 3            # skip thin results (< 3 listings)
 # ─────────────────────────────────────────────
 SHARD_DIR = CACHE_DIR / "shards"
 SHARD_REFRESH_INTERVAL = 86400  # 24 hours
-SHARD_GITHUB_REPO = "CarbonSMASH/POE2_OCR"
+SHARD_GITHUB_REPO = "CouloirGG/lama"
 
 # ─────────────────────────────────────────────
 # Logging

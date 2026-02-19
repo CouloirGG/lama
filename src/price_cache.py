@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Price Cache
+LAMA - Price Cache
 Fetches item prices from poe2scout.com (primary) and poe.ninja (secondary).
 
 poe2scout provides pre-aggregated prices for 900+ items across all categories
@@ -237,7 +237,7 @@ class PriceCache:
 
     def _fetch_all(self):
         new_prices = {}
-        headers = {"User-Agent": "POE2PriceOverlay/1.0"}
+        headers = {"User-Agent": "LAMA/1.0"}
 
         # 1. Fetch poe.ninja first — we need conversion rates before poe2scout
         self._fetch_poe_ninja(headers, new_prices)

@@ -1,5 +1,5 @@
 """
-POE2 Price Overlay - Overlay Window
+LAMA - Overlay Window
 Draws a transparent, always-on-top price tag near the cursor.
 Uses tkinter for zero-dependency transparent window rendering.
 

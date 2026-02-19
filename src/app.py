@@ -1,5 +1,5 @@
 """
-app.py — Standalone desktop launcher for POE2 Price Overlay.
+app.py — Standalone desktop launcher for LAMA (Live Auction Market Assessor).
 
 Starts the FastAPI server in a background thread and opens the
 dashboard in a native window (no browser required).
@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Configuration
 # ---------------------------------------------------------------------------
 PORT = int(os.environ.get("POE2_DASHBOARD_PORT", "8450"))
-WINDOW_TITLE = "POE2 Price Overlay"
+WINDOW_TITLE = "LAMA"
 WINDOW_WIDTH = 1100
 WINDOW_HEIGHT = 750
 
@@ -81,7 +81,7 @@ class WindowApi:
     def _install_hook(self):
         """Install a Win32 hook that silently blocks resize during guard periods."""
         import ctypes
-        from ctypes import wintypes, WINFUNCTYPE, POINTER, c_int, c_uint, c_long
+        from ctypes import wintypes, WINFUNCTYPE, POINTER, c_int, c_uint
 
         hwnd = self._get_hwnd()
         if not hwnd or self._original_proc:
@@ -100,9 +100,21 @@ class WindowApi:
                 ("flags", c_uint),
             ]
 
-        WNDPROC = WINFUNCTYPE(c_long, wintypes.HWND, c_uint,
+        # LRESULT is pointer-sized (8 bytes on 64-bit Windows)
+        LRESULT = wintypes.LPARAM
+        WNDPROC = WINFUNCTYPE(LRESULT, wintypes.HWND, c_uint,
                               wintypes.WPARAM, wintypes.LPARAM)
+
         user32 = ctypes.windll.user32
+        # Set restype to pointer-sized int (critical on 64-bit Windows).
+        # Don't set argtypes on SetWindowLongPtrW — it needs to accept
+        # a CFUNCTYPE callback which ctypes can't coerce to c_longlong.
+        user32.SetWindowLongPtrW.restype = LRESULT
+        user32.CallWindowProcW.restype = LRESULT
+        user32.CallWindowProcW.argtypes = [
+            ctypes.c_void_p, wintypes.HWND, c_uint, wintypes.WPARAM, wintypes.LPARAM
+        ]
+
         api_ref = self
 
         @WNDPROC
@@ -192,7 +204,7 @@ def main():
     server_thread.start()
 
     # Wait for it to be ready
-    print(f"Starting POE2 Price Overlay on port {PORT}...")
+    print(f"Starting LAMA on port {PORT}...")
     if not wait_for_server():
         print("ERROR: Server failed to start within 10 seconds.")
         sys.exit(1)

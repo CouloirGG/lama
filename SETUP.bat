@@ -1,16 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
-title POE2 Price Overlay — Setup
+title LAMA — Setup
 cd /d "%~dp0"
 
 :: ════════════════════════════════════════════════════════════
-::   POE2 Price Overlay — One-Click Setup
+::   LAMA — One-Click Setup
 :: ════════════════════════════════════════════════════════════
 
 echo.
 echo  ╔══════════════════════════════════════════════╗
-echo  ║     POE2 Price Overlay — Setup               ║
+echo  ║     LAMA — Setup                              ║
 echo  ╚══════════════════════════════════════════════╝
 echo.
 
@@ -196,9 +196,9 @@ echo.
 :: ─── Step 4: Desktop Shortcut ─────────────────────────────
 echo  [4/4] Creating desktop shortcut...
 
-set "SHORTCUT=%USERPROFILE%\Desktop\POE2 Dashboard.lnk"
+set "SHORTCUT=%USERPROFILE%\Desktop\LAMA.lnk"
 if not exist "!SHORTCUT!" (
-    powershell -Command "& { $ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%USERPROFILE%\Desktop\POE2 Dashboard.lnk'); $s.TargetPath = '%~dp0POE2 Dashboard.bat'; $s.WorkingDirectory = '%~dp0'; $s.IconLocation = 'shell32.dll,14'; $s.Description = 'POE2 Price Overlay Dashboard'; $s.Save() }" >nul 2>&1
+    powershell -Command "& { $ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%USERPROFILE%\Desktop\LAMA.lnk'); $s.TargetPath = '%~dp0LAMA.bat'; $s.WorkingDirectory = '%~dp0'; $s.IconLocation = 'shell32.dll,14'; $s.Description = 'LAMA — Live Auction Market Assessor'; $s.Save() }" >nul 2>&1
     if not errorlevel 1 (
         echo        ✓ Desktop shortcut created
     ) else (

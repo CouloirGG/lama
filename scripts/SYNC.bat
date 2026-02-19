@@ -1,9 +1,9 @@
 @echo off
-title POE2 Price Overlay - Sync
+title LAMA - Sync
 cd /d "%~dp0.."
 
 echo ============================================================
-echo   POE2 Price Overlay - Multi-Machine Sync
+echo   LAMA - Multi-Machine Sync
 echo ============================================================
 echo.
 
@@ -20,7 +20,7 @@ REM --- 2. Check we're in a git repo ---
 git rev-parse --git-dir >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Not a git repository. Clone first:
-    echo   git clone https://github.com/CarbonSMASH/POE2_OCR.git
+    echo   git clone https://github.com/CouloirGG/lama.git
     pause
     exit /b 1
 )
@@ -74,7 +74,7 @@ echo.
 echo   Files: %CD%
 echo.
 echo   To run the dashboard:  python src\app.py
-echo   Or double-click:       POE2 Dashboard.bat
+echo   Or double-click:       LAMA.bat
 echo.
 echo ============================================================
 pause

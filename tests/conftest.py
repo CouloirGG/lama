@@ -1,4 +1,4 @@
-"""Shared fixtures for POE2 Price Overlay test suite."""
+"""Shared fixtures for LAMA test suite."""
 
 import sys
 import os

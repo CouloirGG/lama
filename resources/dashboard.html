@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>POE2 Price Overlay</title>
+  <title>LAMA</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
@@ -487,7 +487,7 @@
       return (
         <div className="window-titlebar pywebview-drag-region" style={{ height: 36 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: T.gold, textShadow: "0 0 12px rgba(196,164,86,0.3)" }}>
-            POE2 Price Overlay
+            LAMA
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10 }}>
             <div style={{
@@ -707,7 +707,7 @@
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 0" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: T.gold, textShadow: "0 0 12px rgba(196,164,86,0.3)" }}>POE2 Price Overlay</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: T.gold, textShadow: "0 0 12px rgba(196,164,86,0.3)" }}>LAMA</div>
               <div style={{
                 display: "inline-flex", alignItems: "center", gap: 6,
                 background: wsConnected ? "rgba(74,124,89,0.15)" : "rgba(168,50,50,0.1)",
@@ -803,6 +803,7 @@
       divine: "/img/divine_orb.png",
       exalted: "/img/exalted_orb.png",
       chaos: "/img/chaos_orb.png",
+      mirror: "/img/mirror_of_kalandra.png",
     };
 
     function StatusPanel({ status }) {
@@ -824,7 +825,7 @@
             <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
             <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} sub={d2c > 0 ? "Chaos" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
             <StatCard label="1 Exalted" value={e2c > 0 ? `${e2c.toFixed(2)}` : "--"} sub={e2c > 0 ? "Chaos" : null} color={T.amber} iconLeft={ICON.exalted} iconRight={ICON.chaos} tooltip="1 Exalted Orb = X Chaos Orbs" />
-            <StatCard label="1 Mirror" value={m2d > 0 ? `${m2d.toFixed(0)}` : "--"} sub={m2d > 0 ? "Divine" : null} color="#c084fc" iconRight={ICON.divine} tooltip="1 Mirror of Kalandra = X Divine Orbs" />
+            <StatCard label="1 Mirror" value={m2d > 0 ? `${m2d.toFixed(0)}` : "--"} sub={m2d > 0 ? "Divine" : null} color="#c084fc" iconLeft={ICON.mirror} iconRight={ICON.divine} tooltip="1 Mirror of Kalandra = X Divine Orbs" />
             <StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={refreshColor} tooltip="When price data was last fetched (refreshes every 15 min)" />
           </div>
           {/* Health stats — compact inline strip */}

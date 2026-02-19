@@ -1,4 +1,4 @@
-# POE2 Price Overlay
+# LAMA — Live Auction Market Assessor
 
 **Real-time item pricing for Path of Exile 2 — clipboard-based, zero third-party installs.**
 
@@ -27,7 +27,7 @@ Press **Ctrl+L** to select the address bar, type `powershell`, and hit **Enter**
 Copy-paste this line into PowerShell and hit Enter:
 
 ```
-git clone https://github.com/CarbonSMASH/POE2_OCR.git
+git clone https://github.com/CouloirGG/lama.git
 ```
 
 ### 4. Run it
@@ -94,7 +94,7 @@ Subsequent launches skip setup and go straight to the overlay.
 
 | File                   | Purpose                                        |
 |------------------------|------------------------------------------------|
-| `POE2 Dashboard.bat`  | **Dashboard GUI** — the main way to run        |
+| `LAMA.bat`            | **Dashboard GUI** — the main way to run        |
 | `START.bat`            | CLI launcher (no dashboard)                    |
 | `DEBUG.bat`            | Launch with verbose logging to console         |
 | `SETTINGS.bat`         | Change league, view logs, run tests            |
@@ -117,7 +117,7 @@ Alternatively, **double-click `REPORT_BUG.bat`** to zip logs and open a GitHub i
 
 ```
 POE2_OCR/
-├── POE2 Dashboard.bat     # Dashboard GUI launcher (primary)
+├── LAMA.bat               # Dashboard GUI launcher (primary)
 ├── START.bat              # CLI launcher (no dashboard)
 ├── SETUP.bat              # One-click setup & install
 ├── requirements.txt
