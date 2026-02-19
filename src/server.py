@@ -47,6 +47,12 @@ from watchlist import WatchlistWorker
 
 logger = logging.getLogger("dashboard")
 
+# Hidden subprocess helper — suppresses console windows on Windows
+_HIDDEN_SI = subprocess.STARTUPINFO()
+_HIDDEN_SI.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+_HIDDEN_SI.wShowWindow = 0  # SW_HIDE
+_HIDDEN_FLAGS = subprocess.CREATE_NO_WINDOW
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -217,7 +223,8 @@ class OverlayProcess:
                 stderr=subprocess.STDOUT,
                 cwd=str(APP_DIR),
                 env=env,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | _HIDDEN_FLAGS,
+                startupinfo=_HIDDEN_SI,
             )
             self.started_at = time.time()
             self.state = "running"
@@ -450,7 +457,7 @@ def _get_github_headers() -> dict:
         result = subprocess.run(
             ["gh", "auth", "token"],
             capture_output=True, text=True, timeout=5,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            creationflags=_HIDDEN_FLAGS, startupinfo=_HIDDEN_SI,
         )
         token = result.stdout.strip()
         if token:
@@ -1046,7 +1053,7 @@ async def update_filter():
                 cwd=str(APP_DIR),
                 env=env,
                 timeout=120,
-                creationflags=subprocess.CREATE_NO_WINDOW,
+                creationflags=_HIDDEN_FLAGS, startupinfo=_HIDDEN_SI,
             )
             output = result.stdout + result.stderr
             return {"status": "completed", "output": output, "returncode": result.returncode}
@@ -1104,7 +1111,7 @@ async def restart_app():
     # to close, because closing pywebview triggers os._exit(0) in app.py which
     # would kill our daemon threads before Popen runs.
     subprocess.Popen(restart_cmd, cwd=str(APP_DIR),
-                     creationflags=subprocess.CREATE_NO_WINDOW)
+                     creationflags=_HIDDEN_FLAGS, startupinfo=_HIDDEN_SI)
 
     # Now tell the dashboard to close the pywebview window
     await ws_manager.broadcast({"type": "app_restart"})
