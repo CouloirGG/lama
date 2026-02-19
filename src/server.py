@@ -217,7 +217,7 @@ class OverlayProcess:
                 stderr=subprocess.STDOUT,
                 cwd=str(APP_DIR),
                 env=env,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW,
             )
             self.started_at = time.time()
             self.state = "running"
@@ -450,6 +450,7 @@ def _get_github_headers() -> dict:
         result = subprocess.run(
             ["gh", "auth", "token"],
             capture_output=True, text=True, timeout=5,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         token = result.stdout.strip()
         if token:
@@ -1045,6 +1046,7 @@ async def update_filter():
                 cwd=str(APP_DIR),
                 env=env,
                 timeout=120,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
             output = result.stdout + result.stderr
             return {"status": "completed", "output": output, "returncode": result.returncode}
@@ -1101,7 +1103,8 @@ async def restart_app():
     # to be freed before binding.  This must happen before we tell the dashboard
     # to close, because closing pywebview triggers os._exit(0) in app.py which
     # would kill our daemon threads before Popen runs.
-    subprocess.Popen(restart_cmd, cwd=str(APP_DIR))
+    subprocess.Popen(restart_cmd, cwd=str(APP_DIR),
+                     creationflags=subprocess.CREATE_NO_WINDOW)
 
     # Now tell the dashboard to close the pywebview window
     await ws_manager.broadcast({"type": "app_restart"})
