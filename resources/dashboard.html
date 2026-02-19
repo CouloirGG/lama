@@ -1468,8 +1468,11 @@
     // -----------------------------------------------------------------------
     // SectionRow — accordion for one economy category
     // -----------------------------------------------------------------------
-    function SectionRow({ section, visible, tierStyles, onVisibilityChange, onTierStyleChange, strictness, colorPreset }) {
+    function SectionRow({ section, visible, tierStyles, onVisibilityChange, onTierStyleChange, strictness, colorPreset, items }) {
       const [expanded, setExpanded] = useState(false);
+
+      // Count total items across all tiers
+      const totalItems = items ? Object.values(items).reduce((sum, arr) => sum + arr.length, 0) : 0;
 
       return (
         <div className={expanded ? "accordion-expanded" : ""} style={{ border: `1px solid ${T.border}`, borderRadius: 6, marginBottom: 8, overflow: "hidden", transition: "border-color 0.2s" }}>
@@ -1488,6 +1491,7 @@
             <div style={{ flex: 1, fontWeight: 600, fontSize: 13, color: visible !== false ? T.text : T.textMuted }}>
               {section.label}
             </div>
+            {totalItems > 0 && <div style={{ fontSize: 10, color: T.textMuted }}>{totalItems} items</div>}
             <div style={{ fontSize: 10, color: T.textMuted }}>{section.tiers.length} tiers</div>
             <div style={{
               fontSize: 11, color: T.textSecond,
@@ -1515,17 +1519,34 @@
                 <div>Map</div>
               </div>
 
-              {section.tiers.map(tier => (
-                <TierRow
-                  key={tier}
-                  tier={tier}
-                  style={tierStyles[tier] || {}}
-                  onChange={(newStyle) => onTierStyleChange(tier, newStyle)}
-                  thresholdType={section.thresholdType}
-                  strictness={strictness}
-                  colorPreset={colorPreset}
-                />
-              ))}
+              {section.tiers.map(tier => {
+                const tierItems = items ? (items[tier] || []) : [];
+                return (
+                  <React.Fragment key={tier}>
+                    <TierRow
+                      tier={tier}
+                      style={tierStyles[tier] || {}}
+                      onChange={(newStyle) => onTierStyleChange(tier, newStyle)}
+                      thresholdType={section.thresholdType}
+                      strictness={strictness}
+                      colorPreset={colorPreset}
+                    />
+                    {tierItems.length > 0 && (
+                      <div style={{ padding: "2px 0 8px 55px", display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {tierItems.map(item => (
+                          <span key={item.name} style={{
+                            fontSize: 10, color: T.textSecond, background: T.input,
+                            padding: "2px 6px", borderRadius: 3, border: `1px solid ${T.border}44`,
+                            whiteSpace: "nowrap",
+                          }}>
+                            {item.name} <span style={{ color: T.textMuted, fontSize: 9 }}>{item.chaos >= 1 ? `${item.chaos.toFixed(0)}c` : "<1c"}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1694,6 +1715,14 @@
       const gearClasses = settings.filter_gear_classes || {};
       const colorPreset = settings.filter_color_preset || "default";
 
+      // Fetch item-tier assignments from price cache
+      const [filterItems, setFilterItems] = useState({});
+      useEffect(() => {
+        api("/api/filter-items").then(data => {
+          if (data && data.items) setFilterItems(data.items);
+        }).catch(() => {});
+      }, []);
+
       const handleStrictnessChange = (val) => {
         onUpdate({ filter_strictness: val });
       };
@@ -1806,6 +1835,7 @@
               onTierStyleChange={handleTierStyleChange}
               strictness={strictness}
               colorPreset={colorPreset}
+              items={filterItems[UNIQUE_SECTION.id] || {}}
             />
 
             {/* Gear categories — accordion with class toggles */}
@@ -1836,6 +1866,7 @@
                 onTierStyleChange={handleTierStyleChange}
                 strictness={strictness}
                 colorPreset={colorPreset}
+                items={filterItems[section.id] || {}}
               />
             ))}
           </div>
