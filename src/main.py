@@ -1104,13 +1104,14 @@ class POE2PriceOverlay:
                 cal_count = self.calibration.sample_count()
                 d2c = cache_stats.get('divine_to_chaos', 0)
                 d2e = cache_stats.get('divine_to_exalted', 0)
+                m2d = cache_stats.get('mirror_to_divine', 0)
 
                 logger.info(
                     f"[Status] Uptime: {uptime/60:.0f}min | "
                     f"Triggers: {total} | Prices shown: {hits} ({hit_rate:.0f}%) | "
                     f"Cache: {cache_stats['total_items']} items | "
                     f"Last refresh: {cache_stats['last_refresh']} | "
-                    f"D2C: {d2c:.1f} | D2E: {d2e:.1f} | Cal: {cal_count}"
+                    f"D2C: {d2c:.1f} | D2E: {d2e:.1f} | M2D: {m2d:.1f} | Cal: {cal_count}"
                 )
             except Exception:
                 pass

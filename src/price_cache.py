@@ -208,10 +208,12 @@ class PriceCache:
 
     def get_stats(self) -> dict:
         with self._lock:
+            mirror = self.prices.get("mirror of kalandra", {})
             return {
                 "total_items": len(self.prices),
                 "divine_to_chaos": self.divine_to_chaos,
                 "divine_to_exalted": self.divine_to_exalted,
+                "mirror_to_divine": mirror.get("divine_value", 0),
                 "last_refresh": time.strftime("%H:%M:%S", time.localtime(self.last_refresh)) if self.last_refresh else "Never",
                 "league": self.league,
             }

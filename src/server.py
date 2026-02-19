@@ -69,7 +69,7 @@ STATUS_RE = re.compile(
     r"Triggers: (\d+) \| Prices shown: (\d+) \((\d+)%\) \| "
     r"Cache: (\d+) items \| "
     r"Last refresh: (.+?) \| "
-    r"D2C: ([\d.]+) \| D2E: ([\d.]+) \| Cal: (\d+)"
+    r"D2C: ([\d.]+) \| D2E: ([\d.]+) \| M2D: ([\d.]+) \| Cal: (\d+)"
 )
 
 
@@ -186,6 +186,7 @@ class OverlayProcess:
             "last_refresh": "never",
             "divine_to_chaos": 0,
             "divine_to_exalted": 0,
+            "mirror_to_divine": 0,
             "calibration_samples": 0,
         }
 
@@ -340,7 +341,8 @@ class OverlayProcess:
                         "last_refresh": m.group(6),
                         "divine_to_chaos": float(m.group(7)),
                         "divine_to_exalted": float(m.group(8)),
-                        "calibration_samples": int(m.group(9)),
+                        "mirror_to_divine": float(m.group(9)),
+                        "calibration_samples": int(m.group(10)),
                     }
 
                 color = self._classify_line(line)
