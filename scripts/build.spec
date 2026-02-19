@@ -37,6 +37,7 @@ a = Analysis(
         *((str(f), 'resources') for f in (project_dir / 'resources').glob('*.json.gz')),
         # Include image assets
         *((str(f), 'resources/img') for f in (project_dir / 'resources' / 'img').glob('*.png') if (project_dir / 'resources' / 'img').exists()),
+        *((str(f), 'resources/img') for f in (project_dir / 'resources' / 'img').glob('*.ico') if (project_dir / 'resources' / 'img').exists()),
     ],
     hiddenimports=[
         # FastAPI + uvicorn
@@ -69,6 +70,9 @@ a = Analysis(
         'filter_updater', 'mod_database', 'calibration',
         'calibration_harvester', 'bug_reporter',
         'clipboard_reader', 'screen_capture',
+        # System tray
+        'pystray', 'pystray._win32',
+        'PIL', 'PIL.Image',
         # Standard lib
         'requests', 'tkinter', 'numpy',
     ],
@@ -104,6 +108,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(project_dir / 'resources' / 'img' / 'favicon.ico'),
 )
 
 coll = COLLECT(

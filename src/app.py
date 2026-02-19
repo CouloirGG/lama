@@ -2,19 +2,23 @@
 app.py — Standalone desktop launcher for LAMA (Live Auction Market Assessor).
 
 Starts the FastAPI server in a background thread and opens the
-dashboard in a native window (no browser required).
+dashboard in a native window (no browser required).  The system tray icon
+lets users hide/show the window, control the overlay, and quit.
 
 Usage:
     python app.py
 
 Requirements:
-    pip install pywebview
+    pip install pywebview pystray Pillow
 """
 
+import json
 import os
 import sys
 import threading
 import time
+import urllib.request
+from urllib.request import Request
 
 # Ensure src/ is on sys.path so bare imports and uvicorn "server:app" work
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -55,7 +59,6 @@ def wait_for_port_free(timeout=10):
 
 def wait_for_server(timeout=10):
     """Block until the server is accepting connections."""
-    import urllib.request
     start = time.time()
     while time.time() - start < timeout:
         try:
@@ -73,6 +76,7 @@ class WindowApi:
         self._guard_until = 0.0
         self._original_proc = None
         self._hook_ref = None  # prevent garbage collection
+        self._tray = None  # set by main() after tray starts
 
     def _get_hwnd(self):
         import ctypes
@@ -152,15 +156,39 @@ class WindowApi:
                 ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
 
     def close(self):
+        """Hide to tray instead of quitting."""
+        import ctypes
+        hwnd = self._get_hwnd()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+
+    def show(self):
+        """Restore the window from tray."""
+        import ctypes
+        hwnd = self._get_hwnd()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+
+    def force_close(self):
+        """Actually destroy the window (used by restart and quit)."""
         import webview
         if webview.windows:
             webview.windows[0].destroy()
+
+    def quit(self):
+        """Stop tray icon and destroy the window — full exit."""
+        if self._tray:
+            self._tray.stop()
+        self.force_close()
 
 
 def _ensure_deps():
     """Auto-install missing dependencies (runs silently under pythonw)."""
     try:
-        import webview  # noqa: F401
+        import webview   # noqa: F401
+        import pystray   # noqa: F401
+        import PIL        # noqa: F401
         return
     except ImportError:
         pass
@@ -177,7 +205,72 @@ def _ensure_deps():
     )
 
 
+def _tooltip_updater(tray):
+    """Background thread: update tray tooltip every 10 seconds."""
+    while tray._icon:
+        try:
+            raw = urllib.request.urlopen(
+                f"http://127.0.0.1:{PORT}/api/status", timeout=2
+            ).read()
+            data = json.loads(raw)
+            state = data.get("state", "stopped")
+            triggers = data.get("stats", {}).get("triggers", 0)
+            if state == "running":
+                tray.update_tooltip(f"LAMA - Overlay running ({triggers} triggers)")
+            else:
+                tray.update_tooltip(f"LAMA - Overlay {state}")
+        except Exception:
+            tray.update_tooltip("LAMA")
+        time.sleep(10)
+
+
+def _set_icon_and_show(get_hwnd, show_fn):
+    """Background thread: set the taskbar icon, then reveal the window."""
+    import ctypes
+    from bundle_paths import get_resource
+
+    # Wait for the hidden window's hwnd to exist
+    hwnd = 0
+    for _ in range(40):
+        time.sleep(0.25)
+        hwnd = get_hwnd()
+        if hwnd:
+            break
+    if not hwnd:
+        show_fn()  # show anyway even if icon fails
+        return
+
+    # Set the taskbar icon before the window is visible
+    try:
+        from win32com.propsys import propsys
+
+        ico_path = str(get_resource("resources/img/favicon.ico"))
+        store = propsys.SHGetPropertyStoreForWindow(hwnd)
+
+        key_icon = propsys.PSGetPropertyKeyFromName(
+            "System.AppUserModel.RelaunchIconResource")
+        key_id = propsys.PSGetPropertyKeyFromName(
+            "System.AppUserModel.ID")
+
+        store.SetValue(key_icon, propsys.PROPVARIANTType(ico_path))
+        store.SetValue(key_id, propsys.PROPVARIANTType("Couloir.LAMA"))
+        store.Commit()
+    except Exception:
+        pass  # non-critical — falls back to executable icon
+
+    # Now reveal the window — user only ever sees the divine orb
+    show_fn()
+
+
 def main():
+    # Tell Windows this is its own app, not a generic Python process.
+    # Must be called before any window is created.
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Couloir.LAMA")
+    except Exception:
+        pass
+
     _ensure_deps()
     try:
         import webview
@@ -213,6 +306,55 @@ def main():
 
     # Open the native window pointing at the dashboard
     api = WindowApi()
+
+    # --- System tray icon ---------------------------------------------------
+    from tray import TrayIcon
+
+    def _start_overlay():
+        try:
+            urllib.request.urlopen(
+                Request(f"http://127.0.0.1:{PORT}/api/start",
+                        method="POST", data=b"{}",
+                        headers={"Content-Type": "application/json"}),
+                timeout=5,
+            )
+        except Exception:
+            pass
+
+    def _stop_overlay():
+        try:
+            urllib.request.urlopen(
+                Request(f"http://127.0.0.1:{PORT}/api/stop", method="POST"),
+                timeout=5,
+            )
+        except Exception:
+            pass
+
+    def _get_overlay_state():
+        try:
+            raw = urllib.request.urlopen(
+                f"http://127.0.0.1:{PORT}/api/status", timeout=2
+            ).read()
+            return json.loads(raw).get("state", "stopped")
+        except Exception:
+            return "stopped"
+
+    tray = TrayIcon(
+        on_show=api.show,
+        on_start_overlay=_start_overlay,
+        on_stop_overlay=_stop_overlay,
+        on_quit=api.quit,
+        get_overlay_state=_get_overlay_state,
+    )
+    tray.start()
+    api._tray = tray
+
+    # Tooltip updater (daemon thread)
+    threading.Thread(target=_tooltip_updater, args=(tray,), daemon=True).start()
+
+    # -------------------------------------------------------------------------
+    # Start hidden so the Python icon never flashes in the taskbar.
+    # The icon thread sets IPropertyStore, then reveals the window.
     window = webview.create_window(
         WINDOW_TITLE,
         url=f"http://127.0.0.1:{PORT}/dashboard",
@@ -224,12 +366,19 @@ def main():
         frameless=True,
         easy_drag=False,
         js_api=api,
+        hidden=True,
     )
 
-    # This blocks until the window is closed
+    # Set the taskbar icon, then show the window
+    threading.Thread(
+        target=_set_icon_and_show, args=(api._get_hwnd, api.show), daemon=True
+    ).start()
+
+    # This blocks until the window is destroyed (force_close / quit)
     webview.start()
 
     print("Window closed. Shutting down.")
+    tray.stop()
     # Daemon thread dies automatically when main exits
     os._exit(0)
 

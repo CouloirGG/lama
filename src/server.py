@@ -99,7 +99,65 @@ DEFAULT_SETTINGS = {
     "filter_color_preset": "default",
     "watchlist_queries": [],
     "watchlist_poll_interval": 300,
+    "start_with_windows": False,
 }
+
+
+# ---------------------------------------------------------------------------
+# Windows auto-start (registry)
+# ---------------------------------------------------------------------------
+AUTOSTART_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+AUTOSTART_REG_VALUE = "LAMA"
+
+
+def _get_autostart_command() -> str:
+    """Return the command string for the auto-start registry value."""
+    if IS_FROZEN:
+        return f'"{sys.executable}"'
+    # Dev mode: launch via pythonw / python + app.py
+    app_py = str(Path(__file__).parent / "app.py")
+    return f'"{sys.executable}" "{app_py}"'
+
+
+def set_autostart(enabled: bool):
+    """Add or remove LAMA from Windows startup (HKCU\\...\\Run)."""
+    try:
+        import winreg
+        if enabled:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_REG_KEY,
+                                 0, winreg.KEY_SET_VALUE)
+            winreg.SetValueEx(key, AUTOSTART_REG_VALUE, 0, winreg.REG_SZ,
+                              _get_autostart_command())
+            winreg.CloseKey(key)
+            logger.info("Auto-start enabled (registry key set)")
+        else:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_REG_KEY,
+                                 0, winreg.KEY_SET_VALUE)
+            try:
+                winreg.DeleteValue(key, AUTOSTART_REG_VALUE)
+                logger.info("Auto-start disabled (registry key removed)")
+            except FileNotFoundError:
+                pass  # already absent
+            winreg.CloseKey(key)
+    except Exception as e:
+        logger.warning(f"Failed to update auto-start registry: {e}")
+
+
+def get_autostart() -> bool:
+    """Check if the LAMA auto-start registry key exists."""
+    try:
+        import winreg
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, AUTOSTART_REG_KEY,
+                             0, winreg.KEY_QUERY_VALUE)
+        try:
+            winreg.QueryValueEx(key, AUTOSTART_REG_VALUE)
+            return True
+        except FileNotFoundError:
+            return False
+        finally:
+            winreg.CloseKey(key)
+    except Exception:
+        return False
 
 
 def deep_merge(base: dict, updates: dict) -> dict:
@@ -424,6 +482,12 @@ async def lifespan(app: FastAPI):
     # Background task: check for updates after a short delay
     update_task = asyncio.create_task(check_for_updates())
 
+    # Sync auto-start setting with actual registry state
+    actual_autostart = get_autostart()
+    if settings.get("start_with_windows", False) != actual_autostart:
+        settings["start_with_windows"] = actual_autostart
+        save_settings(settings)
+
     logger.info("LAMA dashboard server ready")
     try:
         yield
@@ -551,6 +615,7 @@ class SettingsRequest(BaseModel):
     filter_color_preset: Optional[str] = None
     watchlist_queries: Optional[list] = None
     watchlist_poll_interval: Optional[int] = None
+    start_with_windows: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
@@ -624,6 +689,10 @@ async def update_settings(req: SettingsRequest):
     deep_merge(settings, updates)
     save_settings(settings)
     await ws_manager.broadcast({"type": "settings", "settings": settings})
+
+    # Update Windows auto-start registry if the setting changed
+    if "start_with_windows" in updates:
+        set_autostart(settings.get("start_with_windows", False))
 
     # Notify watchlist worker if queries or interval changed
     if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates):
@@ -1239,6 +1308,16 @@ async def serve_dashboard():
     if not dashboard_path.exists():
         return HTMLResponse("<h1>dashboard.html not found</h1>", status_code=404)
     return HTMLResponse(dashboard_path.read_text(encoding="utf-8"))
+
+
+@app.get("/favicon.ico")
+async def serve_favicon():
+    """Serve favicon.ico — used by WebView2 for the taskbar icon."""
+    from fastapi.responses import FileResponse
+    ico_path = get_resource("resources/img/favicon.ico")
+    if not ico_path.exists():
+        return HTMLResponse("Not found", status_code=404)
+    return FileResponse(ico_path, media_type="image/x-icon")
 
 
 @app.get("/img/{filename}")
