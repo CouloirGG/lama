@@ -132,7 +132,7 @@ PRICE_BRACKETS = _PRIMARY_BRACKETS
 
 RESULTS_PER_QUERY = 20
 FETCH_BATCH_SIZE = 10  # Trade API caps fetches at 10 IDs per request
-MIN_INTERVAL = 2.5  # seconds between API calls
+MIN_INTERVAL = 4.0  # seconds between API calls (raised from 2.5 to avoid rate limits)
 LONG_PENALTY_THRESHOLD = 300  # seconds — bail if penalty exceeds this
 
 
@@ -366,7 +366,7 @@ def write_calibration_record(score_result, price_divine: float,
 
 def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
                   dry_run: bool = False, max_queries: int = 0,
-                  pass_num: int = 1):
+                  pass_num: int = 1, resume: bool = False):
     """Execute the harvester: query trade API, score items, write calibration data."""
 
     output_file = get_shard_output_path(league, pass_num)
@@ -386,15 +386,24 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
 
     # Build deterministic query plan (seed varies by pass for different offsets)
     today_seed = f"{date.today().isoformat()}:p{pass_num}"
-    plan = build_query_plan(categories, today_seed, brackets)
 
     # Load state for resumability
     state = load_state(pass_num)
-    if state.get("query_plan_seed") != today_seed:
-        # New day or new pass — reset state
-        state = {"completed_queries": [], "total_samples": 0,
-                 "query_plan_seed": today_seed}
-        save_state(state, pass_num)
+
+    if resume and state.get("query_plan_seed"):
+        # --resume: reuse the existing seed so the query plan matches,
+        # allowing continuation of an interrupted run across days
+        seed = state["query_plan_seed"]
+        print(f"  Resuming with saved seed: {seed}")
+    else:
+        seed = today_seed
+        if state.get("query_plan_seed") != seed:
+            # New day or new pass — reset state
+            state = {"completed_queries": [], "total_samples": 0,
+                     "query_plan_seed": seed}
+            save_state(state, pass_num)
+
+    plan = build_query_plan(categories, seed, brackets)
 
     completed = set(state["completed_queries"])
     remaining = [(cn, ic, cf, bl) for cn, ic, cf, bl in plan
@@ -519,8 +528,10 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
                 continue
 
             # For multi-pass: offset into results to get different items
-            # Pass 1: first 20, Pass 2: 20-40, Pass 3: 40-60, etc.
-            offset = (pass_num - 1) * RESULTS_PER_QUERY
+            # Offset resets per bracket set (every 5 passes) so stagger/micro
+            # passes start from offset 0, not from the global pass number.
+            pass_within_set = (pass_num - 1) % 5
+            offset = pass_within_set * RESULTS_PER_QUERY
             available_ids = result_ids[offset:offset + RESULTS_PER_QUERY]
             if not available_ids:
                 # No more results at this offset
@@ -660,6 +671,12 @@ def main():
     parser.add_argument("--passes", type=int, default=1,
                         help="Number of passes with different offsets "
                              "(default: 1). Each pass samples deeper into listings.")
+    parser.add_argument("--start-pass", type=int, default=1,
+                        help="First pass number to run (default: 1). "
+                             "Use with --passes to skip already-completed passes.")
+    parser.add_argument("--resume", action="store_true",
+                        help="Resume an interrupted run (reuses saved seed, "
+                             "skips completed queries even across days)")
     parser.add_argument("--reset", action="store_true",
                         help="Reset today's state and start fresh")
     parser.add_argument("-v", "--verbose", action="store_true",
@@ -707,7 +724,7 @@ def main():
         print("State reset.")
 
     # Run each pass
-    for pass_num in range(1, args.passes + 1):
+    for pass_num in range(args.start_pass, args.passes + 1):
         if args.passes > 1:
             print(f"\n{'#'*50}")
             print(f"  PASS {pass_num} of {args.passes}")
@@ -719,6 +736,7 @@ def main():
             dry_run=args.dry_run,
             max_queries=args.max_queries,
             pass_num=pass_num,
+            resume=args.resume,
         )
 
 
