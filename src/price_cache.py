@@ -439,8 +439,10 @@ class PriceCache:
         # Update global conversion rates (poe.ninja is authoritative for these)
         if rates.get("chaos"):
             self.divine_to_chaos = rates["chaos"]
-        if rates.get("exalted"):
-            self.divine_to_exalted = rates["exalted"]
+        if rates.get("exalted") and rates["exalted"] > 0:
+            # rates["exalted"] is the divine value of 1 exalted (e.g. 0.09)
+            # Invert to get "1 divine = X exalted"
+            self.divine_to_exalted = 1.0 / rates["exalted"]
 
         # Build id → name map
         id_map = {}
