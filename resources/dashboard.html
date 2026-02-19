@@ -2730,7 +2730,20 @@
     // -----------------------------------------------------------------------
     // Markets Tab — Currency exchange rates, sparklines, TradingView chart
     // -----------------------------------------------------------------------
-    const MARKET_CATEGORIES = ["All", "Currency", "Fragments", "Essences", "Runes", "Expedition", "SoulCores", "UncutGems", "Ultimatum", "Breach", "Delirium", "Ritual"];
+    const MARKET_CATEGORIES = [
+      { label: "All", value: "all" },
+      { label: "Currency", value: "currency" },
+      { label: "Fragments", value: "fragments" },
+      { label: "Essences", value: "essences" },
+      { label: "Runes", value: "runes" },
+      { label: "Expedition", value: "expedition" },
+      { label: "Soul Cores", value: "idol" },
+      { label: "Uncut Gems", value: "uncutgems" },
+      { label: "Ultimatum", value: "ultimatum" },
+      { label: "Catalysts", value: "breach" },
+      { label: "Delirium", value: "delirium" },
+      { label: "Ritual", value: "ritual" },
+    ];
 
     function SparklineSVG({ data, width = 80, height = 24, color = T.gold }) {
       if (!data || data.length < 2) return null;
@@ -3318,7 +3331,7 @@
     function MarketsTab() {
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(true);
-      const [filter, setFilter] = useState("All");
+      const [filter, setFilter] = useState("all");
 
       const fetchData = async () => {
         const result = await api("/api/market-data");
@@ -3348,10 +3361,10 @@
       const omenAbyss = findCurrency("Essence of the Abyss");
       const divToEx = rates.divine_to_exalted || 0;
 
-      // Filter currencies by category (case-insensitive: poe2scout uses lowercase, pills use PascalCase)
-      const filtered = filter === "All"
+      // Filter currencies by category
+      const filtered = filter === "all"
         ? currencies
-        : currencies.filter(c => (c.category || "").toLowerCase() === filter.toLowerCase());
+        : currencies.filter(c => (c.category || "").toLowerCase() === filter);
 
       return (
         <div style={{ paddingTop: 12 }}>
@@ -3407,11 +3420,11 @@
             {/* Category filter pills */}
             <div style={{ padding: "10px 14px 6px", display: "flex", gap: 4, flexWrap: "wrap", borderBottom: `1px solid ${T.border}` }}>
               {MARKET_CATEGORIES.map(cat => {
-                const active = filter === cat;
+                const active = filter === cat.value;
                 return (
                   <button
-                    key={cat}
-                    onClick={() => setFilter(cat)}
+                    key={cat.value}
+                    onClick={() => setFilter(cat.value)}
                     style={{
                       ...BTN,
                       padding: "3px 10px",
@@ -3421,7 +3434,7 @@
                       color: active ? T.gold : T.textSecond,
                     }}
                   >
-                    {cat}
+                    {cat.label}
                   </button>
                 );
               })}
