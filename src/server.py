@@ -43,6 +43,7 @@ from pydantic import BaseModel
 
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
+from price_cache import PriceCache
 from watchlist import WatchlistWorker
 
 logger = logging.getLogger("dashboard")
@@ -452,6 +453,7 @@ class OverlayProcess:
 overlay = OverlayProcess()
 log_buffer: deque[dict] = deque(maxlen=500)
 watchlist_worker: Optional[WatchlistWorker] = None
+price_cache: Optional[PriceCache] = None
 
 
 # ---------------------------------------------------------------------------
@@ -460,7 +462,7 @@ watchlist_worker: Optional[WatchlistWorker] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Set up the event loop reference and background tasks."""
-    global watchlist_worker
+    global watchlist_worker, price_cache
 
     loop = asyncio.get_running_loop()
     overlay.set_loop(loop)
@@ -479,6 +481,10 @@ async def lifespan(app: FastAPI):
     )
     watchlist_worker.start(loop)
 
+    # Server-side PriceCache for Markets tab (works without overlay running)
+    price_cache = PriceCache(league=league)
+    price_cache.start()
+
     # Background task: check for updates after a short delay
     update_task = asyncio.create_task(check_for_updates())
 
@@ -496,6 +502,8 @@ async def lifespan(app: FastAPI):
         update_task.cancel()
         if watchlist_worker:
             watchlist_worker.stop()
+        if price_cache:
+            price_cache.stop()
         # Stop overlay if running
         overlay.stop()
 
@@ -694,6 +702,11 @@ async def update_settings(req: SettingsRequest):
     if "start_with_windows" in updates:
         set_autostart(settings.get("start_with_windows", False))
 
+    # Update server-side price cache if league changed
+    if "league" in updates and price_cache:
+        new_league = settings.get("league", "Fate of the Vaal")
+        price_cache.league = new_league
+
     # Notify watchlist worker if queries or interval changed
     if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates):
         queries = settings.get("watchlist_queries", [])
@@ -777,6 +790,17 @@ async def refresh_watchlist_query(query_id: str):
     return {"status": "queued", "query_id": query_id}
 
 
+# ---------------------------------------------------------------------------
+# Market data endpoint (Markets tab)
+# ---------------------------------------------------------------------------
+@app.get("/api/market-data")
+async def get_market_data():
+    """Return currency exchange data with sparklines for the Markets tab."""
+    if not price_cache:
+        return {"currencies": [], "rates": {}, "history": [], "last_refresh": "Never", "league": ""}
+    return price_cache.get_market_data()
+
+
 @app.get("/api/trade-data/stats")
 async def get_trade_stats():
     """Return flattened stat definitions from cache for autocomplete."""
@@ -827,6 +851,20 @@ async def get_trade_items():
         logger.warning(f"Failed to load trade items: {e}")
         return []
 
+
+
+# ---------------------------------------------------------------------------
+# Market Signals endpoint (coming soon — Discord integration)
+# ---------------------------------------------------------------------------
+@app.get("/api/market-signals")
+async def get_market_signals():
+    """Return market signals from trusted Discord analysts.
+
+    Currently returns an empty feed. When the Discord bot is connected,
+    this will read from a local cache of messages from #market-signals.
+    Future WS event: {"type": "market_signal", "author": "...", "avatar": "...", "message": "...", "ts": ...}
+    """
+    return {"signals": [], "status": "coming_soon"}
 
 
 # ---------------------------------------------------------------------------
