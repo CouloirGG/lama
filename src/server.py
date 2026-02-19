@@ -998,24 +998,21 @@ async def restart_app():
             return {"error": "app.py not found — restart only works in standalone mode"}
         restart_cmd = [sys.executable, str(entry), "--restart"]
 
-    # Spawn the new process with --restart so it waits for the port to
-    # be freed before binding.  Then kill the current process.
+    # Tell the dashboard to close the pywebview window, then spawn new process
+    await ws_manager.broadcast({"type": "app_restart"})
+
     def _do_restart():
-        subprocess.Popen(
-            restart_cmd,
-            cwd=str(APP_DIR),
-        )
-        time.sleep(0.3)
-        # Close the pywebview window via Win32 so WebView2 cleans up
+        time.sleep(0.5)
+        subprocess.Popen(restart_cmd, cwd=str(APP_DIR))
+        time.sleep(0.5)
+        # Belt-and-suspenders: force kill our own process if webview didn't exit
         try:
             import ctypes
-            hwnd = ctypes.windll.user32.FindWindowW(None, "POE2 Price Overlay")
-            if hwnd:
-                ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
-                time.sleep(0.5)
+            ctypes.windll.kernel32.TerminateProcess(
+                ctypes.windll.kernel32.GetCurrentProcess(), 0
+            )
         except Exception:
-            pass
-        os._exit(0)
+            os._exit(0)
 
     threading.Thread(target=_do_restart, daemon=True).start()
     return {"status": "restarting"}

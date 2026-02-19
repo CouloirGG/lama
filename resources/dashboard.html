@@ -2763,6 +2763,14 @@
           case "update_progress":
             setUpdateInfo(prev => prev ? { ...prev, progress: msg.percent, installing: msg.installing || false } : prev);
             break;
+          case "app_restart":
+            // Server is restarting — close the pywebview window so the old process exits cleanly
+            if (window.pywebview && window.pywebview.api) {
+              window.pywebview.api.close();
+            } else {
+              window.close();
+            }
+            break;
         }
       }, []);
 
