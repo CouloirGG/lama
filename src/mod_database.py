@@ -129,55 +129,73 @@ class ItemScore:
     total_defense: int = 0
 
     def format_overlay_text(self, price_estimate: float = None,
-                            divine_to_chaos: float = 0) -> str:
+                            divine_to_chaos: float = 0,
+                            show_grade: bool = True,
+                            show_price: bool = True,
+                            show_stars: bool = True,
+                            show_mods: bool = True,
+                            show_dps: bool = True) -> str:
         """Format for overlay display.
 
         JUNK:  '✗'
         C:     'C'
         B/A/S without price:  'A 67% ★3: T1 SpellCrit, T1 CritChance, T1 ES'
         B/A/S with price:     'A ~130d ★3: T1 SpellCrit, T1 CritChance, T1 ES'
+
+        Display flags control which parts are included.
         """
         if self.grade in (Grade.JUNK, Grade.C):
             return "\u2717"
-        g = self.grade.value
 
-        # Star count: valuable T1/T2 mods
-        star = f"\u2605{self.top_tier_count}" if self.top_tier_count > 0 else ""
+        parts = []
 
-        # Build price or score tag
-        if price_estimate is not None and price_estimate > 0:
-            if price_estimate >= 10:
-                ptag = f"~{price_estimate:.0f}d"
-            elif price_estimate >= 1.0:
-                ptag = f"~{price_estimate:.1f}d"
-            elif divine_to_chaos > 0:
-                chaos = price_estimate * divine_to_chaos
-                ptag = f"~{chaos:.0f}c"
+        # Grade letter
+        if show_grade:
+            parts.append(self.grade.value)
+
+        # Price or score tag
+        if show_price:
+            if price_estimate is not None and price_estimate > 0:
+                if price_estimate >= 10:
+                    parts.append(f"~{price_estimate:.0f}d")
+                elif price_estimate >= 1.0:
+                    parts.append(f"~{price_estimate:.1f}d")
+                elif divine_to_chaos > 0:
+                    chaos = price_estimate * divine_to_chaos
+                    parts.append(f"~{chaos:.0f}c")
+                else:
+                    parts.append(f"~{price_estimate:.2f}d")
             else:
-                ptag = f"~{price_estimate:.2f}d"
-        else:
-            pct = int(self.normalized_score * 100)
-            ptag = f"{pct}%"
+                pct = int(self.normalized_score * 100)
+                parts.append(f"{pct}%")
 
-        # Combat stat tag: show DPS/defense when factor penalizes
+        # Combat stat tag (DPS/defense when factor penalizes)
         combat_tag = ""
-        if self.dps_factor < 1.0 and self.total_dps > 0:
-            combat_tag = f"{int(self.total_dps)}dps"
-        elif self.defense_factor < 1.0 and self.total_defense > 0:
-            combat_tag = f"{self.total_defense}def"
+        if show_dps:
+            if self.dps_factor < 1.0 and self.total_dps > 0:
+                combat_tag = f"{int(self.total_dps)}dps"
+            elif self.defense_factor < 1.0 and self.total_defense > 0:
+                combat_tag = f"{self.total_defense}def"
 
-        # Assemble: "A 67% ★3: T1 CritMulti, T2 Life"
-        # or with combat: "B 45% 280dps: T1 PhysDmg, T2 AtkSpd"
-        parts = [g, ptag]
+        # Star count: valuable T1/T2 mods (repeated ★ like a rating)
+        star = ""
+        if show_stars and self.top_tier_count > 0:
+            star = "\u2605" * self.top_tier_count
+
         if combat_tag:
             parts.append(combat_tag)
         elif star:
             parts.append(star)
+
         prefix = " ".join(parts)
 
-        if self.top_mods_summary:
-            return f"{prefix}: {self.top_mods_summary}"
-        return prefix
+        if show_mods and self.top_mods_summary:
+            if prefix:
+                return f"{prefix}: {self.top_mods_summary}"
+            return self.top_mods_summary
+        # Fallback: if everything is toggled off, show a single star
+        # so there's still a visible colored indicator
+        return prefix or "\u2605"
 
 
 # ─── Weight Table ─────────────────────────────────────

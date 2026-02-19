@@ -67,6 +67,13 @@ class PriceOverlay:
     _ESTIMATE_BORDER_COLORS = ("#FFD700", "#B8860B")
     _ESTIMATE_PULSE_MS = 600
 
+    # Tier ID to divine threshold mapping (matches dashboard tier definitions)
+    _TIER_ID_MAP = {
+        "mirror": 5000, "jackpot": 1000, "big_hit": 500,
+        "great_find": 250, "good_find": 100, "worth_sell": 50,
+        "marginal": 25, "vendor": 0,
+    }
+
     def __init__(self):
         self._root: Optional[tk.Tk] = None
         self._label: Optional[tk.Label] = None
@@ -82,6 +89,11 @@ class PriceOverlay:
         self._pending_updates = []
         self._lock = threading.Lock()
         self._hwnd: int = 0  # Top-level Win32 HWND for SetWindowPos calls
+        self._transparent_color = "#010101"  # Nearly black, used as transparency key
+        # Custom tier styles from dashboard settings (keyed by threshold)
+        self._custom_text_colors: dict = {}
+        self._custom_bg_colors: dict = {}
+        self._custom_border_colors: dict = {}
 
     def initialize(self):
         """
@@ -101,10 +113,9 @@ class PriceOverlay:
         self._root.attributes("-alpha", 0.92)       # Slight transparency
 
         # Transparent background (Windows-specific)
-        transparent_color = "#010101"  # Nearly black, used as transparency key
-        self._root.configure(bg=transparent_color)
+        self._root.configure(bg=self._transparent_color)
         try:
-            self._root.attributes("-transparentcolor", transparent_color)
+            self._root.attributes("-transparentcolor", self._transparent_color)
         except tk.TclError:
             # Not supported on all platforms
             pass
@@ -149,8 +160,34 @@ class PriceOverlay:
         self._ready.set()
         logger.info("Overlay window initialized")
 
+    def load_custom_styles(self, overlay_tier_styles: dict):
+        """Apply custom tier colors from dashboard settings.
+
+        Args:
+            overlay_tier_styles: dict mapping tier IDs (e.g. "mirror", "jackpot")
+                to style dicts with keys: text_color, border_color, bg_color.
+        """
+        self._custom_text_colors.clear()
+        self._custom_bg_colors.clear()
+        self._custom_border_colors.clear()
+        if not overlay_tier_styles:
+            return
+        for tier_id, style in overlay_tier_styles.items():
+            threshold = self._TIER_ID_MAP.get(tier_id)
+            if threshold is None:
+                continue
+            if style.get("text_color"):
+                self._custom_text_colors[threshold] = style["text_color"]
+            if style.get("bg_color"):
+                self._custom_bg_colors[threshold] = style["bg_color"]
+            if style.get("border_color"):
+                self._custom_border_colors[threshold] = style["border_color"]
+        if self._custom_text_colors or self._custom_bg_colors or self._custom_border_colors:
+            logger.info(f"Loaded custom overlay styles for {len(overlay_tier_styles)} tier(s)")
+
     def show_price(self, text: str, tier: str, cursor_x: int, cursor_y: int,
-                   estimate: bool = False, price_divine: float = 0):
+                   estimate: bool = False, price_divine: float = 0,
+                   borderless: bool = False):
         """
         Show a price tag near the cursor position.
         Thread-safe - can be called from any thread.
@@ -162,10 +199,12 @@ class PriceOverlay:
             cursor_y: Cursor Y position on screen
             estimate: If True, price is a conservative estimate
             price_divine: Price in divine orbs (drives border effects)
+            borderless: If True, render without border/background (floating icon)
         """
         with self._lock:
             self._pending_updates.append(
-                ("show", text, tier, cursor_x, cursor_y, estimate, price_divine))
+                ("show", text, tier, cursor_x, cursor_y, estimate, price_divine,
+                 borderless))
 
     def hide(self):
         """Hide the price overlay. Thread-safe."""
@@ -202,8 +241,9 @@ class PriceOverlay:
         for update in updates:
             try:
                 if update[0] == "show":
-                    _, text, tier, cx, cy, estimate, price_divine = update
-                    self._do_show(text, tier, cx, cy, estimate, price_divine)
+                    _, text, tier, cx, cy, estimate, price_divine, borderless = update
+                    self._do_show(text, tier, cx, cy, estimate, price_divine,
+                                  borderless)
                 elif update[0] == "hide":
                     self._do_hide()
             except Exception as e:
@@ -214,7 +254,8 @@ class PriceOverlay:
             self._root.after(50, self._process_pending)
 
     def _do_show(self, text: str, tier: str, cursor_x: int, cursor_y: int,
-                 estimate: bool = False, price_divine: float = 0):
+                 estimate: bool = False, price_divine: float = 0,
+                 borderless: bool = False):
         """Actually show the price tag (must be on main thread)."""
         if not self._root or not self._label:
             return
@@ -235,41 +276,67 @@ class PriceOverlay:
             self._root.after_cancel(self._pulse_timer)
             self._pulse_timer = None
 
-        # Determine border effect from divine price
-        border_colors = None
-        pulse_ms = 0
-        border_width = 2
-        text_cycle = False
-
-        for min_div, colors, pms, bw, tc in self._VALUE_TIERS:
-            if price_divine >= min_div:
-                border_colors = colors
-                pulse_ms = pms
-                border_width = bw
-                text_cycle = tc
-                break
-
-        # Fallback: estimates below value tiers still get gold pulse
-        if not border_colors and estimate:
-            border_colors = self._ESTIMATE_BORDER_COLORS
-            pulse_ms = self._ESTIMATE_PULSE_MS
-
-        # Apply border effect
-        self._frame.configure(padx=border_width, pady=border_width)
-        self._text_pulse = text_cycle
-        if border_colors:
-            self._pulse_colors = border_colors
-            self._pulse_ms = pulse_ms
-            self._pulse_index = 0
-            self._frame.configure(bg=border_colors[0])
-            if pulse_ms > 0 and len(border_colors) > 1:
-                self._is_estimate = True  # reuse flag to keep pulse running
-                self._start_pulse()
-            else:
-                self._is_estimate = False
-        else:
-            self._frame.configure(bg=self._NORMAL_BORDER_COLOR)
+        if borderless:
+            # Borderless mode: floating colored icon, no box
+            self._frame.configure(
+                bg=self._transparent_color, padx=0, pady=0)
+            self._label.configure(bg=self._transparent_color)
             self._is_estimate = False
+        else:
+            # Restore normal label background (in case previous was borderless)
+            bg_color = OVERLAY_BG_COLOR
+            self._label.configure(bg=bg_color)
+
+            # Determine border effect from divine price
+            border_colors = None
+            pulse_ms = 0
+            border_width = 2
+            text_cycle = False
+            matched_threshold = None
+
+            for min_div, colors, pms, bw, tc in self._VALUE_TIERS:
+                if price_divine >= min_div:
+                    border_colors = colors
+                    pulse_ms = pms
+                    border_width = bw
+                    text_cycle = tc
+                    matched_threshold = min_div
+                    break
+
+            # Apply custom tier overrides from dashboard settings
+            if matched_threshold is not None:
+                custom_text = self._custom_text_colors.get(matched_threshold)
+                if custom_text:
+                    self._label.configure(fg=custom_text)
+                custom_bg = self._custom_bg_colors.get(matched_threshold)
+                if custom_bg:
+                    self._label.configure(bg=custom_bg)
+                custom_border = self._custom_border_colors.get(matched_threshold)
+                if custom_border:
+                    border_colors = (custom_border,)
+                    pulse_ms = 0  # static when custom
+
+            # Fallback: estimates below value tiers still get gold pulse
+            if not border_colors and estimate:
+                border_colors = self._ESTIMATE_BORDER_COLORS
+                pulse_ms = self._ESTIMATE_PULSE_MS
+
+            # Apply border effect
+            self._frame.configure(padx=border_width, pady=border_width)
+            self._text_pulse = text_cycle
+            if border_colors:
+                self._pulse_colors = border_colors
+                self._pulse_ms = pulse_ms
+                self._pulse_index = 0
+                self._frame.configure(bg=border_colors[0])
+                if pulse_ms > 0 and len(border_colors) > 1:
+                    self._is_estimate = True  # reuse flag to keep pulse running
+                    self._start_pulse()
+                else:
+                    self._is_estimate = False
+            else:
+                self._frame.configure(bg=self._NORMAL_BORDER_COLOR)
+                self._is_estimate = False
 
         # Position near cursor
         x = cursor_x + OVERLAY_OFFSET_X
@@ -415,7 +482,8 @@ class ConsoleOverlay:
         pass
 
     def show_price(self, text: str, tier: str, cursor_x: int, cursor_y: int,
-                   estimate: bool = False, price_divine: float = 0):
+                   estimate: bool = False, price_divine: float = 0,
+                   borderless: bool = False):
         tier_symbols = {"high": "$$", "good": ">>", "decent": "- ", "low": "  "}
         symbol = tier_symbols.get(tier, "  ")
         flag = " [est]" if estimate else ""

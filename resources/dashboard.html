@@ -9,6 +9,19 @@
     @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
     @keyframes spin { to { transform: rotate(360deg); } }
+    /* Overlay border pulse animations */
+    @keyframes borderRainbow {
+      0%   { border-color: #FF4040; color: #40CCFF; }
+      16%  { border-color: #FF8C00; color: #FF69B4; }
+      33%  { border-color: #FFD700; color: #FF4040; }
+      50%  { border-color: #40FF40; color: #FF8C00; }
+      66%  { border-color: #40CCFF; color: #FFD700; }
+      83%  { border-color: #FF69B4; color: #40FF40; }
+      100% { border-color: #FF4040; color: #40CCFF; }
+    }
+    @keyframes borderGoldFast { 0%,100% { border-color: #FF4500; } 50% { border-color: #FFD700; } }
+    @keyframes borderGoldMed  { 0%,100% { border-color: #FFD700; } 50% { border-color: #B8860B; } }
+    @keyframes borderGoldSlow { 0%,100% { border-color: #FFD700; } 50% { border-color: #8B7536; } }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; margin: 0; padding: 0; }
     body { background: radial-gradient(ellipse at center, #1a1510 0%, #0d0b08 70%); color: #d4c9a8; font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif; }
@@ -482,12 +495,17 @@
     // -----------------------------------------------------------------------
     // Window Title Bar (frameless mode)
     // -----------------------------------------------------------------------
-    function WindowTitleBar({ wsConnected, overlayState, onStart, onStop, onRestart }) {
+    function WindowTitleBar({ wsConnected, overlayState }) {
       const minimize = () => window.pywebview?.api?.minimize();
       const toggleMax = () => window.pywebview?.api?.toggle_maximize();
       const close = () => window.pywebview?.api?.close();
-      const st = OVERLAY_STATES[overlayState] || OVERLAY_STATES.stopped;
-      const isRunning = overlayState === "running" || overlayState === "starting";
+      const showBadge = overlayState !== "stopped";
+      const badgeConf = {
+        running:  { color: T.green, label: "Scanning", pulse: true },
+        starting: { color: T.amber, label: "Starting...", pulse: false },
+        error:    { color: T.red, label: "Error", pulse: false },
+      };
+      const badge = badgeConf[overlayState];
 
       return (
         <div className="window-titlebar pywebview-drag-region" style={{ height: 36 }}>
@@ -502,37 +520,17 @@
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: wsConnected ? T.green : T.red, animation: wsConnected ? "none" : "pulse 1.5s infinite" }} />
               {wsConnected ? "Connected" : "Reconnecting"}
             </div>
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: 4,
-              background: st.bg, borderRadius: 10, padding: "1px 8px",
-              fontSize: 9, fontWeight: 700, color: st.color, letterSpacing: "0.04em",
-            }}>
-              <span style={{ width: 5, height: 5, borderRadius: "50%", background: st.color, animation: overlayState === "running" ? "pulse 2s infinite" : "none" }} />
-              {st.label}
-            </div>
+            {showBadge && badge && (
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                fontSize: 9, fontWeight: 600, color: badge.color,
+              }}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: badge.color, animation: badge.pulse ? "pulse 2s infinite" : "none" }} />
+                {badge.label}
+              </div>
+            )}
           </div>
           <div style={{ flex: 1 }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 8, position: "relative", minWidth: 90 }}>
-            <button onClick={onStart} className="btn-gold-hover" style={{
-              border: "none", borderRadius: 4, padding: "3px 12px", fontSize: 10, fontWeight: 600,
-              cursor: "pointer", background: T.green, color: "#fff",
-              visibility: isRunning ? "hidden" : "visible",
-            }}>&#9654; Start</button>
-            <button onClick={onStop} className="btn-danger-hover" style={{
-              border: "none", borderRadius: 4, padding: "3px 12px", fontSize: 10, fontWeight: 600,
-              cursor: "pointer", background: T.red, color: "#fff",
-              position: "absolute", left: 0,
-              visibility: isRunning ? "visible" : "hidden",
-            }}>&#9632; Stop</button>
-            <Tooltip text="Restart overlay">
-              <button onClick={onRestart} disabled={!isRunning} style={{
-                border: "none", borderRadius: 4, padding: "3px 8px", fontSize: 10, fontWeight: 600,
-                cursor: isRunning ? "pointer" : "default",
-                background: "transparent", color: isRunning ? T.textSecond : T.border,
-                marginLeft: 4,
-              }}>&#8635;</button>
-            </Tooltip>
-          </div>
           <div style={{ display: "flex", gap: 0 }}>
             <button className="window-btn" onClick={minimize}>&#8211;</button>
             <button className="window-btn" onClick={toggleMax}>&#9633;</button>
@@ -704,41 +702,6 @@
       );
     }
 
-    // Header
-    // -----------------------------------------------------------------------
-    function Header({ wsConnected, overlayState }) {
-      const st = OVERLAY_STATES[overlayState] || OVERLAY_STATES.stopped;
-      return (
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 0" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: T.gold, textShadow: "0 0 12px rgba(196,164,86,0.3)" }}>LAMA</div>
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                background: wsConnected ? "rgba(74,124,89,0.15)" : "rgba(168,50,50,0.1)",
-                border: `1px solid ${wsConnected ? T.green + "44" : T.red + "44"}`,
-                borderRadius: 20, padding: "3px 10px", fontSize: 10, fontWeight: 600,
-                color: wsConnected ? T.green : T.red,
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: wsConnected ? T.green : T.red, animation: wsConnected ? "none" : "pulse 1.5s infinite" }} />
-                {wsConnected ? "Connected" : "Reconnecting"}
-              </div>
-            </div>
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: 6,
-              background: st.bg, border: `1px solid ${st.color}44`,
-              borderRadius: 20, padding: "4px 14px", fontSize: 11, fontWeight: 700,
-              color: st.color, letterSpacing: "0.06em",
-            }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.color, animation: overlayState === "running" ? "pulse 2s infinite" : "none" }} />
-              {st.label}
-            </div>
-          </div>
-          <GoldDivider />
-        </div>
-      );
-    }
-
     // -----------------------------------------------------------------------
     // Tooltip wrapper
     // -----------------------------------------------------------------------
@@ -812,20 +775,17 @@
     };
 
     function StatusPanel({ status }) {
-      const { stats, uptime, state } = status;
-      const isRunning = state === "running";
+      const { stats } = status;
 
       const d2c = stats.divine_to_chaos || 0;
       const d2e = stats.divine_to_exalted || 0;
       const e2c = d2c > 0 ? (d2e / d2c) : 0;
       const m2d = stats.mirror_to_divine || 0;
-      const calSamples = stats.calibration_samples || 0;
 
       const refreshColor = stats.last_refresh === "never" ? T.textSecond : T.green;
 
       return (
         <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px" }}>
-          {/* Market KPIs — compact single row */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 8 }}>
             <StatCard label="1 Mirror" value={m2d > 0 ? `${m2d.toFixed(0)}` : "--"} sub={m2d > 0 ? "Divine" : null} color="#c084fc" iconLeft={ICON.mirror} iconRight={ICON.divine} tooltip="1 Mirror of Kalandra = X Divine Orbs" />
             <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
@@ -833,21 +793,8 @@
             <StatCard label="1 Chaos" value={e2c > 0 ? `${e2c.toFixed(0)}` : "--"} sub={e2c > 0 ? "Exalted" : null} color={T.amber} iconLeft={ICON.exalted} iconRight={ICON.chaos} tooltip="1 Chaos Orb = X Exalted Orbs" />
             <StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={refreshColor} tooltip="When price data was last fetched (refreshes every 15 min)" />
           </div>
-          {/* Health stats — compact inline strip */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 6, padding: "4px 0" }}>
-            <Tooltip text="Number of item tooltips scanned via Ctrl+C">
-              <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Scans: <span style={{ color: T.textSecond, fontWeight: 600 }}>{stats.triggers}</span></span>
-            </Tooltip>
-            <Tooltip text="Percentage of scans that found a price">
-              <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Hit Rate: <span style={{ color: stats.success_rate >= 50 ? T.green : stats.success_rate > 0 ? T.amber : T.textSecond, fontWeight: 600 }}>{stats.success_rate}%</span></span>
-            </Tooltip>
-            <Tooltip text="Calibration data points for score-to-price estimation">
-              <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Calibration: <span style={{ color: calSamples >= 1000 ? T.green : calSamples > 0 ? T.amber : T.textSecond, fontWeight: 600 }}>{calSamples > 0 ? calSamples.toLocaleString() : "--"}</span></span>
-            </Tooltip>
-            <Tooltip text="Time since overlay was started">
-              <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Uptime: <span style={{ color: isRunning ? T.green : T.textSecond, fontWeight: 600 }}>{formatUptime(uptime)}</span></span>
-            </Tooltip>
-            <span style={{ marginLeft: "auto", fontSize: 9, color: T.textMuted, fontStyle: "italic" }}>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4, padding: "2px 0" }}>
+            <span style={{ fontSize: 9, color: T.textMuted, fontStyle: "italic" }}>
               Prices are estimates — always verify before trading
             </span>
           </div>
@@ -1018,81 +965,85 @@
     }
 
     // -----------------------------------------------------------------------
-    // ControlBar (legacy — controls now in title bar + footer)
+    // ScannerStatusCard — hero card at top of Overlay tab
     // -----------------------------------------------------------------------
-    function ControlBar({ overlayState, settings, leagues, onStart, onStop, onRestart, onLeagueChange, onBugReport, onRestartApp }) {
-      const isRunning = overlayState === "running" || overlayState === "starting";
-      const selectedLeague = settings.league || "Fate of the Vaal";
+    function ScannerStatusCard({ status, onStart, onStop, onRestart }) {
+      const { state, stats, uptime } = status;
+      const isRunning = state === "running" || state === "starting";
+      const calSamples = stats.calibration_samples || 0;
 
+      if (state === "stopped") {
+        return (
+          <div className="panel" style={{ ...CARD, padding: 10, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: T.textSecond }}>Scanner offline</span>
+              <button onClick={onStart} className="btn-gold-hover" style={{
+                ...BTN, background: T.green, color: "#fff", padding: "5px 16px", fontSize: 11,
+                border: `1px solid ${T.green}`, marginLeft: "auto",
+              }}>&#9654; Start</button>
+            </div>
+          </div>
+        );
+      }
+
+      if (state === "starting") {
+        return (
+          <div className="panel" style={{ ...CARD, padding: 10, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ width: 12, height: 12, border: `2px solid ${T.amber}`, borderTop: "2px solid transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: T.amber }}>Starting...</span>
+            </div>
+          </div>
+        );
+      }
+
+      if (state === "error") {
+        return (
+          <div className="panel" style={{ ...CARD, padding: 16, marginBottom: 12, borderColor: T.red + "44" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ color: T.red, fontSize: 14, fontWeight: 700 }}>Scanner Error</span>
+                <span style={{ fontSize: 11, color: T.textSecond }}>Check console for details</span>
+              </div>
+              <button onClick={onRestart} className="btn-gold-hover" style={{
+                ...BTN, background: T.input, border: `1px solid ${T.borderGold}`, color: T.gold, padding: "6px 16px",
+              }}>&#8635; Restart</button>
+            </div>
+          </div>
+        );
+      }
+
+      // Running state — compact card with health stats
       return (
-        <div className="panel" style={{ ...CARD, display: "flex", alignItems: "center", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-          <button
-            onClick={onStart}
-            disabled={isRunning}
-            className={!isRunning ? "btn-gold-hover" : ""}
-            style={{
-              ...BTN,
-              background: isRunning ? T.input : T.green,
-              color: isRunning ? T.textMuted : "#fff",
-              cursor: isRunning ? "default" : "pointer",
-              border: `1px solid ${isRunning ? T.border : T.green}`,
-            }}
-          >Start</button>
-          <button
-            onClick={onStop}
-            disabled={!isRunning}
-            className={isRunning ? "btn-danger-hover" : ""}
-            style={{
-              ...BTN,
-              background: !isRunning ? T.input : T.red,
-              color: !isRunning ? T.textMuted : "#fff",
-              cursor: !isRunning ? "default" : "pointer",
-              border: `1px solid ${!isRunning ? T.border : T.red}`,
-            }}
-          >Stop</button>
-          <button
-            onClick={onRestart}
-            disabled={!isRunning}
-            style={{
-              ...BTN,
-              background: !isRunning ? T.input : "transparent",
-              color: !isRunning ? T.textMuted : T.gold,
-              cursor: !isRunning ? "default" : "pointer",
-              border: `1px solid ${!isRunning ? T.border : T.borderGold}`,
-            }}
-          >Restart</button>
-
-          <div style={{ width: 1, height: 24, background: T.border }} />
-
-          <Tooltip text="Send a bug report with logs to Discord">
-            <button
-              onClick={onBugReport}
-              className="btn-gold-hover"
-              style={{ ...BTN, background: T.amber, color: "#000", border: `1px solid ${T.amber}` }}
-            >Report Bug</button>
-          </Tooltip>
-
-          <Tooltip text="Restart the entire app (server + overlay)">
-            <button
-              onClick={onRestartApp}
-              style={{ ...BTN, background: "transparent", color: T.textSecond, border: `1px solid ${T.border}` }}
-            >Restart App</button>
-          </Tooltip>
-
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ ...LABEL, marginBottom: 0 }}>League</span>
-            <select
-              value={selectedLeague}
-              onChange={(e) => onLeagueChange(e.target.value)}
-              style={{
-                ...FIELD_INPUT, width: "auto", minWidth: 180, padding: "6px 10px",
-                appearance: "auto",
-              }}
-            >
-              {leagues.map(lg => (
-                <option key={lg.value} value={lg.value}>{lg.label}</option>
-              ))}
-            </select>
+        <div className="panel" style={{ ...CARD, padding: 12, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <Tooltip text="Number of item tooltips scanned via Ctrl+C">
+                <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Scans: <span style={{ color: T.textSecond, fontWeight: 600 }}>{stats.triggers}</span></span>
+              </Tooltip>
+              <Tooltip text="Percentage of scans that found a price">
+                <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Hit Rate: <span style={{ color: stats.success_rate >= 50 ? T.green : stats.success_rate > 0 ? T.amber : T.textSecond, fontWeight: 600 }}>{stats.success_rate}%</span></span>
+              </Tooltip>
+              <Tooltip text="Calibration data points for score-to-price estimation">
+                <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Calibration: <span style={{ color: calSamples >= 1000 ? T.green : calSamples > 0 ? T.amber : T.textSecond, fontWeight: 600 }}>{calSamples > 0 ? calSamples.toLocaleString() : "--"}</span></span>
+              </Tooltip>
+              <Tooltip text="Time since overlay was started">
+                <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Uptime: <span style={{ color: T.green, fontWeight: 600 }}>{formatUptime(uptime)}</span></span>
+              </Tooltip>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button onClick={onStop} className="btn-danger-hover" style={{
+                ...BTN, background: T.red, color: "#fff", padding: "5px 14px", fontSize: 10,
+                border: `1px solid ${T.red}`,
+              }}>&#9632; Stop</button>
+              <Tooltip text="Restart overlay">
+                <button onClick={onRestart} style={{
+                  ...BTN, background: "transparent", color: T.textSecond, padding: "5px 10px", fontSize: 10,
+                  border: `1px solid ${T.border}`,
+                }}>&#8635;</button>
+              </Tooltip>
+            </div>
           </div>
         </div>
       );
@@ -1141,15 +1092,624 @@
     // -----------------------------------------------------------------------
     // OverlaySettingsTab (consolidated overlay + detection settings)
     // -----------------------------------------------------------------------
-    function OverlaySettingsTab({ settings, onUpdate, overlayState }) {
-      const isRunning = overlayState === "running";
+    // Price color constants for preview
+    const PRICE_COLOR_HIGH = "#ff6b35";
+    const PRICE_COLOR_GOOD = "#ffd700";
+    const PRICE_COLOR_DECENT = "#4ecdc4";
+    const PRICE_COLOR_LOW = "#95a5a6";
 
-      const Field = ({ label, field, type = "number", step, min, max, helpText }) => (
+    // Overlay display presets — maps preset id to toggle states
+    const OVERLAY_PRESETS = [
+      { id: "minimal",  label: "Minimal",  desc: "Price only",      toggles: { overlay_show_grade: false, overlay_show_price: true,  overlay_show_stars: false, overlay_show_mods: false, overlay_show_dps: false } },
+      { id: "quick",    label: "Quick",    desc: "Grade + price",   toggles: { overlay_show_grade: true,  overlay_show_price: true,  overlay_show_stars: false, overlay_show_mods: false, overlay_show_dps: false } },
+      { id: "standard", label: "Standard", desc: "Default",         toggles: { overlay_show_grade: true,  overlay_show_price: true,  overlay_show_stars: true,  overlay_show_mods: false, overlay_show_dps: true  } },
+      { id: "expert",   label: "Expert",   desc: "Full mod detail", toggles: { overlay_show_grade: true,  overlay_show_price: true,  overlay_show_stars: true,  overlay_show_mods: true,  overlay_show_dps: true  } },
+    ];
+
+    // Detect which preset matches current toggle states (or "custom")
+    function detectOverlayPreset(settings) {
+      for (const preset of OVERLAY_PRESETS) {
+        const match = Object.entries(preset.toggles).every(
+          ([key, val]) => (settings[key] !== false) === val
+        );
+        if (match) return preset.id;
+      }
+      return "custom";
+    }
+
+    // -----------------------------------------------------------------------
+    // OverlayPreview — visual mock of in-game tooltip
+    // -----------------------------------------------------------------------
+    // Default overlay tier styles — matches overlay.py _VALUE_TIERS
+    const DEFAULT_OVERLAY_TIER_STYLES = {
+      mirror:      { text_color: "#ff6b35", border_color: "#FF4040", bg_color: "#1a1a2e", border_width: 4, sound_enabled: false },
+      jackpot:     { text_color: "#ff6b35", border_color: "#FF4500", bg_color: "#1a1a2e", border_width: 3, sound_enabled: false },
+      big_hit:     { text_color: "#ff6b35", border_color: "#FFD700", bg_color: "#1a1a2e", border_width: 3, sound_enabled: false },
+      great_find:  { text_color: "#ff6b35", border_color: "#DAA520", bg_color: "#1a1a2e", border_width: 2, sound_enabled: false },
+      good_find:   { text_color: "#ffd700", border_color: "#A0A0B0", bg_color: "#1a1a2e", border_width: 2, sound_enabled: false },
+      worth_sell:  { text_color: "#ffd700", border_color: "#333355", bg_color: "#1a1a2e", border_width: 2, sound_enabled: false },
+      marginal:    { text_color: "#4ecdc4", border_color: "#333355", bg_color: "#1a1a2e", border_width: 2, sound_enabled: false },
+      vendor:      { text_color: "#95a5a6", border_color: null,      bg_color: null,      border_width: 0, sound_enabled: false },
+    };
+
+    function getEffectiveOverlayTierStyle(tierId, overlayTierStyles) {
+      return { ...DEFAULT_OVERLAY_TIER_STYLES[tierId], ...(overlayTierStyles?.[tierId] || {}) };
+    }
+
+    // Sample items representing each overlay value tier
+    // Each has: grade, price text, divine value, stars, mods summary, dps tag,
+    //           tierId for style lookup, animation, and a label for the legend
+    const OVERLAY_SAMPLES = [
+      { tierId: "mirror",     label: "Mirror-tier",  desc: "\u226550,000d",  grade: "S", price: "~52,000d", stars: 6, mods: "T1 SpellDmg, T1 CritMulti, T1 CastSpd", dps: "",
+        borderWidth: 4, animation: "borderRainbow 0.9s linear infinite", textAnim: true },
+      { tierId: "jackpot",    label: "Jackpot",     desc: "\u22651,000d",   grade: "S", price: "~1,200d",  stars: 5, mods: "T1 CritMulti, T1 AtkSpd, T1 PhysDmg",  dps: "",
+        borderWidth: 3, animation: "borderGoldFast 0.5s ease-in-out infinite", textAnim: false },
+      { tierId: "big_hit",    label: "Big hit",     desc: "\u2265250d",     grade: "S", price: "~310d",    stars: 4, mods: "T1 Life, T1 CritChance, T2 ES",        dps: "",
+        borderWidth: 3, animation: "borderGoldMed 0.9s ease-in-out infinite", textAnim: false },
+      { tierId: "great_find", label: "Great find",  desc: "\u226550d",      grade: "A", price: "~65d",     stars: 3, mods: "T1 Life, T2 Crit, T1 ES",              dps: "380dps",
+        borderWidth: 2, animation: "none", textAnim: false },
+      { tierId: "good_find",  label: "Good find",   desc: "\u226525d",      grade: "A", price: "~30d",     stars: 2, mods: "T2 Life, T2 MoveSpd",                  dps: "",
+        borderWidth: 2, animation: "none", textAnim: false },
+      { tierId: "worth_sell", label: "Worth selling",desc: "\u22655d",      grade: "B", price: "~8d",      stars: 1, mods: "T2 Life, T3 ColdRes",                  dps: "",
+        borderWidth: 2, animation: "none", textAnim: false },
+      { tierId: "marginal",   label: "Marginal",    desc: "\u22651d",       grade: "B", price: "~2d",      stars: 1, mods: "T3 Life, T4 FireRes",                  dps: "",
+        borderWidth: 2, animation: "none", textAnim: false },
+      { tierId: "vendor",     label: "Vendor / skip",desc: "<1d",           grade: "C", price: null,        stars: 0, mods: "",                                     dps: "",
+        borderWidth: 0, animation: "none", textAnim: false, isJunk: true },
+    ];
+
+    // Build overlay text for a sample item based on current toggle settings
+    function buildSampleText(sample, settings) {
+      if (sample.isJunk) return "\u2717";
+      const showGrade = settings.overlay_show_grade !== false;
+      const showPrice = settings.overlay_show_price !== false;
+      const showStars = settings.overlay_show_stars !== false;
+      const showMods  = settings.overlay_show_mods !== false;
+      const showDps   = settings.overlay_show_dps !== false;
+      const parts = [];
+      if (showGrade) parts.push(sample.grade);
+      if (showPrice && sample.price) parts.push(sample.price);
+      const starStr = sample.stars > 0 ? "\u2605".repeat(sample.stars) : "";
+      const dpsStr = (showDps && sample.dps) ? sample.dps : "";
+      if (dpsStr) parts.push(dpsStr);
+      else if (showStars && starStr) parts.push(starStr);
+      let text = parts.join(" ");
+      if (showMods && sample.mods) {
+        text = text ? text + ": " + sample.mods : sample.mods;
+      }
+      return text || "\u2605";
+    }
+
+    // Mock POE2 item tooltips for in-game preview (keyed by tierId)
+    // slotW/slotH = inventory cell size (1=1x1, 2=2x1, etc.), col/row = grid position of highlighted item
+    const MOCK_TOOLTIPS = {
+      mirror:     { name: "Entropy Weaver", base: "Vaal Sceptre", rarity: "rare", itemClass: "Sceptres", ilvl: 86, slotW: 1, slotH: 3, col: 4, row: 0,
+        mods: ["+184% Spell Damage", "+52% Critical Strike Multiplier", "+28% Cast Speed", "+112 Maximum Mana", "+42% Lightning Resistance", "+18% Quality"] },
+      jackpot:    { name: "Havoc Edge", base: "Deicide Sword", rarity: "rare", itemClass: "Two Hand Swords", ilvl: 83, slotW: 2, slotH: 4, col: 8, row: 0,
+        mods: ["+178% Physical Damage", "+28% Attack Speed", "+42% Critical Strike Chance", "+95 Maximum Life", "+38% Accuracy Rating"] },
+      big_hit:    { name: "Glyph Ward", base: "Astral Plate", rarity: "rare", itemClass: "Body Armours", ilvl: 84, slotW: 2, slotH: 3, col: 5, row: 0,
+        mods: ["+118 Maximum Life", "+42% Critical Strike Chance", "+156 Energy Shield", "+38% Fire Resistance", "+32% Cold Resistance"] },
+      great_find: { name: "Storm Loop", base: "Sapphire Ring", rarity: "rare", itemClass: "Rings", ilvl: 80, slotW: 1, slotH: 1, col: 3, row: 3,
+        mods: ["+89 Maximum Life", "+35% Critical Strike Multiplier", "+72 Energy Shield", "+380 DPS (Elemental)", "+28% Lightning Damage"] },
+      good_find:  { name: "Rune Treads", base: "Titan Greaves", rarity: "rare", itemClass: "Boots", ilvl: 78, slotW: 2, slotH: 2, col: 0, row: 3,
+        mods: ["+82 Maximum Life", "+25% Movement Speed", "+36% Fire Resistance", "+28% Cold Resistance"] },
+      worth_sell: { name: "Dusk Grip", base: "Spiked Gloves", rarity: "rare", itemClass: "Gloves", ilvl: 75, slotW: 2, slotH: 2, col: 2, row: 0,
+        mods: ["+74 Maximum Life", "+18% Cold Resistance", "+22% Lightning Resistance", "+15 Dexterity"] },
+      marginal:   { name: "Ash Coil", base: "Coral Amulet", rarity: "rare", itemClass: "Amulets", ilvl: 72, slotW: 1, slotH: 1, col: 7, row: 4,
+        mods: ["+48 Maximum Life", "+12% Fire Resistance", "+8 Strength", "+14 Intelligence"] },
+      vendor:     { name: "Briar Helm", base: "Iron Hat", rarity: "rare", itemClass: "Helmets", ilvl: 45, slotW: 2, slotH: 2, col: 0, row: 0,
+        mods: ["+22 Maximum Life", "+8% Fire Resistance", "+6 Armour", "+4 Strength"] },
+    };
+
+    // Inventory filler items — static background items that fill other cells
+    // Each: { col, row, w, h, color, rarity } — rarity drives the border tint
+    const INV_FILLER_ITEMS = [
+      { col: 0, row: 0, w: 2, h: 2, color: "#1a1520", rarity: "rare" },
+      { col: 2, row: 0, w: 2, h: 2, color: "#151820", rarity: "rare" },
+      { col: 4, row: 0, w: 1, h: 3, color: "#18141e", rarity: "rare" },
+      { col: 5, row: 0, w: 2, h: 3, color: "#141a1e", rarity: "rare" },
+      { col: 7, row: 0, w: 1, h: 1, color: "#181518", rarity: "magic" },
+      { col: 8, row: 0, w: 2, h: 4, color: "#1a1418", rarity: "rare" },
+      { col: 10, row: 0, w: 1, h: 1, color: "#151218", rarity: "normal" },
+      { col: 11, row: 0, w: 1, h: 1, color: "#18181a", rarity: "magic" },
+      { col: 7, row: 1, w: 1, h: 2, color: "#161420", rarity: "rare" },
+      { col: 10, row: 1, w: 2, h: 2, color: "#14161a", rarity: "magic" },
+      { col: 0, row: 2, w: 1, h: 1, color: "#1a1518", rarity: "normal" },
+      { col: 1, row: 2, w: 1, h: 1, color: "#161618", rarity: "magic" },
+      { col: 2, row: 2, w: 2, h: 1, color: "#181216", rarity: "rare" },
+      { col: 0, row: 3, w: 2, h: 2, color: "#151a18", rarity: "rare" },
+      { col: 2, row: 3, w: 1, h: 1, color: "#181518", rarity: "normal" },
+      { col: 3, row: 3, w: 1, h: 1, color: "#141820", rarity: "rare" },
+      { col: 4, row: 3, w: 2, h: 2, color: "#1a141e", rarity: "rare" },
+      { col: 6, row: 3, w: 1, h: 2, color: "#161a16", rarity: "magic" },
+      { col: 7, row: 3, w: 1, h: 1, color: "#18161a", rarity: "normal" },
+      { col: 7, row: 4, w: 1, h: 1, color: "#151518", rarity: "rare" },
+      { col: 8, row: 4, w: 2, h: 1, color: "#14181a", rarity: "magic" },
+      { col: 10, row: 3, w: 1, h: 2, color: "#181418", rarity: "normal" },
+      { col: 11, row: 3, w: 1, h: 1, color: "#161616", rarity: "normal" },
+      { col: 11, row: 4, w: 1, h: 1, color: "#1a1a16", rarity: "magic" },
+    ];
+
+    // In-game mockup: POE2 inventory grid with items, highlighted item, tooltip + LAMA overlay
+    function InGameMockup({ sample, settings }) {
+      const tooltip = MOCK_TOOLTIPS[sample.tierId] || MOCK_TOOLTIPS.great_find;
+      const text = buildSampleText(sample, settings);
+      const tierStyle = getEffectiveOverlayTierStyle(sample.tierId, settings.overlay_tier_styles);
+      const isBorderless = text === "\u2605";
+      const isJunk = sample.isJunk;
+      const fontSize = settings.font_size || 14;
+      const fs = Math.max(9, Math.round(fontSize * 0.65));
+      const rarityColors = { rare: "#ff7", unique: "#af6", magic: "#88f", normal: "#aaa" };
+      const rarityBorders = { rare: "#665522", unique: "#336633", magic: "#333366", normal: "#333" };
+      const nameColor = rarityColors[tooltip.rarity] || "#ff7";
+      const CELL = 22; // px per inventory cell
+      const GAP = 2;
+      const COLS = 12;
+      const ROWS = 5;
+      const gridW = COLS * (CELL + GAP) - GAP;
+      const gridH = ROWS * (CELL + GAP) - GAP;
+
+      return (
+        <div style={{
+          position: "relative", background: "#08080e", borderRadius: 6,
+          padding: "10px 12px", overflow: "hidden",
+        }}>
+          {/* Game-like ambient light */}
+          <div style={{ position: "absolute", inset: 0, opacity: 0.06, pointerEvents: "none",
+            backgroundImage: "radial-gradient(ellipse at 40% 30%, #886633 0%, transparent 50%), radial-gradient(ellipse at 80% 70%, #334466 0%, transparent 40%)",
+          }} />
+          <div style={{ position: "relative", display: "flex", alignItems: "flex-start", gap: 12 }}>
+            {/* Inventory panel */}
+            <div style={{
+              background: "#0c0c14", border: "1px solid #2a2520", borderRadius: 3,
+              padding: 6, flexShrink: 0,
+              boxShadow: "inset 0 1px 4px rgba(0,0,0,0.5), 0 0 12px rgba(0,0,0,0.4)",
+            }}>
+              {/* Inventory title bar */}
+              <div style={{ fontSize: 7, color: "#665544", textAlign: "center", marginBottom: 4, letterSpacing: 1, ...MONO }}>INVENTORY</div>
+              {/* Grid */}
+              <div style={{ position: "relative", width: gridW, height: gridH }}>
+                {/* Empty cell grid */}
+                {Array.from({ length: ROWS }, (_, r) =>
+                  Array.from({ length: COLS }, (_, c) => (
+                    <div key={`${c}-${r}`} style={{
+                      position: "absolute",
+                      left: c * (CELL + GAP), top: r * (CELL + GAP),
+                      width: CELL, height: CELL,
+                      background: "#0f0f18", border: "1px solid #1a1a22",
+                      borderRadius: 1,
+                    }} />
+                  ))
+                )}
+                {/* Filler items */}
+                {INV_FILLER_ITEMS.map((item, i) => {
+                  // Skip cells that overlap with the highlighted item
+                  const hc = tooltip.col, hr = tooltip.row, hw = tooltip.slotW, hh = tooltip.slotH;
+                  const overlaps = item.col < hc + hw && item.col + item.w > hc && item.row < hr + hh && item.row + item.h > hr;
+                  if (overlaps) return null;
+                  const borderTint = rarityBorders[item.rarity] || "#222";
+                  return (
+                    <div key={`f${i}`} style={{
+                      position: "absolute",
+                      left: item.col * (CELL + GAP), top: item.row * (CELL + GAP),
+                      width: item.w * (CELL + GAP) - GAP, height: item.h * (CELL + GAP) - GAP,
+                      background: item.color, border: `1px solid ${borderTint}`,
+                      borderRadius: 1,
+                      backgroundImage: `linear-gradient(135deg, ${item.color} 40%, ${borderTint}22 100%)`,
+                    }} />
+                  );
+                })}
+                {/* Highlighted item (hovered by cursor) */}
+                <div style={{
+                  position: "absolute",
+                  left: tooltip.col * (CELL + GAP), top: tooltip.row * (CELL + GAP),
+                  width: tooltip.slotW * (CELL + GAP) - GAP, height: tooltip.slotH * (CELL + GAP) - GAP,
+                  background: "#1a1828", border: `1px solid ${nameColor}88`,
+                  borderRadius: 1,
+                  boxShadow: `0 0 8px ${nameColor}33, inset 0 0 6px ${nameColor}11`,
+                  backgroundImage: `linear-gradient(135deg, #1a1828 30%, ${nameColor}0a 100%)`,
+                }} />
+                {/* Cursor arrow on the highlighted item */}
+                <div style={{
+                  position: "absolute",
+                  left: tooltip.col * (CELL + GAP) + (tooltip.slotW * (CELL + GAP) - GAP) / 2 - 3,
+                  top: tooltip.row * (CELL + GAP) + (tooltip.slotH * (CELL + GAP) - GAP) / 2 - 4,
+                  pointerEvents: "none",
+                }}>
+                  <svg width="12" height="16" viewBox="0 0 12 16" fill="none">
+                    <path d="M1 1L1 13L4.5 9.5L7.5 15L9.5 14L6.5 8L11 7.5L1 1Z" fill="#ffffffcc" stroke="#00000088" strokeWidth="0.5"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Tooltip + overlay — floats right of inventory */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 2, minWidth: 0 }}>
+              {/* Mock POE2 item tooltip */}
+              <div style={{
+                background: "#111118ee", border: "1px solid #33334488", borderRadius: 2,
+                padding: "6px 10px", minWidth: 160, maxWidth: 200,
+                boxShadow: "0 2px 12px rgba(0,0,0,0.6)",
+              }}>
+                <div style={{ fontSize: 7, color: "#555", marginBottom: 2, ...MONO }}>{tooltip.itemClass}</div>
+                <div style={{ height: 1, background: nameColor, opacity: 0.3, marginBottom: 3 }} />
+                <div style={{ fontSize: 10, fontWeight: 700, color: nameColor, marginBottom: 1, ...MONO }}>{tooltip.name}</div>
+                <div style={{ fontSize: 8, color: nameColor, opacity: 0.7, marginBottom: 4, ...MONO }}>{tooltip.base}</div>
+                <div style={{ height: 1, background: "#333", marginBottom: 4 }} />
+                {tooltip.mods.map((mod, i) => (
+                  <div key={i} style={{ fontSize: 7, color: "#8888cc", lineHeight: 1.5, ...MONO }}>{mod}</div>
+                ))}
+                <div style={{ height: 1, background: "#333", margin: "4px 0 2px" }} />
+                <div style={{ fontSize: 7, color: "#444", ...MONO }}>Item Level: {tooltip.ilvl}</div>
+              </div>
+              {/* LAMA overlay tag */}
+              <div style={{
+                display: "inline-flex", alignItems: "center", alignSelf: "flex-start",
+                padding: isBorderless ? "1px 4px" : isJunk ? "2px 6px" : "2px 6px",
+                background: (isBorderless || isJunk) ? "transparent" : (tierStyle.bg_color || "#1a1a2e"),
+                border: (isBorderless || isJunk) ? "none" : `${tierStyle.border_width || sample.borderWidth}px solid ${tierStyle.border_color || "#333355"}`,
+                borderRadius: 3,
+                color: sample.textAnim ? undefined : (tierStyle.text_color || "#95a5a6"),
+                fontSize: fs,
+                fontWeight: 700,
+                ...MONO,
+                whiteSpace: "nowrap",
+                animation: (!isBorderless && !isJunk) ? sample.animation : "none",
+                boxShadow: (isBorderless || isJunk) ? "none" : "0 1px 6px rgba(0,0,0,0.5)",
+              }}>{text}</div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Render a single overlay sample chip using effective tier style
+    function OverlaySampleChip({ sample, settings, compact }) {
+      const text = buildSampleText(sample, settings);
+      const isBorderless = text === "\u2605";
+      const isJunk = sample.isJunk;
+      const fontSize = settings.font_size || 14;
+      const fs = Math.max(9, Math.round(fontSize * 0.7));
+      const tierStyle = getEffectiveOverlayTierStyle(sample.tierId, settings.overlay_tier_styles);
+
+      return (
+        <div style={{
+          display: "inline-flex", alignItems: "center",
+          padding: isBorderless ? "1px 4px" : isJunk ? "2px 8px" : "2px 8px",
+          background: (isBorderless || isJunk) ? "transparent" : (tierStyle.bg_color || "#1a1a2e"),
+          border: (isBorderless || isJunk) ? "none" : `${tierStyle.border_width || sample.borderWidth}px solid ${tierStyle.border_color || "#333355"}`,
+          borderRadius: 3,
+          color: sample.textAnim ? undefined : (tierStyle.text_color || "#95a5a6"),
+          fontSize: compact ? Math.max(8, fs - 1) : (isBorderless ? Math.round(fs * 1.3) : fs),
+          fontWeight: 700,
+          ...MONO,
+          whiteSpace: "nowrap",
+          animation: (!isBorderless && !isJunk) ? sample.animation : "none",
+          transition: "all 0.2s ease",
+          minWidth: compact ? 18 : 24,
+          justifyContent: "center",
+        }}>{text}</div>
+      );
+    }
+
+    // Single tier editor row with color pickers and sound toggle
+    function OverlayTierRow({ sample, settings, onUpdate }) {
+      const tierStyle = getEffectiveOverlayTierStyle(sample.tierId, settings.overlay_tier_styles);
+      const isJunk = sample.isJunk;
+
+      const updateField = (field, value) => {
+        const current = settings.overlay_tier_styles || {};
+        const tierCurrent = current[sample.tierId] || {};
+        onUpdate({
+          overlay_tier_styles: { ...current, [sample.tierId]: { ...tierCurrent, [field]: value } }
+        });
+      };
+
+      return (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "40px 1fr 24px 24px 24px 28px",
+          alignItems: "center",
+          gap: 8,
+          padding: "3px 0",
+        }}>
+          {/* Live preview chip */}
+          <OverlaySampleChip sample={sample} settings={settings} compact={true} />
+          {/* Tier label */}
+          <div style={{ overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+            <span style={{ fontSize: 10, color: T.textSecond, fontWeight: 600 }}>{sample.label}</span>
+            <span style={{ fontSize: 9, color: T.textMuted, marginLeft: 4 }}>{sample.desc}</span>
+          </div>
+          {/* Text color picker */}
+          <Tooltip text="Text color">
+            <input type="color" value={tierStyle.text_color || "#95a5a6"}
+              onChange={(e) => updateField("text_color", e.target.value)}
+              style={{ width: 24, height: 24, border: `1px solid ${T.border}`, borderRadius: 3, padding: 0, cursor: "pointer", background: "transparent" }}
+            />
+          </Tooltip>
+          {/* Border color picker */}
+          <Tooltip text="Border color">
+            <input type="color" value={tierStyle.border_color || "#333355"}
+              onChange={(e) => updateField("border_color", e.target.value)}
+              disabled={isJunk}
+              style={{ width: 24, height: 24, border: `1px solid ${T.border}`, borderRadius: 3, padding: 0, cursor: isJunk ? "not-allowed" : "pointer", background: "transparent", opacity: isJunk ? 0.3 : 1 }}
+            />
+          </Tooltip>
+          {/* BG color picker */}
+          <Tooltip text="Background color">
+            <input type="color" value={tierStyle.bg_color || "#1a1a2e"}
+              onChange={(e) => updateField("bg_color", e.target.value)}
+              disabled={isJunk}
+              style={{ width: 24, height: 24, border: `1px solid ${T.border}`, borderRadius: 3, padding: 0, cursor: isJunk ? "not-allowed" : "pointer", background: "transparent", opacity: isJunk ? 0.3 : 1 }}
+            />
+          </Tooltip>
+          {/* Sound toggle (UI only) */}
+          <Toggle value={tierStyle.sound_enabled || false}
+            onChange={(v) => updateField("sound_enabled", v)}
+            size="small" />
+        </div>
+      );
+    }
+
+    function OverlayPreview({ settings, onUpdate }) {
+      const [expanded, setExpanded] = useState(false);
+      const [selectedTierId, setSelectedTierId] = useState("great_find");
+      const showStars = settings.overlay_show_stars !== false;
+      const fontSize = settings.font_size || 14;
+      const fs = Math.max(9, Math.round(fontSize * 0.7));
+      // Representative samples for collapsed view
+      const collapsedSamples = OVERLAY_SAMPLES.filter(s =>
+        s.tierId === "mirror" || s.tierId === "great_find" || s.tierId === "vendor"
+      );
+      const selectedSample = OVERLAY_SAMPLES.find(s => s.tierId === selectedTierId) || OVERLAY_SAMPLES[3];
+
+      return (
+        <div style={{ marginTop: 12 }}>
+          <div
+            onClick={() => setExpanded(!expanded)}
+            style={{ ...LABEL, marginBottom: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, userSelect: "none" }}
+          >
+            <span style={{ fontSize: 9, color: T.textMuted, transition: "transform 0.2s", transform: expanded ? "rotate(90deg)" : "none" }}>{"\u25B6"}</span>
+            Overlay Preview
+          </div>
+
+          {!expanded ? (
+            /* Collapsed: compact row of representative chips */
+            <div
+              onClick={() => setExpanded(true)}
+              style={{
+                background: T.input, border: `1px solid ${T.border}`, borderRadius: 6,
+                padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
+              }}
+            >
+              {collapsedSamples.map(sample => (
+                <OverlaySampleChip key={sample.tierId} sample={sample} settings={settings} compact={true} />
+              ))}
+              <span style={{ fontSize: 9, color: T.textMuted, marginLeft: "auto" }}>Click to expand</span>
+            </div>
+          ) : (
+            /* Expanded: full preview + tier editor */
+            <div style={{
+              background: T.input, border: `1px solid ${T.border}`, borderRadius: 6,
+              padding: 14, display: "flex", flexDirection: "column", gap: 10,
+            }}>
+              {/* In-game mockup — shows selected tier overlay next to a POE2 tooltip */}
+              <InGameMockup sample={selectedSample} settings={settings} />
+              {/* Tier selector chips — click to change the mockup */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {OVERLAY_SAMPLES.map(sample => (
+                  <div
+                    key={sample.tierId}
+                    onClick={() => setSelectedTierId(sample.tierId)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6,
+                      padding: "3px 8px", borderRadius: 3, cursor: "pointer",
+                      background: sample.tierId === selectedTierId ? T.border + "44" : "transparent",
+                      border: `1px solid ${sample.tierId === selectedTierId ? T.border : "transparent"}`,
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <OverlaySampleChip sample={sample} settings={settings} compact={true} />
+                    <span style={{ fontSize: 9, color: sample.tierId === selectedTierId ? T.textSecond : T.textMuted, fontWeight: sample.tierId === selectedTierId ? 600 : 400 }}>{sample.label}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Stars legend */}
+              {showStars && (
+                <div style={{ fontSize: 9, color: T.textMuted, borderTop: `1px solid ${T.border}33`, paddingTop: 8 }}>
+                  {"\u2605"} = top-tier mod rolls (T1{"\u2013"}T2)
+                </div>
+              )}
+              {/* Tier color editor */}
+              <div style={{ borderTop: `1px solid ${T.border}33`, paddingTop: 10 }}>
+                <div style={{
+                  display: "grid", gridTemplateColumns: "40px 1fr 24px 24px 24px 28px",
+                  gap: 8, alignItems: "center", marginBottom: 4,
+                }}>
+                  <div />
+                  <div style={{ ...LABEL, fontSize: 9 }}>Tier Colors</div>
+                  <span style={{ fontSize: 8, color: T.textMuted, textAlign: "center" }}>Text</span>
+                  <span style={{ fontSize: 8, color: T.textMuted, textAlign: "center" }}>Border</span>
+                  <span style={{ fontSize: 8, color: T.textMuted, textAlign: "center" }}>BG</span>
+                  <span style={{ fontSize: 8, color: T.textMuted, textAlign: "center" }}>Sound</span>
+                </div>
+                {OVERLAY_SAMPLES.map(sample => (
+                  <OverlayTierRow key={sample.tierId} sample={sample} settings={settings} onUpdate={onUpdate} />
+                ))}
+                {/* Reset to defaults link */}
+                {Object.keys(settings.overlay_tier_styles || {}).length > 0 && (
+                  <div style={{ marginTop: 6, textAlign: "right" }}>
+                    <span
+                      onClick={() => onUpdate({ overlay_tier_styles: {} })}
+                      style={{ fontSize: 9, color: T.textMuted, cursor: "pointer", textDecoration: "underline" }}
+                    >Reset to defaults</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // ItemLookupCard — paste item text, get parsed results
+    // -----------------------------------------------------------------------
+    function ItemLookupCard() {
+      const [text, setText] = useState("");
+      const [result, setResult] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [collapsed, setCollapsed] = useState(false);
+
+      const doLookup = async (itemText) => {
+        if (!itemText || !itemText.trim()) return;
+        setLoading(true);
+        setError(null);
+        setResult(null);
+        const res = await api("/api/item-lookup", "POST", { text: itemText.trim() });
+        setLoading(false);
+        if (res.error) {
+          setError(res.error);
+        } else {
+          setResult(res);
+        }
+      };
+
+      const handlePaste = async () => {
+        try {
+          const clip = await navigator.clipboard.readText();
+          if (clip) {
+            setText(clip);
+            doLookup(clip);
+          }
+        } catch (e) {
+          setError("Clipboard access denied");
+        }
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.ctrlKey && e.key === "Enter") doLookup(text);
+      };
+
+      const gradeColor = (grade) => {
+        if (grade === "S") return PRICE_COLOR_HIGH;
+        if (grade === "A") return PRICE_COLOR_GOOD;
+        if (grade === "B") return PRICE_COLOR_DECENT;
+        return PRICE_COLOR_LOW;
+      };
+
+      return (
+        <div className="panel" style={{ ...CARD, padding: 12, marginBottom: 12 }}>
+          <div
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none" }}
+            onClick={() => setCollapsed(!collapsed)}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={LABEL}>Item Lookup</span>
+              <span style={{ fontSize: 10, color: T.textMuted }}>Paste item text to analyze</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {!collapsed && (
+                <button onClick={(e) => { e.stopPropagation(); handlePaste(); }} style={{
+                  background: "transparent", border: "none", fontSize: 10, fontWeight: 600,
+                  cursor: "pointer", letterSpacing: "0.06em", color: T.gold, transition: "color 0.15s",
+                }}>PASTE FROM CLIPBOARD</button>
+              )}
+              <div style={{
+                fontSize: 11, color: T.textSecond,
+                transform: collapsed ? "rotate(0deg)" : "rotate(180deg)",
+                transition: "transform 0.15s",
+              }}>&#9660;</div>
+            </div>
+          </div>
+          {!collapsed && (
+            <div style={{ marginTop: 10 }}>
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onPaste={(e) => {
+                  setTimeout(() => {
+                    const pasted = e.target.value;
+                    if (pasted.trim()) doLookup(pasted.trim());
+                  }, 50);
+                }}
+                placeholder="Paste item text here (Ctrl+C on any item in-game)..."
+                rows={4}
+                style={{ ...FIELD_INPUT, resize: "vertical", marginBottom: 8, fontSize: 11 }}
+              />
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+                <button onClick={() => doLookup(text)} disabled={loading || !text.trim()} style={{
+                  ...BTN_GOLD_ACTIVE, opacity: (loading || !text.trim()) ? 0.5 : 1,
+                  padding: "8px 24px",
+                }}>{loading ? "Looking up..." : "Lookup"}</button>
+              </div>
+
+              {error && (
+                <div style={{ fontSize: 11, color: T.red, marginBottom: 8, padding: "6px 10px", background: "rgba(168,50,50,0.1)", borderRadius: 4 }}>
+                  {error}
+                </div>
+              )}
+
+              {result && result.item && (
+                <div style={{ background: T.input, border: `1px solid ${T.border}`, borderRadius: 6, padding: 12 }}>
+                  {/* Item header */}
+                  <div style={{ marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>
+                      {result.item.name || result.item.base_type}
+                    </span>
+                    {result.item.name && result.item.base_type && (
+                      <span style={{ fontSize: 11, color: T.textSecond, marginLeft: 8 }}>
+                        {result.item.base_type}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 10, color: T.textMuted, marginLeft: 8 }}>
+                      ({result.item.rarity}{result.item.item_level ? `, ilvl ${result.item.item_level}` : ""})
+                    </span>
+                  </div>
+
+                  {/* Score summary */}
+                  {result.score && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, padding: "6px 10px", background: "rgba(196,164,86,0.06)", borderRadius: 4 }}>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: gradeColor(result.score.grade), ...MONO }}>{result.score.grade}</span>
+                      <span style={{ fontSize: 11, color: T.textSecond }}>Score: <span style={{ color: T.text, fontWeight: 600 }}>{(result.score.normalized_score * 100).toFixed(0)}%</span></span>
+                      {result.estimate && result.estimate.divine_value != null && (
+                        <span style={{ fontSize: 11, color: T.textSecond }}>Est: <span style={{ color: T.gold, fontWeight: 600 }}>~{result.estimate.divine_value >= 1 ? result.estimate.divine_value.toFixed(1) + "d" : (result.estimate.chaos_value || 0).toFixed(0) + "c"}</span></span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Mods list */}
+                  {result.mods && result.mods.length > 0 && (
+                    <div>
+                      <div style={{ ...LABEL, marginBottom: 4, fontSize: 9 }}>Mods</div>
+                      {result.mods.map((mod, i) => (
+                        <div key={i} style={{ fontSize: 11, color: T.textSecond, padding: "2px 0", display: "flex", alignItems: "baseline", gap: 6 }}>
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, color: mod.tier_label?.startsWith("T1") ? T.gold : mod.tier_label?.startsWith("T2") ? T.amber : T.textMuted,
+                            minWidth: 22, ...MONO,
+                          }}>{mod.tier_label || "--"}</span>
+                          <span>{mod.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function SettingsField({ label, field, value, onUpdate, type = "number", step, min, max, helpText }) {
+      return (
         <div>
           <label style={FIELD_LABEL}>{label}</label>
           <input
             type={type}
-            value={settings[field] ?? ""}
+            value={value ?? ""}
             onChange={(e) => {
               const val = type === "number" ? parseFloat(e.target.value) : e.target.value;
               onUpdate({ [field]: val });
@@ -1162,6 +1722,10 @@
           {helpText && <div style={{ fontSize: 10, color: T.textMuted, marginTop: 3 }}>{helpText}</div>}
         </div>
       );
+    }
+
+    function OverlaySettingsTab({ settings, onUpdate, overlayState }) {
+      const isRunning = overlayState === "running";
 
       return (
         <div style={{ marginTop: 12, marginBottom: 12 }}>
@@ -1186,20 +1750,70 @@
             <div className="panel" style={{ ...CARD, padding: 12 }}>
               <div style={{ ...LABEL, marginBottom: 8 }}>Display</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
-                <Field label="Font Size" field="font_size" min={8} max={24} step={1} helpText="Text size (px)" />
-                <Field label="Duration" field="overlay_duration" min={0.5} max={10} step={0.5} helpText="Seconds shown" />
+                <SettingsField label="Font Size" field="font_size" value={settings.font_size} onUpdate={onUpdate} min={8} max={24} step={1} helpText="Text size (px)" />
+                <SettingsField label="Duration" field="overlay_duration" value={settings.overlay_duration} onUpdate={onUpdate} min={0.5} max={10} step={0.5} helpText="Seconds shown" />
+              </div>
+              {/* Display Preset selector */}
+              <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.border}33` }}>
+                <div style={{ ...LABEL, marginBottom: 8, fontSize: 9 }}>Display Preset</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {OVERLAY_PRESETS.map(p => {
+                    const activePreset = detectOverlayPreset(settings);
+                    const active = activePreset === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => onUpdate({ ...p.toggles, overlay_display_preset: p.id })}
+                        style={{
+                          ...BTN,
+                          flex: 1,
+                          background: active ? T.gold : T.input,
+                          color: active ? "#0d0b08" : T.textSecond,
+                          border: `1px solid ${active ? T.gold : T.border}`,
+                          padding: "6px 8px",
+                        }}
+                      >
+                        <div style={{ fontWeight: 600, fontSize: 11 }}>{p.label}</div>
+                        <div style={{ fontSize: 8, opacity: 0.7, marginTop: 1 }}>{p.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {detectOverlayPreset(settings) === "custom" && (
+                  <div style={{ fontSize: 9, color: T.amber, marginTop: 4 }}>Custom (toggles don't match any preset)</div>
+                )}
+              </div>
+              {/* Individual toggle overrides */}
+              <div style={{ marginTop: 10 }}>
+                <div style={{ ...LABEL, marginBottom: 6, fontSize: 9 }}>Toggle Overrides</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px 12px" }}>
+                  {[
+                    ["Grade", "overlay_show_grade"],
+                    ["Price", "overlay_show_price"],
+                    ["Stars", "overlay_show_stars"],
+                    ["Top Mods", "overlay_show_mods"],
+                    ["DPS/Defense", "overlay_show_dps"],
+                  ].map(([label, field]) => (
+                    <div key={field} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <Toggle value={settings[field] !== false} onChange={(v) => onUpdate({ [field]: v, overlay_display_preset: "custom" })} size="small" />
+                      <span style={{ fontSize: 11, color: T.textSecond }}>{label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="panel" style={{ ...CARD, padding: 12 }}>
-              <div style={{ ...LABEL, marginBottom: 8 }}>Detection</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
-                <Field label="Scan FPS" field="scan_fps" min={1} max={30} step={1} helpText="Checks per second" />
-                <Field label="Cooldown" field="detection_cooldown" min={0.1} max={5} step={0.1} helpText="Seconds between" />
-                <Field label="Still Radius" field="cursor_still_radius" min={5} max={50} step={1} helpText="Max px movement" />
-                <Field label="Still Frames" field="cursor_still_frames" min={1} max={10} step={1} helpText="Frames to wait" />
+            <div className="panel" style={{ ...CARD, padding: 8 }}>
+              <div style={{ ...LABEL, marginBottom: 6 }}>Detection</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "6px 12px" }}>
+                <SettingsField label="Scan FPS" field="scan_fps" value={settings.scan_fps} onUpdate={onUpdate} min={1} max={30} step={1} helpText="Checks/sec" />
+                <SettingsField label="Cooldown" field="detection_cooldown" value={settings.detection_cooldown} onUpdate={onUpdate} min={0.1} max={5} step={0.1} helpText="Sec between" />
+                <SettingsField label="Still Radius" field="cursor_still_radius" value={settings.cursor_still_radius} onUpdate={onUpdate} min={5} max={50} step={1} helpText="Max px" />
+                <SettingsField label="Still Frames" field="cursor_still_frames" value={settings.cursor_still_frames} onUpdate={onUpdate} min={1} max={10} step={1} helpText="Frames" />
               </div>
             </div>
           </div>
+          {/* Overlay Preview */}
+          <OverlayPreview settings={settings} onUpdate={onUpdate} />
         </div>
       );
     }
@@ -3542,7 +4156,7 @@
     // -----------------------------------------------------------------------
     function Dashboard() {
       const [status, setStatus] = useState({ state: "stopped", uptime: 0, stats: { uptime_min: 0, triggers: 0, prices_shown: 0, success_rate: 0, cache_items: 0, last_refresh: "never", divine_to_chaos: 0, divine_to_exalted: 0, mirror_to_divine: 0, calibration_samples: 0 } });
-      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, start_with_windows: false, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {}, filter_gear_classes: {}, filter_color_preset: "default" });
+      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, start_with_windows: false, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {}, filter_gear_classes: {}, filter_color_preset: "default", overlay_show_grade: true, overlay_show_price: true, overlay_show_stars: true, overlay_show_mods: false, overlay_show_dps: true, overlay_display_preset: "standard", overlay_tier_styles: {} });
       const [leagues, setLeagues] = useState([{ value: "Fate of the Vaal", label: "Fate of the Vaal" }]);
       const [logs, setLogs] = useState([]);
       const [autoStartDone, setAutoStartDone] = useState(false);
@@ -3711,9 +4325,6 @@
           <WindowTitleBar
             wsConnected={connected}
             overlayState={status.state}
-            onStart={handleStart}
-            onStop={handleStop}
-            onRestart={handleRestart}
           />
           <GoldDivider />
           {updateInfo && (
@@ -3757,6 +4368,8 @@
             <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 16px" }}>
               {activeTab === "overlay" && (
                 <>
+                  <ScannerStatusCard status={status} onStart={handleStart} onStop={handleStop} onRestart={handleRestart} />
+                  <ItemLookupCard />
                   <OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} />
                   <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
                 </>
