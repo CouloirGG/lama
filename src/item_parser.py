@@ -230,8 +230,8 @@ class ItemParser:
         # Extract weapon/defense stats (DPS, armour, evasion, ES)
         self._extract_combat_stats(full_text, item)
 
-        # Extract mod lines for non-unique equippable items
-        if item.rarity in ("rare", "magic"):
+        # Extract mod lines for rare/magic items and corrupted uniques
+        if item.rarity in ("rare", "magic") or (item.rarity == "unique" and item.corrupted):
             item.mods = self._extract_mod_lines(sections)
 
         if not item.name:

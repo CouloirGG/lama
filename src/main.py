@@ -419,8 +419,13 @@ class LAMA:
                     base_type=item.base_type,
                     item_level=item.item_level,
                 )
+                # Parse mods for roll-specific pricing
+                parsed_mods = []
+                if item.mods and self.mod_parser.loaded:
+                    parsed_mods = self.mod_parser.parse_mods(item)
                 self._price_unique_async(item, cursor_x, cursor_y,
-                                         static_result=static_result)
+                                         static_result=static_result,
+                                         parsed_mods=parsed_mods)
                 return
 
             # Step 2: Non-unique items with mods → local scoring (or trade API fallback)
@@ -450,8 +455,8 @@ class LAMA:
                 self._price_rare_async(item, cursor_x, cursor_y)
                 return
 
-            # Step 2b: Normal/magic items with sockets → trade API for base pricing
-            if (item.rarity in ("normal", "magic") and item.sockets >= 2):
+            # Step 2b: Normal/magic items with sockets OR high ilvl → trade API for base pricing
+            if item.rarity in ("normal", "magic") and (item.sockets >= 2 or item.item_level >= 75):
                 self._price_base_async(item, cursor_x, cursor_y)
                 return
 
@@ -610,7 +615,13 @@ class LAMA:
         display_name = item.base_type or item.name
         sockets = item.sockets
         ilvl = getattr(item, "item_level", 0) or 0
-        tag = f"{sockets}S, ilvl {ilvl}" if ilvl > 0 else f"{sockets}S"
+        # Build tag: " (3S, ilvl 82)" or " (ilvl 82)" or " (3S)" or ""
+        parts = []
+        if sockets:
+            parts.append(f"{sockets}S")
+        if ilvl > 0:
+            parts.append(f"ilvl {ilvl}")
+        tag = f" ({', '.join(parts)})" if parts else ""
 
         with self._trade_gen_lock:
             self._trade_generation += 1
@@ -622,7 +633,7 @@ class LAMA:
 
         # Show initial checking indicator
         self.overlay.show_price(
-            text=f"{display_name} ({tag}): Checking.",
+            text=f"{display_name}{tag}: Checking.",
             tier="low",
             cursor_x=cursor_x,
             cursor_y=cursor_y,
@@ -638,7 +649,7 @@ class LAMA:
                     return
                 dots = (dots % 3) + 1
                 self.overlay.show_price(
-                    text=f"{display_name} ({tag}): Checking{'.' * dots}",
+                    text=f"{display_name}{tag}: Checking{'.' * dots}",
                     tier="low",
                     cursor_x=cursor_x,
                     cursor_y=cursor_y,
@@ -658,7 +669,7 @@ class LAMA:
                     return
                 if result:
                     self.overlay.show_price(
-                        text=f"{display_name} ({tag}): {result.display}",
+                        text=f"{display_name}{tag}: {result.display}",
                         tier=result.tier,
                         cursor_x=cursor_x,
                         cursor_y=cursor_y,
@@ -682,7 +693,7 @@ class LAMA:
         thread.start()
 
     def _price_unique_async(self, item, cursor_x: int, cursor_y: int,
-                            static_result: dict = None):
+                            static_result: dict = None, parsed_mods=None):
         """Price a corrupted unique via the trade API in a background thread.
 
         Shows static price immediately if available, then upgrades with
@@ -696,14 +707,14 @@ class LAMA:
         if static_result:
             static_display = static_result.get("display", "?")
             self.overlay.show_price(
-                text=f"{display_name} ({tag}): Checking.",
+                text=f"{display_name}{tag}: Checking.",
                 tier=static_result.get("tier", "low"),
                 cursor_x=cursor_x, cursor_y=cursor_y,
                 price_divine=static_result.get("divine_value", 0),
             )
         else:
             self.overlay.show_price(
-                text=f"{display_name} ({tag}): Checking.",
+                text=f"{display_name}{tag}: Checking.",
                 tier="low",
                 cursor_x=cursor_x, cursor_y=cursor_y,
             )
@@ -725,7 +736,7 @@ class LAMA:
                     return
                 dots = (dots % 3) + 1
                 self.overlay.show_price(
-                    text=f"{display_name} ({tag}): Checking{'.' * dots}",
+                    text=f"{display_name}{tag}: Checking{'.' * dots}",
                     tier="low",
                     cursor_x=cursor_x, cursor_y=cursor_y,
                 )
@@ -739,12 +750,12 @@ class LAMA:
                     return
 
                 result = self.trade_client.price_unique_item(
-                    item, is_stale=_is_stale)
+                    item, mods=parsed_mods, is_stale=_is_stale)
                 if _is_stale():
                     return
                 if result and result.min_price > 0:
                     self.overlay.show_price(
-                        text=f"{display_name} ({tag}): {result.display}",
+                        text=f"{display_name}{tag}: {result.display}",
                         tier=result.tier,
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         price_divine=result.min_price,
