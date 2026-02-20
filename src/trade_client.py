@@ -409,11 +409,14 @@ class TradeClient:
                 display="?", tier="low",
             )
 
-    def price_unique_item(self, item, is_stale=None) -> Optional[RarePriceResult]:
+    def price_unique_item(self, item, mods=None, is_stale=None) -> Optional[RarePriceResult]:
         """Price a corrupted unique item by name + sockets via the trade API.
 
         Used for corrupted uniques where Vaal outcomes (rerolled mods, added
         sockets) significantly affect value compared to the static base price.
+
+        If *mods* are provided (parsed from corrupted unique), builds stat
+        filters so different rolls produce different prices and cache entries.
         """
         name = item.name
         base_type = item.base_type or ""
@@ -422,7 +425,20 @@ class TradeClient:
         if not name:
             return None
 
-        cache_key = f"unique:{name}:{sockets}"
+        # Filter to priceable mod types (mutated is the key one for corrupted uniques)
+        _PRICEABLE = ("mutated", "explicit", "implicit")
+        priceable = [m for m in (mods or []) if m.mod_type in _PRICEABLE]
+
+        # Mod-aware cache key: different rolls → different cache entries
+        if priceable:
+            mod_part = "|".join(
+                f"{m.stat_id}:{round(m.value / 5) * 5}"
+                for m in sorted(priceable, key=lambda m: m.stat_id)
+            )
+            cache_key = f"unique:{name}:{sockets}:{hashlib.md5(mod_part.encode()).hexdigest()[:8]}"
+        else:
+            cache_key = f"unique:{name}:{sockets}"
+
         cached = self._check_cache(cache_key)
         if cached:
             logger.debug(f"TradeClient: cache hit for unique {name}")
@@ -438,15 +454,33 @@ class TradeClient:
 
             logger.info(
                 f"TradeClient: pricing unique {name} "
-                f"(corrupted, sockets={sockets})"
+                f"(corrupted, sockets={sockets}, mods={len(priceable)})"
             )
 
-            query = self._build_unique_query(name, base_type, sockets)
+            # Build stat filters from parsed mods (relaxed 60% minimums)
+            stat_filters = self._build_stat_filters_relaxed(priceable) if priceable else None
+
+            query = self._build_unique_query(name, base_type, sockets,
+                                             stat_filters=stat_filters)
 
             if is_stale and is_stale():
                 return None
 
             search_result = self._do_search(query)
+
+            # Fallback: if stat filters produced 0 results, retry without them
+            if stat_filters and search_result:
+                total = search_result.get("total", 0)
+                if total == 0:
+                    logger.info(
+                        f"TradeClient: 0 results with stat filters for {name}, "
+                        f"retrying without"
+                    )
+                    query = self._build_unique_query(name, base_type, sockets)
+                    if is_stale and is_stale():
+                        return None
+                    search_result = self._do_search(query)
+
             if not search_result:
                 return None
 
@@ -482,8 +516,13 @@ class TradeClient:
             )
 
     def _build_unique_query(self, name: str, base_type: str,
-                            sockets: int = 0) -> dict:
-        """Build a trade API query for a corrupted unique by name + sockets."""
+                            sockets: int = 0,
+                            stat_filters: list = None) -> dict:
+        """Build a trade API query for a corrupted unique by name + sockets.
+
+        If *stat_filters* are provided, they are included in the stats block
+        so the trade API returns only listings with comparable mod rolls.
+        """
         filters = {
             "type_filters": {
                 "filters": {
@@ -507,7 +546,7 @@ class TradeClient:
         query_inner = {
             "status": {"option": "any"},
             "name": name,
-            "stats": [{"type": "and", "filters": []}],
+            "stats": [{"type": "and", "filters": stat_filters or []}],
             "filters": filters,
         }
         if base_type:
