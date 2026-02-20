@@ -62,19 +62,61 @@ class TierLadder:
     item_class: str      # "Gloves"
     tiers: List[TierInfo]  # ordered T1-first (highest ilvl = T1)
 
-    def identify_tier(self, value: float) -> Optional[TierInfo]:
-        """Which tier does this value fall into?"""
+    def identify_tier(self, value: float, item_level: int = 0) -> Optional[TierInfo]:
+        """Which tier does this value fall into?
+
+        When item_level > 0, skips tiers the item can't roll (required_level > item_level).
+        """
         if not self.tiers:
             return None
         abs_val = abs(value)
         # Walk from T1 (best) down — first tier whose range contains the value
         for tier in self.tiers:
+            # Skip tiers the item can't roll
+            if item_level and tier.required_level > item_level:
+                continue
             t_min = min(abs(tier.stat_min), abs(tier.stat_max))
-            t_max = max(abs(tier.stat_min), abs(tier.stat_max))
             if abs_val >= t_min:
                 return tier
-        # Below worst tier's minimum — return worst
+        # Below worst tier's minimum — return worst rollable tier
+        if item_level:
+            rollable = [t for t in self.tiers if t.required_level <= item_level]
+            if rollable:
+                return rollable[-1]
         return self.tiers[-1]
+
+    def max_tier_for_ilvl(self, item_level: int) -> Optional[TierInfo]:
+        """Best tier this ilvl can roll (T1 = best)."""
+        for tier in self.tiers:  # T1-first order
+            if tier.required_level <= item_level:
+                return tier
+        return None
+
+    def global_min_for_ilvl(self, item_level: int = 0) -> float:
+        """Lowest possible value across rollable tiers."""
+        tiers = self._rollable_tiers(item_level)
+        if not tiers:
+            return self.global_min
+        vals = []
+        for t in tiers:
+            vals.extend([abs(t.stat_min), abs(t.stat_max)])
+        return min(vals)
+
+    def global_max_for_ilvl(self, item_level: int = 0) -> float:
+        """Highest possible value across rollable tiers."""
+        tiers = self._rollable_tiers(item_level)
+        if not tiers:
+            return self.global_max
+        vals = []
+        for t in tiers:
+            vals.extend([abs(t.stat_min), abs(t.stat_max)])
+        return max(vals)
+
+    def _rollable_tiers(self, item_level: int) -> List[TierInfo]:
+        """Return tiers the item can roll (required_level <= item_level)."""
+        if not item_level:
+            return self.tiers
+        return [t for t in self.tiers if t.required_level <= item_level]
 
     @property
     def global_min(self) -> float:
@@ -363,7 +405,7 @@ def _dps_factor(total_dps: float, item_class: str, item_level: int) -> float:
                         (0.15,  0.15,     0.5,  0.85,   1.0,   1.15))
 
 
-def _defense_factor(total_defense: int, item_class: str) -> float:
+def _defense_factor(total_defense: int, item_class: str, item_level: int = 0) -> float:
     """Multiplicative defense factor for armor piece scoring.
 
     Returns 1.0 for non-armor items or when total_defense=0.
@@ -374,9 +416,11 @@ def _defense_factor(total_defense: int, item_class: str) -> float:
     if item_class not in DEFENSE_ITEM_CLASSES:
         return 1.0
 
-    thresholds = DEFENSE_THRESHOLDS.get(item_class)
-    if not thresholds:
+    brackets = DEFENSE_THRESHOLDS.get(item_class)
+    if not brackets:
         return 1.0
+
+    thresholds = _select_bracket(brackets, item_level)
 
     #                    below  terrible  low   decent  good   above
     return _interpolate(float(total_defense), thresholds,
@@ -610,8 +654,10 @@ class ModDatabase:
         prefix_count = 0
         suffix_count = 0
 
+        item_level = getattr(item, 'item_level', 0) or 0
+
         for mod in mods:
-            ms = self._score_mod(mod, item_class)
+            ms = self._score_mod(mod, item_class, item_level)
             mod_scores.append(ms)
             if ms.generation_type == "prefix":
                 prefix_count += 1
@@ -639,12 +685,11 @@ class ModDatabase:
 
         # Apply DPS/defense combat factors
         item_class_raw = getattr(item, 'item_class', '') or ''
-        item_level = getattr(item, 'item_level', 0) or 0
         total_dps = getattr(item, 'total_dps', 0.0) or 0.0
         total_defense = getattr(item, 'total_defense', 0) or 0
 
         d_factor = _dps_factor(total_dps, item_class_raw, item_level)
-        a_factor = _defense_factor(total_defense, item_class_raw)
+        a_factor = _defense_factor(total_defense, item_class_raw, item_level)
         combat_factor = min(d_factor, a_factor)  # only one applies per item
 
         normalized = max(0.0, min(1.0, normalized * combat_factor))
@@ -1052,7 +1097,7 @@ class ModDatabase:
                 return key
         return raw
 
-    def _score_mod(self, mod, item_class: str) -> ModScore:
+    def _score_mod(self, mod, item_class: str, item_level: int = 0) -> ModScore:
         """Score a single parsed mod."""
         bridge_entry = self._bridge.get(mod.stat_id)
         group = ""
@@ -1075,7 +1120,18 @@ class ModDatabase:
                         break
 
             if ladder:
-                tier = ladder.identify_tier(mod.value)
+                tier = ladder.identify_tier(mod.value, item_level=item_level)
+                if tier and item_level:
+                    # Log when ilvl filtering changed the tier assignment
+                    uncapped = ladder.identify_tier(mod.value, item_level=0)
+                    if uncapped and uncapped.tier_num < tier.tier_num:
+                        best = ladder.max_tier_for_ilvl(item_level)
+                        best_label = f"T{best.tier_num}" if best else "none"
+                        logger.debug(
+                            f"ilvl {item_level} caps \"{tier.name}\" at T{tier.tier_num} "
+                            f"(T{uncapped.tier_num} needs ilvl {uncapped.required_level}) "
+                            f"— best rollable={best_label}"
+                        )
                 if tier:
                     tier_label = f"T{tier.tier_num}"
                     # Compute roll quality within tier
@@ -1086,9 +1142,9 @@ class ModDatabase:
                         roll_quality = max(0.0, min(1.0, roll_quality))
                     else:
                         roll_quality = 1.0  # single-value tier = perfect
-                # Compute percentile
-                g_min = ladder.global_min
-                g_max = ladder.global_max
+                # Compute percentile against rollable tiers only
+                g_min = ladder.global_min_for_ilvl(item_level)
+                g_max = ladder.global_max_for_ilvl(item_level)
                 if g_max > g_min:
                     percentile = (abs(mod.value) - g_min) / (g_max - g_min)
                     percentile = max(0.0, min(1.0, percentile))
@@ -1712,19 +1768,19 @@ if __name__ == "__main__":
         f = _dps_factor(dps_val, "Wands", 80)
         print(f"    {dps_val:>4} DPS -> factor {f:.3f}")
 
-    print("\n  Defense factors (Body Armours):")
+    print("\n  Defense factors (Body Armours, ilvl 80):")
     for def_val in [100, 200, 400, 700, 1000, 1200]:
-        f = _defense_factor(def_val, "Body Armours")
+        f = _defense_factor(def_val, "Body Armours", 80)
         print(f"    {def_val:>4} def -> factor {f:.3f}")
 
-    print("\n  Defense factors (Gloves):")
+    print("\n  Defense factors (Gloves, ilvl 80):")
     for def_val in [50, 80, 160, 280, 400, 500]:
-        f = _defense_factor(def_val, "Gloves")
+        f = _defense_factor(def_val, "Gloves", 80)
         print(f"    {def_val:>4} def -> factor {f:.3f}")
 
     print("\n  Defense factors (Rings — excluded):")
     for def_val in [50, 100]:
-        f = _defense_factor(def_val, "Rings")
+        f = _defense_factor(def_val, "Rings", 80)
         print(f"    {def_val:>4} def -> factor {f:.3f}")
 
     # ── SOMV Diagnostics ─────────────────────────────

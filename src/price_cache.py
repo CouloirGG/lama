@@ -692,11 +692,13 @@ class PriceCache:
 
     def _adjust_ilvl(self, data, ilvl):
         r = data.copy()
-        if ilvl >= 86: m = 1.5
-        elif ilvl >= 83: m = 1.2
-        elif ilvl >= 80: m = 1.0
-        elif ilvl >= 75: m = 0.5
-        else: m = 0.2
+        if ilvl >= 86:   m = 1.5
+        elif ilvl >= 83: m = 1.3
+        elif ilvl >= 80: m = 1.1
+        elif ilvl >= 75: m = 0.9
+        elif ilvl >= 68: m = 0.7
+        elif ilvl >= 45: m = 0.4
+        else:            m = 0.2
         r["divine_value"] *= m
         r["chaos_value"] *= m
         return r
