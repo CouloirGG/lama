@@ -40,6 +40,7 @@ from filter_updater import FilterUpdater, find_template_filter
 from mod_database import ModDatabase
 from calibration import CalibrationEngine
 from bug_reporter import BugReporter
+from flag_reporter import FlagReporter
 from telemetry import TelemetryUploader
 
 logger = logging.getLogger("poe2-overlay")
@@ -84,6 +85,10 @@ class LAMA:
         self._last_scored_result = None
         self._last_scored_cursor = (0, 0)
         self._last_scored_lock = threading.Lock()
+
+        # Flag reporter state: snapshot of last displayed item for Ctrl+Shift+F
+        self._last_flaggable = None
+        self._last_flaggable_lock = threading.Lock()
 
         # Auto-calibration queue: A/S graded items get trade API lookups in background
         self._calibration_queue = queue.Queue()
@@ -133,6 +138,12 @@ class LAMA:
         self.bug_reporter = BugReporter(
             root_fn=lambda: self.overlay._root,
             stats_fn=lambda: self.stats,
+            overlay=self.overlay,
+        )
+
+        # Flag reporter (Ctrl+Shift+F)
+        self.flag_reporter = FlagReporter(
+            root_fn=lambda: self.overlay._root,
             overlay=self.overlay,
         )
 
@@ -252,6 +263,13 @@ class LAMA:
             name="BugReportHotkey",
         ).start()
 
+        # 2e. Flag reporter hotkey listener (Ctrl+Shift+F)
+        threading.Thread(
+            target=self._flag_hotkey_loop,
+            daemon=True,
+            name="FlagReportHotkey",
+        ).start()
+
         # 2d. Auto-calibration queue processor
         if self.mod_database.loaded:
             threading.Thread(
@@ -323,6 +341,10 @@ class LAMA:
                     text="\u2717", tier="low",
                     cursor_x=cursor_x, cursor_y=cursor_y,
                 )
+                self._cache_for_flag(
+                    item_name=item.name, rarity=item.rarity,
+                    tier="low", display_text="\u2717",
+                    clipboard_text=item_text)
                 return
 
 
@@ -340,13 +362,19 @@ class LAMA:
                     price_str = "valuable"
                     tier = "good"
                     divine = 0
+                chanceable_text = f"Chance \u2192 {unique_name} ({price_str})"
                 logger.info(f"Chanceable base: {item.base_type} → {unique_name} ({price_str})")
                 self.overlay.show_price(
-                    text=f"Chance \u2192 {unique_name} ({price_str})",
+                    text=chanceable_text,
                     tier=tier,
                     cursor_x=cursor_x, cursor_y=cursor_y,
                     price_divine=divine,
                 )
+                self._cache_for_flag(
+                    item_name=item.name, base_type=item.base_type,
+                    rarity=item.rarity, tier=tier,
+                    display_text=chanceable_text, price_divine=divine,
+                    clipboard_text=item_text)
                 self.stats["successful_lookups"] += 1
                 return
 
@@ -358,17 +386,24 @@ class LAMA:
                 if item.rarity == "unique":
                     result = self.price_cache.lookup_unidentified(base)
                     if result:
+                        unid_text = f"{base} (unid): {result['display']}"
                         logger.info(
                             f">>> PRICE [unid] {base}: {result['display']} "
                             f"({result['name']})"
                         )
                         self.overlay.show_price(
-                            text=f"{base} (unid): {result['display']}",
+                            text=unid_text,
                             tier=result["tier"],
                             cursor_x=cursor_x,
                             cursor_y=cursor_y,
                             price_divine=result.get("divine_value", 0),
                         )
+                        self._cache_for_flag(
+                            item_name=result.get("name", base),
+                            base_type=item.base_type, rarity=item.rarity,
+                            tier=result["tier"], display_text=unid_text,
+                            price_divine=result.get("divine_value", 0),
+                            clipboard_text=item_text)
                         self.stats["successful_lookups"] += 1
                         return
 
@@ -404,7 +439,8 @@ class LAMA:
 
                 # Primary path: local scoring (instant, no API calls)
                 if self.mod_database.loaded:
-                    self._score_and_display(item, parsed_mods, cursor_x, cursor_y)
+                    self._score_and_display(item, parsed_mods, cursor_x, cursor_y,
+                                            clipboard_text=item_text)
                     return
 
                 # Fallback: trade API (if mod database failed to load)
@@ -439,18 +475,26 @@ class LAMA:
             # Step 3: Display the price
             elapsed = (time.time() - start_time) * 1000
             matched_name = result.get("name", item.name)
+            static_text = f"{matched_name}: {result['display']}"
             logger.info(
                 f">>> PRICE [{elapsed:.0f}ms] {matched_name}: "
                 f"{result['display']}"
             )
 
             self.overlay.show_price(
-                text=f"{matched_name}: {result['display']}",
+                text=static_text,
                 tier=result["tier"],
                 cursor_x=cursor_x,
                 cursor_y=cursor_y,
                 price_divine=result.get("divine_value", 0),
             )
+            self._cache_for_flag(
+                item_name=matched_name, base_type=item.base_type,
+                rarity=item.rarity,
+                item_class=getattr(item, "item_class", None),
+                tier=result["tier"], display_text=static_text,
+                price_divine=result.get("divine_value", 0),
+                clipboard_text=item_text)
             self.stats["successful_lookups"] += 1
 
         except Exception as e:
@@ -743,7 +787,8 @@ class LAMA:
 
     # ─── Local Scoring + Deep Query ──────────────────
 
-    def _score_and_display(self, item, parsed_mods, cursor_x, cursor_y):
+    def _score_and_display(self, item, parsed_mods, cursor_x, cursor_y,
+                           clipboard_text=None):
         """Score item locally, display grade, store state for deep query."""
         from config import GRADE_TIER_MAP
         score = self.mod_database.score_item(item, parsed_mods)
@@ -810,6 +855,24 @@ class LAMA:
         self.overlay.show_price(text=text, tier=overlay_tier,
                                 cursor_x=cursor_x, cursor_y=cursor_y,
                                 borderless=is_borderless)
+
+        # Cache for flag reporter
+        mod_details = None
+        if hasattr(score, "mod_scores") and score.mod_scores:
+            mod_details = [
+                {"text": ms.raw_text, "tier": ms.tier_label,
+                 "weight": round(ms.weight, 3)}
+                for ms in score.mod_scores[:6]
+            ]
+        self._cache_for_flag(
+            item_name=display_name, base_type=item.base_type,
+            rarity=item.rarity,
+            item_class=getattr(item, "item_class", None),
+            grade=score.grade.value, price_divine=price_est,
+            tier=overlay_tier, display_text=text,
+            normalized_score=round(score.normalized_score, 3),
+            clipboard_text=clipboard_text, mod_details=mod_details)
+
         if score.grade.value not in ("C", "JUNK"):
             self.stats["successful_lookups"] += 1
 
@@ -859,6 +922,47 @@ class LAMA:
             if pressed and not was_pressed:
                 was_pressed = True
                 self.bug_reporter.report()
+            elif not pressed:
+                was_pressed = False
+
+    def _cache_for_flag(self, *, item_name=None, base_type=None, rarity=None,
+                         item_class=None, grade=None, price_divine=None,
+                         tier=None, display_text=None, normalized_score=None,
+                         clipboard_text=None, mod_details=None):
+        """Snapshot the current item for flagging via Ctrl+Shift+F."""
+        data = {
+            "item_name": item_name,
+            "base_type": base_type,
+            "rarity": rarity,
+            "item_class": item_class,
+            "grade": grade,
+            "price_divine": price_divine,
+            "tier": tier,
+            "display_text": display_text,
+            "normalized_score": normalized_score,
+            "clipboard_text": clipboard_text,
+            "mod_details": mod_details,
+        }
+        with self._last_flaggable_lock:
+            self._last_flaggable = data
+
+    def _flag_hotkey_loop(self):
+        """Poll for Ctrl+Shift+F to trigger flag dialog."""
+        import ctypes
+        VK_SHIFT, VK_CONTROL, VK_F = 0x10, 0x11, 0x46
+        _gaks = ctypes.windll.user32.GetAsyncKeyState
+        was_pressed = False
+
+        while True:
+            time.sleep(0.05)  # 20 Hz
+            pressed = bool(_gaks(VK_CONTROL) & 0x8000
+                           and _gaks(VK_SHIFT) & 0x8000
+                           and _gaks(VK_F) & 0x8000)
+            if pressed and not was_pressed:
+                was_pressed = True
+                with self._last_flaggable_lock:
+                    snapshot = self._last_flaggable
+                self.flag_reporter.flag(snapshot)
             elif not pressed:
                 was_pressed = False
 
