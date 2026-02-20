@@ -409,7 +409,7 @@ class PriceOverlay:
         from bundle_paths import get_resource
 
         icon_size = OVERLAY_FONT_SIZE + 4  # ~18px at default font size
-        scrap_size = OVERLAY_FONT_SIZE * 2 + 4  # Larger — standalone overlay icon
+        scrap_size = OVERLAY_FONT_SIZE * 3  # Larger — standalone overlay icon (42px)
         for key, rel_path in self._CURRENCY_ICON_FILES.items():
             try:
                 img_path = get_resource(rel_path)
