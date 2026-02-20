@@ -68,6 +68,12 @@ OVERLAY_BG_ALPHA = 0.85            # Background opacity
 OVERLAY_FONT_SIZE = 14
 OVERLAY_PADDING = 8
 
+# Overlay theme: "poe2" (gothic, default) or "classic" (original)
+OVERLAY_THEME = "poe2"
+
+# Overlay pulse style: "sheen" (default), "border", "both", or "none"
+OVERLAY_PULSE_STYLE = "sheen"
+
 # Price tier colors
 PRICE_COLOR_HIGH = "#ff6b35"       # Orange - very valuable (>= 50 Exalted)
 PRICE_COLOR_GOOD = "#ffd700"       # Gold - worth picking up (>= 5 Exalted)

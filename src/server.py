@@ -109,6 +109,8 @@ DEFAULT_SETTINGS = {
     "overlay_show_dps": True,
     "overlay_display_preset": "standard",
     "overlay_tier_styles": {},
+    "overlay_theme": "poe2",
+    "overlay_pulse_style": "sheen",
 }
 
 
@@ -650,6 +652,8 @@ class SettingsRequest(BaseModel):
     overlay_show_dps: Optional[bool] = None
     overlay_display_preset: Optional[str] = None
     overlay_tier_styles: Optional[dict] = None
+    overlay_theme: Optional[str] = None
+    overlay_pulse_style: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
