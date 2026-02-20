@@ -1,5 +1,4 @@
 .env*
-scripts/jira_cli.py
 __pycache__/
 *.pyc
 *.pyo
