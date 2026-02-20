@@ -14,7 +14,7 @@
 - [x] **Flag inaccurate result** — Quick one-click way for users to flag a price estimate as wrong directly from the overlay. Could be a small button/hotkey on the overlay itself. Flagged items should include the item data, our estimate, and optionally the user's correction. Feed into calibration improvement pipeline.
 - [x] **Harvester speed improvements** — (1) Fetch 50 items per query instead of 20 (2.5x samples/query), (2) burst-then-pause rate strategy (4 calls + 8s pause), (3) auto-wait through penalties instead of exiting, (4) skip dead category/bracket combos with `--reset-dead` CLI flag. Target ~20-25 min/pass.
 - [x] **Process name in Task Manager** — `pythonw.exe` is hard to find; set a custom process/app name so the app shows properly in Task Manager's Apps list (e.g., "POE2 Price Overlay")
-- [ ] **ilvl breakpoint tables** — ilvl is now included in trade API queries for base items, but different slots have different ilvl breakpoints (bows need 82 for top phys%, wands only need 81). Could build per-slot breakpoint tables and consider ilvl in loot filter tiering for exceptional bases.
+- [x] **ilvl breakpoint tables** — Scoring engine is now ilvl-aware: `identify_tier()` filters out unrollable mod tiers, percentile computed against rollable range only, DPS brackets expanded to 4 ilvl tiers (82/68/45/0), defense thresholds keyed by ilvl per slot, `price_cache._adjust_ilvl()` smoothed to 7 brackets. Diagnostic logging when ilvl caps a tier assignment.
 - [ ] **Common mod classification** — Heuristic-based; may occasionally misclassify an unusual valuable mod as "common". Mitigated by hybrid queries that always require key mods.
 - [x] **"Grants Skill:" edge cases** — Unusual skill grant formats might not be stripped by `_SKIP_LINE_RE`, leaking into trade queries.
 - [x] **Rate limiting under burst** — Fixed: adaptive rate limiting parses `X-Rate-Limit-Ip` headers from API responses, backs off proactively at 50% usage per window. Socket retry path also guarded against wasted calls when rate limited.
@@ -29,6 +29,9 @@
 - [x] **Pre-built calibration data shard** — Ship a curated `calibration.jsonl` with the repo so new users get reasonable price estimates from day one instead of starting from scratch. Update periodically as more data is collected. Consider league-aware shards (calibration data from one league may not apply to another). Harvester (`calibration_harvester.py`) can now generate these shards automatically.
 
 ## Completed
+
+### Session 24 (2026-02-20)
+- [x] **ilvl breakpoint tables (PT-12)** — `identify_tier()` now skips tiers whose `required_level > item_level`, percentile denominator scoped to rollable tiers only, DPS brackets expanded from 2 to 4 ilvl tiers, defense thresholds changed from flat tuples to ilvl-keyed dicts, `_adjust_ilvl()` smoothed from 5 to 7 brackets removing cliff-edge at ilvl 80→75. All 40 tests pass.
 
 ### Session 23 (2026-02-19)
 - [x] **POE2 gothic overlay theme** — Full theme system with grunge effects (blood splatters, scratch marks, vignette, corner diamonds), sheen sweep animation, serif font fallback chain (`Palatino Linotype → Book Antiqua → Georgia → Segoe UI`), and tier-based border styling. Theme (`poe2`/`classic`) and pulse style (`sheen`/`border`/`both`/`none`) exposed as dashboard settings.
