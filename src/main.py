@@ -40,6 +40,7 @@ from filter_updater import FilterUpdater, find_template_filter
 from mod_database import ModDatabase
 from calibration import CalibrationEngine
 from bug_reporter import BugReporter
+from telemetry import TelemetryUploader
 
 logger = logging.getLogger("poe2-overlay")
 
@@ -135,6 +136,9 @@ class LAMA:
             overlay=self.overlay,
         )
 
+        # Telemetry uploader (opt-in)
+        self.telemetry = TelemetryUploader(league=self.league)
+
         # Wire up detection callbacks
         self.item_detector.set_callback(self._on_change_detected)
         self.item_detector.set_hide_callback(self.overlay.hide)
@@ -153,6 +157,7 @@ class LAMA:
             "overlay_tier_styles": {},
             "overlay_theme": "poe2",
             "overlay_pulse_style": "sheen",
+            "telemetry_enabled": False,
         }
         try:
             if settings_file.exists():
@@ -218,6 +223,11 @@ class LAMA:
         if not self._no_filter_update:
             self.filter_updater.start()
 
+        # 1d. Start telemetry schedule if opt-in
+        if self._display_settings.get("telemetry_enabled", False):
+            self.telemetry.start_schedule()
+            logger.info("Telemetry: schedule started (opt-in enabled)")
+
         # 2. Start item detection in background thread
         logger.info("Starting item detection (clipboard mode)...")
         detect_thread = threading.Thread(
@@ -270,6 +280,7 @@ class LAMA:
     def stop(self):
         """Shut down all components."""
         logger.info("\nShutting down...")
+        self.telemetry.stop_schedule()
         self.filter_updater.stop()
         self.price_cache.stop()
         self.overlay.shutdown()
