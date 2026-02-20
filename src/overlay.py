@@ -113,6 +113,7 @@ class PriceOverlay:
         "chaos": "resources/img/chaos_orb.png",
         "exalted": "resources/img/exalted_orb.png",
         "mirror": "resources/img/mirror_of_kalandra.png",
+        "scrap": "resources/img/scrap_hammer.png",
     }
 
     # Value-based border effects:
@@ -408,13 +409,15 @@ class PriceOverlay:
         from bundle_paths import get_resource
 
         icon_size = OVERLAY_FONT_SIZE + 4  # ~18px at default font size
+        scrap_size = OVERLAY_FONT_SIZE * 2 + 4  # Larger — standalone overlay icon
         for key, rel_path in self._CURRENCY_ICON_FILES.items():
             try:
                 img_path = get_resource(rel_path)
                 if not img_path.exists():
                     continue
                 img = Image.open(img_path).convert("RGBA")
-                img = img.resize((icon_size, icon_size), Image.LANCZOS)
+                size = scrap_size if key == "scrap" else icon_size
+                img = img.resize((size, size), Image.LANCZOS)
                 photo = ImageTk.PhotoImage(img)
                 self._currency_icons[key] = photo
             except Exception as e:
@@ -536,6 +539,22 @@ class PriceOverlay:
             grade_letter in ("C", "JUNK") and not estimate)
 
         if is_plain:
+            # SCRAP with hammer icon — show icon-only tag
+            scrap_icon = self._currency_icons.get("scrap") if text == "SCRAP" else None
+            if scrap_icon:
+                icon_size = scrap_icon.width()
+                w = icon_size + pad_x * 2
+                h = icon_size + pad_y * 2
+
+                c.configure(width=w, height=h)
+                c.create_rectangle(0, 0, w, h, fill=_POE2_BG,
+                                   outline=_POE2_BORDER_NORMAL, width=1,
+                                   tags="bg")
+                c.create_image(w // 2, h // 2, image=scrap_icon,
+                               anchor="center", tags="scrap_icon")
+                self._sheen_strips = []
+                return
+
             # Simple small tag — no ornate decorations
             tw = font_sm.measure(text) + 4
             th = font_sm.metrics("linespace")
@@ -870,10 +889,21 @@ class PriceOverlay:
                 self._frame.configure(padx=border_width, pady=border_width,
                                       bg=border_color)
             # Render label content (with or without currency icon)
-            currency = self._parse_currency(text) if self._currency_icons else None
-            if currency:
-                prefix, icon_key, suffix = currency
-                self._render_with_icon(prefix, icon_key, suffix, color, bg_color)
+            scrap_icon = self._currency_icons.get("scrap") if text == "SCRAP" else None
+            if scrap_icon:
+                # Show hammer icon instead of "SCRAP" text
+                self._icon_label.pack_forget()
+                self._suffix_label.pack_forget()
+                self._label.pack_forget()
+                self._icon_label.configure(image=scrap_icon, bg=bg_color)
+                self._icon_label.pack(side="left")
+            elif self._currency_icons:
+                currency = self._parse_currency(text)
+                if currency:
+                    prefix, icon_key, suffix = currency
+                    self._render_with_icon(prefix, icon_key, suffix, color, bg_color)
+                else:
+                    self._render_text_only(text, color, bg_color)
             else:
                 self._render_text_only(text, color, bg_color)
             if self._is_estimate:
