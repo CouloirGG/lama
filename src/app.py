@@ -271,6 +271,12 @@ def main():
     except Exception:
         pass
 
+    try:
+        import setproctitle
+        setproctitle.setproctitle("LAMA")
+    except ImportError:
+        pass
+
     _ensure_deps()
     try:
         import webview

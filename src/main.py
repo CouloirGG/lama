@@ -1336,6 +1336,12 @@ def main():
     # We send Ctrl+C via keybd_event to copy items from POE2, and the
     # Windows console would otherwise treat it as a terminate signal.
     try:
+        import setproctitle
+        setproctitle.setproctitle("LAMA-overlay")
+    except ImportError:
+        pass
+
+    try:
         import ctypes
         ctypes.windll.kernel32.SetConsoleCtrlHandler(None, True)
         # Resize console window — find by title for Windows Terminal compatibility
