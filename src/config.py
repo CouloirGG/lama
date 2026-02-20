@@ -188,23 +188,27 @@ DEFENSE_ITEM_CLASSES = frozenset({
 # DPS thresholds: (terrible, low, decent, good) total DPS values
 # Keyed by minimum ilvl bracket
 DPS_BRACKETS_2H = {
-    68: (150, 250, 400, 600),   # endgame
+    82: (300, 450, 600, 800),   # endgame
+    68: (150, 250, 400, 600),   # maps
+    45: (60, 120, 200, 350),    # cruel
     0:  (30, 60, 120, 200),     # leveling
 }
 DPS_BRACKETS_1H = {
-    68: (80, 150, 250, 400),    # endgame
+    82: (180, 280, 400, 550),   # endgame
+    68: (80, 150, 250, 400),    # maps
+    45: (35, 70, 140, 220),     # cruel
     0:  (15, 35, 70, 120),      # leveling
 }
 
-# Defense thresholds per slot: (terrible, low, decent, good)
+# Defense thresholds per slot: ilvl-keyed {min_ilvl: (terrible, low, decent, good)}
 DEFENSE_THRESHOLDS = {
-    "Body Armours": (200, 400, 700, 1000),
-    "Shields":      (150, 300, 500, 750),
-    "Helmets":      (100, 200, 350, 500),
-    "Gloves":       (80, 160, 280, 400),
-    "Boots":        (80, 160, 280, 400),
-    "Bucklers":     (100, 200, 350, 500),
-    "Foci":         (50, 100, 200, 350),
+    "Body Armours": {82: (400, 700, 1000, 1400), 68: (200, 400, 700, 1000), 0: (50, 120, 250, 500)},
+    "Shields":      {82: (300, 500, 750, 1000),  68: (150, 300, 500, 750),  0: (40, 100, 200, 400)},
+    "Helmets":      {82: (200, 350, 500, 700),   68: (100, 200, 350, 500),  0: (30, 80, 160, 300)},
+    "Gloves":       {82: (160, 280, 400, 550),   68: (80, 160, 280, 400),   0: (25, 65, 130, 250)},
+    "Boots":        {82: (160, 280, 400, 550),   68: (80, 160, 280, 400),   0: (25, 65, 130, 250)},
+    "Bucklers":     {82: (200, 350, 500, 700),   68: (100, 200, 350, 500),  0: (30, 80, 160, 300)},
+    "Foci":         {82: (100, 200, 350, 500),   68: (50, 100, 200, 350),   0: (15, 50, 100, 200)},
 }
 
 # Trade API filter multipliers (search for items with >= X% of this item's stats)
