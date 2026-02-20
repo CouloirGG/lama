@@ -6,6 +6,9 @@ All tunable constants in one place.
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from bundle_paths import get_resource
 
 # ─────────────────────────────────────────────
