@@ -42,7 +42,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
-from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE, SHARD_GITHUB_REPO
+from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from item_lookup import ItemLookup
 from price_cache import PriceCache
 from telemetry import TelemetryUploader
@@ -468,118 +468,6 @@ watchlist_worker: Optional[WatchlistWorker] = None
 price_cache: Optional[PriceCache] = None
 item_lookup: Optional[ItemLookup] = None
 telemetry_uploader: Optional[TelemetryUploader] = None
-github_kpi_cache: Optional["GitHubKPICache"] = None
-
-
-# ---------------------------------------------------------------------------
-# GitHub KPI cache (daemon thread, 5-minute refresh)
-# ---------------------------------------------------------------------------
-class GitHubKPICache:
-    """Fetches and caches GitHub repo stats (stars, forks, downloads, traffic)."""
-
-    REFRESH_INTERVAL = 300  # 5 minutes
-
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._data = {}
-        self._running = False
-        self._thread: Optional[threading.Thread] = None
-        self._repo = SHARD_GITHUB_REPO  # e.g. "CouloirGG/lama"
-
-    def start(self):
-        self._running = True
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-        self._thread.start()
-
-    def stop(self):
-        self._running = False
-
-    def get_data(self) -> dict:
-        with self._lock:
-            return dict(self._data)
-
-    def _loop(self):
-        while self._running:
-            try:
-                self._refresh()
-            except Exception as e:
-                logger.debug(f"KPI refresh error: {e}")
-            # Sleep in small increments so stop() is responsive
-            for _ in range(self.REFRESH_INTERVAL):
-                if not self._running:
-                    return
-                time.sleep(1)
-
-    def _refresh(self):
-        headers = _get_github_headers()
-        has_auth = "Authorization" in headers
-        base = f"https://api.github.com/repos/{self._repo}"
-        result = {"has_auth": has_auth}
-
-        # 1. Repo metadata (stars, forks, watchers, open_issues)
-        try:
-            resp = requests.get(base, headers=headers, timeout=10)
-            if resp.status_code == 200:
-                repo = resp.json()
-                result["stars"] = repo.get("stargazers_count", 0)
-                result["forks"] = repo.get("forks_count", 0)
-                result["watchers"] = repo.get("subscribers_count", 0)
-                result["open_issues"] = repo.get("open_issues_count", 0)
-        except Exception as e:
-            logger.debug(f"KPI repo fetch failed: {e}")
-
-        # 2. Releases (per-asset download counts)
-        try:
-            resp = requests.get(
-                f"{base}/releases?per_page=30",
-                headers=headers, timeout=10,
-            )
-            if resp.status_code == 200:
-                releases_raw = resp.json()
-                releases = []
-                total_downloads = 0
-                for rel in releases_raw:
-                    dl = sum(a.get("download_count", 0) for a in rel.get("assets", []))
-                    total_downloads += dl
-                    releases.append({
-                        "tag": rel.get("tag_name", ""),
-                        "name": rel.get("name", ""),
-                        "downloads": dl,
-                        "published": rel.get("published_at", ""),
-                    })
-                result["releases"] = releases
-                result["total_downloads"] = total_downloads
-        except Exception as e:
-            logger.debug(f"KPI releases fetch failed: {e}")
-
-        # 3 & 4. Traffic (views + clones) — requires push access
-        if has_auth:
-            for kind in ("views", "clones"):
-                try:
-                    resp = requests.get(
-                        f"{base}/traffic/{kind}",
-                        headers=headers, timeout=10,
-                    )
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        result[f"traffic_{kind}"] = {
-                            "total": data.get("count", 0),
-                            "uniques": data.get("uniques", 0),
-                            "daily": data.get(kind, []),
-                        }
-                    else:
-                        result[f"traffic_{kind}"] = None
-                except Exception as e:
-                    logger.debug(f"KPI traffic/{kind} fetch failed: {e}")
-                    result[f"traffic_{kind}"] = None
-        else:
-            result["traffic_views"] = None
-            result["traffic_clones"] = None
-
-        result["last_refresh"] = time.time()
-
-        with self._lock:
-            self._data = result
 
 
 # ---------------------------------------------------------------------------
@@ -588,7 +476,7 @@ class GitHubKPICache:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Set up the event loop reference and background tasks."""
-    global watchlist_worker, price_cache, item_lookup, telemetry_uploader, github_kpi_cache
+    global watchlist_worker, price_cache, item_lookup, telemetry_uploader
 
     loop = asyncio.get_running_loop()
     overlay.set_loop(loop)
@@ -635,10 +523,6 @@ async def lifespan(app: FastAPI):
     if settings.get("telemetry_enabled", False):
         telemetry_uploader.start_schedule()
 
-    # GitHub KPI cache (stars, downloads, traffic)
-    github_kpi_cache = GitHubKPICache()
-    github_kpi_cache.start()
-
     logger.info("LAMA dashboard server ready")
     try:
         yield
@@ -651,8 +535,6 @@ async def lifespan(app: FastAPI):
             price_cache.stop()
         if telemetry_uploader:
             telemetry_uploader.stop_schedule()
-        if github_kpi_cache:
-            github_kpi_cache.stop()
         # Stop overlay if running
         overlay.stop()
 
@@ -1200,26 +1082,6 @@ async def telemetry_status():
     settings = load_settings()
     status["enabled"] = settings.get("telemetry_enabled", False)
     return status
-
-
-# ---------------------------------------------------------------------------
-# GitHub KPI endpoint
-# ---------------------------------------------------------------------------
-@app.get("/api/kpi")
-async def get_kpi():
-    """Return cached GitHub repo stats + telemetry status."""
-    data = github_kpi_cache.get_data() if github_kpi_cache else {}
-
-    # Merge telemetry info
-    if telemetry_uploader:
-        tel = telemetry_uploader.get_status()
-        data["telemetry_pending"] = tel.get("pending_samples", 0)
-        data["telemetry_last_upload"] = tel.get("last_upload")
-    else:
-        data["telemetry_pending"] = 0
-        data["telemetry_last_upload"] = None
-
-    return data
 
 
 # ---------------------------------------------------------------------------
