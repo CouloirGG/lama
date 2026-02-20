@@ -325,6 +325,7 @@ class LAMA:
                 )
                 return
 
+
             # Chanceable bases: normal items that can become valuable uniques
             base_lower = (item.base_type or "").lower()
             if item.rarity == "normal" and base_lower in self._CHANCEABLE_BASES:
@@ -373,10 +374,7 @@ class LAMA:
 
                 # Rare/magic/unknown unidentified — no mods to price
                 logger.info(f"Unidentified {item.rarity}: {base}")
-                self.overlay.show_price(
-                    text="\u2717", tier="low",
-                    cursor_x=cursor_x, cursor_y=cursor_y,
-                )
+                self._show_dismiss(item, cursor_x, cursor_y)
                 return
 
             # Step 1c: Corrupted uniques → trade API for Vaal-outcome-aware pricing
@@ -401,10 +399,7 @@ class LAMA:
 
                 parsed_mods = self.mod_parser.parse_mods(item)
                 if not parsed_mods:
-                    self.overlay.show_price(
-                        text="\u2717", tier="low",
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                    )
+                    self._show_dismiss(item, cursor_x, cursor_y)
                     return
 
                 # Primary path: local scoring (instant, no API calls)
@@ -414,10 +409,7 @@ class LAMA:
 
                 # Fallback: trade API (if mod database failed to load)
                 if self._has_only_common_mods(item.mods):
-                    self.overlay.show_price(
-                        text="\u2717", tier="low",
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                    )
+                    self._show_dismiss(item, cursor_x, cursor_y)
                     return
                 self._price_rare_async(item, cursor_x, cursor_y)
                 return
@@ -441,10 +433,7 @@ class LAMA:
             if not result:
                 self.stats["not_found"] += 1
                 logger.info(f"No price: {item.lookup_key} (base: {item.base_type})")
-                self.overlay.show_price(
-                    text="\u2717", tier="low",
-                    cursor_x=cursor_x, cursor_y=cursor_y,
-                )
+                self._show_dismiss(item, cursor_x, cursor_y)
                 return
 
             # Step 3: Display the price
@@ -532,10 +521,7 @@ class LAMA:
                 parsed_mods = self.mod_parser.parse_mods(item)
                 if not parsed_mods:
                     logger.info(f"No mods matched for {display_name}")
-                    self.overlay.show_price(
-                        text="\u2717", tier="low",
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                    )
+                    self._show_dismiss(item, cursor_x, cursor_y)
                     self.stats["not_found"] += 1
                     return
 
@@ -557,10 +543,7 @@ class LAMA:
                     )
                     self.stats["successful_lookups"] += 1
                 else:
-                    self.overlay.show_price(
-                        text="\u2717", tier="low",
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                    )
+                    self._show_dismiss(item, cursor_x, cursor_y)
                     self.stats["not_found"] += 1
             except Exception as e:
                 logger.error(f"Rare pricing error: {e}", exc_info=True)
@@ -639,10 +622,7 @@ class LAMA:
                     )
                     self.stats["successful_lookups"] += 1
                 else:
-                    self.overlay.show_price(
-                        text="\u2717", tier="low",
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                    )
+                    self._show_dismiss(item, cursor_x, cursor_y)
                     self.stats["not_found"] += 1
             except Exception as e:
                 logger.error(f"Base pricing error: {e}", exc_info=True)
@@ -737,10 +717,7 @@ class LAMA:
                     )
                     self.stats["successful_lookups"] += 1
                 else:
-                    self.overlay.show_price(
-                        text="\u2717", tier="low",
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                    )
+                    self._show_dismiss(item, cursor_x, cursor_y)
                     self.stats["not_found"] += 1
             except Exception as e:
                 logger.error(f"Unique pricing error: {e}", exc_info=True)
@@ -1096,6 +1073,23 @@ class LAMA:
                 logger.warning(f"Auto-cal failed ({display_name}): {e}")
 
     # Items that should always show ✗ (too cheap to bother pricing)
+    def _show_dismiss(self, item, cursor_x, cursor_y):
+        """Show dismiss (✗) or scrap hammer if the item has quality/sockets."""
+        has_scrap = (
+            getattr(item, "quality", 0) > 0 or
+            getattr(item, "sockets", 0) > 0
+        )
+        if has_scrap:
+            self.overlay.show_price(
+                text="SCRAP", tier="scrap",
+                cursor_x=cursor_x, cursor_y=cursor_y,
+            )
+        else:
+            self.overlay.show_price(
+                text="\u2717", tier="low",
+                cursor_x=cursor_x, cursor_y=cursor_y,
+            )
+
     _WORTHLESS_ITEMS = (
         "chance shard", "transmutation shard", "regal shard",
         "artificer's shard",
