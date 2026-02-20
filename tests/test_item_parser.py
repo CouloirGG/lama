@@ -171,7 +171,9 @@ def test_unique_corrupted_with_enchant(parser):
     assert item.rarity == "unique"
     assert item.name == "The Vertex"
     assert item.corrupted is True
-    # Uniques don't extract mods (only rare/magic do)
-    # But we still check properties
     assert item.energy_shield == 85
     assert item.evasion == 200
+    # Corrupted uniques now extract mods for roll-aware pricing
+    assert len(item.mods) > 0
+    mod_types = {t for t, _ in item.mods}
+    assert "mutated" in mod_types
