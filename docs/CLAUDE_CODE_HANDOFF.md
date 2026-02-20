@@ -55,10 +55,18 @@ Cursor stops over POE2 window (8 fps polling)
 ## File Inventory
 
 ### Source (`src/`)
+
+> **Game-agnostic architecture:** See [`GAME_ABSTRACTION.md`](GAME_ABSTRACTION.md) for full details on `core/` and `games/`.
+
 | File | Purpose |
 |------|---------|
+| `core/__init__.py` | Exports `PricingEngine` and `GameConfig` — public API for the game-agnostic engine |
+| `core/game_config.py` | `GameConfig` dataclass — 44 typed fields covering all game-specific constants |
+| `core/pricing_engine.py` | `PricingEngine` facade — injects `GameConfig` into modules, exposes parse/score/price pipeline |
+| `games/__init__.py` | Game factory registry |
+| `games/poe2.py` | `create_poe2_config()` — builds `GameConfig` with all POE2 constants (reference implementation) |
 | `main.py` | Entry point & orchestrator. Pipeline, threading, startup |
-| `config.py` | All constants: API URLs, rate limits, display settings |
+| `config.py` | All constants: API URLs, rate limits, display settings (legacy — bridged by `games/poe2.py`) |
 | `item_detection.py` | Cursor tracking, Ctrl+C sending, POE2 window detection |
 | `item_parser.py` | Clipboard text → ParsedItem (name, base_type, rarity, mods, DPS, defense) |
 | `mod_parser.py` | Matches mod text to trade API stat IDs via regex |
@@ -217,7 +225,7 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 
 ## Test Suite
 
-106 pytest tests across 4 modules in `tests/`:
+153 pytest tests across 6 modules in `tests/`:
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
@@ -225,6 +233,8 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 | `test_mod_parser.py` | 15 | `_template_to_regex`, opposite word matching, real fixture mod parsing, `resolve_base_type`, value extraction |
 | `test_mod_database.py` | 55 | 40 migrated from `__main__` (S/A/B/C/JUNK grading) + 15 new (SOMV, `_assign_grade` boundaries, DPS/defense factors) |
 | `test_trade_client.py` | 15 | Common mod patterns, stat filter building, value-dependent minimums, fractured mods, price tiers, filter classification |
+| `test_game_config.py` | 23 | GameConfig dataclass creation/defaults, POE2 factory field validation (all 44 fields) |
+| `test_pricing_engine.py` | 24 | Engine construction, pre-init safety, fixture parsing, scoring, full pipeline, calibration estimates, module override verification |
 
 **Fixtures:** `tests/conftest.py` provides session-scoped `mod_parser` and `mod_database` (load once per run), plus `stat_ids` resolver, `make_item`/`make_mod` helpers, and `load_fixture` for reading clipboard captures from `tests/fixtures/`.
 
