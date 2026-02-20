@@ -309,6 +309,11 @@ class BugReporter:
 
         combined = "".join(parts).encode("utf-8")
 
+        if not DISCORD_WEBHOOK_URL:
+            logger.info("Bug report saved locally (no Discord webhook configured)")
+            self._show_result("Saved locally", "decent")
+            return
+
         try:
             resp = requests.post(
                 DISCORD_WEBHOOK_URL,

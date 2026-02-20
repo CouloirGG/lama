@@ -884,7 +884,7 @@
             </div>
 
             {result && (
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12, color: result.ok ? T.green : T.red }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12, color: result.ok ? T.green : T.red, wordBreak: "break-word", overflowWrap: "anywhere" }}>
                 {result.msg}
               </div>
             )}
@@ -969,7 +969,7 @@
             </div>
 
             {result && (
-              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12, color: result.ok ? T.green : T.red }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12, color: result.ok ? T.green : T.red, wordBreak: "break-word", overflowWrap: "anywhere" }}>
                 {result.msg}
               </div>
             )}

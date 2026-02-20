@@ -1037,6 +1037,10 @@ async def submit_bug_report(req: BugReportRequest):
     combined = "".join(parts).encode("utf-8")
 
     # POST to Discord
+    if not DISCORD_WEBHOOK_URL:
+        logger.info("Bug report saved locally (no Discord webhook configured)")
+        return {"status": "sent", "title": title, "note": "Saved locally"}
+
     try:
         resp = requests.post(
             DISCORD_WEBHOOK_URL,
@@ -1052,7 +1056,7 @@ async def submit_bug_report(req: BugReportRequest):
             return {"error": f"Discord returned HTTP {resp.status_code}"}
     except Exception as e:
         logger.error(f"Bug report upload error: {e}")
-        return {"error": str(e)}
+        return {"error": "Failed to send report. Saved locally."}
 
 
 # ---------------------------------------------------------------------------
@@ -1109,6 +1113,10 @@ async def submit_feedback(req: FeedbackRequest):
     if len(message) > 2000:
         message = message[:1997] + "..."
 
+    if not DISCORD_WEBHOOK_URL:
+        logger.info(f"{kind} received but no Discord webhook configured")
+        return {"status": "sent", "title": title, "note": "No webhook configured"}
+
     try:
         resp = requests.post(
             DISCORD_WEBHOOK_URL,
@@ -1123,7 +1131,7 @@ async def submit_feedback(req: FeedbackRequest):
             return {"error": f"Discord returned HTTP {resp.status_code}"}
     except Exception as e:
         logger.error(f"{kind} upload error: {e}")
-        return {"error": str(e)}
+        return {"error": "Failed to send. Please try again later."}
 
 
 # ---------------------------------------------------------------------------
