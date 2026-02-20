@@ -45,6 +45,7 @@ from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from item_lookup import ItemLookup
 from price_cache import PriceCache
+from telemetry import TelemetryUploader
 from watchlist import WatchlistWorker
 
 logger = logging.getLogger("dashboard")
@@ -111,6 +112,7 @@ DEFAULT_SETTINGS = {
     "overlay_tier_styles": {},
     "overlay_theme": "poe2",
     "overlay_pulse_style": "sheen",
+    "telemetry_enabled": False,
 }
 
 
@@ -465,6 +467,7 @@ log_buffer: deque[dict] = deque(maxlen=500)
 watchlist_worker: Optional[WatchlistWorker] = None
 price_cache: Optional[PriceCache] = None
 item_lookup: Optional[ItemLookup] = None
+telemetry_uploader: Optional[TelemetryUploader] = None
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +476,7 @@ item_lookup: Optional[ItemLookup] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Set up the event loop reference and background tasks."""
-    global watchlist_worker, price_cache, item_lookup
+    global watchlist_worker, price_cache, item_lookup, telemetry_uploader
 
     loop = asyncio.get_running_loop()
     overlay.set_loop(loop)
@@ -515,6 +518,11 @@ async def lifespan(app: FastAPI):
         settings["start_with_windows"] = actual_autostart
         save_settings(settings)
 
+    # Initialize telemetry uploader (opt-in)
+    telemetry_uploader = TelemetryUploader(league=league)
+    if settings.get("telemetry_enabled", False):
+        telemetry_uploader.start_schedule()
+
     logger.info("LAMA dashboard server ready")
     try:
         yield
@@ -525,6 +533,8 @@ async def lifespan(app: FastAPI):
             watchlist_worker.stop()
         if price_cache:
             price_cache.stop()
+        if telemetry_uploader:
+            telemetry_uploader.stop_schedule()
         # Stop overlay if running
         overlay.stop()
 
@@ -654,6 +664,7 @@ class SettingsRequest(BaseModel):
     overlay_tier_styles: Optional[dict] = None
     overlay_theme: Optional[str] = None
     overlay_pulse_style: Optional[str] = None
+    telemetry_enabled: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
@@ -736,6 +747,13 @@ async def update_settings(req: SettingsRequest):
     if "league" in updates and price_cache:
         new_league = settings.get("league", "Fate of the Vaal")
         price_cache.league = new_league
+
+    # Start/stop telemetry schedule if the setting changed
+    if "telemetry_enabled" in updates and telemetry_uploader:
+        if settings.get("telemetry_enabled", False):
+            telemetry_uploader.start_schedule()
+        else:
+            telemetry_uploader.stop_schedule()
 
     # Notify watchlist worker if queries or interval changed
     if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates):
@@ -1035,6 +1053,35 @@ async def submit_bug_report(req: BugReportRequest):
     except Exception as e:
         logger.error(f"Bug report upload error: {e}")
         return {"error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Telemetry endpoints (opt-in anonymous calibration data)
+# ---------------------------------------------------------------------------
+@app.post("/api/telemetry/upload")
+async def telemetry_upload():
+    """Manual trigger: upload pending calibration samples now."""
+    if not telemetry_uploader:
+        return {"error": "Telemetry not initialized"}
+    settings = load_settings()
+    if not settings.get("telemetry_enabled", False):
+        return {"error": "Telemetry is disabled"}
+    loop = asyncio.get_running_loop()
+    success = await loop.run_in_executor(None, telemetry_uploader.upload_now)
+    if success:
+        return {"status": "uploaded"}
+    return {"error": "Upload failed — check logs"}
+
+
+@app.get("/api/telemetry/status")
+async def telemetry_status():
+    """Return telemetry status for dashboard display."""
+    if not telemetry_uploader:
+        return {"last_upload": None, "pending_samples": 0, "enabled": False}
+    status = telemetry_uploader.get_status()
+    settings = load_settings()
+    status["enabled"] = settings.get("telemetry_enabled", False)
+    return status
 
 
 # ---------------------------------------------------------------------------

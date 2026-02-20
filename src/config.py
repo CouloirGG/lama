@@ -258,6 +258,7 @@ LOG_FILE = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "overlay.log"
 # Bug Reporting (Discord webhook)
 # ─────────────────────────────────────────────
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+DISCORD_TELEMETRY_WEBHOOK_URL = os.environ.get("DISCORD_TELEMETRY_WEBHOOK_URL", "")
 
 # Market Signals — Discord integration (coming soon)
 DISCORD_SIGNALS_CHANNEL_ID = os.environ.get("DISCORD_SIGNALS_CHANNEL_ID", "")
@@ -266,3 +267,9 @@ BUG_REPORT_LOG_LINES = 200        # Tail of overlay.log to include
 BUG_REPORT_MAX_CLIPBOARDS = 5     # Most recent clipboard debug files
 BUG_REPORT_DB = CACHE_DIR / "bug_reports.jsonl"
 DEBUG_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "debug"
+
+# ─────────────────────────────────────────────
+# Telemetry (opt-in anonymous calibration upload)
+# ─────────────────────────────────────────────
+TELEMETRY_UPLOAD_INTERVAL = 86400  # 24 hours
+TELEMETRY_LAST_UPLOAD_FILE = CACHE_DIR / "telemetry_last_upload.json"

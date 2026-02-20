@@ -675,7 +675,7 @@
                 want. We took the ideas we loved from other tools and put them in one place,
                 for free. It's <span style={{ color: T.text, fontWeight: 600 }}>GPLv3</span> —
                 the code is yours. Fork it, improve it, break it, whatever.
-                No tracking, no telemetry, no third-party ads. <span style={{ color: T.text, fontWeight: 600 }}>Ever.</span>
+                No tracking, no third-party ads. Optional anonymous calibration sharing improves accuracy for everyone.
               </div>
               <div style={{ fontSize: 12, color: T.textSecond, lineHeight: 1.65, marginTop: 10 }}>
                 If it supports GGG's goals and helps players, we hit the mark. If it saves
@@ -2114,12 +2114,21 @@
       );
     }
 
-    function OverlaySettingsTab({ settings, onUpdate, overlayState }) {
+    function OverlaySettingsTab({ settings, onUpdate, overlayState, telemetryStatus, onTelemetryUpload }) {
       const isRunning = overlayState === "running";
+      const telEnabled = settings.telemetry_enabled === true;
+      const telPending = telemetryStatus?.pending_samples || 0;
+      const telLast = telemetryStatus?.last_upload;
+      const telLastStr = telLast ? (() => {
+        const ago = Math.floor((Date.now() / 1000 - telLast) / 60);
+        if (ago < 60) return `${ago}m ago`;
+        if (ago < 1440) return `${Math.floor(ago / 60)}h ago`;
+        return `${Math.floor(ago / 1440)}d ago`;
+      })() : "never";
       return (
         <div style={{ marginTop: 12, marginBottom: 12 }}>
           {/* Toggles row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 4, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Toggle value={settings.auto_start !== false} onChange={(v) => onUpdate({ auto_start: v })} size="small" />
               <span style={{ fontSize: 11, color: T.textSecond }}>Auto-start overlay on launch</span>
@@ -2128,12 +2137,27 @@
               <Toggle value={settings.start_with_windows === true} onChange={(v) => onUpdate({ start_with_windows: v })} size="small" />
               <span style={{ fontSize: 11, color: T.textSecond }}>Launch LAMA on Windows startup</span>
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Toggle value={telEnabled} onChange={(v) => onUpdate({ telemetry_enabled: v })} size="small" />
+              <span style={{ fontSize: 11, color: T.textSecond }}>Share anonymous data to improve accuracy</span>
+            </div>
             {isRunning && (
               <span style={{ fontSize: 10, color: T.amber, fontWeight: 500, marginLeft: "auto" }}>
                 Restart to apply setting changes
               </span>
             )}
           </div>
+          {/* Telemetry status line */}
+          {telEnabled && (
+            <div style={{ fontSize: 10, color: T.textSecond, marginBottom: 12, marginLeft: 2 }}>
+              Last upload: {telLastStr} &middot; {telPending} pending &middot;{" "}
+              <span
+                style={{ color: T.borderGold, cursor: "pointer", textDecoration: "underline" }}
+                onClick={onTelemetryUpload}
+              >Upload Now</span>
+            </div>
+          )}
+          {!telEnabled && <div style={{ height: 8 }} />}
           {/* Display & Detection settings — two grouped columns */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div className="panel" style={{ ...CARD, padding: 12 }}>
@@ -4621,6 +4645,7 @@
       const [watchlistResults, setWatchlistResults] = useState({});
       const [queryStates, setQueryStates] = useState({});
       const [updateInfo, setUpdateInfo] = useState(null);
+      const [telemetryStatus, setTelemetryStatus] = useState({ last_upload: null, pending_samples: 0, enabled: false });
       const logRef = useRef(null);
       const autoScrollRef = useRef(true);
 
@@ -4705,13 +4730,14 @@
 
       const { connected } = useDashboardSocket(WS_URL, handleWsMessage);
 
-      // Fetch leagues on mount
+      // Fetch leagues + telemetry status on mount
       useEffect(() => {
         api("/api/leagues").then(data => {
           if (data.leagues && data.leagues.length > 0) {
             setLeagues(data.leagues);
           }
         });
+        refreshTelemetryStatus();
       }, []);
 
       // Auto-start overlay on mount
@@ -4753,10 +4779,18 @@
         api("/api/settings", "POST", { league });
       };
 
+      const refreshTelemetryStatus = () => {
+        api("/api/telemetry/status").then(data => {
+          if (data && !data.error) setTelemetryStatus(data);
+        });
+      };
+
       const handleSettingsUpdate = (updates) => {
         const newSettings = { ...settings, ...updates };
         setSettings(newSettings);
-        api("/api/settings", "POST", updates);
+        api("/api/settings", "POST", updates).then(() => {
+          if ("telemetry_enabled" in updates) refreshTelemetryStatus();
+        });
       };
 
       const handleRestartApp = () => api("/api/restart-app", "POST");
@@ -4824,7 +4858,7 @@
                 <>
                   <ScannerStatusCard status={status} onStart={handleStart} onStop={handleStop} onRestart={handleRestart} />
                   <ItemLookupCard />
-                  <OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} />
+                  <OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} telemetryStatus={telemetryStatus} onTelemetryUpload={() => { api("/api/telemetry/upload", "POST").then(refreshTelemetryStatus); }} />
                   <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
                 </>
               )}

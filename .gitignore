@@ -17,3 +17,4 @@ nul
 resources/NewBooBoo_updated.filter
 test_results.md
 *.lnk
+data/telemetry/
