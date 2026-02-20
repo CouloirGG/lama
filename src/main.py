@@ -98,13 +98,15 @@ class LAMA:
         else:
             logger.info("No .filter template found — filter updater disabled")
 
+        # Load overlay display settings from dashboard config
+        self._display_settings = self._load_display_settings()
+
         if use_console:
             self.overlay = ConsoleOverlay()
         else:
-            self.overlay = PriceOverlay()
-
-        # Load overlay display settings from dashboard config
-        self._display_settings = self._load_display_settings()
+            theme = self._display_settings.get("overlay_theme", "poe2")
+            pulse_style = self._display_settings.get("overlay_pulse_style", "sheen")
+            self.overlay = PriceOverlay(theme=theme, pulse_style=pulse_style)
 
         # Apply custom tier styles to overlay (if any)
         if hasattr(self.overlay, 'load_custom_styles'):
@@ -149,6 +151,8 @@ class LAMA:
             "overlay_show_mods": False,
             "overlay_show_dps": True,
             "overlay_tier_styles": {},
+            "overlay_theme": "poe2",
+            "overlay_pulse_style": "sheen",
         }
         try:
             if settings_file.exists():
