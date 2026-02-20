@@ -29,6 +29,13 @@
 
 ## Completed
 
+### Session 23 (2026-02-19)
+- [x] **POE2 gothic overlay theme** — Full theme system with grunge effects (blood splatters, scratch marks, vignette, corner diamonds), sheen sweep animation, serif font fallback chain (`Palatino Linotype → Book Antiqua → Georgia → Segoe UI`), and tier-based border styling. Theme (`poe2`/`classic`) and pulse style (`sheen`/`border`/`both`/`none`) exposed as dashboard settings.
+- [x] **Dashboard layout reorganization** — Detection settings moved from right column into expanded OverlayPreview section (2×2 grid). Right column now shows InventoryPreview with real item art.
+- [x] **Inventory preview with POE2 item art** — 8×4 grid using real item images from `web.poecdn.com` CDN (sword, body armor, helmet, ring, boots, gloves). SVG silhouette filler icons for non-art cells. Overlay bars use actual `OverlaySampleChip` component for 1:1 match with in-game overlay.
+- [x] **Calibration shard regenerated** — From harvester passes 6-15: 15,302 raw → 3,849 samples (25.3 KB). Validation: 75.7% within 2x accuracy (PASS, target ≥70%).
+- [x] **Game abstraction docs** — `GAME_ABSTRACTION.md` covering `GameConfig` dataclass and `PricingEngine` facade; `CLAUDE_CODE_HANDOFF.md` updated with `core/` and `games/` modules, test count updated to 153.
+
 ### Session 22 (2026-02-19)
 - [x] **Overlay tier customization** — Per-tier color pickers (text, border, background) in dashboard with live preview; custom styles persist in `overlay_tier_styles` setting and apply in overlay subprocess
 - [x] **In-game inventory mockup** — Expanded overlay preview shows 12x5 inventory grid with filler items, highlighted item under cursor, POE2 tooltip, and LAMA overlay tag; click any tier to preview
