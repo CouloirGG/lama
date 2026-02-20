@@ -255,10 +255,10 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 - **Log file:** `~/.poe2-price-overlay/overlay.log`
 
 ## Git Status
-- **Remote:** `https://github.com/CarbonSMASH/POE2_OCR.git` (private repo)
+- **Remote:** `https://github.com/CouloirGG/lama.git`
 - **Branch:** `main`
 - All changes committed and pushed
-- GitHub CLI (`gh`) installed and authenticated as CarbonSMASH
+- GitHub CLI (`gh`) installed and authenticated as CouloirGG
 - Issue template at `.github/ISSUE_TEMPLATE/bug_report.md`
 - Bug reporting script: `REPORT_BUG.bat` (zips logs, opens GitHub issue page)
 
