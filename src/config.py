@@ -269,6 +269,13 @@ BUG_REPORT_DB = CACHE_DIR / "bug_reports.jsonl"
 DEBUG_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "debug"
 
 # ─────────────────────────────────────────────
+# Flag Reporting (inaccurate price feedback)
+# ─────────────────────────────────────────────
+DISCORD_FLAG_WEBHOOK_URL = os.environ.get("DISCORD_FLAG_WEBHOOK_URL", "")
+FLAG_REPORT_DB = CACHE_DIR / "flag_reports.jsonl"
+FLAG_REPORT_COOLDOWN = 10  # seconds between flags
+
+# ─────────────────────────────────────────────
 # Telemetry (opt-in anonymous calibration upload)
 # ─────────────────────────────────────────────
 TELEMETRY_UPLOAD_INTERVAL = 86400  # 24 hours
