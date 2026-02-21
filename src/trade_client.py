@@ -244,6 +244,20 @@ class TradeClient:
                         dps_min=dps_min, defense_mins=defense_mins,
                     )
 
+            # Fallback: if all searches failed and we had DPS/defense filters,
+            # retry without combat filters — mods alone still give a price signal.
+            if not search_result and (dps_min > 0 or defense_mins):
+                if not (is_stale and is_stale()) and not self._is_rate_limited():
+                    logger.info(
+                        f"TradeClient: no results with combat filters "
+                        f"(dps_min={dps_min:.0f}, def={defense_mins}), "
+                        f"retrying without them")
+                    search_result, exact_match, mods_dropped = self._search_progressive(
+                        base_type, stat_filters, priceable, quality=quality,
+                        sockets=0, is_stale=is_stale, max_calls=3,
+                        dps_min=0, defense_mins={},
+                    )
+
             if not search_result:
                 if has_value_signals:
                     logger.info(
@@ -871,14 +885,26 @@ class TradeClient:
         df = defense_mins
         calls_remaining = max_calls
 
+        consecutive_zeros = 0
+        _ZERO_BAIL = 3  # bail after 3 consecutive zero-result queries
+
         def _budget_search(query):
             """Call _do_search if budget remains, decrement counter."""
-            nonlocal calls_remaining
+            nonlocal calls_remaining, consecutive_zeros
             if calls_remaining <= 0:
                 logger.info("TradeClient: search budget exhausted")
                 return None
+            if consecutive_zeros >= _ZERO_BAIL:
+                logger.info("TradeClient: bailing — %d consecutive zero results",
+                            consecutive_zeros)
+                return None
             calls_remaining -= 1
-            return self._do_search(query)
+            result = self._do_search(query)
+            if result and result.get("result"):
+                consecutive_zeros = 0
+            else:
+                consecutive_zeros += 1
+            return result
 
         def _stale():
             if is_stale and is_stale():
