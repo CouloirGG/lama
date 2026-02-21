@@ -175,6 +175,7 @@ class ItemScore:
 
     def format_overlay_text(self, price_estimate: float = None,
                             divine_to_chaos: float = 0,
+                            divine_to_exalted: float = 0,
                             show_grade: bool = True,
                             show_price: bool = True,
                             show_stars: bool = True,
@@ -207,6 +208,17 @@ class ItemScore:
                     parts.append(f"~{price_estimate:.0f}d")
                 elif price_estimate >= 1.0:
                     parts.append(f"~{price_estimate:.1f}d")
+                elif divine_to_exalted > 0:
+                    ex = price_estimate * divine_to_exalted
+                    if ex >= 10:
+                        parts.append(f"~{ex:.0f}ex")
+                    elif ex >= 1:
+                        parts.append(f"~{ex:.1f}ex")
+                    elif divine_to_chaos > 0:
+                        chaos = price_estimate * divine_to_chaos
+                        parts.append(f"~{chaos:.0f}c")
+                    else:
+                        parts.append(f"~{price_estimate:.2f}d")
                 elif divine_to_chaos > 0:
                     chaos = price_estimate * divine_to_chaos
                     parts.append(f"~{chaos:.0f}c")

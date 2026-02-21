@@ -41,11 +41,11 @@ EXCHANGE_CATEGORIES = [
     "Essences",
     "Runes",
     "Expedition",
-    "SoulCores",
+    "SoulCores",      # includes Soul Cores + Theses (34 items)
     "Idols",
     "UncutGems",
     "LineageSupportGems",
-    "Ultimatum",
+    # "Ultimatum" intentionally omitted — duplicates SoulCores with stale pricing
     "Breach",
     "Delirium",
     "Ritual",
@@ -64,6 +64,37 @@ POE2SCOUT_CURRENCY_CATEGORIES = [
 ]
 
 REQUEST_DELAY = 0.3  # seconds between API calls
+
+# ─── Per-category source preference ──────────
+# poe2scout categories where poe.ninja is more accurate and should NOT be
+# overwritten.  For unlisted categories both sources agree well enough that
+# poe2scout (fetched second) can overwrite poe.ninja.
+NINJA_PREFERRED = {
+    "currency",           # more items (45 vs 37), includes incursion currency
+    "fragments",          # more items (20 vs 13), includes reliquary keys
+    "runes",              # poe2scout has wild outliers (Body Rune 298ex vs 1.4ex)
+    "ritual",             # poe.ninja more stable on mid-tier omens
+    "idol",               # large mid-tier disagreements on poe2scout
+    "lineagesupportgems", # poe.ninja more stable on mid/high-tier
+    "ultimatum",          # soul cores — poe.ninja SoulCores type is authoritative
+}
+
+# ─── Name aliases: in-game clipboard name → API name ─────
+# Some items have different names in-game vs on poe.ninja/poe2scout.
+# Keys must be lowercase.
+NAME_ALIASES = {
+    # Delirium: in-game uses "Distilled X", APIs use "Liquid/Diluted Liquid X"
+    "distilled ire": "diluted liquid ire",
+    "distilled paranoia": "liquid paranoia",
+    "distilled despair": "liquid despair",
+    "distilled guilt": "diluted liquid guilt",
+    "distilled greed": "diluted liquid greed",
+    "distilled disgust": "liquid disgust",
+    "distilled isolation": "concentrated liquid isolation",
+    "distilled suffering": "concentrated liquid suffering",
+    "distilled fear": "concentrated liquid fear",
+    "distilled envy": "liquid envy",
+}
 
 
 class PriceCache:
@@ -91,6 +122,9 @@ class PriceCache:
         """Look up price. Returns enriched dict or None."""
         with self._lock:
             key = item_name.strip().lower()
+
+            # Resolve name alias (e.g. in-game "Distilled Ire" → API "Diluted Liquid Ire")
+            key = NAME_ALIASES.get(key, key)
 
             # Direct match
             if key in self.prices:
@@ -541,9 +575,14 @@ class PriceCache:
             "category": category,
             "source": "poe2scout",
         }
-        # Preserve sparkline/image data from poe.ninja if it was fetched first
+        # Check if poe.ninja already has this item and is the preferred source
         existing = prices.get(key)
         if existing and existing.get("source") == "poe.ninja":
+            if category in NINJA_PREFERRED:
+                # poe.ninja is authoritative for this category — keep it,
+                # but still fill in items poe.ninja didn't have
+                return 0
+            # poe2scout overwrites price but preserves sparkline/image data
             for field in ("sparkline_data", "sparkline_change", "volume", "image_url"):
                 if field in existing:
                     entry[field] = existing[field]
@@ -670,8 +709,11 @@ class PriceCache:
             result["tier"] = "low"
 
         # Display string - shorthand format consistent with local scoring
+        # POE2 economy: Divine > Exalted (base trade currency) > Chaos
         if dv >= 0.85:
             result["display"] = f"~{dv:.0f}d" if dv >= 10 else f"~{dv:.1f}d"
+        elif ev >= 1:
+            result["display"] = f"~{ev:.0f}ex" if ev >= 10 else f"~{ev:.1f}ex"
         elif chaos >= 1:
             result["display"] = f"~{chaos:.0f}c"
         else:

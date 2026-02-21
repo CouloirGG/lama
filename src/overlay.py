@@ -105,7 +105,7 @@ class PriceOverlay:
     _NORMAL_BORDER_COLOR = "#333355"
 
     # Currency detection patterns for inline icon rendering
-    _CURRENCY_SHORT_RE = re.compile(r'(?<=\d)(d|c)\b')
+    _CURRENCY_SHORT_RE = re.compile(r'(?<=\d)(ex|d|c)\b')
     _CURRENCY_LONG_RE = re.compile(r'\b(Divine|Chaos|Exalted|Mirror)s?\b', re.IGNORECASE)
 
     # Maps icon keys → resource filenames
@@ -481,7 +481,8 @@ class PriceOverlay:
         # Short forms: "~130d" → ("~130", "divine", " ★3: ..."),  "~45c" → chaos
         m = self._CURRENCY_SHORT_RE.search(text)
         if m:
-            key = "divine" if m.group(1) == "d" else "chaos"
+            suffix = m.group(1)
+            key = "divine" if suffix == "d" else "exalted" if suffix == "ex" else "chaos"
             if key in self._currency_icons:
                 return text[:m.start()], key, text[m.end():]
 
