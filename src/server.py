@@ -649,6 +649,11 @@ def _merge_cache_rates(status: dict):
     for key in ("divine_to_chaos", "divine_to_exalted", "mirror_to_divine"):
         if cache_stats.get(key):
             stats[key] = cache_stats[key]
+    # Also fill cache metadata (items count, last refresh time)
+    if cache_stats.get("total_items"):
+        stats["cache_items"] = cache_stats["total_items"]
+    if cache_stats.get("last_refresh") and cache_stats["last_refresh"] != "Never":
+        stats["last_refresh"] = cache_stats["last_refresh"]
 
 
 async def status_broadcast_loop():

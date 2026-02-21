@@ -529,7 +529,7 @@
     // NUX text supports highlighted keywords: use { hl: "word" } for gold-animated emphasis
     const NUX_STEPS = [
       { id: "exchange-rates", tab: null, target: "exchange-rates", title: "Core Currencies", text: [
-        "The ", { hl: "big four", mark: "big-four" }, " currency rates from ", { hl: "poe.ninja" }, ", updated every ", { hl: "15 minutes", mark: "last-refresh" }, ". Use these to gauge whether an item is worth picking up."
+        "The ", { hl: "big four", mark: "big-four" }, " currency rates from ", { hl: "poe.ninja" }, ", updated every ", { hl: "15 minutes" }, ". Use these to gauge whether an item is worth picking up."
       ], position: "bottom" },
       { id: "start-scanner", tab: "overlay", target: "start-scanner", title: "Start the Overlay", text: [
         "Hit ", { hl: "Start", mark: "start" }, ", then hover over any item in-game and press ", { hl: "Ctrl+C" }, ". LAMA reads the clipboard and instantly shows a ", { hl: "price overlay" }, " on screen."
@@ -1026,18 +1026,20 @@
       const e2c = d2c > 0 ? (d2e / d2c) : 0;
       const m2d = stats.mirror_to_divine || 0;
 
-      const refreshColor = stats.last_refresh === "never" ? T.textSecond : T.green;
+      const refreshText = stats.last_refresh && stats.last_refresh !== "never" ? stats.last_refresh : null;
 
       return (
         <div data-nux="exchange-rates" style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px" }}>
-          <div data-nux-hl="big-four" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 8 }}>
+          <div data-nux-hl="big-four" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 8 }}>
             <StatCard label="1 Mirror" value={m2d > 0 ? `${m2d.toFixed(0)}` : "--"} sub={m2d > 0 ? "Divine" : null} color="#c084fc" iconLeft={ICON.mirror} iconRight={ICON.divine} tooltip="1 Mirror of Kalandra = X Divine Orbs" />
             <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
             <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} sub={d2c > 0 ? "Chaos" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
             <StatCard label="1 Chaos" value={e2c > 0 ? `${e2c.toFixed(0)}` : "--"} sub={e2c > 0 ? "Exalted" : null} color={T.amber} iconLeft={ICON.exalted} iconRight={ICON.chaos} tooltip="1 Chaos Orb = X Exalted Orbs" />
-            <div data-nux-hl="last-refresh"><StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={refreshColor} tooltip="When price data was last fetched (refreshes every 15 min)" /></div>
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4, padding: "2px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, padding: "2px 0" }}>
+            <span style={{ fontSize: 9, color: T.textMuted }}>
+              {refreshText ? `Updated ${refreshText}` : ""}
+            </span>
             <span style={{ fontSize: 9, color: T.textMuted, fontStyle: "italic" }}>
               Prices are estimates — always verify before trading
             </span>
@@ -1795,7 +1797,7 @@
 
     // Inventory preview: POE2-style grid with real item art + overlay price bars
     function InventoryPreview({ settings }) {
-      const CELL = 40, GAP = 2, COLS = 8, ROWS = 4;
+      const CELL = 48, GAP = 3, COLS = 8, ROWS = 4;
       const gridW = COLS * (CELL + GAP) - GAP;
       const gridH = ROWS * (CELL + GAP) - GAP;
       const rarityColors = { rare: "#ff7", unique: "#af6", magic: "#88f", normal: "#aaa" };

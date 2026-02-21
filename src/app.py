@@ -91,7 +91,7 @@ class WindowApi:
         return ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
 
     def _install_hook(self):
-        """Install a Win32 hook that silently blocks resize during guard periods."""
+        """Install a Win32 hook for resize guard and edge-resize on frameless window."""
         import ctypes
         from ctypes import wintypes, WINFUNCTYPE, POINTER, c_int, c_uint
 
@@ -100,8 +100,22 @@ class WindowApi:
             return
 
         WM_WINDOWPOSCHANGING = 0x0046
+        WM_NCHITTEST = 0x0084
         SWP_NOSIZE = 0x0001
         GWL_WNDPROC = -4
+
+        # WM_NCHITTEST return values for resize edges
+        HTCLIENT = 1
+        HTLEFT = 10
+        HTRIGHT = 11
+        HTTOP = 12
+        HTTOPLEFT = 13
+        HTTOPRIGHT = 14
+        HTBOTTOM = 15
+        HTBOTTOMLEFT = 16
+        HTBOTTOMRIGHT = 17
+
+        RESIZE_BORDER = 6  # pixels from edge that trigger resize cursor
 
         class WINDOWPOS(ctypes.Structure):
             _fields_ = [
@@ -111,6 +125,10 @@ class WindowApi:
                 ("cx", c_int), ("cy", c_int),
                 ("flags", c_uint),
             ]
+
+        class RECT(ctypes.Structure):
+            _fields_ = [("left", c_int), ("top", c_int),
+                        ("right", c_int), ("bottom", c_int)]
 
         # LRESULT is pointer-sized (8 bytes on 64-bit Windows)
         LRESULT = wintypes.LPARAM
@@ -134,6 +152,35 @@ class WindowApi:
             if msg == WM_WINDOWPOSCHANGING and time.time() < api_ref._guard_until:
                 pos = ctypes.cast(lparam, POINTER(WINDOWPOS)).contents
                 pos.flags |= SWP_NOSIZE  # silently prevent resize
+
+            # Edge resize: map cursor position near borders to resize handles
+            if msg == WM_NCHITTEST:
+                result = user32.CallWindowProcW(api_ref._original_proc,
+                                                hwnd, msg, wparam, lparam)
+                if result == HTCLIENT:
+                    rc = RECT()
+                    user32.GetWindowRect(hwnd, ctypes.byref(rc))
+                    x = (lparam & 0xFFFF)
+                    y = ((lparam >> 16) & 0xFFFF)
+                    # Convert unsigned to signed (for multi-monitor negative coords)
+                    if x >= 0x8000: x -= 0x10000
+                    if y >= 0x8000: y -= 0x10000
+
+                    left = x - rc.left < RESIZE_BORDER
+                    right = rc.right - x < RESIZE_BORDER
+                    top = y - rc.top < RESIZE_BORDER
+                    bottom = rc.bottom - y < RESIZE_BORDER
+
+                    if top and left:     return HTTOPLEFT
+                    if top and right:    return HTTOPRIGHT
+                    if bottom and left:  return HTBOTTOMLEFT
+                    if bottom and right: return HTBOTTOMRIGHT
+                    if left:             return HTLEFT
+                    if right:            return HTRIGHT
+                    if top:              return HTTOP
+                    if bottom:           return HTBOTTOM
+                return result
+
             return user32.CallWindowProcW(api_ref._original_proc,
                                           hwnd, msg, wparam, lparam)
 
@@ -232,7 +279,7 @@ def _tooltip_updater(tray):
         time.sleep(10)
 
 
-def _set_icon_and_show(get_hwnd, show_fn):
+def _set_icon_and_show(get_hwnd, show_fn, api_ref=None):
     """Background thread: set the taskbar icon, then reveal the window."""
     import ctypes
     from bundle_paths import get_resource
@@ -265,6 +312,10 @@ def _set_icon_and_show(get_hwnd, show_fn):
         store.Commit()
     except Exception:
         pass  # non-critical — falls back to executable icon
+
+    # Install Win32 resize hook before showing the window
+    if api_ref:
+        api_ref._install_hook()
 
     # Now reveal the window — user only ever sees the LAMA icon
     show_fn()
@@ -385,7 +436,7 @@ def main():
 
     # Set the taskbar icon, then show the window
     threading.Thread(
-        target=_set_icon_and_show, args=(api._get_hwnd, api.show), daemon=True
+        target=_set_icon_and_show, args=(api._get_hwnd, api.show, api), daemon=True
     ).start()
 
     # This blocks until the window is destroyed (force_close / quit)

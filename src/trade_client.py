@@ -208,7 +208,7 @@ class TradeClient:
                             None, filters_at, "count", min_count,
                             quality=quality, sockets=sockets,
                             dps_min=dps_min, defense_mins=defense_mins)
-                        result = self._do_search(query)
+                        result = self._do_search(query, is_stale=is_stale)
                         pct = int(mult * 100)
                         if result and result.get("result"):
                             total = result.get("total", 0)
@@ -287,7 +287,7 @@ class TradeClient:
 
             # Fetch the first N listings
             fetch_ids = result_ids[:TRADE_RESULT_COUNT]
-            listings = self._do_fetch(query_id, fetch_ids)
+            listings = self._do_fetch(query_id, fetch_ids, is_stale=is_stale)
             if not listings:
                 return None
 
@@ -390,7 +390,7 @@ class TradeClient:
             if is_stale and is_stale():
                 return None
 
-            search_result = self._do_search(query)
+            search_result = self._do_search(query, is_stale=is_stale)
             if not search_result:
                 return None
 
@@ -405,7 +405,7 @@ class TradeClient:
                 return None
 
             fetch_ids = result_ids[:TRADE_RESULT_COUNT]
-            listings = self._do_fetch(query_id, fetch_ids)
+            listings = self._do_fetch(query_id, fetch_ids, is_stale=is_stale)
             if not listings:
                 return None
 
@@ -482,7 +482,7 @@ class TradeClient:
             if is_stale and is_stale():
                 return None
 
-            search_result = self._do_search(query)
+            search_result = self._do_search(query, is_stale=is_stale)
 
             # Fallback: if stat filters produced 0 results, retry without them
             if stat_filters and search_result:
@@ -495,7 +495,7 @@ class TradeClient:
                     query = self._build_unique_query(name, base_type, sockets)
                     if is_stale and is_stale():
                         return None
-                    search_result = self._do_search(query)
+                    search_result = self._do_search(query, is_stale=is_stale)
 
             if not search_result:
                 return None
@@ -511,11 +511,12 @@ class TradeClient:
                 return None
 
             fetch_ids = result_ids[:TRADE_RESULT_COUNT]
-            listings = self._do_fetch(query_id, fetch_ids)
+            listings = self._do_fetch(query_id, fetch_ids, is_stale=is_stale)
             if not listings:
                 return None
 
-            result = self._build_result(listings, total)
+            result = self._build_result(listings, total,
+                                        skip_low_value_check=True)
             if result:
                 self._put_cache(cache_key, result)
                 logger.info(
@@ -909,8 +910,10 @@ class TradeClient:
                 logger.info("TradeClient: bailing — %d consecutive zero results",
                             consecutive_zeros)
                 return None
+            if _stale():
+                return None
             calls_remaining -= 1
-            result = self._do_search(query)
+            result = self._do_search(query, is_stale=is_stale)
             if result and result.get("result"):
                 consecutive_zeros = 0
             else:
@@ -1149,7 +1152,7 @@ class TradeClient:
             f"pausing all requests"
         )
 
-    def _do_search(self, query: dict) -> Optional[dict]:
+    def _do_search(self, query: dict, is_stale=None) -> Optional[dict]:
         """POST search query to trade API. Returns search result or None.
         Retries once on connection errors / timeouts."""
         if self._is_rate_limited():
@@ -1158,7 +1161,9 @@ class TradeClient:
         url = f"{TRADE_API_BASE}/search/poe2/{self.league}"
 
         for attempt in range(2):
-            self._rate_limit()
+            self._rate_limit(is_stale)
+            if is_stale and is_stale():
+                return None
             try:
                 resp = self._session.post(url, json=query, timeout=5)
                 self._parse_rate_limit_headers(resp)
@@ -1170,7 +1175,9 @@ class TradeClient:
                         return None
                     logger.warning(f"TradeClient: rate limited, waiting {retry_after}s")
                     time.sleep(retry_after)
-                    self._rate_limit()
+                    self._rate_limit(is_stale)
+                    if is_stale and is_stale():
+                        return None
                     resp = self._session.post(url, json=query, timeout=5)
                     self._parse_rate_limit_headers(resp)
 
@@ -1191,7 +1198,8 @@ class TradeClient:
                 logger.warning(f"TradeClient: search failed: {e}")
                 return None
 
-    def _do_fetch(self, query_id: str, result_ids: List[str]) -> Optional[list]:
+    def _do_fetch(self, query_id: str, result_ids: List[str],
+                  is_stale=None) -> Optional[list]:
         """GET listing details for the given result IDs.
         Retries once on connection errors / timeouts."""
         if not result_ids:
@@ -1203,7 +1211,9 @@ class TradeClient:
         url = f"{TRADE_API_BASE}/fetch/{ids_str}"
 
         for attempt in range(2):
-            self._rate_limit()
+            self._rate_limit(is_stale)
+            if is_stale and is_stale():
+                return None
             try:
                 resp = self._session.get(url, params={"query": query_id}, timeout=5)
                 self._parse_rate_limit_headers(resp)
@@ -1215,7 +1225,9 @@ class TradeClient:
                         return None
                     logger.warning(f"TradeClient: fetch rate limited, waiting {retry_after}s")
                     time.sleep(retry_after)
-                    self._rate_limit()
+                    self._rate_limit(is_stale)
+                    if is_stale and is_stale():
+                        return None
                     resp = self._session.get(url, params={"query": query_id}, timeout=5)
                     self._parse_rate_limit_headers(resp)
 
@@ -1240,13 +1252,17 @@ class TradeClient:
     # ─── Price Extraction ─────────────────────────
 
     def _build_result(self, listings: list, total: int,
-                      lower_bound: bool = False) -> Optional[RarePriceResult]:
+                      lower_bound: bool = False,
+                      skip_low_value_check: bool = False) -> Optional[RarePriceResult]:
         """Extract prices from listings and build a RarePriceResult.
 
         Args:
             lower_bound: When True, comparables are worse than the actual item
                 (mods were dropped to find results). Uses upper prices and
                 shows "X+" instead of "X-Y" to indicate a floor price.
+            skip_low_value_check: When True, skip the low-value threshold
+                filter. Used for unique items where the name-based search
+                guarantees results are for the correct item.
         """
         divine_to_chaos = self._divine_to_chaos_fn()
         # Collect (divine_value, original_amount, original_currency) for display
@@ -1311,9 +1327,10 @@ class TradeClient:
 
         # Items below ~10 exalted are effectively worthless — return None
         # so callers show "Low value" instead of a misleading price.
+        # Skipped for unique items (name-search guarantees correct item).
         divine_to_exalted = self._divine_to_exalted_fn()
         low_value_threshold = 10.0 / divine_to_exalted if divine_to_exalted > 0 else 0.03
-        if min_divine < low_value_threshold:
+        if not skip_low_value_check and min_divine < low_value_threshold:
             logger.info(
                 f"TradeClient: below low-value threshold "
                 f"({min_divine:.4f} div < {low_value_threshold:.4f} div = 10 exalted)")
@@ -1441,18 +1458,25 @@ class TradeClient:
 
     # ─── Rate Limiting ────────────────────────────
 
-    def _rate_limit(self):
+    def _rate_limit(self, is_stale=None):
         """Enforce rate limit between API requests.
 
         Uses adaptive interval from API headers when available,
         falling back to _min_interval (1.0s) when no rules are known.
+        Breaks sleep into small chunks so stale queries release the lock
+        quickly instead of blocking for 10+ seconds.
         """
         with self._rate_lock:
             interval = self._compute_adaptive_interval()
             now = time.time()
             elapsed = now - self._last_request_time
-            if elapsed < interval:
-                time.sleep(interval - elapsed)
+            wait = interval - elapsed
+            while wait > 0:
+                chunk = min(0.5, wait)
+                time.sleep(chunk)
+                wait -= chunk
+                if is_stale and is_stale():
+                    return  # Release lock — let fresh query proceed
             self._last_request_time = time.time()
 
     def _parse_rate_limit_headers(self, resp):

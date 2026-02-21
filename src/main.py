@@ -46,6 +46,9 @@ from telemetry import TelemetryUploader
 
 logger = logging.getLogger("poe2-overlay")
 
+# Currency below this chaos threshold → silent skip (no overlay)
+_CURRENCY_SKIP_CHAOS = 2
+
 
 class LAMA:
     """
@@ -356,18 +359,36 @@ class LAMA:
                 + (" [unidentified]" if item.unidentified else "")
             )
 
-            # Skip worthless currency shards — not worth displaying
-            item_lower = (item.name or "").lower()
-            if any(s in item_lower for s in self._WORTHLESS_ITEMS):
-                logger.info(f"Worthless item: {item.name}")
+            # Currency: silent skip for low-value, clean overlay for valuable
+            if item.rarity == "currency":
+                result = self.price_cache.lookup(
+                    item_name=item.lookup_key,
+                    base_type=item.base_type,
+                    item_level=item.item_level,
+                )
+                if not result:
+                    logger.info(f"Unknown currency, skipping: {item.name}")
+                    return  # unknown currency → skip silently
+                chaos_val = result.get("divine_value", 0) * self.price_cache.divine_to_chaos
+                if chaos_val < _CURRENCY_SKIP_CHAOS:
+                    logger.info(f"Low-value currency ({chaos_val:.0f}c), skipping: {item.name}")
+                    return  # low-value currency → skip silently
+                # Show clean overlay for valuable currency
+                static_text = result["display"]
+                logger.info(f">>> PRICE {item.name}: {static_text}")
                 self.overlay.show_price(
-                    text="\u2717", tier="low",
-                    cursor_x=cursor_x, cursor_y=cursor_y,
+                    text=static_text,
+                    tier=result["tier"],
+                    cursor_x=cursor_x,
+                    cursor_y=cursor_y,
+                    price_divine=result.get("divine_value", 0),
                 )
                 self._cache_for_flag(
                     item_name=item.name, rarity=item.rarity,
-                    tier="low", display_text="\u2717",
+                    tier=result["tier"], display_text=static_text,
+                    price_divine=result.get("divine_value", 0),
                     clipboard_text=item_text)
+                self.stats["successful_lookups"] += 1
                 return
 
 
@@ -1236,11 +1257,6 @@ class LAMA:
                 text="\u2717", tier="low",
                 cursor_x=cursor_x, cursor_y=cursor_y,
             )
-
-    _WORTHLESS_ITEMS = (
-        "chance shard", "transmutation shard", "regal shard",
-        "artificer's shard",
-    )
 
     # Normal base types that can be chanced into valuable uniques.
     # Maps base_type (lowercase) → unique name for price lookup.
