@@ -83,10 +83,10 @@ _GRUNGE_SCRATCHES = [
 
 # Sheen sweep animation constants
 _SHEEN_WIDTH_FRAC = 0.28    # Band = 28% of overlay width
-_SHEEN_SWEEP_MS = 1800      # Full left→right sweep duration
-_SHEEN_FPS = 30             # ~33ms per frame
+_SHEEN_SWEEP_MS = 900       # Full left→right sweep duration
+_SHEEN_FPS = 60             # ~16ms per frame
 _SHEEN_FRAME_MS = 1000 // _SHEEN_FPS
-_SHEEN_PAUSE_MS = 400       # Gap between sweeps
+_SHEEN_PAUSE_MS = 150       # Gap between sweeps
 
 # Serif font fallback chain (Palatino Linotype ships with every Windows since XP)
 _POE2_FONT_CHAIN = ("Palatino Linotype", "Book Antiqua", "Georgia", "Segoe UI")
@@ -199,6 +199,8 @@ class PriceOverlay:
         self._sheen_strips: list = []     # Canvas item IDs for the 3 sheen strips
         self._sheen_color: str = "#c4a456"
         self._sheen_active: bool = False
+        self._sheen_bg: str = _POE2_BG           # background color for blending
+        self._sheen_profile: list = [0.05, 0.12, 0.22, 0.35, 0.22, 0.12, 0.05]
 
     def initialize(self):
         """
@@ -313,10 +315,11 @@ class PriceOverlay:
                 break
         logger.info(f"POE2 theme font: {chosen_family}")
 
+        base = max(9, round(self._font_size * 0.7))
         self._poe2_font = tkfont.Font(
-            family=chosen_family, size=self._font_size + 2, weight="bold")
+            family=chosen_family, size=base, weight="bold")
         self._poe2_font_small = tkfont.Font(
-            family=chosen_family, size=max(9, self._font_size - 2))
+            family=chosen_family, size=max(8, base - 1))
 
         # Canvas is the single child of root; bg = transparent color key
         self._canvas = tk.Canvas(
@@ -531,12 +534,12 @@ class PriceOverlay:
         c.delete("all")
         self._cv_items.clear()
         # Reset canvas size to prevent old geometry from flashing when
-        # shrinking (e.g. full overlay with pips → small ✗ tag)
+        # shrinking (e.g. full overlay with pips → small PASS tag)
         c.configure(width=1, height=1)
 
-        pad_x = round(12 * self._scale)
-        pad_y = round(8 * self._scale)
-        diamond_size = max(2, round(4 * self._scale))
+        pad_x = round(10 * self._scale)
+        pad_y = round(3 * self._scale)
+        diamond_size = max(2, round(3 * self._scale))
         rule_inset = round(6 * self._scale)
 
         # Measure text to compute canvas size
@@ -545,7 +548,7 @@ class PriceOverlay:
         line_h = font.metrics("linespace")
 
         # Parse text into segments: grade badge, price, secondary
-        # Expected formats: "[A] ~130d ★★★", "~130d ★★★", "SCRAP", "✗"
+        # Expected formats: "[A] ~130d ★★★", "~130d ★★★", "SCRAP", "PASS"
         grade_letter = ""
         grade_color = color
         price_part = text
@@ -575,7 +578,7 @@ class PriceOverlay:
             secondary_part = secondary_part.strip()
 
         # Check for JUNK/C/SCRAP — plain small tag, no ornate frame
-        is_plain = text in ("SCRAP", "\u2717") or (
+        is_plain = text in ("SCRAP", "PASS") or (
             grade_letter in ("C", "JUNK") and not estimate)
 
         if is_plain:
@@ -617,7 +620,7 @@ class PriceOverlay:
         # Grade badge
         badge_w = 0
         if grade_letter:
-            badge_w = font_sm.measure(grade_letter) + round(12 * self._scale)  # rect padding
+            badge_w = font_sm.measure(grade_letter) + round(8 * self._scale)  # rect padding
             x_cursor += badge_w + 6
 
         # Price text
@@ -648,7 +651,7 @@ class PriceOverlay:
         h = line_h + pad_y * 2
 
         # Minimum width for aesthetics
-        w = max(w, max(round(80 * self._scale), 60))
+        w = max(w, max(round(24 * self._scale), 24))
 
         c.configure(width=w, height=h)
 
@@ -658,12 +661,21 @@ class PriceOverlay:
         c.create_rectangle(1, 1, w - 1, h - 1, fill=bg_color,
                            outline="", tags="bg_fill")
 
-        # 1b. Edge vignette — dark strips along each edge for depth
+        # 1b. Edge vignette — blended strips along each edge for depth
         vig_w = max(3, w // 12)
-        c.create_rectangle(1, 1, vig_w, h - 1, fill=_POE2_VIGNETTE,
-                           outline="", stipple="gray25", tags="vignette")
-        c.create_rectangle(w - vig_w, 1, w - 1, h - 1, fill=_POE2_VIGNETTE,
-                           outline="", stipple="gray25", tags="vignette")
+        vig_strip = max(1, vig_w // 3)
+        vig_intensities = [0.35, 0.20, 0.08]  # strongest at edge
+        for i, intensity in enumerate(vig_intensities):
+            vc = self._blend_hex(bg_color, _POE2_VIGNETTE, intensity)
+            x0 = 1 + vig_strip * i
+            x1 = 1 + vig_strip * (i + 1)
+            c.create_rectangle(x0, 1, x1, h - 1, fill=vc,
+                               outline="", tags="vignette")
+            # Right side (mirror)
+            rx0 = w - 1 - vig_strip * (i + 1)
+            rx1 = w - 1 - vig_strip * i
+            c.create_rectangle(rx0, 1, rx1, h - 1, fill=vc,
+                               outline="", tags="vignette")
 
         # 1c. Blood splatters — small dark ovals for worn/gritty look
         for xf, yf, sw, sh in _GRUNGE_SPLATTERS:
@@ -678,22 +690,20 @@ class PriceOverlay:
                           int(x2f * w), int(y2f * h),
                           fill=_POE2_BLOOD_MID, width=1, tags="grunge")
 
-        # 1e. Sheen sweep strips — 3 translucent bands (leading, center, trailing)
+        # 1e. Sheen sweep strips — 7 blended bands with bell-curve profile
         # Placed here so they render under the border and text layers
         sheen_band = max(4, int(w * _SHEEN_WIDTH_FRAC))
-        strip_w = sheen_band // 3
+        n_strips = len(self._sheen_profile)
+        strip_w = max(1, sheen_band // n_strips)
         off = -sheen_band - 10  # start off-screen left
-        self._sheen_strips = [
-            c.create_rectangle(off, 2, off + strip_w, h - 2,
-                               fill="#ffffff", outline="", stipple="gray25",
-                               tags="sheen"),
-            c.create_rectangle(off + strip_w, 2, off + strip_w * 2, h - 2,
-                               fill="#ffffff", outline="", stipple="gray50",
-                               tags="sheen"),
-            c.create_rectangle(off + strip_w * 2, 2, off + sheen_band, h - 2,
-                               fill="#ffffff", outline="", stipple="gray25",
-                               tags="sheen"),
-        ]
+        self._sheen_bg = bg_color
+        self._sheen_strips = []
+        for i in range(n_strips):
+            sid = c.create_rectangle(
+                off + strip_w * i, 2,
+                off + strip_w * (i + 1), h - 2,
+                fill=bg_color, outline="", tags="sheen")
+            self._sheen_strips.append(sid)
 
         # 2. Border — double-line effect: outer dark, inner accent
         # Outer border
@@ -770,8 +780,15 @@ class PriceOverlay:
             pip_x = (w - total_pip_w) // 2 + pip_size
             pip_y = h - 1  # straddle the bottom border
             for _ in range(star_count):
-                self._draw_corner_diamond(c, pip_x, pip_y, pip_size)
+                c.create_polygon(
+                    pip_x, pip_y - pip_size,
+                    pip_x + pip_size, pip_y,
+                    pip_x, pip_y + pip_size,
+                    pip_x - pip_size, pip_y,
+                    fill=_POE2_CORNER_GOLD, outline="", tags="pip"
+                )
                 pip_x += pip_size * 2 + pip_gap
+            c.tag_raise("pip")
 
     @staticmethod
     def _draw_corner_diamond(canvas, cx, cy, size=4):
@@ -783,6 +800,16 @@ class PriceOverlay:
             cx - size, cy,
             fill=_POE2_CORNER_GOLD, outline="", tags="diamond"
         )
+
+    @staticmethod
+    def _blend_hex(c1: str, c2: str, t: float) -> str:
+        """Linearly interpolate two hex colors. t=0 → c1, t=1 → c2."""
+        r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+        r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
+        r = int(r1 + (r2 - r1) * t)
+        g = int(g1 + (g2 - g1) * t)
+        b = int(b1 + (b2 - b1) * t)
+        return f"#{r:02x}{g:02x}{b:02x}"
 
     def _process_pending(self):
         """Process pending UI updates from other threads.
@@ -1120,21 +1147,24 @@ class PriceOverlay:
             _SHEEN_FRAME_MS, self._start_sheen)
 
     def _position_sheen_strips(self):
-        """Move the 3 sheen strips to the current _sheen_x position, clamped to border."""
-        if not self._canvas or len(self._sheen_strips) < 3:
+        """Move the sheen strips to the current _sheen_x position with blended colors."""
+        if not self._canvas or not self._sheen_strips:
             return
         c = self._canvas
         h = c.winfo_reqheight()
         w = c.winfo_reqwidth()
+        n_strips = len(self._sheen_strips)
         sheen_band = max(4, int(w * _SHEEN_WIDTH_FRAC))
-        strip_w = sheen_band // 3
+        strip_w = max(1, sheen_band // n_strips)
         x = self._sheen_x
         inset = 3  # stay inside the border
         for i, sid in enumerate(self._sheen_strips):
             x0 = max(inset, x + strip_w * i)
             x1 = min(w - inset, x + strip_w * (i + 1))
             c.coords(sid, x0, inset, x1, h - inset)
-            c.itemconfigure(sid, fill=_POE2_CORNER_GOLD)
+            intensity = self._sheen_profile[i] if i < len(self._sheen_profile) else 0.05
+            fill = self._blend_hex(self._sheen_bg, self._sheen_color, intensity)
+            c.itemconfigure(sid, fill=fill)
 
     def _do_reshow(self, cursor_x: int, cursor_y: int):
         """Reposition and re-display the overlay without re-rendering.
@@ -1359,7 +1389,7 @@ if __name__ == "__main__":
                 ("[B] ~8d ★", "decent", False, 8),
                 ("45 Chaos", "low", False, 0.5),
                 ("SCRAP", "scrap", False, 0),
-                ("\u2717", "low", False, 0),
+                ("PASS", "low", False, 0),
                 # High-value pulse tests
                 ("[S] ~6000d ★★★", "high", True, 6000),  # Mirror rainbow
                 ("[S] ~300d ★★★", "high", True, 300),     # Gold pulse

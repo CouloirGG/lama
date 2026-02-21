@@ -669,24 +669,13 @@ class PriceCache:
         else:
             result["tier"] = "low"
 
-        # Display string - pick the most readable denomination
-        # Use 0.85 threshold for divine to handle poe2scout rounding
+        # Display string - shorthand format consistent with local scoring
         if dv >= 0.85:
-            result["display"] = f"{dv:.1f} Divine" if dv < 10 else f"{dv:.0f} Divine"
-        elif is_currency and dv > 0:
-            # Currency items: show exchange rate (more useful than raw value)
-            per_divine = 1.0 / dv
-            per_exalted = per_divine / ex_rate if ex_rate > 0 else 0
-            if 2 <= per_exalted <= 100:
-                result["display"] = f"~{per_exalted:.0f} = 1 Exalted"
-            elif per_divine <= 10000:
-                result["display"] = f"~{per_divine:.0f} = 1 Divine"
-            else:
-                result["display"] = "< 1 Chaos"
+            result["display"] = f"~{dv:.0f}d" if dv >= 10 else f"~{dv:.1f}d"
         elif chaos >= 1:
-            result["display"] = f"{chaos:.0f} Chaos"
+            result["display"] = f"~{chaos:.0f}c"
         else:
-            result["display"] = "< 1 Chaos"
+            result["display"] = "< 1c"
 
         return result
 

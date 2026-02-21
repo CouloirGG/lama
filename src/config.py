@@ -56,11 +56,11 @@ DEFAULT_LEAGUE = "Fate of the Vaal"
 SCAN_FPS = 8  # 8 checks per second
 
 # Cooldown after a successful detection (seconds)
-DETECTION_COOLDOWN = 1.0
+DETECTION_COOLDOWN = 0.5
 
 # Cursor must be within this many pixels for N frames before triggering
 # This filters out camera panning (cursor moves = camera moves = everything changes)
-CURSOR_STILL_RADIUS = 20  # pixels
+CURSOR_STILL_RADIUS = 5   # pixels
 CURSOR_STILL_FRAMES = 3   # must be still for 3 consecutive frames (~375ms)
 
 # ─────────────────────────────────────────────
@@ -251,7 +251,7 @@ GRADE_TIER_MAP = {
     "S": "high",
     "A": "good",
     "B": "decent",
-    "C": "low",     # C and JUNK both show as ✗ (not worth reselling)
+    "C": "low",     # C and JUNK both show as PASS (not worth reselling)
     "JUNK": "low",
 }
 
