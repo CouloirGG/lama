@@ -72,12 +72,13 @@ class LAMA:
         self.item_detector = ItemDetector()
         self.item_parser = ItemParser()
         self.mod_parser = ModParser()
+        self.mod_database = ModDatabase()
         self.trade_client = TradeClient(
             league=self.league,
             divine_to_chaos_fn=lambda: self.price_cache.divine_to_chaos,
             divine_to_exalted_fn=lambda: self.price_cache.divine_to_exalted,
+            mod_database=self.mod_database,
         )
-        self.mod_database = ModDatabase()
         self.calibration = CalibrationEngine()
 
         # Deep query state: last scored item (for Ctrl+Shift+C trade lookup)

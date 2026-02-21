@@ -59,10 +59,12 @@ class TradeClient:
     """
 
     def __init__(self, league: str = DEFAULT_LEAGUE,
-                 divine_to_chaos_fn=None, divine_to_exalted_fn=None):
+                 divine_to_chaos_fn=None, divine_to_exalted_fn=None,
+                 mod_database=None):
         self.league = league
         self._divine_to_chaos_fn = divine_to_chaos_fn or (lambda: 68.0)
         self._divine_to_exalted_fn = divine_to_exalted_fn or (lambda: 300.0)
+        self._mod_database = mod_database
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": "LAMA/1.0"})
 
@@ -829,6 +831,10 @@ class TradeClient:
     def _classify_filters(self, priceable: List[ParsedMod], stat_filters: list):
         """Split stat filters into key (price-driving) and common (filler).
 
+        When mod_database is loaded, uses the weight table (backed by RePoE
+        structured data) for classification.  Falls back to heuristic
+        pattern matching otherwise.
+
         Returns:
             (key_mods, common_mods, key_filters, common_filters)
             key_mods/common_mods: ParsedMod lists (for rebuilding with different multipliers)
@@ -838,14 +844,19 @@ class TradeClient:
         common_mods = []
         key_filters = []
         common_filters = []
+        use_db = self._mod_database and self._mod_database.loaded
         for mod, sf in zip(priceable, stat_filters):
-            text_lower = mod.raw_text.lower()
-            # Implicit mods are inherent to the base type — they don't
-            # differentiate value and should never be key mods
-            is_common = (
-                mod.mod_type == "implicit"
-                or any(pat in text_lower for pat in self._COMMON_MOD_PATTERNS)
-            )
+            if use_db:
+                is_key = self._mod_database.classify_mod(
+                    mod.stat_id, mod.raw_text, mod.mod_type)
+                is_common = not is_key
+            else:
+                # Fallback: heuristic pattern matching
+                text_lower = mod.raw_text.lower()
+                is_common = (
+                    mod.mod_type == "implicit"
+                    or any(pat in text_lower for pat in self._COMMON_MOD_PATTERNS)
+                )
             if is_common:
                 common_mods.append(mod)
                 common_filters.append(sf)
