@@ -152,6 +152,7 @@ class LAMA:
             root_fn=lambda: self.overlay._root,
             stats_fn=lambda: self.stats,
             overlay=self.overlay,
+            item_context_fn=lambda: self._get_item_context(),
         )
 
         # Flag reporter (Ctrl+Shift+F)
@@ -831,10 +832,12 @@ class LAMA:
             score.normalized_score, getattr(item, "item_class", "") or "",
             grade=score.grade.value)
         d2c = self.price_cache.divine_to_chaos
+        d2e = self.price_cache.divine_to_exalted
         ds = self._display_settings
         text = score.format_overlay_text(
             price_estimate=price_est,
             divine_to_chaos=d2c,
+            divine_to_exalted=d2e,
             show_grade=ds.get("overlay_show_grade", True),
             show_price=ds.get("overlay_show_price", True),
             show_stars=ds.get("overlay_show_stars", True),
@@ -968,6 +971,11 @@ class LAMA:
         }
         with self._last_flaggable_lock:
             self._last_flaggable = data
+
+    def _get_item_context(self):
+        """Return last flaggable item snapshot (for bug reporter price context)."""
+        with self._last_flaggable_lock:
+            return self._last_flaggable
 
     def _flag_hotkey_loop(self):
         """Poll for Ctrl+Shift+F to trigger flag dialog."""

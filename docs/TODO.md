@@ -26,6 +26,7 @@
 - [x] **Automated regression test suite** — 106 pytest tests across 4 modules (item_parser, mod_parser, mod_database, trade_client). Fixtures from real clipboard captures. `RUN_TESTS.bat` spawns a PowerShell window per module for visual monitoring. Also runnable via `python -m pytest tests/ -v`.
 - [ ] **Currency icons in overlay** — Show small currency images (Divine, Exalted, Chaos, etc.) next to the price text in the overlay instead of just the name string. Makes prices instantly recognizable at a glance.
 - [ ] **Chanceable base icons** — Show a Chance Orb icon and the target unique's icon (e.g., Headhunter) in the overlay for chanceable normal bases. Visual support alongside the text.
+- [x] **Context-aware bug reporter** — Ctrl+Shift+B now detects recently priced items and defaults to "Price Inaccuracy" mode with auto-populated item data (name, grade, estimate, top mods). Category pills toggle between Price Inaccuracy and General Bug. Reports include full bug data (logs, system info) plus item context. Discord messages prefixed with `[PRICE]`/`[BUG]`, local JSONL records include category and item fields.
 - [x] **Pre-built calibration data shard** — Ship a curated `calibration.jsonl` with the repo so new users get reasonable price estimates from day one instead of starting from scratch. Update periodically as more data is collected. Consider league-aware shards (calibration data from one league may not apply to another). Harvester (`calibration_harvester.py`) can now generate these shards automatically.
 
 ## Completed
