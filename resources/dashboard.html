@@ -516,7 +516,7 @@
     // -----------------------------------------------------------------------
     // Window Title Bar (frameless mode)
     // -----------------------------------------------------------------------
-    function WindowTitleBar({ wsConnected, overlayState }) {
+    function WindowTitleBar({ wsConnected, overlayState, isDev, version }) {
       const minimize = () => window.pywebview?.api?.minimize();
       const toggleMax = () => window.pywebview?.api?.toggle_maximize();
       const close = () => window.pywebview?.api?.quit();
@@ -530,8 +530,20 @@
 
       return (
         <div className="window-titlebar pywebview-drag-region" style={{ height: 36 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: T.gold, textShadow: "0 0 12px rgba(196,164,86,0.3)" }}>
-            LAMA
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: T.gold, textShadow: "0 0 12px rgba(196,164,86,0.3)" }}>
+              LAMA
+            </span>
+            {isDev && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, color: "#1a1a2e",
+                background: T.amber, borderRadius: 8,
+                padding: "1px 6px", letterSpacing: 0.5, lineHeight: "14px",
+              }}>DEV</span>
+            )}
+            {version && (
+              <span style={{ fontSize: 9, color: T.textSecond, fontWeight: 400 }}>v{version}</span>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10 }}>
             <div style={{
@@ -4799,7 +4811,7 @@
       const handleWsMessage = useCallback((msg) => {
         switch (msg.type) {
           case "init":
-            setStatus({ state: msg.state, uptime: msg.uptime, stats: msg.stats });
+            setStatus({ state: msg.state, uptime: msg.uptime, stats: msg.stats, version: msg.version, is_dev: msg.is_dev });
             if (msg.settings) setSettings(msg.settings);
             if (msg.log && msg.log.length > 0) {
               setLogs(msg.log);
@@ -4940,6 +4952,8 @@
           <WindowTitleBar
             wsConnected={connected}
             overlayState={status.state}
+            isDev={status.is_dev}
+            version={status.version}
           />
           <GoldDivider />
           {updateInfo && (
