@@ -479,8 +479,8 @@ class LAMA:
                 self._price_rare_async(item, cursor_x, cursor_y)
                 return
 
-            # Step 2b: Normal/magic items with sockets OR high ilvl → trade API for base pricing
-            if item.rarity in ("normal", "magic") and (item.sockets >= 2 or item.item_level >= 75):
+            # Step 2b: Normal/magic items with 2+ sockets → trade API for base pricing
+            if item.rarity in ("normal", "magic") and item.sockets >= 2:
                 self._price_base_async(item, cursor_x, cursor_y)
                 return
 
@@ -602,7 +602,7 @@ class LAMA:
                     return
                 if result:
                     self.overlay.show_price(
-                        text=f"{display_name}: {result.display}",
+                        text=result.display,
                         tier=result.tier,
                         cursor_x=cursor_x,
                         cursor_y=cursor_y,
@@ -616,7 +616,7 @@ class LAMA:
             except Exception as e:
                 logger.error(f"Rare pricing error: {e}", exc_info=True)
                 self.overlay.show_price(
-                    text=f"{display_name}: ?", tier="low",
+                    text="?", tier="low",
                     cursor_x=cursor_x, cursor_y=cursor_y,
                 )
                 self.stats["not_found"] += 1
@@ -683,7 +683,7 @@ class LAMA:
                     return
                 if result:
                     self.overlay.show_price(
-                        text=f"{display_name}{tag}: {result.display}",
+                        text=result.display,
                         tier=result.tier,
                         cursor_x=cursor_x,
                         cursor_y=cursor_y,
@@ -696,7 +696,7 @@ class LAMA:
             except Exception as e:
                 logger.error(f"Base pricing error: {e}", exc_info=True)
                 self.overlay.show_price(
-                    text=f"{display_name}: ?", tier="low",
+                    text="?", tier="low",
                     cursor_x=cursor_x, cursor_y=cursor_y,
                 )
                 self.stats["not_found"] += 1
@@ -717,11 +717,11 @@ class LAMA:
         sockets = getattr(item, "sockets", 0) or 0
         tag = f"{sockets}S corrupted" if sockets else "corrupted"
 
-        # Show static price while trade API loads
+        # Show static price immediately while trade API refines
         if static_result:
             static_display = static_result.get("display", "?")
             self.overlay.show_price(
-                text="Checking...",
+                text=static_display,
                 tier=static_result.get("tier", "low"),
                 cursor_x=cursor_x, cursor_y=cursor_y,
                 price_divine=static_result.get("divine_value", 0),
@@ -752,9 +752,11 @@ class LAMA:
                 self.overlay.update_text(f"Checking{'.' * dots}")
 
         def _do_price():
-            anim = threading.Thread(
-                target=_animate_dots, daemon=True, name="UniqueAnim")
-            anim.start()
+            # Only animate dots if we don't already have a static price shown
+            if not static_result:
+                anim = threading.Thread(
+                    target=_animate_dots, daemon=True, name="UniqueAnim")
+                anim.start()
             try:
                 if _is_stale():
                     return
@@ -765,7 +767,7 @@ class LAMA:
                     return
                 if result and result.min_price > 0:
                     self.overlay.show_price(
-                        text=f"{display_name}{tag}: {result.display}",
+                        text=result.display,
                         tier=result.tier,
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         price_divine=result.min_price,
@@ -773,9 +775,8 @@ class LAMA:
                     self.stats["successful_lookups"] += 1
                 elif static_result:
                     # Trade API returned nothing — fall back to static
-                    static_display = static_result.get("display", "?")
                     self.overlay.show_price(
-                        text=f"{display_name}: {static_display}",
+                        text=static_result.get("display", "?"),
                         tier=static_result.get("tier", "low"),
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         price_divine=static_result.get("divine_value", 0),
@@ -788,14 +789,14 @@ class LAMA:
                 logger.error(f"Unique pricing error: {e}", exc_info=True)
                 if static_result:
                     self.overlay.show_price(
-                        text=f"{display_name}: {static_result.get('display', '?')}",
+                        text=static_result.get("display", "?"),
                         tier=static_result.get("tier", "low"),
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         price_divine=static_result.get("divine_value", 0),
                     )
                 else:
                     self.overlay.show_price(
-                        text=f"{display_name}: ?", tier="low",
+                        text="?", tier="low",
                         cursor_x=cursor_x, cursor_y=cursor_y,
                     )
                 self.stats["not_found"] += 1
@@ -1042,7 +1043,7 @@ class LAMA:
                     return
                 if result:
                     self.overlay.show_price(
-                        text=f"{display_name}: {result.display}",
+                        text=result.display,
                         tier=result.tier,
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         estimate=result.estimate,
@@ -1051,13 +1052,13 @@ class LAMA:
                     self._log_calibration(score_result, result, item)
                 else:
                     self.overlay.show_price(
-                        text=f"{grade_str}: No listings", tier="low",
+                        text="No listings", tier="low",
                         cursor_x=cursor_x, cursor_y=cursor_y)
                     self.stats["not_found"] += 1
             except Exception as e:
                 logger.error(f"Deep query error: {e}", exc_info=True)
                 self.overlay.show_price(
-                    text=f"{grade_str}: ?", tier="low",
+                    text="?", tier="low",
                     cursor_x=cursor_x, cursor_y=cursor_y)
             finally:
                 search_done.set()
