@@ -131,8 +131,29 @@ class ItemDetector:
                 if self._cursor_still_count != CURSOR_STILL_FRAMES:
                     continue
 
-                # Position-based cooldown: skip if we already triggered at this spot
+                # Position-based cooldown: if at the same spot, only re-check
+                # after DETECTION_COOLDOWN to detect item changes under cursor
                 if self._last_trigger_pos and self._is_same_position((cx, cy), self._last_trigger_pos):
+                    now = time.time()
+                    if (now - self._last_trigger_time) < DETECTION_COOLDOWN:
+                        continue
+                    # Same position but enough time passed — re-check clipboard
+                    # to detect if a different item is now under cursor
+                    if not self.game_window.is_poe2_foreground():
+                        continue
+                    item_text = self.clipboard.copy_item_under_cursor()
+                    if item_text and item_text != self._last_item_text:
+                        # Different item at same position — treat as new detection
+                        logger.info(f"New item at same position ({cx}, {cy})")
+                        if self._on_change:
+                            self._on_change(item_text, cx, cy)
+                            self._last_trigger_time = now
+                            self._last_trigger_pos = (cx, cy)
+                            self._last_item_text = item_text
+                            self._last_item_time = time.time()
+                            self._awaiting_reshow = False
+                    else:
+                        self._last_trigger_time = now  # update cooldown timer
                     continue
 
                 # Time-based cooldown
