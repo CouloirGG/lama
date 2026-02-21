@@ -251,7 +251,7 @@ GRADE_TIER_MAP = {
     "S": "high",
     "A": "good",
     "B": "decent",
-    "C": "low",     # C and JUNK both show as PASS (not worth reselling)
+    "C": "low",     # C and JUNK both show as ✗ (not worth reselling)
     "JUNK": "low",
 }
 

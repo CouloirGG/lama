@@ -534,7 +534,7 @@ class PriceOverlay:
         c.delete("all")
         self._cv_items.clear()
         # Reset canvas size to prevent old geometry from flashing when
-        # shrinking (e.g. full overlay with pips → small PASS tag)
+        # shrinking (e.g. full overlay with pips → small ✗ tag)
         c.configure(width=1, height=1)
 
         pad_x = round(10 * self._scale)
@@ -548,7 +548,7 @@ class PriceOverlay:
         line_h = font.metrics("linespace")
 
         # Parse text into segments: grade badge, price, secondary
-        # Expected formats: "[A] ~130d ★★★", "~130d ★★★", "SCRAP", "PASS"
+        # Expected formats: "[A] ~130d ★★★", "~130d ★★★", "SCRAP", "✗"
         grade_letter = ""
         grade_color = color
         price_part = text
@@ -578,7 +578,7 @@ class PriceOverlay:
             secondary_part = secondary_part.strip()
 
         # Check for JUNK/C/SCRAP — plain small tag, no ornate frame
-        is_plain = text in ("SCRAP", "PASS", "UNID") or (
+        is_plain = text in ("SCRAP", "\u2717", "UNID") or (
             grade_letter in ("C", "JUNK") and not estimate)
 
         if is_plain:
@@ -1389,7 +1389,7 @@ if __name__ == "__main__":
                 ("[B] ~8d ★", "decent", False, 8),
                 ("45 Chaos", "low", False, 0.5),
                 ("SCRAP", "scrap", False, 0),
-                ("PASS", "low", False, 0),
+                ("\u2717", "low", False, 0),
                 # High-value pulse tests
                 ("[S] ~6000d ★★★", "high", True, 6000),  # Mirror rainbow
                 ("[S] ~300d ★★★", "high", True, 300),     # Gold pulse

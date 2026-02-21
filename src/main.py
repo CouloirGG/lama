@@ -359,12 +359,12 @@ class LAMA:
             if any(s in item_lower for s in self._WORTHLESS_ITEMS):
                 logger.info(f"Worthless item: {item.name}")
                 self.overlay.show_price(
-                    text="PASS", tier="low",
+                    text="\u2717", tier="low",
                     cursor_x=cursor_x, cursor_y=cursor_y,
                 )
                 self._cache_for_flag(
                     item_name=item.name, rarity=item.rarity,
-                    tier="low", display_text="PASS",
+                    tier="low", display_text="\u2717",
                     clipboard_text=item_text)
                 return
 
@@ -1211,9 +1211,9 @@ class LAMA:
             except Exception as e:
                 logger.warning(f"Auto-cal failed ({display_name}): {e}")
 
-    # Items that should always show PASS (too cheap to bother pricing)
+    # Items that should always show ✗ (too cheap to bother pricing)
     def _show_dismiss(self, item, cursor_x, cursor_y):
-        """Show dismiss (PASS) or scrap hammer if the item has quality/sockets."""
+        """Show dismiss (✗) or scrap hammer if the item has quality/sockets."""
         has_scrap = (
             getattr(item, "quality", 0) > 0 or
             getattr(item, "sockets", 0) > 0
@@ -1225,7 +1225,7 @@ class LAMA:
             )
         else:
             self.overlay.show_price(
-                text="PASS", tier="low",
+                text="\u2717", tier="low",
                 cursor_x=cursor_x, cursor_y=cursor_y,
             )
 

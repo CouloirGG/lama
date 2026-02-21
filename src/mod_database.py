@@ -182,7 +182,7 @@ class ItemScore:
                             show_dps: bool = True) -> str:
         """Format for overlay display.
 
-        JUNK:  'PASS'
+        JUNK:  '✗'
         C:     'C'
         B/A/S without price:  'A 67% ★3: T1 SpellCrit, T1 CritChance, T1 ES'
         B/A/S with price:     'A ~130d ★3: T1 SpellCrit, T1 CritChance, T1 ES'
@@ -192,7 +192,7 @@ class ItemScore:
         if self.grade in (Grade.JUNK, Grade.C):
             if self.quality > 0 or self.sockets > 0:
                 return "SCRAP"
-            return "PASS"
+            return "\u2717"
 
         parts = []
 
