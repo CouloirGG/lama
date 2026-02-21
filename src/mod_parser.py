@@ -229,7 +229,7 @@ class ModParser:
         # is the most specific (e.g. "Stellar Amulet" before "Amulet")
         for bt in self._base_types:
             if bt.lower() in name_lower:
-                logger.debug(f"Resolved base type: '{magic_name}' → '{bt}'")
+                logger.debug(f"Resolved base type: '{magic_name}' -> '{bt}'")
                 return bt
 
         logger.debug(f"Could not resolve base type from '{magic_name}'")

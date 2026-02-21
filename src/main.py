@@ -29,6 +29,7 @@ from config import (
     DEFAULT_LEAGUE,
     LOG_LEVEL,
     LOG_FILE,
+    OVERLAY_REFERENCE_HEIGHT,
 )
 from item_detection import ItemDetector
 from item_parser import ItemParser
@@ -110,9 +111,20 @@ class LAMA:
         if use_console:
             self.overlay = ConsoleOverlay()
         else:
+            # Compute overlay scale factor from game window resolution
+            scale = 1.0
+            rect = self.item_detector.game_window._find_poe2_rect()
+            if rect:
+                game_h = rect[3] - rect[1]
+                scale = max(0.6, min(1.5, game_h / OVERLAY_REFERENCE_HEIGHT))
+                logger.info(f"Game window height {game_h}px -> overlay scale {scale:.2f}")
+            else:
+                logger.info("Game window not found — overlay scale defaulting to 1.0")
+
             theme = self._display_settings.get("overlay_theme", "poe2")
             pulse_style = self._display_settings.get("overlay_pulse_style", "sheen")
-            self.overlay = PriceOverlay(theme=theme, pulse_style=pulse_style)
+            self.overlay = PriceOverlay(theme=theme, pulse_style=pulse_style,
+                                        scale_factor=scale)
 
         # Apply custom tier styles to overlay (if any)
         if hasattr(self.overlay, 'load_custom_styles'):
@@ -153,6 +165,7 @@ class LAMA:
         # Wire up detection callbacks
         self.item_detector.set_callback(self._on_change_detected)
         self.item_detector.set_hide_callback(self.overlay.hide)
+        self.item_detector.set_reshow_callback(self._on_reshow)
 
     @staticmethod
     def _load_display_settings() -> dict:
@@ -306,6 +319,14 @@ class LAMA:
 
     # ─── Core Pipeline ───────────────────────────────
 
+    def _on_reshow(self, cursor_x: int, cursor_y: int):
+        """Called when the user re-hovers the same item after moving away.
+
+        Repositions the existing overlay at the new cursor position without
+        re-running the pricing pipeline (no re-parse, re-score, or API calls).
+        """
+        self.overlay.reshow(cursor_x, cursor_y)
+
     def _on_change_detected(self, item_text: str, cursor_x: int, cursor_y: int):
         """
         Called by ItemDetector when Ctrl+C returns item data.
@@ -363,7 +384,7 @@ class LAMA:
                     tier = "good"
                     divine = 0
                 chanceable_text = f"Chance \u2192 {unique_name} ({price_str})"
-                logger.info(f"Chanceable base: {item.base_type} → {unique_name} ({price_str})")
+                logger.info(f"Chanceable base: {item.base_type} -> {unique_name} ({price_str})")
                 self.overlay.show_price(
                     text=chanceable_text,
                     tier=tier,
@@ -559,7 +580,7 @@ class LAMA:
                     resolved = self.mod_parser.resolve_base_type(item.name)
                     if resolved:
                         item.base_type = resolved
-                        logger.info(f"Resolved base type: '{item.name}' → '{resolved}'")
+                        logger.info(f"Resolved base type: '{item.name}' -> '{resolved}'")
                     else:
                         logger.info(f"Could not resolve base type for '{item.name}'")
 
@@ -1179,11 +1200,11 @@ class LAMA:
                     self._log_calibration(score_result, result, item)
                     logger.info(
                         f"Auto-cal: {display_name} "
-                        f"grade={score_result.grade.value} → {result.display}")
+                        f"grade={score_result.grade.value} -> {result.display}")
                 else:
                     logger.info(
                         f"Auto-cal: {display_name} "
-                        f"grade={score_result.grade.value} → no listings")
+                        f"grade={score_result.grade.value} -> no listings")
             except Exception as e:
                 logger.warning(f"Auto-cal failed ({display_name}): {e}")
 
