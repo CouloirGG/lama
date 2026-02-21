@@ -60,6 +60,13 @@ class WatchlistWorker:
         self._session.headers["User-Agent"] = USER_AGENT
         self.query_states: dict[str, dict] = {}  # per-query state tracking
 
+    def set_session_id(self, poesessid: str):
+        """Set or clear the POESESSID cookie for authenticated trade fetches."""
+        if poesessid:
+            self._session.cookies.set("POESESSID", poesessid, domain=".pathofexile.com")
+        else:
+            self._session.cookies.clear()
+
     def update_queries(self, queries: list[dict], poll_interval: int = None):
         """Update the query list (called when settings change)."""
         self._queries = queries[:WATCHLIST_MAX_QUERIES]
@@ -329,9 +336,12 @@ class WatchlistWorker:
                     "amount": amount,
                     "currency": currency,
                     "account": account.get("name", ""),
+                    "character": account.get("lastCharacterName", ""),
                     "whisper": whisper,
                     "indexed": indexed,
                     "item_name": display_name,
+                    "whisper_token": listing.get("whisper_token", ""),
+                    "hideout_token": listing.get("hideout_token", ""),
                 })
 
             # Compute price range

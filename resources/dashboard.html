@@ -519,7 +519,7 @@
     function WindowTitleBar({ wsConnected, overlayState }) {
       const minimize = () => window.pywebview?.api?.minimize();
       const toggleMax = () => window.pywebview?.api?.toggle_maximize();
-      const close = () => window.pywebview?.api?.close();
+      const close = () => window.pywebview?.api?.quit();
       const showBadge = overlayState !== "stopped";
       const badgeConf = {
         running:  { color: T.green, label: "Scanning", pulse: true },
@@ -3333,16 +3333,36 @@
     // -----------------------------------------------------------------------
     // Watchlist — WatchlistListingsTable
     // -----------------------------------------------------------------------
-    function WatchlistListingsTable({ listings, tradeUrl }) {
-      const [copiedIdx, setCopiedIdx] = useState(null);
+    function WatchlistListingsTable({ listings, tradeUrl, poesessidSet }) {
+      const [actionFeedback, setActionFeedback] = useState({});
 
       if (!listings || listings.length === 0) return null;
 
-      const copyWhisper = (whisper, idx) => {
-        navigator.clipboard.writeText(whisper).then(() => {
-          setCopiedIdx(idx);
-          setTimeout(() => setCopiedIdx(null), 1200);
-        }).catch(() => {});
+      const doAction = async (action, listing, idx) => {
+        const body = {
+          player: listing.character || listing.account,
+          token: "",
+          whisper: listing.whisper || "",
+        };
+        if (action === "whisper") body.token = listing.whisper_token || "";
+        if (action === "hideout") body.token = listing.hideout_token || "";
+
+        setActionFeedback(prev => ({ ...prev, [`${idx}-${action}`]: "pending" }));
+        try {
+          const resp = await api(`/api/trade/${action}`, "POST", body);
+          if (resp.error) {
+            setActionFeedback(prev => ({ ...prev, [`${idx}-${action}`]: "error" }));
+          } else {
+            setActionFeedback(prev => ({ ...prev, [`${idx}-${action}`]: "ok" }));
+          }
+        } catch {
+          setActionFeedback(prev => ({ ...prev, [`${idx}-${action}`]: "error" }));
+        }
+        setTimeout(() => setActionFeedback(prev => {
+          const next = { ...prev };
+          delete next[`${idx}-${action}`];
+          return next;
+        }), 1200);
       };
 
       const formatTime = (indexed) => {
@@ -3358,62 +3378,91 @@
         } catch { return "--"; }
       };
 
+      const actionBtn = (label, action, listing, idx, opts = {}) => {
+        const key = `${idx}-${action}`;
+        const fb = actionFeedback[key];
+        const isOk = fb === "ok";
+        const isErr = fb === "error";
+        const isPending = fb === "pending";
+        const isApi = opts.isApi;
+
+        let bg = T.input;
+        let color = T.textSecond;
+        let borderColor = T.border;
+        if (isOk) { bg = T.green; color = "#fff"; borderColor = T.green; }
+        else if (isErr) { bg = "#a83232"; color = "#fff"; borderColor = "#a83232"; }
+        else if (opts.accent) { bg = `${T.gold}22`; borderColor = T.borderGold; color = T.gold; }
+
+        return (
+          <Tooltip text={opts.tooltip || label}>
+            <button
+              onClick={() => doAction(action, listing, idx)}
+              disabled={isPending}
+              style={{
+                ...BTN, padding: "1px 4px", fontSize: 9, lineHeight: "16px",
+                background: bg, color: color,
+                border: `1px solid ${borderColor}`,
+                opacity: isPending ? 0.6 : 1,
+                minWidth: 0,
+              }}
+            >
+              {isOk ? "\u2713" : isErr ? "\u2717" : label}
+              {isApi && !isOk && !isErr && (
+                <span style={{ fontSize: 7, marginLeft: 1, color: T.green }} title="API mode">*</span>
+              )}
+            </button>
+          </Tooltip>
+        );
+      };
+
       return (
         <div style={{ maxHeight: 220, overflowY: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, ...MONO }}>
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${T.border}`, color: T.textMuted, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Price</th>
-                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Item</th>
-                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Account</th>
-                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Listed</th>
-                <th style={{ textAlign: "right", padding: "4px 6px", fontWeight: 600 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listings.map((l, i) => (
-                <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
-                  <td style={{ padding: "4px 6px", color: T.gold, fontWeight: 600, whiteSpace: "nowrap" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                      {l.price && l.price.toLowerCase().includes("divine") && <CurrencyIcon src={ICON.divine} size={14} />}
-                      {l.price && l.price.toLowerCase().includes("exalted") && <CurrencyIcon src={ICON.exalted} size={14} />}
-                      {l.price && l.price.toLowerCase().includes("chaos") && <CurrencyIcon src={ICON.chaos} size={14} />}
-                      {l.price ? l.price.replace(/\s*(divine|exalted|chaos)\s*/gi, " ").trim() : "--"}
-                    </span>
-                  </td>
-                  <td style={{ padding: "4px 6px", color: T.text, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {l.item_name || "--"}
-                  </td>
-                  <td style={{ padding: "4px 6px", color: T.textSecond, maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.account}</td>
-                  <td style={{ padding: "4px 6px", color: T.textMuted, whiteSpace: "nowrap" }}>{formatTime(l.indexed)}</td>
-                  <td style={{ padding: "4px 6px", textAlign: "right", whiteSpace: "nowrap" }}>
-                    <div style={{ display: "inline-flex", gap: 4 }}>
-                      {tradeUrl && (
-                        <Tooltip text="Open on trade site to visit hideout">
-                          <a href={tradeUrl} target="_blank" rel="noopener noreferrer" style={{
-                            ...BTN, padding: "2px 8px", fontSize: 10, textDecoration: "none",
-                            background: T.input, color: T.gold,
-                            border: `1px solid ${T.borderGold}`,
-                            display: "inline-block",
-                          }}>Buy</a>
-                        </Tooltip>
-                      )}
-                      {l.whisper && (
-                        <Tooltip text="Copy whisper message to clipboard">
-                          <button onClick={() => copyWhisper(l.whisper, i)} style={{
-                            ...BTN, padding: "2px 8px", fontSize: 10,
-                            background: copiedIdx === i ? T.green : T.input,
-                            color: copiedIdx === i ? "#fff" : T.textSecond,
-                            border: `1px solid ${copiedIdx === i ? T.green : T.border}`,
-                          }}>{copiedIdx === i ? "Copied" : "Whisper"}</button>
-                        </Tooltip>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {listings.map((l, i) => {
+            const hasWhisperToken = poesessidSet && !!l.whisper_token;
+            const hasHideoutToken = poesessidSet && !!l.hideout_token;
+            return (
+              <div key={i} style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "4px 6px", borderBottom: `1px solid ${T.border}22`,
+                fontSize: 11, ...MONO,
+              }}>
+                {/* Price */}
+                <span style={{ color: T.gold, fontWeight: 600, whiteSpace: "nowrap", minWidth: 50 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+                    {l.price && l.price.toLowerCase().includes("divine") && <CurrencyIcon src={ICON.divine} size={12} />}
+                    {l.price && l.price.toLowerCase().includes("exalted") && <CurrencyIcon src={ICON.exalted} size={12} />}
+                    {l.price && l.price.toLowerCase().includes("chaos") && <CurrencyIcon src={ICON.chaos} size={12} />}
+                    {l.price ? l.price.replace(/\s*(divine|exalted|chaos)\s*/gi, " ").trim() : "--"}
+                  </span>
+                </span>
+                {/* Account */}
+                <span style={{ color: T.textSecond, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10 }}>{l.account}</span>
+                {/* Listed */}
+                <span style={{ color: T.textMuted, whiteSpace: "nowrap", fontSize: 9 }}>{formatTime(l.indexed)}</span>
+                {/* Actions — require character name (only available with POESESSID) */}
+                {l.character ? (
+                  <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                    {actionBtn("Wh", "whisper", l, i, {
+                      tooltip: hasWhisperToken ? "Send whisper via API (no chat)" : "Send whisper via game chat",
+                      isApi: hasWhisperToken,
+                    })}
+                    {actionBtn("Inv", "invite", l, i, { tooltip: "Send /invite via game chat" })}
+                    {actionBtn("HO", "hideout", l, i, {
+                      tooltip: hasHideoutToken ? "Visit hideout via API (instant)" : "Send /hideout via game chat",
+                      accent: true,
+                      isApi: hasHideoutToken,
+                    })}
+                    {actionBtn("Tr", "tradewith", l, i, { tooltip: "Send /tradewith via game chat" })}
+                    {actionBtn("Kk", "kick", l, i, { tooltip: "Send /kick via game chat" })}
+                  </div>
+                ) : (
+                  <Tooltip text="Set your POESESSID above to enable trade actions">
+                    <span style={{ fontSize: 8, color: T.textMuted, fontStyle: "italic" }}>No session</span>
+                  </Tooltip>
+                )}
+              </div>
+            );
+          })}
         </div>
       );
     }
@@ -3468,7 +3517,7 @@
       );
     }
 
-    function WatchlistQueryCard({ query, result, queryState, tradeStats, tradeItems, onUpdate, onDelete, onRefresh }) {
+    function WatchlistQueryCard({ query, result, queryState, tradeStats, tradeItems, onUpdate, onDelete, onRefresh, poesessidSet }) {
       const [editing, setEditing] = useState(false);
 
       const r = result || {};
@@ -3582,7 +3631,7 @@
           {/* Listings — always expanded when available */}
           {!editing && r.listings && r.listings.length > 0 && (
             <div style={{ padding: "0 12px 8px", flex: 1, minHeight: 0 }}>
-              <WatchlistListingsTable listings={r.listings} tradeUrl={r.trade_url} />
+              <WatchlistListingsTable listings={r.listings} tradeUrl={r.trade_url} poesessidSet={poesessidSet} />
             </div>
           )}
         </div>
@@ -3597,6 +3646,8 @@
       const [tradeItems, setTradeItems] = useState([]);
       const [loaded, setLoaded] = useState(false);
       const [addingSlot, setAddingSlot] = useState(null); // index of slot being added to
+      const [showPoesessid, setShowPoesessid] = useState(false);
+      const [poesessidInput, setPoesessidInput] = useState("");
 
       const queries = settings.watchlist_queries || [];
       const pollInterval = settings.watchlist_poll_interval || 300;
@@ -3656,7 +3707,7 @@
             Watchlist prices are from the trade API and reflect current listings, not completed sales. Prices may include price-fixers.
           </div>
           {/* Settings row */}
-          <div className="panel" style={{ ...CARD, marginBottom: 16, display: "flex", alignItems: "center", gap: 16 }}>
+          <div className="panel" style={{ ...CARD, marginBottom: 16, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={FIELD_LABEL}>Poll Interval</span>
               <select value={pollInterval} onChange={(e) => handlePollIntervalChange(e.target.value)}
@@ -3667,6 +3718,46 @@
                 <option value={600}>10 minutes</option>
                 <option value={900}>15 minutes</option>
               </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Tooltip text="Your POE session ID enables API-based trade actions (whisper, hideout visit) without chat commands. Find it in your browser's DevTools (Application > Cookies > pathofexile.com). Never share this value.">
+                <span style={{ ...FIELD_LABEL, cursor: "help", borderBottom: `1px dashed ${T.textMuted}` }}>POESESSID</span>
+              </Tooltip>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type={showPoesessid ? "text" : "password"}
+                  value={poesessidInput}
+                  placeholder={settings.poesessid_set ? "(configured)" : "paste session ID"}
+                  onChange={(e) => setPoesessidInput(e.target.value)}
+                  onBlur={() => {
+                    if (poesessidInput) {
+                      onSettingsUpdate({ poesessid: poesessidInput });
+                      setPoesessidInput("");
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && poesessidInput) {
+                      onSettingsUpdate({ poesessid: poesessidInput });
+                      setPoesessidInput("");
+                    }
+                  }}
+                  style={{ ...FIELD_INPUT, width: 160, padding: "5px 10px", fontSize: 10 }}
+                />
+                <button onClick={() => setShowPoesessid(!showPoesessid)} style={{
+                  background: "transparent", border: "none", color: T.textMuted,
+                  cursor: "pointer", fontSize: 12, padding: "2px 4px",
+                }}>{showPoesessid ? "Hide" : "Show"}</button>
+                {settings.poesessid_set && (
+                  <button onClick={() => { onSettingsUpdate({ poesessid: "" }); setPoesessidInput(""); }} style={{
+                    ...BTN, padding: "2px 6px", fontSize: 9,
+                    background: "transparent", color: T.textMuted,
+                    border: `1px solid ${T.border}`,
+                  }}>Clear</button>
+                )}
+              </div>
+              {settings.poesessid_set && (
+                <span style={{ fontSize: 9, color: T.green }}>Active</span>
+              )}
             </div>
             <div style={{ flex: 1 }} />
             <div style={{ fontSize: 11, color: T.textMuted }}>
@@ -3693,6 +3784,7 @@
                     onUpdate={handleUpdate}
                     onDelete={handleDelete}
                     onRefresh={onRefresh}
+                    poesessidSet={settings.poesessid_set}
                   />
                 );
               } else if (slot.type === "adding") {

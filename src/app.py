@@ -363,7 +363,7 @@ def main():
     # The icon thread sets IPropertyStore, then reveals the window.
     window = webview.create_window(
         WINDOW_TITLE,
-        url=f"http://127.0.0.1:{PORT}/dashboard",
+        url=f"http://127.0.0.1:{PORT}/dashboard?_t={int(time.time())}",
         width=WINDOW_WIDTH,
         height=WINDOW_HEIGHT,
         min_size=(900, 600),
