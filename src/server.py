@@ -117,6 +117,7 @@ DEFAULT_SETTINGS = {
     "overlay_pulse_style": "sheen",
     "telemetry_enabled": False,
     "poesessid": "",
+    "nux_completed": False,
 }
 
 

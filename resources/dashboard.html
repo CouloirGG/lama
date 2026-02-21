@@ -116,6 +116,10 @@
       from { opacity: 0; transform: translateY(8px) scale(0.97); }
       to   { opacity: 1; transform: translateY(0) scale(1); }
     }
+    @keyframes nuxFadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
     .couloir-flyout {
       position: absolute;
       bottom: calc(100% + 8px);
@@ -513,6 +517,17 @@
       markets: "The Exchange Floor",
     };
 
+    const NUX_STEPS = [
+      { id: "exchange-rates", tab: null, target: "exchange-rates", title: "Exchange Rates", text: "Live currency conversion rates from poe.ninja. These update every 15 minutes.", position: "bottom" },
+      { id: "start-scanner", tab: "overlay", target: "start-scanner", title: "Start the Scanner", text: "Click Start to begin scanning items. Hover over any item in POE2 and press Ctrl+C \u2014 LAMA reads the clipboard and shows a price overlay.", position: "bottom" },
+      { id: "item-lookup", tab: "overlay", target: "item-lookup", title: "Quick Price Check", text: "Paste any item text here (Ctrl+C from in-game) to look up its price without the overlay running.", position: "bottom" },
+      { id: "overlay-settings", tab: "overlay", target: "overlay-settings", title: "Overlay Settings", text: "Adjust how the overlay looks \u2014 font size, display duration, theme, and what info to show (grade, price, stars, DPS).", position: "top" },
+      { id: "filter-tab", tab: "filter", target: "filter-tab", title: "Loot Filter", text: "Customize your loot filter strictness and per-tier visual styles. Changes apply to your in-game filter file.", position: "bottom" },
+      { id: "watchlist-tab", tab: "watchlist", target: "watchlist-tab", title: "Trade Watchlist", text: "Set up trade search queries that auto-refresh. Get notified when items you want are listed, and use action buttons to whisper, invite, or trade.", position: "bottom" },
+      { id: "markets-tab", tab: "markets", target: "markets-tab", title: "Live Markets", text: "Track currency exchange rates and price trends over time.", position: "bottom" },
+      { id: "footer-controls", tab: null, target: "footer-controls", title: "Footer Controls", text: "Switch leagues, report bugs, send feedback, or check credits from the footer bar.", position: "top" },
+    ];
+
     // -----------------------------------------------------------------------
     // Window Title Bar (frameless mode)
     // -----------------------------------------------------------------------
@@ -589,7 +604,7 @@
       }, [flyoutOpen]);
 
       return (
-        <div className="app-footer" style={{ position: "relative" }} ref={flyoutRef}>
+        <div className="app-footer" data-nux="footer-controls" style={{ position: "relative" }} ref={flyoutRef}>
           <select
             value={selectedLeague || "Fate of the Vaal"}
             onChange={(e) => onLeagueChange(e.target.value)}
@@ -779,6 +794,116 @@
     }
 
     // -----------------------------------------------------------------------
+    // NUX Guided Tour Overlay
+    // -----------------------------------------------------------------------
+    function NUXOverlay({ step, current, total, onNext, onSkip }) {
+      const [rect, setRect] = useState(null);
+
+      const measure = useCallback(() => {
+        const el = document.querySelector(`[data-nux="${step.id}"]`);
+        if (el) {
+          const r = el.getBoundingClientRect();
+          const vw = window.innerWidth, vh = window.innerHeight;
+          const top = Math.max(0, r.top);
+          const left = Math.max(0, r.left);
+          const bottom = Math.min(vh, r.bottom);
+          const right = Math.min(vw, r.right);
+          setRect({ top, left, width: right - left, height: Math.max(40, bottom - top) });
+        }
+      }, [step.id]);
+
+      useEffect(() => {
+        const timer = setTimeout(measure, 150);
+        return () => clearTimeout(timer);
+      }, [measure]);
+
+      useEffect(() => {
+        const ro = new ResizeObserver(measure);
+        ro.observe(document.body);
+        window.addEventListener("resize", measure);
+        return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+      }, [measure]);
+
+      // Escape key dismisses tour
+      useEffect(() => {
+        const onKey = (e) => { if (e.key === "Escape") onSkip(); };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+      }, [onSkip]);
+
+      if (!rect) return null;
+
+      const pad = 8;
+      const t = rect.top - pad, l = rect.left - pad, w = rect.width + pad * 2, h = rect.height + pad * 2;
+
+      // Position tooltip card with auto-flip
+      const cardW = 320, cardH = 160, cardGap = 14;
+      const vh = window.innerHeight, vw = window.innerWidth;
+      let cardTop = 0;
+      let pos = step.position;
+      if (pos === "bottom" && (rect.top + rect.height + pad + cardGap + cardH > vh)) pos = "top";
+      else if (pos === "top" && (rect.top - pad - cardGap - cardH < 0)) pos = "bottom";
+
+      const cardLeft = Math.max(8, Math.min(rect.left + rect.width / 2 - cardW / 2, vw - cardW - 8));
+      const arrowLeft = Math.min(Math.max(20, rect.left + rect.width / 2 - cardLeft), cardW - 20);
+      let arrowStyle = { position: "absolute", width: 0, height: 0, borderStyle: "solid" };
+
+      if (pos === "bottom") {
+        cardTop = Math.min(rect.top + rect.height + pad + cardGap, vh - cardH - 8);
+        arrowStyle = { ...arrowStyle, top: -8, left: arrowLeft, borderWidth: "0 8px 8px 8px", borderColor: `transparent transparent ${T.borderGold} transparent` };
+      } else if (pos === "top") {
+        cardTop = Math.max(8, rect.top - pad - cardGap - cardH);
+        arrowStyle = { ...arrowStyle, bottom: -8, left: arrowLeft, borderWidth: "8px 8px 0 8px", borderColor: `${T.borderGold} transparent transparent transparent` };
+      } else if (pos === "right") {
+        cardTop = Math.max(8, Math.min(rect.top + rect.height / 2 - 60, vh - cardH - 8));
+        arrowStyle = { ...arrowStyle, top: 30, left: -8, borderWidth: "8px 8px 8px 0", borderColor: `transparent ${T.borderGold} transparent transparent` };
+      } else {
+        cardTop = Math.max(8, Math.min(rect.top + rect.height / 2 - 60, vh - cardH - 8));
+        arrowStyle = { ...arrowStyle, top: 30, right: -8, borderWidth: "8px 0 8px 8px", borderColor: `transparent transparent transparent ${T.borderGold}` };
+      }
+
+      const isLast = current >= total - 1;
+
+      // Render backdrop and card as separate sibling divs to avoid pointer-events inheritance issues
+      return (
+        <>
+          {/* Backdrop: 4 opaque rects around the cutout */}
+          <div style={{ position: "fixed", inset: 0, zIndex: 10000, pointerEvents: "none", animation: "nuxFadeIn 0.3s ease-out" }}>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: Math.max(0, t), background: "rgba(0,0,0,0.65)", pointerEvents: "auto" }} />
+            <div style={{ position: "absolute", top: t, left: 0, width: Math.max(0, l), height: h, background: "rgba(0,0,0,0.65)", pointerEvents: "auto" }} />
+            <div style={{ position: "absolute", top: t, left: l + w, right: 0, height: h, background: "rgba(0,0,0,0.65)", pointerEvents: "auto" }} />
+            <div style={{ position: "absolute", top: t + h, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", pointerEvents: "auto" }} />
+            {/* Gold highlight ring */}
+            <div style={{
+              position: "absolute", top: t, left: l, width: w, height: h,
+              borderRadius: 6, boxShadow: `0 0 0 3px ${T.gold}44, 0 0 20px rgba(196,164,86,0.2)`,
+            }} />
+          </div>
+          {/* Tooltip card — completely separate from backdrop for clean pointer-events */}
+          <div style={{
+            position: "fixed", top: cardTop, left: pos === "left" ? undefined : cardLeft,
+            right: pos === "left" ? (vw - rect.left + pad + cardGap) : undefined,
+            width: cardW, zIndex: 10001,
+            background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 10,
+            padding: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+            animation: "flyoutIn 0.25s ease-out",
+          }}>
+            <div style={{ ...arrowStyle }} />
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.gold, marginBottom: 8 }}>{step.title}</div>
+            <div style={{ fontSize: 12, color: T.textSecond, lineHeight: 1.5, marginBottom: 16 }}>{step.text}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 10, color: T.textMuted }}>{current + 1} of {total}</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={onSkip} style={{ ...BTN, background: "transparent", border: "none", color: T.textSecond, padding: "6px 12px", fontSize: 11 }}>Skip</button>
+                <button onClick={onNext} style={{ ...BTN_GOLD_ACTIVE, padding: "6px 16px", fontSize: 11 }}>{isLast ? "Done" : "Next"}</button>
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    // -----------------------------------------------------------------------
     // StatCard
     // -----------------------------------------------------------------------
     function CurrencyIcon({ src, size = 24 }) {
@@ -822,7 +947,7 @@
       const refreshColor = stats.last_refresh === "never" ? T.textSecond : T.green;
 
       return (
-        <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px" }}>
+        <div data-nux="exchange-rates" style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 8 }}>
             <StatCard label="1 Mirror" value={m2d > 0 ? `${m2d.toFixed(0)}` : "--"} sub={m2d > 0 ? "Divine" : null} color="#c084fc" iconLeft={ICON.mirror} iconRight={ICON.divine} tooltip="1 Mirror of Kalandra = X Divine Orbs" />
             <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
@@ -2162,6 +2287,7 @@
                 Restart to apply setting changes
               </span>
             )}
+            <button onClick={() => onUpdate({ nux_completed: false })} style={{ ...BTN, background: "transparent", border: `1px solid ${T.borderGold}`, color: T.gold, padding: "4px 10px", fontSize: 10, marginLeft: isRunning ? 0 : "auto" }}>Replay Tour</button>
           </div>
           {/* Telemetry status line */}
           {telEnabled && (
@@ -4789,6 +4915,9 @@
       const [queryStates, setQueryStates] = useState({});
       const [updateInfo, setUpdateInfo] = useState(null);
       const [telemetryStatus, setTelemetryStatus] = useState({ last_upload: null, pending_samples: 0, enabled: false });
+      const [nuxStep, setNuxStep] = useState(0);
+      const [nuxDismissed, setNuxDismissed] = useState(false);
+      const [settingsLoaded, setSettingsLoaded] = useState(false);
       const logRef = useRef(null);
       const autoScrollRef = useRef(true);
 
@@ -4816,7 +4945,7 @@
         switch (msg.type) {
           case "init":
             setStatus({ state: msg.state, uptime: msg.uptime, stats: msg.stats, version: msg.version, is_dev: msg.is_dev });
-            if (msg.settings) setSettings(msg.settings);
+            if (msg.settings) { setSettings(msg.settings); setSettingsLoaded(true); }
             if (msg.log && msg.log.length > 0) {
               setLogs(msg.log);
             }
@@ -4931,6 +5060,7 @@
       const handleSettingsUpdate = (updates) => {
         const newSettings = { ...settings, ...updates };
         setSettings(newSettings);
+        if ("nux_completed" in updates && updates.nux_completed === false) { setNuxStep(0); setNuxDismissed(false); }
         api("/api/settings", "POST", updates).then(() => {
           if ("telemetry_enabled" in updates) refreshTelemetryStatus();
         });
@@ -4951,7 +5081,33 @@
         }
       };
 
+      // NUX guided tour
+      const nuxActive = settingsLoaded && settings.nux_completed !== true && !nuxDismissed;
+
+      const dismissNux = () => {
+        setNuxDismissed(true);
+        handleSettingsUpdate({ nux_completed: true });
+      };
+
+      const handleNuxNext = () => {
+        const nextIdx = nuxStep + 1;
+        if (nextIdx >= NUX_STEPS.length) {
+          dismissNux();
+          return;
+        }
+        const nextStep = NUX_STEPS[nextIdx];
+        if (nextStep.tab && nextStep.tab !== activeTab) {
+          setActiveTab(nextStep.tab);
+        }
+        setNuxStep(nextIdx);
+      };
+
+      const handleNuxSkip = () => {
+        dismissNux();
+      };
+
       return (
+        <>
         <div className="app-frame">
           <WindowTitleBar
             wsConnected={connected}
@@ -5001,31 +5157,31 @@
             <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 16px" }}>
               {activeTab === "overlay" && (
                 <>
-                  <ScannerStatusCard status={status} onStart={handleStart} onStop={handleStop} onRestart={handleRestart} />
-                  <ItemLookupCard />
-                  <OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} telemetryStatus={telemetryStatus} onTelemetryUpload={() => { api("/api/telemetry/upload", "POST").then(refreshTelemetryStatus); }} />
+                  <div data-nux="start-scanner"><ScannerStatusCard status={status} onStart={handleStart} onStop={handleStop} onRestart={handleRestart} /></div>
+                  <div data-nux="item-lookup"><ItemLookupCard /></div>
+                  <div data-nux="overlay-settings"><OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} telemetryStatus={telemetryStatus} onTelemetryUpload={() => { api("/api/telemetry/upload", "POST").then(refreshTelemetryStatus); }} /></div>
                   <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
                 </>
               )}
               {activeTab === "filter" && (
-                <FilterTab
+                <div data-nux="filter-tab"><FilterTab
                   settings={settings}
                   onUpdate={handleSettingsUpdate}
                   onUpdateFilter={handleUpdateFilter}
                   filterUpdating={filterUpdating}
-                />
+                /></div>
               )}
               {activeTab === "watchlist" && (
-                <WatchlistTab
+                <div data-nux="watchlist-tab"><WatchlistTab
                   settings={settings}
                   watchlistResults={watchlistResults}
                   queryStates={queryStates}
                   onSettingsUpdate={handleSettingsUpdate}
                   onRefresh={handleWatchlistRefresh}
-                />
+                /></div>
               )}
               {activeTab === "markets" && (
-                <MarketsTab />
+                <div data-nux="markets-tab"><MarketsTab /></div>
               )}
             </div>
           </div>
@@ -5041,6 +5197,17 @@
           <BugReportModal open={bugModalOpen} onClose={() => setBugModalOpen(false)} />
           <FeedbackModal open={!!feedbackModal} feedbackType={feedbackModal || "feedback"} onClose={() => setFeedbackModal(null)} />
         </div>
+        {nuxActive && ReactDOM.createPortal(
+          <NUXOverlay
+            step={NUX_STEPS[nuxStep]}
+            current={nuxStep}
+            total={NUX_STEPS.length}
+            onNext={handleNuxNext}
+            onSkip={handleNuxSkip}
+          />,
+          document.body
+        )}
+        </>
       );
     }
 
