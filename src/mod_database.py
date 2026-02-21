@@ -805,6 +805,28 @@ class ModDatabase:
             "repoe_item_classes": len(self._mods_by_base_data),
         }
 
+    def classify_mod(self, stat_id: str, raw_text: str, mod_type: str) -> bool:
+        """Classify a mod as key (True) or common (False) for trade queries.
+
+        Uses the bridge + weight table when available, falls back to
+        common pattern substring matching.
+        """
+        # Implicit mods are always common (inherent to base type)
+        if mod_type == "implicit":
+            return False
+        # Fractured/desecrated mods are always key (permanent, rare)
+        if mod_type in ("fractured", "desecrated"):
+            return True
+        # Try bridge + weight table
+        bridge_entry = self._bridge.get(stat_id)
+        if bridge_entry:
+            group, _ = bridge_entry
+            w = _get_weight_for_group(group)
+            if w is not None:
+                return w >= 1.0
+        # Fallback: common pattern check
+        return not _is_common_mod(raw_text)
+
     # ─── Internal: Data Loading ───────────────────
 
     _REPOE_FILES = {
