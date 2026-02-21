@@ -93,6 +93,7 @@ OVERLAY_BG_COLOR = "#1a1a2e"      # Dark background
 OVERLAY_BG_ALPHA = 0.85            # Background opacity
 OVERLAY_FONT_SIZE = 14
 OVERLAY_PADDING = 8
+OVERLAY_REFERENCE_HEIGHT = 1080  # Baseline resolution for overlay scaling
 
 # Overlay theme: "poe2" (gothic, default) or "classic" (original)
 OVERLAY_THEME = "poe2"

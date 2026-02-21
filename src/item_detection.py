@@ -50,11 +50,11 @@ class ItemDetector:
         # Callbacks
         self._on_change: Optional[Callable] = None
         self._on_hide: Optional[Callable] = None
+        self._on_reshow: Optional[Callable] = None
         # When True, the overlay was hidden by cursor movement and the
         # next detection of the same item should re-fire the callback
         # instead of being blocked by content dedup.
         self._awaiting_reshow: bool = False
-        self._reshow_origin_pos: Optional[Tuple[int, int]] = None
 
     def set_callback(self, callback: Callable):
         """
@@ -66,6 +66,15 @@ class ItemDetector:
     def set_hide_callback(self, callback: Callable):
         """Set callback for when cursor moves away from a priced item."""
         self._on_hide = callback
+
+    def set_reshow_callback(self, callback: Callable):
+        """Set callback for re-displaying the last overlay at a new position.
+
+        Callback receives: (cursor_x: int, cursor_y: int)
+        Called instead of the full change callback when the user re-hovers
+        the same item — avoids re-running the entire pricing pipeline.
+        """
+        self._on_reshow = callback
 
     def _is_same_position(self, pos_a: Tuple[int, int], pos_b: Tuple[int, int]) -> bool:
         """Check if two positions are within CURSOR_STILL_RADIUS of each other."""
@@ -108,8 +117,6 @@ class ItemDetector:
                     # stale item data from a previous tooltip, so we must prevent
                     # the same item text from re-triggering at every new position)
                     if self._last_trigger_pos and not self._is_same_position((cx, cy), self._last_trigger_pos):
-                        # Save origin before clearing — needed for distance-guarded reshow
-                        self._reshow_origin_pos = self._last_trigger_pos
                         self._last_trigger_pos = None
                         # Hide overlay when cursor leaves the item
                         if self._on_hide:
@@ -152,19 +159,18 @@ class ItemDetector:
                 if (item_text == self._last_item_text
                         and (now_dedup - self._last_item_time) < self._DEDUP_TTL):
                     if self._awaiting_reshow:
-                        if self._reshow_origin_pos and self._is_same_position(
-                                (cx, cy), self._reshow_origin_pos):
-                            # Genuine jitter — cursor returned to same item
-                            logger.debug(f"Re-showing item at ({cx}, {cy})")
-                            self._awaiting_reshow = False
-                            self._last_trigger_pos = (cx, cy)
-                            if self._on_change:
-                                self._on_change(item_text, cx, cy)
-                        else:
-                            # Stale cached data at a different position — suppress
-                            logger.debug(f"Suppressing stale reshow at ({cx}, {cy})")
-                            self._last_trigger_pos = (cx, cy)
-                            self._awaiting_reshow = False
+                        # The clipboard reader clears before Ctrl+C, so any
+                        # data returned here is genuinely from a tooltip under
+                        # the cursor — safe to re-show without position gating.
+                        # Use the lightweight reshow callback to just reposition
+                        # the overlay instead of re-running the full pipeline.
+                        logger.debug(f"Re-showing item at ({cx}, {cy})")
+                        self._awaiting_reshow = False
+                        self._last_trigger_pos = (cx, cy)
+                        if self._on_reshow:
+                            self._on_reshow(cx, cy)
+                        elif self._on_change:
+                            self._on_change(item_text, cx, cy)
                     else:
                         logger.debug(f"Skipping duplicate item at ({cx}, {cy})")
                         self._last_trigger_pos = (cx, cy)

@@ -153,7 +153,7 @@ class TradeClient:
             for m in priceable:
                 logger.info(
                     f"TradeClient: mod [{m.mod_type}] {m.raw_text} "
-                    f"→ {m.stat_id} (val={m.value})")
+                    f"-> {m.stat_id} (val={m.value})")
 
             # Compute DPS/defense filters for trade API
             item_class = getattr(item, 'item_class', '') or ''
