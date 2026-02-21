@@ -1457,7 +1457,8 @@ async def restart_app():
     # to be freed before binding.  This must happen before we tell the dashboard
     # to close, because closing pywebview triggers os._exit(0) in app.py which
     # would kill our daemon threads before Popen runs.
-    subprocess.Popen(restart_cmd, cwd=str(APP_DIR))
+    subprocess.Popen(restart_cmd, cwd=str(APP_DIR),
+                     creationflags=_HIDDEN_FLAGS, startupinfo=_HIDDEN_SI)
 
     # Now tell the dashboard to close the pywebview window
     await ws_manager.broadcast({"type": "app_restart"})
