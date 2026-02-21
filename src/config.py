@@ -300,6 +300,7 @@ DEBUG_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "debug"
 # Flag Reporting (inaccurate price feedback)
 # ─────────────────────────────────────────────
 DISCORD_FLAG_WEBHOOK_URL = os.environ.get("DISCORD_FLAG_WEBHOOK_URL", "")
+DISCORD_RELEASE_WEBHOOK_URL = os.environ.get("DISCORD_RELEASE_WEBHOOK_URL", "")
 FLAG_REPORT_DB = CACHE_DIR / "flag_reports.jsonl"
 FLAG_REPORT_COOLDOWN = 10  # seconds between flags
 
