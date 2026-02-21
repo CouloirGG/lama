@@ -451,7 +451,8 @@ class LAMA:
                     parsed_mods = self.mod_parser.parse_mods(item)
                 self._price_unique_async(item, cursor_x, cursor_y,
                                          static_result=static_result,
-                                         parsed_mods=parsed_mods)
+                                         parsed_mods=parsed_mods,
+                                         clipboard_text=item_text)
                 return
 
             # Step 2: Non-unique items with mods → local scoring (or trade API fallback)
@@ -709,7 +710,8 @@ class LAMA:
         thread.start()
 
     def _price_unique_async(self, item, cursor_x: int, cursor_y: int,
-                            static_result: dict = None, parsed_mods=None):
+                            static_result: dict = None, parsed_mods=None,
+                            clipboard_text=None):
         """Price a corrupted unique via the trade API in a background thread.
 
         Shows static price immediately if available, then upgrades with
@@ -774,6 +776,12 @@ class LAMA:
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         price_divine=result.min_price,
                     )
+                    self._cache_for_flag(
+                        item_name=display_name, base_type=item.base_type,
+                        rarity=item.rarity, tier=result.tier,
+                        display_text=result.display,
+                        price_divine=result.min_price,
+                        clipboard_text=clipboard_text)
                     self.stats["successful_lookups"] += 1
                 elif static_result:
                     # Trade API returned nothing — fall back to static
@@ -783,6 +791,13 @@ class LAMA:
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         price_divine=static_result.get("divine_value", 0),
                     )
+                    self._cache_for_flag(
+                        item_name=display_name, base_type=item.base_type,
+                        rarity=item.rarity,
+                        tier=static_result.get("tier", "low"),
+                        display_text=static_result.get("display", "?"),
+                        price_divine=static_result.get("divine_value", 0),
+                        clipboard_text=clipboard_text)
                     self.stats["successful_lookups"] += 1
                 else:
                     self._show_dismiss(item, cursor_x, cursor_y)
