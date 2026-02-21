@@ -23,6 +23,14 @@ from urllib.request import Request
 # Ensure src/ is on sys.path so bare imports and uvicorn "server:app" work
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+
+def _log(msg):
+    """Print that won't crash under pythonw (sys.stdout is None)."""
+    try:
+        print(msg)
+    except Exception:
+        pass
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -281,21 +289,21 @@ def main():
     try:
         import webview
     except ImportError:
-        print("=" * 50)
-        print("pywebview is required for standalone mode.")
-        print("Install it with:")
-        print()
-        print("    pip install pywebview")
-        print()
-        print("Then re-run: python app.py")
-        print("=" * 50)
+        _log("=" * 50)
+        _log("pywebview is required for standalone mode.")
+        _log("Install it with:")
+        _log("")
+        _log("    pip install pywebview")
+        _log("")
+        _log("Then re-run: python app.py")
+        _log("=" * 50)
         sys.exit(1)
 
     # If launched with --restart, wait for the old process to release the port
     if "--restart" in sys.argv:
-        print("Restart requested — waiting for old process to release port...")
+        _log("Restart requested — waiting for old process to release port...")
         if not wait_for_port_free():
-            print("ERROR: Port not freed within 10 seconds.")
+            _log("ERROR: Port not freed within 10 seconds.")
             sys.exit(1)
 
     # Start the server in a daemon thread
@@ -303,12 +311,12 @@ def main():
     server_thread.start()
 
     # Wait for it to be ready
-    print(f"Starting LAMA on port {PORT}...")
+    _log(f"Starting LAMA on port {PORT}...")
     if not wait_for_server():
-        print("ERROR: Server failed to start within 10 seconds.")
+        _log("ERROR: Server failed to start within 10 seconds.")
         sys.exit(1)
 
-    print("Server ready. Opening window...")
+    _log("Server ready. Opening window...")
 
     # Open the native window pointing at the dashboard
     api = WindowApi()
@@ -385,9 +393,10 @@ def main():
     ico_path = str(get_resource("resources/img/favicon.ico"))
     webview.start(icon=ico_path)
 
-    print("Window closed. Shutting down.")
-    tray.stop()
-    # Daemon thread dies automatically when main exits
+    try:
+        tray.stop()
+    except Exception:
+        pass
     os._exit(0)
 
 
