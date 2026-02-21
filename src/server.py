@@ -684,6 +684,7 @@ class SettingsRequest(BaseModel):
     overlay_pulse_style: Optional[str] = None
     telemetry_enabled: Optional[bool] = None
     poesessid: Optional[str] = None
+    nux_completed: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
