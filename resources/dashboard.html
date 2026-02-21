@@ -3385,24 +3385,27 @@
         const isErr = fb === "error";
         const isPending = fb === "pending";
         const isApi = opts.isApi;
+        const isDisabled = isPending || opts.disabled;
 
         let bg = T.input;
         let color = T.textSecond;
         let borderColor = T.border;
         if (isOk) { bg = T.green; color = "#fff"; borderColor = T.green; }
         else if (isErr) { bg = "#a83232"; color = "#fff"; borderColor = "#a83232"; }
+        else if (opts.disabled) { bg = T.input; color = T.textMuted; borderColor = `${T.border}66`; }
         else if (opts.accent) { bg = `${T.gold}22`; borderColor = T.borderGold; color = T.gold; }
 
         return (
           <Tooltip text={opts.tooltip || label}>
             <button
-              onClick={() => doAction(action, listing, idx)}
-              disabled={isPending}
+              onClick={() => !opts.disabled && doAction(action, listing, idx)}
+              disabled={isDisabled}
               style={{
                 ...BTN, padding: "1px 4px", fontSize: 9, lineHeight: "16px",
                 background: bg, color: color,
                 border: `1px solid ${borderColor}`,
-                opacity: isPending ? 0.6 : 1,
+                opacity: isDisabled ? 0.4 : 1,
+                cursor: opts.disabled ? "not-allowed" : undefined,
                 minWidth: 0,
               }}
             >
@@ -3435,12 +3438,20 @@
                     {l.price ? l.price.replace(/\s*(divine|exalted|chaos)\s*/gi, " ").trim() : "--"}
                   </span>
                 </span>
-                {/* Account */}
-                <span style={{ color: T.textSecond, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10 }}>{l.account}</span>
+                {/* Account + online status */}
+                <span style={{ display: "flex", alignItems: "center", gap: 3, flex: 1, minWidth: 0, overflow: "hidden" }}>
+                  <Tooltip text={l.online ? (l.afk ? "AFK" : "Online") : "Offline"}>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                      background: l.online ? (l.afk ? T.gold : T.green) : "#a83232",
+                    }} />
+                  </Tooltip>
+                  <span style={{ color: T.textSecond, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10 }}>{l.account}</span>
+                </span>
                 {/* Listed */}
                 <span style={{ color: T.textMuted, whiteSpace: "nowrap", fontSize: 9 }}>{formatTime(l.indexed)}</span>
-                {/* Actions — require character name (only available with POESESSID) */}
-                {l.character ? (
+                {/* Actions — need character name for in-game commands */}
+                {(l.character || l.account) ? (
                   <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
                     {actionBtn("Wh", "whisper", l, i, {
                       tooltip: hasWhisperToken ? "Send whisper via API (no chat)" : "Send whisper via game chat",
@@ -3448,16 +3459,17 @@
                     })}
                     {actionBtn("Inv", "invite", l, i, { tooltip: "Send /invite via game chat" })}
                     {actionBtn("HO", "hideout", l, i, {
-                      tooltip: hasHideoutToken ? "Visit hideout via API (instant)" : "Send /hideout via game chat",
-                      accent: true,
+                      tooltip: hasHideoutToken ? "Visit hideout via API (instant)" : "Requires POESESSID (POE2 has no /hideout <player> command)",
+                      accent: hasHideoutToken,
                       isApi: hasHideoutToken,
+                      disabled: !hasHideoutToken,
                     })}
                     {actionBtn("Tr", "tradewith", l, i, { tooltip: "Send /tradewith via game chat" })}
                     {actionBtn("Kk", "kick", l, i, { tooltip: "Send /kick via game chat" })}
                   </div>
                 ) : (
-                  <Tooltip text="Set your POESESSID above to enable trade actions">
-                    <span style={{ fontSize: 8, color: T.textMuted, fontStyle: "italic" }}>No session</span>
+                  <Tooltip text="No player info available for this listing">
+                    <span style={{ fontSize: 8, color: T.textMuted, fontStyle: "italic" }}>--</span>
                   </Tooltip>
                 )}
               </div>
@@ -3519,6 +3531,7 @@
 
     function WatchlistQueryCard({ query, result, queryState, tradeStats, tradeItems, onUpdate, onDelete, onRefresh, poesessidSet }) {
       const [editing, setEditing] = useState(false);
+      const [refreshing, setRefreshing] = useState(false);
 
       const r = result || {};
       const hasResult = !!r.last_checked;
@@ -3568,10 +3581,17 @@
             )}
 
             <Tooltip text="Refresh now">
-              <button onClick={() => onRefresh(query.id)} style={{
-                ...BTN, padding: "3px 7px", fontSize: 12, background: "transparent",
-                border: `1px solid ${T.border}`, color: T.textSecond, lineHeight: 1,
-              }}>&#8635;</button>
+              <button onClick={() => {
+                onRefresh(query.id);
+                setRefreshing(true);
+                setTimeout(() => setRefreshing(false), 2000);
+              }} style={{
+                ...BTN, padding: "3px 7px", fontSize: 12,
+                background: refreshing ? `${T.green}22` : "transparent",
+                border: `1px solid ${refreshing ? T.green : T.border}`,
+                color: refreshing ? T.green : T.textSecond, lineHeight: 1,
+                transition: "all 0.2s",
+              }}>{refreshing ? "\u2713" : "\u21BB"}</button>
             </Tooltip>
             <Tooltip text="Edit query">
               <button onClick={() => setEditing(!editing)} style={{
@@ -3651,6 +3671,7 @@
 
       const queries = settings.watchlist_queries || [];
       const pollInterval = settings.watchlist_poll_interval || 300;
+      const onlineOnly = settings.watchlist_online_only !== false;
       const TOTAL_SLOTS = 6;
 
       // Lazy-load trade data on first render
@@ -3718,6 +3739,20 @@
                 <option value={600}>10 minutes</option>
                 <option value={900}>15 minutes</option>
               </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Tooltip text="Only show listings from players currently online">
+                <span style={FIELD_LABEL}>Online Only</span>
+              </Tooltip>
+              <button onClick={() => onSettingsUpdate({ watchlist_online_only: !onlineOnly })}
+                style={{
+                  ...BTN, padding: "4px 12px", fontSize: 10,
+                  background: onlineOnly ? `${T.green}22` : T.input,
+                  border: `1px solid ${onlineOnly ? T.green : T.border}`,
+                  color: onlineOnly ? T.green : T.textMuted,
+                }}>
+                {onlineOnly ? "ON" : "OFF"}
+              </button>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Tooltip text="Your POE session ID enables API-based trade actions (whisper, hideout visit) without chat commands. Find it in your browser's DevTools (Application > Cookies > pathofexile.com). Never share this value.">

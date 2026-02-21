@@ -50,8 +50,8 @@ class GameWindowDetector:
     works on multi-monitor setups where POE2 may not be the "focused" window.
     """
 
-    # EnumWindows callback type
-    _WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+    # EnumWindows callback type (HWND and LPARAM are pointer-sized on 64-bit)
+    _WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
 
     def __init__(self):
         self._use_win32 = False

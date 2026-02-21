@@ -260,7 +260,13 @@ class GameCommander:
         return self.type_in_chat(f"/invite {player}")
 
     def visit_hideout(self, player: str) -> dict:
-        """Visit a player's hideout."""
+        """Visit a player's hideout.
+
+        NOTE: POE2 does NOT support /hideout <player> (POE1 only).
+        In POE2, visiting another player's hideout requires the token API
+        or right-clicking their name in party → 'Visit Hideout'.
+        This method is kept for POE1 compatibility but should not be called for POE2.
+        """
         return self.type_in_chat(f"/hideout {player}")
 
     def trade_with(self, player: str) -> dict:

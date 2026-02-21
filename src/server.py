@@ -104,6 +104,7 @@ DEFAULT_SETTINGS = {
     "filter_color_preset": "default",
     "watchlist_queries": [],
     "watchlist_poll_interval": 300,
+    "watchlist_online_only": True,
     "start_with_windows": False,
     "overlay_show_grade": True,
     "overlay_show_price": True,
@@ -497,6 +498,7 @@ async def lifespan(app: FastAPI):
     watchlist_worker.update_queries(
         settings.get("watchlist_queries", []),
         settings.get("watchlist_poll_interval", 300),
+        online_only=settings.get("watchlist_online_only", True),
     )
     # Propagate POESESSID to watchlist worker if configured
     poesessid = settings.get("poesessid", "")
@@ -666,6 +668,7 @@ class SettingsRequest(BaseModel):
     filter_color_preset: Optional[str] = None
     watchlist_queries: Optional[list] = None
     watchlist_poll_interval: Optional[int] = None
+    watchlist_online_only: Optional[bool] = None
     start_with_windows: Optional[bool] = None
     overlay_show_grade: Optional[bool] = None
     overlay_show_price: Optional[bool] = None
@@ -783,12 +786,13 @@ async def update_settings(req: SettingsRequest):
     if "poesessid" in updates and watchlist_worker:
         watchlist_worker.set_session_id(settings.get("poesessid", ""))
 
-    # Notify watchlist worker if queries or interval changed
-    if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates):
+    # Notify watchlist worker if queries, interval, or online filter changed
+    if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates or "watchlist_online_only" in updates):
         queries = settings.get("watchlist_queries", [])
         watchlist_worker.update_queries(
             queries,
             settings.get("watchlist_poll_interval", 300),
+            online_only=settings.get("watchlist_online_only", True),
         )
         # Force-refresh all enabled queries so results appear immediately
         enabled = [q for q in queries if q.get("enabled", True) and q.get("id")]
@@ -913,12 +917,22 @@ async def trade_whisper(req: TradeActionRequest):
             return {**result, "method": "api"}
         logger.warning(f"Whisper token API failed: {result.get('error')}, falling back to chat")
 
-    if not req.player or not req.whisper:
-        return {"error": "Player name and whisper message required for chat fallback"}
+    # The trade API whisper field is the full ready-to-paste message
+    # (e.g. "@CharName Hi, I would like to buy..."), so paste it directly.
+    if req.whisper:
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, game_commander.type_in_chat, req.whisper
+        )
+        return {**result, "method": "chat"}
 
+    if not req.player:
+        return {"error": "No whisper text or player name available"}
+
+    # Bare fallback — just open whisper prompt to player (no message)
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
-        None, game_commander.whisper, req.player, req.whisper
+        None, game_commander.type_in_chat, f"@{req.player} ", False
     )
     return {**result, "method": "chat"}
 
@@ -935,7 +949,11 @@ async def trade_invite(req: TradeActionRequest):
 
 @app.post("/api/trade/hideout")
 async def trade_hideout(req: TradeActionRequest):
-    """Visit a player's hideout — via token API if available, else chat fallback."""
+    """Visit a player's hideout — requires hideout_token + POESESSID.
+
+    POE2 has no /hideout <player> chat command (unlike POE1).
+    The only programmatic way is via the token API.
+    """
     settings = load_settings()
     poesessid = settings.get("poesessid", "")
 
@@ -946,16 +964,9 @@ async def trade_hideout(req: TradeActionRequest):
         )
         if result.get("status") == "sent":
             return {**result, "method": "api"}
-        logger.warning(f"Hideout token API failed: {result.get('error')}, falling back to chat")
+        return {**result, "method": "api"}
 
-    if not req.player:
-        return {"error": "Player name required for chat fallback"}
-
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        None, game_commander.visit_hideout, req.player
-    )
-    return {**result, "method": "chat"}
+    return {"error": "Hideout requires POESESSID + hideout token (POE2 has no /hideout <player> command)"}
 
 
 @app.post("/api/trade/tradewith")

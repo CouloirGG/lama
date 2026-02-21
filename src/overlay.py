@@ -10,6 +10,7 @@ On Windows, this creates a layered window that:
 - Shows a small price tag with color coding
 """
 
+import math
 import re
 import time
 import logging
@@ -86,6 +87,17 @@ _SHEEN_SWEEP_MS = 1800      # Full left→right sweep duration
 _SHEEN_FPS = 30             # ~33ms per frame
 _SHEEN_FRAME_MS = 1000 // _SHEEN_FPS
 _SHEEN_PAUSE_MS = 400       # Gap between sweeps
+_SHEEN_SLICES = 14          # Vertical slices for smooth gradient
+
+
+def _lerp_color(c1: str, c2: str, t: float) -> str:
+    """Linearly interpolate between two hex colors (#rrggbb)."""
+    r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+    r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
+    r = int(r1 + (r2 - r1) * t)
+    g = int(g1 + (g2 - g1) * t)
+    b = int(b1 + (b2 - b1) * t)
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 # Serif font fallback chain (Palatino Linotype ships with every Windows since XP)
 _POE2_FONT_CHAIN = ("Palatino Linotype", "Book Antiqua", "Georgia", "Segoe UI")
@@ -618,12 +630,21 @@ class PriceOverlay:
         c.create_rectangle(1, 1, w - 1, h - 1, fill=bg_color,
                            outline="", tags="bg_fill")
 
-        # 1b. Edge vignette — dark strips along each edge for depth
+        # 1b. Edge vignette — gradient fade from near-black to transparent
+        vig_slices = 6
         vig_w = max(3, w // 12)
-        c.create_rectangle(1, 1, vig_w, h - 1, fill=_POE2_VIGNETTE,
-                           outline="", stipple="gray25", tags="vignette")
-        c.create_rectangle(w - vig_w, 1, w - 1, h - 1, fill=_POE2_VIGNETTE,
-                           outline="", stipple="gray25", tags="vignette")
+        sw = max(1, vig_w // vig_slices)
+        for i in range(vig_slices):
+            # Fade: strongest at the edge, disappears toward center
+            t = 1.0 - i / vig_slices  # 1.0→0.0
+            intensity = t * t * 0.35   # quadratic falloff, max 35% blend
+            color = _lerp_color(bg_color, _POE2_VIGNETTE, intensity)
+            # Left edge
+            c.create_rectangle(1 + sw * i, 1, 1 + sw * (i + 1), h - 1,
+                               fill=color, outline="", tags="vignette")
+            # Right edge
+            c.create_rectangle(w - 1 - sw * (i + 1), 1, w - 1 - sw * i, h - 1,
+                               fill=color, outline="", tags="vignette")
 
         # 1c. Blood splatters — small dark ovals for worn/gritty look
         for xf, yf, sw, sh in _GRUNGE_SPLATTERS:
@@ -638,22 +659,19 @@ class PriceOverlay:
                           int(x2f * w), int(y2f * h),
                           fill=_POE2_BLOOD_MID, width=1, tags="grunge")
 
-        # 1e. Sheen sweep strips — 3 translucent bands (leading, center, trailing)
-        # Placed here so they render under the border and text layers
+        # 1e. Sheen sweep — smooth gradient slices (no stipple/dithering)
+        # Uses N thin rectangles whose colors are pre-blended with the bg,
+        # forming a bell-curve fade from bg → highlight → bg.
         sheen_band = max(4, int(w * _SHEEN_WIDTH_FRAC))
-        strip_w = sheen_band // 3
         off = -sheen_band - 10  # start off-screen left
-        self._sheen_strips = [
-            c.create_rectangle(off, 2, off + strip_w, h - 2,
-                               fill="#ffffff", outline="", stipple="gray25",
-                               tags="sheen"),
-            c.create_rectangle(off + strip_w, 2, off + strip_w * 2, h - 2,
-                               fill="#ffffff", outline="", stipple="gray50",
-                               tags="sheen"),
-            c.create_rectangle(off + strip_w * 2, 2, off + sheen_band, h - 2,
-                               fill="#ffffff", outline="", stipple="gray25",
-                               tags="sheen"),
-        ]
+        n = _SHEEN_SLICES
+        slice_w = max(1, sheen_band // n)
+        self._sheen_strips = []
+        for i in range(n):
+            x0 = off + slice_w * i
+            sid = c.create_rectangle(x0, 2, x0 + slice_w, h - 2,
+                                     fill=_POE2_BG, outline="", tags="sheen")
+            self._sheen_strips.append(sid)
 
         # 2. Border — double-line effect: outer dark, inner accent
         # Outer border
@@ -1039,21 +1057,28 @@ class PriceOverlay:
             _SHEEN_FRAME_MS, self._start_sheen)
 
     def _position_sheen_strips(self):
-        """Move the 3 sheen strips to the current _sheen_x position, clamped to border."""
-        if not self._canvas or len(self._sheen_strips) < 3:
+        """Move the gradient sheen slices and recolor with a smooth bell-curve."""
+        n = len(self._sheen_strips)
+        if not self._canvas or n == 0:
             return
         c = self._canvas
         h = c.winfo_reqheight()
         w = c.winfo_reqwidth()
         sheen_band = max(4, int(w * _SHEEN_WIDTH_FRAC))
-        strip_w = sheen_band // 3
+        slice_w = max(1, sheen_band // n)
         x = self._sheen_x
         inset = 3  # stay inside the border
+        bg = _POE2_BG
+        highlight = self._sheen_color or _POE2_CORNER_GOLD
         for i, sid in enumerate(self._sheen_strips):
-            x0 = max(inset, x + strip_w * i)
-            x1 = min(w - inset, x + strip_w * (i + 1))
+            # Bell curve: peak intensity at center slice
+            t = i / max(1, n - 1)  # 0..1 across the band
+            intensity = math.sin(t * math.pi) * 0.45  # 0→0.45→0 bell shape
+            color = _lerp_color(bg, highlight, intensity)
+            x0 = max(inset, x + slice_w * i)
+            x1 = min(w - inset, x + slice_w * (i + 1))
             c.coords(sid, x0, inset, x1, h - inset)
-            c.itemconfigure(sid, fill=_POE2_CORNER_GOLD)
+            c.itemconfigure(sid, fill=color)
 
     def _do_hide(self):
         """Actually hide the overlay (must be on main thread)."""
