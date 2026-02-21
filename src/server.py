@@ -1465,16 +1465,10 @@ async def restart_app():
 
     def _kill_self():
         time.sleep(1.5)
-        # Belt-and-suspenders: force kill if webview didn't exit cleanly
-        try:
-            import ctypes
-            ctypes.windll.kernel32.TerminateProcess(
-                ctypes.windll.kernel32.GetCurrentProcess(), 0
-            )
-        except Exception:
-            os._exit(0)
+        os._exit(0)
 
-    threading.Thread(target=_kill_self, daemon=True).start()
+    # Use non-daemon thread so it survives even if main thread exits first
+    threading.Thread(target=_kill_self, daemon=False).start()
     return {"status": "restarting"}
 
 
