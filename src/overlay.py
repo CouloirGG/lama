@@ -247,7 +247,7 @@ class PriceOverlay:
         self._visible = False
 
         # Process pending updates periodically
-        self._root.after(50, self._process_pending)
+        self._root.after(30, self._process_pending)
 
         self._ready.set()
         logger.info(f"Overlay window initialized (theme={self._theme}, scale={self._scale:.2f})")
@@ -646,8 +646,8 @@ class PriceOverlay:
             _, icon_key, _ = currency
             # Recalculate: price_part is just the prefix before currency
             price_part = currency[0]
-            price_w = font.measure(price_part) + 4
-            icon_w = self._font_size + 6  # icon size + gap
+            price_w = font.measure(price_part) + 6  # extra for serif overhang
+            icon_w = self._font_size + 10  # icon size + gaps
             if currency[2] and currency[2].strip():
                 secondary_part = currency[2].strip() + (
                     ("  " + secondary_part) if secondary_part else "")
@@ -773,7 +773,7 @@ class PriceOverlay:
         # 7. Currency icon
         if icon_key and icon_key in self._currency_icons:
             icon = self._currency_icons[icon_key]
-            c.create_image(x + 2, cy, image=icon, anchor="w", tags="icon")
+            c.create_image(x + 4, cy, image=icon, anchor="w", tags="icon")
             x += icon_w
 
         # 8. Secondary text (non-star remainder, e.g. currency suffix)
@@ -877,7 +877,7 @@ class PriceOverlay:
 
         # Schedule next check
         if self._root:
-            self._root.after(50, self._process_pending)
+            self._root.after(30, self._process_pending)
 
     def _do_show(self, text: str, tier: str, cursor_x: int, cursor_y: int,
                  estimate: bool = False, price_divine: float = 0,
@@ -1088,14 +1088,11 @@ class PriceOverlay:
 
         self._visible = True
 
-        # Cancel any leftover hide timer from a previous show
+        # Reset auto-hide safety timer — if no new show/reshow arrives
+        # within 3s the overlay hides itself (safety net for missed hides)
         if self._hide_timer:
             self._root.after_cancel(self._hide_timer)
-            self._hide_timer = None
-
-        # No auto-hide timer — the overlay stays visible until the cursor
-        # moves off the item, which triggers overlay.hide() via the
-        # ItemDetector's on_hide callback (item_detection.py:114-116).
+        self._hide_timer = self._root.after(3000, self._do_hide)
 
     def _start_pulse(self):
         """Pulse the border between colors at the configured speed."""
@@ -1256,6 +1253,11 @@ class PriceOverlay:
                 pass
 
         self._visible = True
+
+        # Reset auto-hide safety timer (reshow refreshes the countdown)
+        if self._hide_timer:
+            self._root.after_cancel(self._hide_timer)
+        self._hide_timer = self._root.after(3000, self._do_hide)
 
     def _do_hide(self):
         """Actually hide the overlay (must be on main thread)."""

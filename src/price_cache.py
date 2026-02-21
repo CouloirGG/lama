@@ -719,6 +719,21 @@ class PriceCache:
         else:
             result["display"] = "< 1c"
 
+        # Currency-specific display cleanup
+        if is_currency:
+            name_lower = data.get("name", "").lower()
+            # Avoid self-referential display (Divine Orb = "1.0d", Exalted = "1.0ex")
+            if ("divine" in name_lower and result["display"].endswith("d")) or \
+               ("exalted" in name_lower and result["display"].endswith("ex")):
+                # Force chaos denomination
+                if chaos >= 1:
+                    result["display"] = f"{chaos:.0f}c"
+                else:
+                    result["display"] = "< 1c"
+            else:
+                # Strip ~ prefix for all currency
+                result["display"] = result["display"].lstrip("~").lstrip(" ")
+
         return result
 
     def _adjust_ilvl(self, data, ilvl):

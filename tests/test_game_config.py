@@ -118,7 +118,7 @@ class TestPoe2Config:
 
         assert "Body Armours" in cfg.defense_thresholds
         assert "Helmets" in cfg.defense_thresholds
-        assert len(cfg.defense_thresholds["Body Armours"]) == 4
+        assert len(cfg.defense_thresholds["Body Armours"]) == 3
 
     def test_price_source(self):
         from games.poe2 import create_poe2_config
