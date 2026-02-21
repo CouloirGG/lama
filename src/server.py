@@ -637,12 +637,28 @@ async def check_for_updates():
         logger.debug(f"Update check failed: {e}")
 
 
+def _merge_cache_rates(status: dict):
+    """Fill KPI exchange rates from server-side price_cache.
+
+    The overlay subprocess reports rates via [Status] log lines, but those
+    only appear when the overlay is running.  The server-side price_cache
+    refreshes independently, so we always have fresh rates available.
+    """
+    cache_stats = price_cache.get_stats()
+    stats = status.setdefault("stats", {})
+    for key in ("divine_to_chaos", "divine_to_exalted", "mirror_to_divine"):
+        if cache_stats.get(key):
+            stats[key] = cache_stats[key]
+
+
 async def status_broadcast_loop():
     """Push status updates to WebSocket clients every 5 seconds."""
     while True:
         await asyncio.sleep(5)
         if ws_manager.connections:
             status = overlay.get_status()
+            if price_cache:
+                _merge_cache_rates(status)
             await ws_manager.broadcast({"type": "status", **status})
 
 
@@ -692,7 +708,11 @@ class SettingsRequest(BaseModel):
 # ---------------------------------------------------------------------------
 @app.get("/api/status")
 async def get_status():
-    return overlay.get_status()
+    status = overlay.get_status()
+    # Merge server-side price_cache rates so KPIs work without overlay running
+    if price_cache:
+        _merge_cache_rates(status)
+    return status
 
 
 @app.post("/api/start")
