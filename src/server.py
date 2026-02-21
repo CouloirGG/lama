@@ -378,12 +378,14 @@ class OverlayProcess:
         if self.started_at and self.state == "running":
             uptime = int(time.time() - self.started_at)
 
-        from config import APP_VERSION
+        from config import APP_VERSION, GIT_BRANCH, IS_DEV_BUILD
         return {
             "state": self.state,
             "uptime": uptime,
             "stats": dict(self.stats),
             "version": APP_VERSION,
+            "branch": GIT_BRANCH,
+            "is_dev": IS_DEV_BUILD,
         }
 
     def _classify_line(self, line: str) -> str:

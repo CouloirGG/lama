@@ -4,18 +4,41 @@ All tunable constants in one place.
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from bundle_paths import get_resource
+from bundle_paths import get_resource, IS_FROZEN
 
 # ─────────────────────────────────────────────
 # Version
 # ─────────────────────────────────────────────
 _version_file = get_resource("resources/VERSION")
 APP_VERSION = _version_file.read_text().strip() if _version_file.exists() else "dev"
+
+# ─────────────────────────────────────────────
+# Dev build detection
+# ─────────────────────────────────────────────
+def _detect_git_branch() -> str | None:
+    """Return the current git branch name, or None if not in a git repo."""
+    if IS_FROZEN:
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+GIT_BRANCH = _detect_git_branch()
+IS_DEV_BUILD = GIT_BRANCH not in (None, "main")
 
 # ─────────────────────────────────────────────
 # POE2 Game Settings
