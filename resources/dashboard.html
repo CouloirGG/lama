@@ -120,6 +120,15 @@
       from { opacity: 0; }
       to   { opacity: 1; }
     }
+    @keyframes nuxHighlight {
+      0%   { color: #8c7a5c; }
+      40%  { color: #c4a456; text-shadow: 0 0 6px rgba(196,164,86,0.4); }
+      100% { color: #c4a456; text-shadow: none; }
+    }
+    @keyframes nuxMarkerRing {
+      0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.7), 0 0 6px rgba(255,255,255,0.15); }
+      50%      { box-shadow: 0 0 0 3px rgba(255,255,255,0.95), 0 0 12px rgba(255,255,255,0.3); }
+    }
     .couloir-flyout {
       position: absolute;
       bottom: calc(100% + 8px);
@@ -517,15 +526,32 @@
       markets: "The Exchange Floor",
     };
 
+    // NUX text supports highlighted keywords: use { hl: "word" } for gold-animated emphasis
     const NUX_STEPS = [
-      { id: "exchange-rates", tab: null, target: "exchange-rates", title: "Exchange Rates", text: "Live currency conversion rates from poe.ninja. These update every 15 minutes.", position: "bottom" },
-      { id: "start-scanner", tab: "overlay", target: "start-scanner", title: "Start the Scanner", text: "Click Start to begin scanning items. Hover over any item in POE2 and press Ctrl+C \u2014 LAMA reads the clipboard and shows a price overlay.", position: "bottom" },
-      { id: "item-lookup", tab: "overlay", target: "item-lookup", title: "Quick Price Check", text: "Paste any item text here (Ctrl+C from in-game) to look up its price without the overlay running.", position: "bottom" },
-      { id: "overlay-settings", tab: "overlay", target: "overlay-settings", title: "Overlay Settings", text: "Adjust how the overlay looks \u2014 font size, display duration, theme, and what info to show (grade, price, stars, DPS).", position: "top" },
-      { id: "filter-tab", tab: "filter", target: "filter-tab", title: "Loot Filter", text: "Customize your loot filter strictness and per-tier visual styles. Changes apply to your in-game filter file.", position: "bottom" },
-      { id: "watchlist-tab", tab: "watchlist", target: "watchlist-tab", title: "Trade Watchlist", text: "Set up trade search queries that auto-refresh. Get notified when items you want are listed, and use action buttons to whisper, invite, or trade.", position: "bottom" },
-      { id: "markets-tab", tab: "markets", target: "markets-tab", title: "Live Markets", text: "Track currency exchange rates and price trends over time.", position: "bottom" },
-      { id: "footer-controls", tab: null, target: "footer-controls", title: "Footer Controls", text: "Switch leagues, report bugs, send feedback, or check credits from the footer bar.", position: "top" },
+      { id: "exchange-rates", tab: null, target: "exchange-rates", title: "Core Currencies", text: [
+        "The ", { hl: "big four", mark: "big-four" }, " currency rates from ", { hl: "poe.ninja" }, ", updated every ", { hl: "15 minutes", mark: "last-refresh" }, ". Use these to gauge whether an item is worth picking up."
+      ], position: "bottom" },
+      { id: "start-scanner", tab: "overlay", target: "start-scanner", title: "Start the Overlay", text: [
+        "Hit ", { hl: "Start", mark: "start" }, ", then hover over any item in-game and press ", { hl: "Ctrl+C" }, ". LAMA reads the clipboard and instantly shows a ", { hl: "price overlay" }, " on screen."
+      ], position: "bottom" },
+      { id: "item-lookup", tab: "overlay", target: "item-lookup", title: "Quick Price Check", text: [
+        "Don\u2019t want to run the overlay? ", { hl: "Paste", mark: "paste" }, " any item text here (", { hl: "Ctrl+C" }, " from in-game) for a one-off price lookup."
+      ], position: "bottom" },
+      { id: "overlay-settings", tab: "overlay", target: "overlay-settings", title: "Overlay Settings", text: [
+        "Tweak how the overlay appears \u2014 ", { hl: "font size", mark: "font-size" }, ", ", { hl: "display duration", mark: "duration" }, ", ", { hl: "theme", mark: "theme" }, ", and what info to show like ", { hl: "grade", mark: "grade" }, ", ", { hl: "price", mark: "price" }, ", and ", { hl: "DPS", mark: "dps" }, "."
+      ], position: "top" },
+      { id: "filter-tab", tab: "filter", target: "filter-tab", title: "Loot Filter", text: [
+        "LAMA auto-generates a loot filter based on ", { hl: "real market prices" }, ". Choose a ", { hl: "strictness", mark: "strictness" }, " level and it handles the rest \u2014 valuable items glow, junk fades out."
+      ], position: "bottom" },
+      { id: "watchlist-tab", tab: "watchlist", target: "watchlist-tab", title: "Item Watchlist", text: [
+        "Hunting for a specific unique or base? Set up ", { hl: "search queries" }, " that auto-refresh in the background. When a match appears, ", { hl: "whisper" }, ", ", { hl: "invite" }, ", or ", { hl: "trade" }, " with one click."
+      ], position: "bottom" },
+      { id: "markets-tab", tab: "markets", target: "markets-tab", title: "Live Markets", text: [
+        "Track currency ", { hl: "price trends", mark: "price-trends" }, " and spot opportunities. See which orbs are ", { hl: "rising", mark: "rising" }, " or ", { hl: "crashing", mark: "crashing" }, " \u2014 buy the dip, sell the peak."
+      ], position: "bottom" },
+      { id: "footer-controls", tab: null, target: "footer-controls", title: "Footer Controls", text: [
+        "Switch ", { hl: "leagues", mark: "leagues" }, " if you play multiple, ", { hl: "report bugs", mark: "bug-report" }, " or send feedback directly to the dev, and check ", { hl: "credits", mark: "credits" }, " from the Couloir menu."
+      ], position: "top" },
     ];
 
     // -----------------------------------------------------------------------
@@ -606,6 +632,7 @@
       return (
         <div className="app-footer" data-nux="footer-controls" style={{ position: "relative" }} ref={flyoutRef}>
           <select
+            data-nux-hl="leagues"
             value={selectedLeague || "Fate of the Vaal"}
             onChange={(e) => onLeagueChange(e.target.value)}
             style={{
@@ -619,7 +646,7 @@
             ))}
           </select>
           <Tooltip text="Send bug report with logs to Discord">
-            <button onClick={onBugReport} style={{
+            <button onClick={onBugReport} data-nux-hl="bug-report" style={{
               background: "transparent", border: "none", color: T.textSecond,
               fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
               transition: "color 0.15s",
@@ -654,6 +681,7 @@
           <img
             src="/img/couloir_avatar.png"
             alt="Couloir"
+            data-nux-hl="credits"
             onClick={() => setFlyoutOpen(!flyoutOpen)}
             style={{
               width: 22, height: 22, borderRadius: 4, cursor: "pointer",
@@ -798,6 +826,21 @@
     // -----------------------------------------------------------------------
     function NUXOverlay({ step, current, total, onNext, onSkip }) {
       const [rect, setRect] = useState(null);
+      const [markerRects, setMarkerRects] = useState([]);
+
+      // Collect markers from step text segments
+      const markers = useMemo(() => {
+        if (!Array.isArray(step.text)) return [];
+        let hlCount = 0;
+        const result = [];
+        for (const seg of step.text) {
+          if (typeof seg !== "string") {
+            if (seg.mark) result.push({ mark: seg.mark, hlIdx: hlCount });
+            hlCount++;
+          }
+        }
+        return result;
+      }, [step]);
 
       const measure = useCallback(() => {
         const el = document.querySelector(`[data-nux="${step.id}"]`);
@@ -810,7 +853,16 @@
           const right = Math.min(vw, r.right);
           setRect({ top, left, width: right - left, height: Math.max(40, bottom - top) });
         }
-      }, [step.id]);
+        // Measure marker elements
+        const mRects = markers.map(m => {
+          const mel = document.querySelector(`[data-nux-hl="${m.mark}"]`);
+          if (!mel) return null;
+          const mr = mel.getBoundingClientRect();
+          if (mr.width === 0 || mr.height === 0) return null;
+          return { ...m, rect: mr };
+        }).filter(Boolean);
+        setMarkerRects(mRects);
+      }, [step.id, markers]);
 
       useEffect(() => {
         const timer = setTimeout(measure, 150);
@@ -878,6 +930,26 @@
               position: "absolute", top: t, left: l, width: w, height: h,
               borderRadius: 6, boxShadow: `0 0 0 3px ${T.gold}44, 0 0 20px rgba(196,164,86,0.2)`,
             }} />
+            {/* White marker rings on specific UI elements */}
+            {markerRects.map((m, i) => {
+              const mr = m.rect;
+              const delay = 0.3 + m.hlIdx * 0.15;
+              const padM = 5;
+              return (
+                <div key={i} style={{
+                  position: "fixed",
+                  left: mr.left - padM,
+                  top: mr.top - padM,
+                  width: mr.width + padM * 2,
+                  height: mr.height + padM * 2,
+                  borderRadius: Math.max(mr.width, mr.height) > 60 ? 8 : "50%",
+                  boxShadow: "0 0 0 2px rgba(255,255,255,0.7), 0 0 6px rgba(255,255,255,0.15)",
+                  pointerEvents: "none",
+                  opacity: 0,
+                  animation: `nuxFadeIn 0.3s ease-out ${delay}s forwards, nuxMarkerRing 1.5s ease-in-out ${delay + 0.3}s infinite`,
+                }} />
+              );
+            })}
           </div>
           {/* Tooltip card — completely separate from backdrop for clean pointer-events */}
           <div style={{
@@ -890,7 +962,17 @@
           }}>
             <div style={{ ...arrowStyle }} />
             <div style={{ fontSize: 14, fontWeight: 700, color: T.gold, marginBottom: 8 }}>{step.title}</div>
-            <div style={{ fontSize: 12, color: T.textSecond, lineHeight: 1.5, marginBottom: 16 }}>{step.text}</div>
+            <div style={{ fontSize: 12, color: T.textSecond, lineHeight: 1.5, marginBottom: 16 }}>{
+              Array.isArray(step.text) ? step.text.map((seg, i) => {
+                if (typeof seg === "string") return <span key={i}>{seg}</span>;
+                const hlIdx = step.text.filter((s, j) => j < i && typeof s !== "string").length;
+                const delay = 0.3 + hlIdx * 0.15;
+                return <span key={i} style={{
+                  color: T.gold, fontWeight: 600,
+                  animation: `nuxHighlight 0.5s ease-out ${delay}s both`,
+                }}>{seg.hl}</span>;
+              }) : step.text
+            }</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 10, color: T.textMuted }}>{current + 1} of {total}</span>
               <div style={{ display: "flex", gap: 8 }}>
@@ -948,12 +1030,12 @@
 
       return (
         <div data-nux="exchange-rates" style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 8 }}>
+          <div data-nux-hl="big-four" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 8 }}>
             <StatCard label="1 Mirror" value={m2d > 0 ? `${m2d.toFixed(0)}` : "--"} sub={m2d > 0 ? "Divine" : null} color="#c084fc" iconLeft={ICON.mirror} iconRight={ICON.divine} tooltip="1 Mirror of Kalandra = X Divine Orbs" />
             <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
             <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} sub={d2c > 0 ? "Chaos" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
             <StatCard label="1 Chaos" value={e2c > 0 ? `${e2c.toFixed(0)}` : "--"} sub={e2c > 0 ? "Exalted" : null} color={T.amber} iconLeft={ICON.exalted} iconRight={ICON.chaos} tooltip="1 Chaos Orb = X Exalted Orbs" />
-            <StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={refreshColor} tooltip="When price data was last fetched (refreshes every 15 min)" />
+            <div data-nux-hl="last-refresh"><StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={refreshColor} tooltip="When price data was last fetched (refreshes every 15 min)" /></div>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4, padding: "2px 0" }}>
             <span style={{ fontSize: 9, color: T.textMuted, fontStyle: "italic" }}>
@@ -1140,7 +1222,7 @@
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
               <span style={{ fontSize: 12, color: T.textSecond }}>Scanner offline</span>
-              <button onClick={onStart} className="btn-gold-hover" style={{
+              <button onClick={onStart} className="btn-gold-hover" data-nux-hl="start" style={{
                 ...BTN, background: T.green, color: "#fff", padding: "5px 16px", fontSize: 11,
                 border: `1px solid ${T.green}`, marginLeft: "auto",
               }}>&#9654; Start</button>
@@ -2142,7 +2224,7 @@
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {!collapsed && (
-                <button onClick={(e) => { e.stopPropagation(); handlePaste(); }} style={{
+                <button onClick={(e) => { e.stopPropagation(); handlePaste(); }} data-nux-hl="paste" style={{
                   background: "transparent", border: "none", fontSize: 10, fontWeight: 600,
                   cursor: "pointer", letterSpacing: "0.06em", color: T.gold, transition: "color 0.15s",
                 }}>PASTE FROM CLIPBOARD</button>
@@ -2234,9 +2316,9 @@
       );
     }
 
-    function SettingsField({ label, field, value, onUpdate, type = "number", step, min, max, helpText }) {
+    function SettingsField({ label, field, value, onUpdate, type = "number", step, min, max, helpText, nuxHl }) {
       return (
-        <div>
+        <div data-nux-hl={nuxHl || undefined}>
           <label style={FIELD_LABEL}>{label}</label>
           <input
             type={type}
@@ -2305,11 +2387,11 @@
             <div className="panel" style={{ ...CARD, padding: 12 }}>
               <div style={{ ...LABEL, marginBottom: 8 }}>Display</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
-                <SettingsField label="Font Size" field="font_size" value={settings.font_size} onUpdate={onUpdate} min={8} max={24} step={1} helpText="Text size (px)" />
-                <SettingsField label="Duration" field="overlay_duration" value={settings.overlay_duration} onUpdate={onUpdate} min={0.5} max={10} step={0.5} helpText="Seconds shown" />
+                <SettingsField label="Font Size" field="font_size" value={settings.font_size} onUpdate={onUpdate} min={8} max={24} step={1} helpText="Text size (px)" nuxHl="font-size" />
+                <SettingsField label="Duration" field="overlay_duration" value={settings.overlay_duration} onUpdate={onUpdate} min={0.5} max={10} step={0.5} helpText="Seconds shown" nuxHl="duration" />
               </div>
               {/* Theme selector */}
-              <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.border}33` }}>
+              <div data-nux-hl="theme" style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.border}33` }}>
                 <div style={{ ...LABEL, marginBottom: 8, fontSize: 9 }}>Theme</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   {[
@@ -2413,13 +2495,13 @@
                 <div style={{ ...LABEL, marginBottom: 6, fontSize: 9 }}>Toggle Overrides</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px 12px" }}>
                   {[
-                    ["Grade", "overlay_show_grade"],
-                    ["Price", "overlay_show_price"],
+                    ["Grade", "overlay_show_grade", "grade"],
+                    ["Price", "overlay_show_price", "price"],
                     ["Stars", "overlay_show_stars"],
                     ["Top Mods", "overlay_show_mods"],
-                    ["DPS/Defense", "overlay_show_dps"],
-                  ].map(([label, field]) => (
-                    <div key={field} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    ["DPS/Defense", "overlay_show_dps", "dps"],
+                  ].map(([label, field, nuxHl]) => (
+                    <div key={field} data-nux-hl={nuxHl || undefined} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <Toggle value={settings[field] !== false} onChange={(v) => onUpdate({ [field]: v, overlay_display_preset: "custom" })} size="small" />
                       <span style={{ fontSize: 11, color: T.textSecond }}>{label}</span>
                     </div>
@@ -2452,7 +2534,7 @@
       return (
         <div style={{ marginBottom: 20 }}>
           <div style={{ ...LABEL, marginBottom: 10 }}>Strictness</div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div data-nux-hl="strictness" style={{ display: "flex", gap: 8 }}>
             {presets.map(p => {
               const active = value === p.id;
               return (
@@ -4816,7 +4898,7 @@
           </div>
 
           {/* Featured Chart */}
-          <FeaturedChart history={history} currencies={currencies} rates={rates} oldestHistoryTs={data?.oldest_history_ts || 0} />
+          <div data-nux-hl="price-trends"><FeaturedChart history={history} currencies={currencies} rates={rates} oldestHistoryTs={data?.oldest_history_ts || 0} /></div>
 
           {/* Market Signals */}
           <MarketSignals />
@@ -4856,8 +4938,8 @@
               <div />
               <div style={{ ...LABEL, fontSize: 8 }}>Currency</div>
               <div style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>Value</div>
-              <div style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>7d %</div>
-              <div style={{ ...LABEL, fontSize: 8, textAlign: "center" }}>Trend</div>
+              <div data-nux-hl="rising" style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>7d %</div>
+              <div data-nux-hl="crashing" style={{ ...LABEL, fontSize: 8, textAlign: "center" }}>Trend</div>
               <div style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>Vol</div>
             </div>
             {/* Table rows */}
