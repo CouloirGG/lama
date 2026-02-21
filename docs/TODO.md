@@ -30,6 +30,9 @@
 
 ## Completed
 
+### Session 25 (2026-02-20)
+- [x] **Trade action buttons** — Full trade flow in Watchlist tab: Whisper, Invite, Hideout, Trade, Kick buttons per listing. Chat command engine (`game_commands.py`) sends commands via keystroke simulation + clipboard paste. Authenticated mode (`trade_actions.py`) uses POESESSID + whisper_token/hideout_token for API-based actions without chat. POESESSID input with password masking + clear button in Watchlist settings. Token indicators show API vs chat mode per listing.
+
 ### Session 24 (2026-02-20)
 - [x] **ilvl breakpoint tables (PT-12)** — `identify_tier()` now skips tiers whose `required_level > item_level`, percentile denominator scoped to rollable tiers only, DPS brackets expanded from 2 to 4 ilvl tiers, defense thresholds changed from flat tuples to ilvl-keyed dicts, `_adjust_ilvl()` smoothed from 5 to 7 brackets removing cliff-edge at ilvl 80→75. All 40 tests pass.
 

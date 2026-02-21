@@ -45,7 +45,9 @@ from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from item_lookup import ItemLookup
 from price_cache import PriceCache
+from game_commands import GameCommander
 from telemetry import TelemetryUploader
+from trade_actions import TradeActions
 from watchlist import WatchlistWorker
 
 logger = logging.getLogger("dashboard")
@@ -113,6 +115,7 @@ DEFAULT_SETTINGS = {
     "overlay_theme": "poe2",
     "overlay_pulse_style": "sheen",
     "telemetry_enabled": False,
+    "poesessid": "",
 }
 
 
@@ -468,6 +471,8 @@ watchlist_worker: Optional[WatchlistWorker] = None
 price_cache: Optional[PriceCache] = None
 item_lookup: Optional[ItemLookup] = None
 telemetry_uploader: Optional[TelemetryUploader] = None
+game_commander = GameCommander()
+trade_actions: Optional[TradeActions] = None
 
 
 # ---------------------------------------------------------------------------
@@ -476,7 +481,7 @@ telemetry_uploader: Optional[TelemetryUploader] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Set up the event loop reference and background tasks."""
-    global watchlist_worker, price_cache, item_lookup, telemetry_uploader
+    global watchlist_worker, price_cache, item_lookup, telemetry_uploader, trade_actions
 
     loop = asyncio.get_running_loop()
     overlay.set_loop(loop)
@@ -493,7 +498,14 @@ async def lifespan(app: FastAPI):
         settings.get("watchlist_queries", []),
         settings.get("watchlist_poll_interval", 300),
     )
+    # Propagate POESESSID to watchlist worker if configured
+    poesessid = settings.get("poesessid", "")
+    if poesessid:
+        watchlist_worker.set_session_id(poesessid)
     watchlist_worker.start(loop)
+
+    # Initialize trade actions (authenticated API calls)
+    trade_actions = TradeActions(lambda: load_settings().get("poesessid", ""))
 
     # Server-side PriceCache for Markets tab (works without overlay running)
     price_cache = PriceCache(league=league)
@@ -665,6 +677,7 @@ class SettingsRequest(BaseModel):
     overlay_theme: Optional[str] = None
     overlay_pulse_style: Optional[str] = None
     telemetry_enabled: Optional[bool] = None
+    poesessid: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -721,9 +734,20 @@ async def restart_overlay(req: StartRequest = StartRequest()):
     return result
 
 
+def _redact_settings(settings: dict) -> dict:
+    """Return settings with sensitive fields redacted for API responses."""
+    out = dict(settings)
+    if out.get("poesessid"):
+        out["poesessid_set"] = True
+        out["poesessid"] = ""
+    else:
+        out["poesessid_set"] = False
+    return out
+
+
 @app.get("/api/settings")
 async def get_settings():
-    return load_settings()
+    return _redact_settings(load_settings())
 
 
 @app.post("/api/settings")
@@ -737,7 +761,7 @@ async def update_settings(req: SettingsRequest):
             settings[key] = updates.pop(key)
     deep_merge(settings, updates)
     save_settings(settings)
-    await ws_manager.broadcast({"type": "settings", "settings": settings})
+    await ws_manager.broadcast({"type": "settings", "settings": _redact_settings(settings)})
 
     # Update Windows auto-start registry if the setting changed
     if "start_with_windows" in updates:
@@ -754,6 +778,10 @@ async def update_settings(req: SettingsRequest):
             telemetry_uploader.start_schedule()
         else:
             telemetry_uploader.stop_schedule()
+
+    # Propagate POESESSID to watchlist worker
+    if "poesessid" in updates and watchlist_worker:
+        watchlist_worker.set_session_id(settings.get("poesessid", ""))
 
     # Notify watchlist worker if queries or interval changed
     if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates):
@@ -859,6 +887,95 @@ async def refresh_watchlist_query(query_id: str):
         return {"error": "Watchlist not initialized"}
     watchlist_worker.force_refresh(query_id)
     return {"status": "queued", "query_id": query_id}
+
+
+# ---------------------------------------------------------------------------
+# Trade action endpoints (whisper, invite, hideout, trade, kick)
+# ---------------------------------------------------------------------------
+class TradeActionRequest(BaseModel):
+    player: str = ""
+    token: str = ""
+    whisper: str = ""
+
+
+@app.post("/api/trade/whisper")
+async def trade_whisper(req: TradeActionRequest):
+    """Send a trade whisper — via token API if available, else chat fallback."""
+    settings = load_settings()
+    poesessid = settings.get("poesessid", "")
+
+    if req.token and poesessid and trade_actions:
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, trade_actions.whisper_via_token, req.token
+        )
+        if result.get("status") == "sent":
+            return {**result, "method": "api"}
+        logger.warning(f"Whisper token API failed: {result.get('error')}, falling back to chat")
+
+    if not req.player or not req.whisper:
+        return {"error": "Player name and whisper message required for chat fallback"}
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None, game_commander.whisper, req.player, req.whisper
+    )
+    return {**result, "method": "chat"}
+
+
+@app.post("/api/trade/invite")
+async def trade_invite(req: TradeActionRequest):
+    """Send /invite <player> via chat."""
+    if not req.player:
+        return {"error": "Player name required"}
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, game_commander.invite, req.player)
+    return result
+
+
+@app.post("/api/trade/hideout")
+async def trade_hideout(req: TradeActionRequest):
+    """Visit a player's hideout — via token API if available, else chat fallback."""
+    settings = load_settings()
+    poesessid = settings.get("poesessid", "")
+
+    if req.token and poesessid and trade_actions:
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, trade_actions.hideout_via_token, req.token
+        )
+        if result.get("status") == "sent":
+            return {**result, "method": "api"}
+        logger.warning(f"Hideout token API failed: {result.get('error')}, falling back to chat")
+
+    if not req.player:
+        return {"error": "Player name required for chat fallback"}
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None, game_commander.visit_hideout, req.player
+    )
+    return {**result, "method": "chat"}
+
+
+@app.post("/api/trade/tradewith")
+async def trade_tradewith(req: TradeActionRequest):
+    """Send /tradewith <player> via chat."""
+    if not req.player:
+        return {"error": "Player name required"}
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, game_commander.trade_with, req.player)
+    return result
+
+
+@app.post("/api/trade/kick")
+async def trade_kick(req: TradeActionRequest):
+    """Send /kick <player> via chat."""
+    if not req.player:
+        return {"error": "Player name required"}
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, game_commander.kick, req.player)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1453,7 +1570,14 @@ async def serve_dashboard():
     dashboard_path = get_resource("resources/dashboard.html")
     if not dashboard_path.exists():
         return HTMLResponse("<h1>dashboard.html not found</h1>", status_code=404)
-    return HTMLResponse(dashboard_path.read_text(encoding="utf-8"))
+    return HTMLResponse(
+        dashboard_path.read_text(encoding="utf-8"),
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 @app.get("/favicon.ico")
@@ -1484,7 +1608,7 @@ async def websocket_endpoint(ws: WebSocket):
     await ws_manager.connect(ws)
     try:
         # Send initial state
-        settings = load_settings()
+        settings = _redact_settings(load_settings())
         init_msg = {
             "type": "init",
             **overlay.get_status(),
