@@ -166,6 +166,7 @@ class ItemScore:
     top_tier_count: int = 0  # count of valuable T1/T2 mods (weight >= 1.0)
     dps_factor: float = 1.0
     defense_factor: float = 1.0
+    skill_level_factor: float = 1.0
     somv_factor: float = 1.0   # roll quality multiplier (0.90-1.10)
     total_dps: float = 0.0
     total_defense: int = 0
@@ -304,6 +305,13 @@ _WEIGHT_TABLE: List[Tuple[float, List[str]]] = [
 # these are armour/evasion/ES defence groups, not damage groups.
 _DEFENCE_GROUP_MARKERS = ("reductionrating", "evasionrating", "energyshield")
 
+# Mod groups that indicate +level of skill gems — their absence on weapons
+# is a strong negative signal (weapon is "incomplete").
+_SKILL_LEVEL_PATTERNS = ("skilllevels", "gemlevels", "addedskilllevels")
+
+# All weapon classes (DPS melee/ranged + caster weapons)
+_WEAPON_CLASSES = frozenset(DPS_ITEM_CLASSES) | {"Wands", "Staves", "Sceptres"}
+
 
 def _get_weight_for_group(group: str) -> Optional[float]:
     """Look up weight by RePoE mod group name.  Returns None if no match."""
@@ -425,6 +433,24 @@ def _defense_factor(total_defense: int, item_class: str, item_level: int = 0) ->
     #                    below  terrible  low   decent  good   above
     return _interpolate(float(total_defense), thresholds,
                         (0.6,  0.6,      0.75, 0.9,    1.0,   1.05))
+
+
+def _skill_level_factor(mod_scores: list, item_class: str) -> float:
+    """Multiplicative penalty for weapons missing +level of skills mods.
+
+    +Level of skills can roll on ALL weapon types from ilvl 2, so their
+    absence is a real signal that the weapon is incomplete.
+    Returns 0.5 for weapons without any skill-level mod, 1.0 otherwise.
+    """
+    if item_class not in _WEAPON_CLASSES:
+        return 1.0
+
+    for ms in mod_scores:
+        group_lower = (ms.mod_group or "").lower()
+        if any(pat in group_lower for pat in _SKILL_LEVEL_PATTERNS):
+            return 1.0
+
+    return 0.5
 
 
 # ─── Display Names ───────────────────────────────────
@@ -691,8 +717,9 @@ class ModDatabase:
         d_factor = _dps_factor(total_dps, item_class_raw, item_level)
         a_factor = _defense_factor(total_defense, item_class_raw, item_level)
         combat_factor = min(d_factor, a_factor)  # only one applies per item
+        skill_factor = _skill_level_factor(mod_scores, item_class_raw)
 
-        normalized = max(0.0, min(1.0, normalized * combat_factor))
+        normalized = max(0.0, min(1.0, normalized * combat_factor * skill_factor))
 
         # Count key mods and high-tier key mods
         key_mods = [ms for ms in mod_scores if ms.is_key_mod]
@@ -735,6 +762,7 @@ class ModDatabase:
             top_tier_count=len(valuable_top_tier),
             dps_factor=round(d_factor, 3),
             defense_factor=round(a_factor, 3),
+            skill_level_factor=round(skill_factor, 3),
             somv_factor=round(somv_factor, 3),
             total_dps=round(total_dps, 1),
             total_defense=total_defense,
