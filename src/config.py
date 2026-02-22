@@ -271,7 +271,7 @@ CALIBRATION_LOG_FILE = CACHE_DIR / "calibration.jsonl"
 HARVESTER_STATE_FILE = CACHE_DIR / "harvester_state.json"
 
 # Calibration write-time filters
-CALIBRATION_MAX_PRICE_DIVINE = 300.0   # skip records above this
+CALIBRATION_MAX_PRICE_DIVINE = 1500.0  # skip records above this
 CALIBRATION_MIN_RESULTS = 3            # skip thin results (< 3 listings)
 
 # ─────────────────────────────────────────────

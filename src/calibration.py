@@ -50,7 +50,7 @@ class CalibrationEngine:
     DEFENSE_WEIGHT = 0.2       # defense factor difference weight
 
     # Sanity cap applied when loading data
-    _MAX_PRICE_DIVINE = 300.0       # above this = likely price-fixer
+    _MAX_PRICE_DIVINE = 1500.0      # above this = likely price-fixer
 
     # Recency bonus: user data from last 7 days gets 2x weight
     _RECENCY_WINDOW = 7 * 86400    # 7 days in seconds
@@ -385,7 +385,7 @@ class CalibrationEngine:
         # Cap wildly extrapolated estimates — with few samples the
         # log-space interpolation can produce absurd values.
         max_observed = max((s[1] for s in samples), default=100.0)
-        result = min(result, max_observed * 2.0, 500.0)
+        result = min(result, max_observed * 2.0, 1500.0)
 
         # Round to reasonable precision
         if result >= 10:
