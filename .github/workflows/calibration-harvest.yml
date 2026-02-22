@@ -96,6 +96,14 @@ jobs:
             --input $JSONL_FILES \
             --output ~/.poe2-price-overlay/cache/calibration-shard-latest.json.gz
 
+      - name: Generate harvest summary
+        run: |
+          python scripts/harvest_summary.py \
+            --dir ~/.poe2-price-overlay/cache/ \
+            --shard ~/.poe2-price-overlay/cache/calibration-shard-latest.json.gz \
+            >> "$GITHUB_STEP_SUMMARY"
+        continue-on-error: true
+
       - name: Upload shard as artifact
         uses: actions/upload-artifact@v4
         with:
