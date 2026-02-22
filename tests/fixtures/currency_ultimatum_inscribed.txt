@@ -1,0 +1,13 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Inscribed Ultimatum
+--------
+Stack Size: 1/20
+--------
+Area Level: 80
+--------
+Sacrifice: 50 Chaos Orbs
+Reward: 3 Divine Orbs
+Rounds: 7
+--------
+Take this item to the Trialmaster to begin an Ultimatum encounter.

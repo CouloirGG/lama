@@ -1,0 +1,11 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Uncut Skill Gem
+--------
+Stack Size: 1/10
+--------
+Level: 16
+--------
+Can be Cut to create a Skill Gem of your choice. The gem will have the same level as this Uncut Gem.
+--------
+  to cut.

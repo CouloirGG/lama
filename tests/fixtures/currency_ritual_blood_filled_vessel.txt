@@ -1,0 +1,11 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Blood-filled Vessel
+--------
+Stack Size: 1/10
+--------
+Area Level: 81
+--------
+Can be used in a personal Map Device with a Map. Adds a Ritual encounter to the Map in which the stored monsters appear.
+--------
+  to use, then   on a map device to apply it.

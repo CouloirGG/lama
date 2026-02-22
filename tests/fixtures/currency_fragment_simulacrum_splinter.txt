@@ -1,0 +1,7 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Simulacrum Splinter
+--------
+Stack Size: 7/100
+--------
+Combine 100 Splinters to create a Simulacrum.
