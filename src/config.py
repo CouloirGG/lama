@@ -290,8 +290,8 @@ LOG_FILE = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "overlay.log"
 # ─────────────────────────────────────────────
 # Bug Reporting (Discord webhook)
 # ─────────────────────────────────────────────
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
-DISCORD_TELEMETRY_WEBHOOK_URL = os.environ.get("DISCORD_TELEMETRY_WEBHOOK_URL", "")
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+DISCORD_TELEMETRY_WEBHOOK_URL = os.environ.get("DISCORD_TELEMETRY_WEBHOOK_URL", "").strip()
 
 # Market Signals — Discord integration (coming soon)
 DISCORD_SIGNALS_CHANNEL_ID = os.environ.get("DISCORD_SIGNALS_CHANNEL_ID", "")
@@ -304,8 +304,8 @@ DEBUG_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "debug"
 # ─────────────────────────────────────────────
 # Flag Reporting (inaccurate price feedback)
 # ─────────────────────────────────────────────
-DISCORD_FLAG_WEBHOOK_URL = os.environ.get("DISCORD_FLAG_WEBHOOK_URL", "")
-DISCORD_RELEASE_WEBHOOK_URL = os.environ.get("DISCORD_RELEASE_WEBHOOK_URL", "")
+DISCORD_FLAG_WEBHOOK_URL = os.environ.get("DISCORD_FLAG_WEBHOOK_URL", "").strip()
+DISCORD_RELEASE_WEBHOOK_URL = os.environ.get("DISCORD_RELEASE_WEBHOOK_URL", "").strip()
 FLAG_REPORT_DB = CACHE_DIR / "flag_reports.jsonl"
 FLAG_REPORT_COOLDOWN = 10  # seconds between flags
 

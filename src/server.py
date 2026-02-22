@@ -67,7 +67,7 @@ SETTINGS_FILE = SETTINGS_DIR / "dashboard_settings.json"
 POE2SCOUT_API = "https://poe2scout.com/api"
 
 # Bug report (mirrors config.py constants)
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 LOG_FILE = SETTINGS_DIR / "overlay.log"
 DEBUG_DIR = SETTINGS_DIR / "debug"
 BUG_REPORT_LOG_LINES = 200
