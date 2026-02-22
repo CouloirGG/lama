@@ -144,19 +144,6 @@ def build_query_plan(categories: Dict[str, Tuple[str, str]],
     return plan
 
 
-# ─── Progress Bar ────────────────────────────────────
-
-def progress_bar(current: int, total: int, samples: int,
-                 elapsed: float, width: int = 30):
-    """Print in-place progress bar."""
-    pct = current / total if total else 0
-    filled = int(width * pct)
-    bar = "#" * filled + "-" * (width - filled)
-    mins = elapsed / 60
-    print(f"\r  [{bar}] {current}/{total} queries | "
-          f"{samples} samples | {mins:.1f}m elapsed", end="", flush=True)
-
-
 # ─── Main Harvester Loop ────────────────────────────
 
 def run_elite_harvester(league: str,
@@ -273,12 +260,17 @@ def run_elite_harvester(league: str,
         bracket = next(b for b in ELITE_BRACKETS if b[0] == bracket_label)
         _, price_min, price_max, price_currency = bracket
 
-        # Update progress bar
         elapsed = time.time() - t_start
-        progress_bar(queries_done, effective_total, samples_this_run, elapsed)
+        pct = queries_done / effective_total * 100 if effective_total else 0
+        eta_str = ""
+        if queries_done > 0:
+            eta_sec = elapsed / queries_done * (effective_total - queries_done)
+            eta_str = f" | ETA {eta_sec/60:.0f}m"
 
-        print(f"\n  {cat_name} / {bracket_label} "
-              f"({price_min}-{price_max} {price_currency})")
+        print(f"\n[{queries_done+1}/{effective_total}] ({pct:.0f}%) "
+              f"{cat_name} / {bracket_label} "
+              f"({price_min}-{price_max} {price_currency}) "
+              f"| {samples_this_run} samples | {elapsed/60:.1f}m{eta_str}")
 
         # Burst pacing
         if burst_count >= BURST_SIZE:
@@ -441,12 +433,9 @@ def run_elite_harvester(league: str,
         state["completed_queries"].append(query_key)
         save_state(state, pass_num)
 
-    # Final progress bar
-    elapsed = time.time() - t_start
-    progress_bar(queries_done, effective_total, samples_this_run, elapsed)
-
     # Final summary
-    print(f"\n\n{'='*50}")
+    elapsed = time.time() - t_start
+    print(f"\n{'='*50}")
     print(f"Elite harvest complete (pass {pass_num})!")
     print(f"  Queries: {queries_done}")
     print(f"  Samples collected: {samples_this_run}")

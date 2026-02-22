@@ -457,6 +457,7 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
     errors = 0
     burst_count = 0  # API calls in current burst
     t_start = time.time()
+    effective_total = min(len(remaining), max_queries or len(remaining))
 
     for cat_name, item_class, cat_filter, bracket_label in remaining:
         if max_queries > 0 and queries_done >= max_queries:
@@ -467,9 +468,17 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
         bracket = next(b for b in brackets if b[0] == bracket_label)
         _, price_min, price_max, price_currency = bracket
 
-        print(f"\n[{queries_done+1}/{min(len(remaining), max_queries or len(remaining))}] "
+        elapsed = time.time() - t_start
+        pct = queries_done / effective_total * 100 if effective_total else 0
+        eta_str = ""
+        if queries_done > 0:
+            eta_sec = elapsed / queries_done * (effective_total - queries_done)
+            eta_str = f" | ETA {eta_sec/60:.0f}m"
+
+        print(f"\n[{queries_done+1}/{effective_total}] ({pct:.0f}%) "
               f"{cat_name} / {bracket_label} "
-              f"({price_min}-{price_max or 'max'} {price_currency})")
+              f"({price_min}-{price_max or 'max'} {price_currency}) "
+              f"| {samples_this_run} samples | {elapsed/60:.1f}m{eta_str}")
 
         # Burst pacing: pause after every BURST_SIZE API calls
         if burst_count >= BURST_SIZE:
