@@ -84,6 +84,20 @@ class TradeClient:
         self._cache: dict = {}
         self._cache_lock = threading.Lock()
 
+    def lookup_cached(self, item, mods: List[ParsedMod]) -> Optional[RarePriceResult]:
+        """Check cache for a previously-queried rare item. No API calls."""
+        base_type = item.base_type
+        if not base_type or not mods:
+            return None
+        quality = getattr(item, "quality", 0) or 0
+        sockets = getattr(item, "sockets", 0) or 0
+        total_dps = getattr(item, 'total_dps', 0.0) or 0.0
+        total_defense = getattr(item, 'total_defense', 0) or 0
+        fingerprint = self._make_fingerprint(
+            base_type, mods, quality, sockets,
+            dps=total_dps, defense=total_defense)
+        return self._check_cache(fingerprint)
+
     def price_rare_item(self, item, mods: List[ParsedMod],
                         is_stale=None) -> Optional[RarePriceResult]:
         """

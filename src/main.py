@@ -871,6 +871,15 @@ class LAMA:
         price_est = self.calibration.estimate(
             score.normalized_score, getattr(item, "item_class", "") or "",
             grade=score.grade.value)
+
+        # Check trade cache — deep query or auto-cal may have a real price
+        cached_trade = None
+        if hasattr(self, 'trade_client') and self.trade_client:
+            cached_trade = self.trade_client.lookup_cached(item, parsed_mods)
+        if cached_trade and cached_trade.min_price > 0:
+            price_est = cached_trade.min_price
+            logger.info(f"Using cached trade result: {cached_trade.display}")
+
         d2c = self.price_cache.divine_to_chaos
         d2e = self.price_cache.divine_to_exalted
         ds = self._display_settings
@@ -920,7 +929,9 @@ class LAMA:
         is_borderless = (text == "\u2605")
         self.overlay.show_price(text=text, tier=overlay_tier,
                                 cursor_x=cursor_x, cursor_y=cursor_y,
-                                borderless=is_borderless)
+                                borderless=is_borderless,
+                                estimate=cached_trade.estimate if cached_trade else False,
+                                price_divine=cached_trade.min_price if cached_trade else (price_est or 0))
 
         # Cache for flag reporter
         mod_details = None
