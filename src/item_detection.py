@@ -55,6 +55,10 @@ class ItemDetector:
         # next detection of the same item should re-fire the callback
         # instead of being blocked by content dedup.
         self._awaiting_reshow: bool = False
+        # Sticky flag: pipeline decided not to show an overlay for the
+        # current item.  Prevents cursor-wobble from re-triggering
+        # _awaiting_reshow until a genuinely new item is detected.
+        self._reshow_suppressed: bool = False
 
     def set_callback(self, callback: Callable):
         """
@@ -77,13 +81,14 @@ class ItemDetector:
         self._on_reshow = callback
 
     def suppress_reshow(self):
-        """Prevent the next reshow from firing.
+        """Prevent reshows until a genuinely new item is detected.
 
         Called by the pipeline when it decides not to display an overlay
         (e.g. low-value currency skip).  Without this, cursor wobble can
-        re-trigger a reshow of stale overlay content.
+        re-trigger _awaiting_reshow and reshow stale overlay content.
         """
         self._awaiting_reshow = False
+        self._reshow_suppressed = True
 
     def _is_same_position(self, pos_a: Tuple[int, int], pos_b: Tuple[int, int]) -> bool:
         """Check if two positions are within CURSOR_STILL_RADIUS of each other."""
@@ -130,7 +135,8 @@ class ItemDetector:
                         # Hide overlay when cursor leaves the item
                         if self._on_hide:
                             self._on_hide()
-                            self._awaiting_reshow = True
+                            if not self._reshow_suppressed:
+                                self._awaiting_reshow = True
                 else:
                     self._cursor_still_count += 1
 
@@ -155,6 +161,7 @@ class ItemDetector:
                         # Different item at same position — treat as new detection
                         logger.info(f"New item at same position ({cx}, {cy})")
                         if self._on_change:
+                            self._reshow_suppressed = False  # reset before callback
                             self._on_change(item_text, cx, cy)
                             self._last_trigger_time = now
                             self._last_trigger_pos = (cx, cy)
@@ -210,6 +217,7 @@ class ItemDetector:
 
                 # Fire callback with item text
                 if self._on_change:
+                    self._reshow_suppressed = False  # reset before callback
                     self._on_change(item_text, cx, cy)
                     self._last_trigger_time = now
                     self._last_trigger_pos = (cx, cy)
