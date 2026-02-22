@@ -47,7 +47,7 @@ class TestGameConfig:
         assert cfg.trade_mod_min_multiplier == 0.8
         assert cfg.repoe_cache_ttl == 7 * 86400
         assert cfg.price_refresh_interval == 900
-        assert cfg.calibration_max_price_divine == 300.0
+        assert cfg.calibration_max_price_divine == 1500.0
         assert cfg.shard_refresh_interval == 86400
         assert cfg.dps_item_classes == frozenset()
         assert cfg.grade_tier_map == {}
@@ -133,7 +133,7 @@ class TestPoe2Config:
         assert cfg.calibration_log_file is not None
         assert cfg.shard_dir is not None
         assert cfg.shard_github_repo  # non-empty
-        assert cfg.calibration_max_price_divine == 300.0
+        assert cfg.calibration_max_price_divine == 1500.0
 
     def test_grade_tier_map(self):
         from games.poe2 import create_poe2_config
