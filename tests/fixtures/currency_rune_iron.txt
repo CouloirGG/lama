@@ -1,0 +1,10 @@
+Item Class: Socketable
+Rarity: Currency
+Iron Rune
+--------
+Stack Size: 4/20
+--------
+Adds (1-2) to (3-4) Physical Damage
+--------
+Place into a Rune Socket on an item to apply its effect.
+Press and hold   to unstack.
