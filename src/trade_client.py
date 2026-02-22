@@ -59,10 +59,12 @@ class TradeClient:
     """
 
     def __init__(self, league: str = DEFAULT_LEAGUE,
-                 divine_to_chaos_fn=None, divine_to_exalted_fn=None):
+                 divine_to_chaos_fn=None, divine_to_exalted_fn=None,
+                 mod_database=None):
         self.league = league
         self._divine_to_chaos_fn = divine_to_chaos_fn or (lambda: 68.0)
         self._divine_to_exalted_fn = divine_to_exalted_fn or (lambda: 300.0)
+        self._mod_database = mod_database
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": "LAMA/1.0"})
 
@@ -81,6 +83,20 @@ class TradeClient:
         # In-memory cache: fingerprint → (result, timestamp)
         self._cache: dict = {}
         self._cache_lock = threading.Lock()
+
+    def lookup_cached(self, item, mods: List[ParsedMod]) -> Optional[RarePriceResult]:
+        """Check cache for a previously-queried rare item. No API calls."""
+        base_type = item.base_type
+        if not base_type or not mods:
+            return None
+        quality = getattr(item, "quality", 0) or 0
+        sockets = getattr(item, "sockets", 0) or 0
+        total_dps = getattr(item, 'total_dps', 0.0) or 0.0
+        total_defense = getattr(item, 'total_defense', 0) or 0
+        fingerprint = self._make_fingerprint(
+            base_type, mods, quality, sockets,
+            dps=total_dps, defense=total_defense)
+        return self._check_cache(fingerprint)
 
     def price_rare_item(self, item, mods: List[ParsedMod],
                         is_stale=None) -> Optional[RarePriceResult]:
@@ -153,7 +169,7 @@ class TradeClient:
             for m in priceable:
                 logger.info(
                     f"TradeClient: mod [{m.mod_type}] {m.raw_text} "
-                    f"→ {m.stat_id} (val={m.value})")
+                    f"-> {m.stat_id} (val={m.value})")
 
             # Compute DPS/defense filters for trade API
             item_class = getattr(item, 'item_class', '') or ''
@@ -206,7 +222,7 @@ class TradeClient:
                             None, filters_at, "count", min_count,
                             quality=quality, sockets=sockets,
                             dps_min=dps_min, defense_mins=defense_mins)
-                        result = self._do_search(query)
+                        result = self._do_search(query, is_stale=is_stale)
                         pct = int(mult * 100)
                         if result and result.get("result"):
                             total = result.get("total", 0)
@@ -244,6 +260,20 @@ class TradeClient:
                         dps_min=dps_min, defense_mins=defense_mins,
                     )
 
+            # Fallback: if all searches failed and we had DPS/defense filters,
+            # retry without combat filters — mods alone still give a price signal.
+            if not search_result and (dps_min > 0 or defense_mins):
+                if not (is_stale and is_stale()) and not self._is_rate_limited():
+                    logger.info(
+                        f"TradeClient: no results with combat filters "
+                        f"(dps_min={dps_min:.0f}, def={defense_mins}), "
+                        f"retrying without them")
+                    search_result, exact_match, mods_dropped = self._search_progressive(
+                        base_type, stat_filters, priceable, quality=quality,
+                        sockets=0, is_stale=is_stale, max_calls=3,
+                        dps_min=0, defense_mins={},
+                    )
+
             if not search_result:
                 if has_value_signals:
                     logger.info(
@@ -271,7 +301,7 @@ class TradeClient:
 
             # Fetch the first N listings
             fetch_ids = result_ids[:TRADE_RESULT_COUNT]
-            listings = self._do_fetch(query_id, fetch_ids)
+            listings = self._do_fetch(query_id, fetch_ids, is_stale=is_stale)
             if not listings:
                 return None
 
@@ -374,7 +404,7 @@ class TradeClient:
             if is_stale and is_stale():
                 return None
 
-            search_result = self._do_search(query)
+            search_result = self._do_search(query, is_stale=is_stale)
             if not search_result:
                 return None
 
@@ -389,7 +419,7 @@ class TradeClient:
                 return None
 
             fetch_ids = result_ids[:TRADE_RESULT_COUNT]
-            listings = self._do_fetch(query_id, fetch_ids)
+            listings = self._do_fetch(query_id, fetch_ids, is_stale=is_stale)
             if not listings:
                 return None
 
@@ -409,11 +439,14 @@ class TradeClient:
                 display="?", tier="low",
             )
 
-    def price_unique_item(self, item, is_stale=None) -> Optional[RarePriceResult]:
+    def price_unique_item(self, item, mods=None, is_stale=None) -> Optional[RarePriceResult]:
         """Price a corrupted unique item by name + sockets via the trade API.
 
         Used for corrupted uniques where Vaal outcomes (rerolled mods, added
         sockets) significantly affect value compared to the static base price.
+
+        If *mods* are provided (parsed from corrupted unique), builds stat
+        filters so different rolls produce different prices and cache entries.
         """
         name = item.name
         base_type = item.base_type or ""
@@ -422,7 +455,20 @@ class TradeClient:
         if not name:
             return None
 
-        cache_key = f"unique:{name}:{sockets}"
+        # Filter to priceable mod types (mutated is the key one for corrupted uniques)
+        _PRICEABLE = ("mutated", "explicit", "implicit")
+        priceable = [m for m in (mods or []) if m.mod_type in _PRICEABLE]
+
+        # Mod-aware cache key: different rolls → different cache entries
+        if priceable:
+            mod_part = "|".join(
+                f"{m.stat_id}:{round(m.value / 5) * 5}"
+                for m in sorted(priceable, key=lambda m: m.stat_id)
+            )
+            cache_key = f"unique:{name}:{sockets}:{hashlib.md5(mod_part.encode()).hexdigest()[:8]}"
+        else:
+            cache_key = f"unique:{name}:{sockets}"
+
         cached = self._check_cache(cache_key)
         if cached:
             logger.debug(f"TradeClient: cache hit for unique {name}")
@@ -438,15 +484,33 @@ class TradeClient:
 
             logger.info(
                 f"TradeClient: pricing unique {name} "
-                f"(corrupted, sockets={sockets})"
+                f"(corrupted, sockets={sockets}, mods={len(priceable)})"
             )
 
-            query = self._build_unique_query(name, base_type, sockets)
+            # Build stat filters from parsed mods (relaxed 60% minimums)
+            stat_filters = self._build_stat_filters_relaxed(priceable) if priceable else None
+
+            query = self._build_unique_query(name, base_type, sockets,
+                                             stat_filters=stat_filters)
 
             if is_stale and is_stale():
                 return None
 
-            search_result = self._do_search(query)
+            search_result = self._do_search(query, is_stale=is_stale)
+
+            # Fallback: if stat filters produced 0 results, retry without them
+            if stat_filters and search_result:
+                total = search_result.get("total", 0)
+                if total == 0:
+                    logger.info(
+                        f"TradeClient: 0 results with stat filters for {name}, "
+                        f"retrying without"
+                    )
+                    query = self._build_unique_query(name, base_type, sockets)
+                    if is_stale and is_stale():
+                        return None
+                    search_result = self._do_search(query, is_stale=is_stale)
+
             if not search_result:
                 return None
 
@@ -461,11 +525,12 @@ class TradeClient:
                 return None
 
             fetch_ids = result_ids[:TRADE_RESULT_COUNT]
-            listings = self._do_fetch(query_id, fetch_ids)
+            listings = self._do_fetch(query_id, fetch_ids, is_stale=is_stale)
             if not listings:
                 return None
 
-            result = self._build_result(listings, total)
+            result = self._build_result(listings, total,
+                                        skip_low_value_check=True)
             if result:
                 self._put_cache(cache_key, result)
                 logger.info(
@@ -482,8 +547,13 @@ class TradeClient:
             )
 
     def _build_unique_query(self, name: str, base_type: str,
-                            sockets: int = 0) -> dict:
-        """Build a trade API query for a corrupted unique by name + sockets."""
+                            sockets: int = 0,
+                            stat_filters: list = None) -> dict:
+        """Build a trade API query for a corrupted unique by name + sockets.
+
+        If *stat_filters* are provided, they are included in the stats block
+        so the trade API returns only listings with comparable mod rolls.
+        """
         filters = {
             "type_filters": {
                 "filters": {
@@ -507,7 +577,7 @@ class TradeClient:
         query_inner = {
             "status": {"option": "any"},
             "name": name,
-            "stats": [{"type": "and", "filters": []}],
+            "stats": [{"type": "and", "filters": stat_filters or []}],
             "filters": filters,
         }
         if base_type:
@@ -776,6 +846,10 @@ class TradeClient:
     def _classify_filters(self, priceable: List[ParsedMod], stat_filters: list):
         """Split stat filters into key (price-driving) and common (filler).
 
+        When mod_database is loaded, uses the weight table (backed by RePoE
+        structured data) for classification.  Falls back to heuristic
+        pattern matching otherwise.
+
         Returns:
             (key_mods, common_mods, key_filters, common_filters)
             key_mods/common_mods: ParsedMod lists (for rebuilding with different multipliers)
@@ -785,14 +859,19 @@ class TradeClient:
         common_mods = []
         key_filters = []
         common_filters = []
+        use_db = self._mod_database and self._mod_database.loaded
         for mod, sf in zip(priceable, stat_filters):
-            text_lower = mod.raw_text.lower()
-            # Implicit mods are inherent to the base type — they don't
-            # differentiate value and should never be key mods
-            is_common = (
-                mod.mod_type == "implicit"
-                or any(pat in text_lower for pat in self._COMMON_MOD_PATTERNS)
-            )
+            if use_db:
+                is_key = self._mod_database.classify_mod(
+                    mod.stat_id, mod.raw_text, mod.mod_type)
+                is_common = not is_key
+            else:
+                # Fallback: heuristic pattern matching
+                text_lower = mod.raw_text.lower()
+                is_common = (
+                    mod.mod_type == "implicit"
+                    or any(pat in text_lower for pat in self._COMMON_MOD_PATTERNS)
+                )
             if is_common:
                 common_mods.append(mod)
                 common_filters.append(sf)
@@ -832,14 +911,28 @@ class TradeClient:
         df = defense_mins
         calls_remaining = max_calls
 
+        consecutive_zeros = 0
+        _ZERO_BAIL = 3  # bail after 3 consecutive zero-result queries
+
         def _budget_search(query):
             """Call _do_search if budget remains, decrement counter."""
-            nonlocal calls_remaining
+            nonlocal calls_remaining, consecutive_zeros
             if calls_remaining <= 0:
                 logger.info("TradeClient: search budget exhausted")
                 return None
+            if consecutive_zeros >= _ZERO_BAIL:
+                logger.info("TradeClient: bailing — %d consecutive zero results",
+                            consecutive_zeros)
+                return None
+            if _stale():
+                return None
             calls_remaining -= 1
-            return self._do_search(query)
+            result = self._do_search(query, is_stale=is_stale)
+            if result and result.get("result"):
+                consecutive_zeros = 0
+            else:
+                consecutive_zeros += 1
+            return result
 
         def _stale():
             if is_stale and is_stale():
@@ -1073,7 +1166,7 @@ class TradeClient:
             f"pausing all requests"
         )
 
-    def _do_search(self, query: dict) -> Optional[dict]:
+    def _do_search(self, query: dict, is_stale=None) -> Optional[dict]:
         """POST search query to trade API. Returns search result or None.
         Retries once on connection errors / timeouts."""
         if self._is_rate_limited():
@@ -1082,7 +1175,9 @@ class TradeClient:
         url = f"{TRADE_API_BASE}/search/poe2/{self.league}"
 
         for attempt in range(2):
-            self._rate_limit()
+            self._rate_limit(is_stale)
+            if is_stale and is_stale():
+                return None
             try:
                 resp = self._session.post(url, json=query, timeout=5)
                 self._parse_rate_limit_headers(resp)
@@ -1094,7 +1189,9 @@ class TradeClient:
                         return None
                     logger.warning(f"TradeClient: rate limited, waiting {retry_after}s")
                     time.sleep(retry_after)
-                    self._rate_limit()
+                    self._rate_limit(is_stale)
+                    if is_stale and is_stale():
+                        return None
                     resp = self._session.post(url, json=query, timeout=5)
                     self._parse_rate_limit_headers(resp)
 
@@ -1115,7 +1212,8 @@ class TradeClient:
                 logger.warning(f"TradeClient: search failed: {e}")
                 return None
 
-    def _do_fetch(self, query_id: str, result_ids: List[str]) -> Optional[list]:
+    def _do_fetch(self, query_id: str, result_ids: List[str],
+                  is_stale=None) -> Optional[list]:
         """GET listing details for the given result IDs.
         Retries once on connection errors / timeouts."""
         if not result_ids:
@@ -1127,7 +1225,9 @@ class TradeClient:
         url = f"{TRADE_API_BASE}/fetch/{ids_str}"
 
         for attempt in range(2):
-            self._rate_limit()
+            self._rate_limit(is_stale)
+            if is_stale and is_stale():
+                return None
             try:
                 resp = self._session.get(url, params={"query": query_id}, timeout=5)
                 self._parse_rate_limit_headers(resp)
@@ -1139,7 +1239,9 @@ class TradeClient:
                         return None
                     logger.warning(f"TradeClient: fetch rate limited, waiting {retry_after}s")
                     time.sleep(retry_after)
-                    self._rate_limit()
+                    self._rate_limit(is_stale)
+                    if is_stale and is_stale():
+                        return None
                     resp = self._session.get(url, params={"query": query_id}, timeout=5)
                     self._parse_rate_limit_headers(resp)
 
@@ -1164,13 +1266,17 @@ class TradeClient:
     # ─── Price Extraction ─────────────────────────
 
     def _build_result(self, listings: list, total: int,
-                      lower_bound: bool = False) -> Optional[RarePriceResult]:
+                      lower_bound: bool = False,
+                      skip_low_value_check: bool = False) -> Optional[RarePriceResult]:
         """Extract prices from listings and build a RarePriceResult.
 
         Args:
             lower_bound: When True, comparables are worse than the actual item
                 (mods were dropped to find results). Uses upper prices and
                 shows "X+" instead of "X-Y" to indicate a floor price.
+            skip_low_value_check: When True, skip the low-value threshold
+                filter. Used for unique items where the name-based search
+                guarantees results are for the correct item.
         """
         divine_to_chaos = self._divine_to_chaos_fn()
         # Collect (divine_value, original_amount, original_currency) for display
@@ -1235,9 +1341,10 @@ class TradeClient:
 
         # Items below ~10 exalted are effectively worthless — return None
         # so callers show "Low value" instead of a misleading price.
+        # Skipped for unique items (name-search guarantees correct item).
         divine_to_exalted = self._divine_to_exalted_fn()
         low_value_threshold = 10.0 / divine_to_exalted if divine_to_exalted > 0 else 0.03
-        if min_divine < low_value_threshold:
+        if not skip_low_value_check and min_divine < low_value_threshold:
             logger.info(
                 f"TradeClient: below low-value threshold "
                 f"({min_divine:.4f} div < {low_value_threshold:.4f} div = 10 exalted)")
@@ -1365,18 +1472,25 @@ class TradeClient:
 
     # ─── Rate Limiting ────────────────────────────
 
-    def _rate_limit(self):
+    def _rate_limit(self, is_stale=None):
         """Enforce rate limit between API requests.
 
         Uses adaptive interval from API headers when available,
         falling back to _min_interval (1.0s) when no rules are known.
+        Breaks sleep into small chunks so stale queries release the lock
+        quickly instead of blocking for 10+ seconds.
         """
         with self._rate_lock:
             interval = self._compute_adaptive_interval()
             now = time.time()
             elapsed = now - self._last_request_time
-            if elapsed < interval:
-                time.sleep(interval - elapsed)
+            wait = interval - elapsed
+            while wait > 0:
+                chunk = min(0.5, wait)
+                time.sleep(chunk)
+                wait -= chunk
+                if is_stale and is_stale():
+                    return  # Release lock — let fresh query proceed
             self._last_request_time = time.time()
 
     def _parse_rate_limit_headers(self, resp):

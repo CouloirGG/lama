@@ -364,6 +364,7 @@ class PricingEngine:
                 league=self.config.default_league,
                 divine_to_chaos_fn=d2c_fn,
                 divine_to_exalted_fn=d2e_fn,
+                mod_database=self._mod_database,
             )
         except Exception as e:
             logger.debug(f"TradeClient init skipped: {e}")

@@ -1,0 +1,11 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Distilled Ire
+--------
+Stack Size: 2/20
+--------
+Adds Delirium to a Map item.
+Delirium monsters in this area deal 30% more damage.
+--------
+  to use, then   on a map to apply it.
+Press and hold   to unstack.

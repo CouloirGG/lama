@@ -41,6 +41,7 @@ from config import (
     OVERLAY_PADDING,
     OVERLAY_THEME,
     OVERLAY_PULSE_STYLE,
+    OVERLAY_REFERENCE_HEIGHT,
     PRICE_COLOR_HIGH,
     PRICE_COLOR_GOOD,
     PRICE_COLOR_DECENT,
@@ -82,10 +83,10 @@ _GRUNGE_SCRATCHES = [
 
 # Sheen sweep animation constants
 _SHEEN_WIDTH_FRAC = 0.28    # Band = 28% of overlay width
-_SHEEN_SWEEP_MS = 1800      # Full left→right sweep duration
-_SHEEN_FPS = 30             # ~33ms per frame
+_SHEEN_SWEEP_MS = 900       # Full left→right sweep duration
+_SHEEN_FPS = 60             # ~16ms per frame
 _SHEEN_FRAME_MS = 1000 // _SHEEN_FPS
-_SHEEN_PAUSE_MS = 400       # Gap between sweeps
+_SHEEN_PAUSE_MS = 150       # Gap between sweeps
 
 # Serif font fallback chain (Palatino Linotype ships with every Windows since XP)
 _POE2_FONT_CHAIN = ("Palatino Linotype", "Book Antiqua", "Georgia", "Segoe UI")
@@ -104,7 +105,7 @@ class PriceOverlay:
     _NORMAL_BORDER_COLOR = "#333355"
 
     # Currency detection patterns for inline icon rendering
-    _CURRENCY_SHORT_RE = re.compile(r'(?<=\d)(d|c)\b')
+    _CURRENCY_SHORT_RE = re.compile(r'(?<=\d)(ex|d|c)\b')
     _CURRENCY_LONG_RE = re.compile(r'\b(Divine|Chaos|Exalted|Mirror)s?\b', re.IGNORECASE)
 
     # Maps icon keys → resource filenames
@@ -155,9 +156,14 @@ class PriceOverlay:
         "marginal": 25, "vendor": 0,
     }
 
-    def __init__(self, theme: str = OVERLAY_THEME, pulse_style: str = OVERLAY_PULSE_STYLE):
+    def __init__(self, theme: str = OVERLAY_THEME, pulse_style: str = OVERLAY_PULSE_STYLE,
+                 scale_factor: float = 1.0):
         self._theme = theme if theme in (THEME_CLASSIC, THEME_POE2) else THEME_POE2
         self._pulse_style = pulse_style if pulse_style in ("border", "sheen", "both", "none") else "sheen"
+        # Resolution scale factor (1.0 = 1080p baseline)
+        self._scale = max(0.6, min(1.5, scale_factor))
+        self._font_size = max(9, round(OVERLAY_FONT_SIZE * self._scale))
+        self._padding = max(4, round(OVERLAY_PADDING * self._scale))
         self._root: Optional[tk.Tk] = None
         self._label: Optional[tk.Label] = None
         self._visible = False
@@ -193,6 +199,8 @@ class PriceOverlay:
         self._sheen_strips: list = []     # Canvas item IDs for the 3 sheen strips
         self._sheen_color: str = "#c4a456"
         self._sheen_active: bool = False
+        self._sheen_bg: str = _POE2_BG           # background color for blending
+        self._sheen_profile: list = [0.05, 0.12, 0.22, 0.35, 0.22, 0.12, 0.05]
 
     def initialize(self):
         """
@@ -239,10 +247,10 @@ class PriceOverlay:
         self._visible = False
 
         # Process pending updates periodically
-        self._root.after(50, self._process_pending)
+        self._root.after(30, self._process_pending)
 
         self._ready.set()
-        logger.info(f"Overlay window initialized (theme={self._theme})")
+        logger.info(f"Overlay window initialized (theme={self._theme}, scale={self._scale:.2f})")
 
     def _initialize_classic(self):
         """Set up classic Frame+Label widgets (original UI)."""
@@ -260,11 +268,11 @@ class PriceOverlay:
         self._label = tk.Label(
             self._frame,
             text="",
-            font=("Segoe UI", OVERLAY_FONT_SIZE, "bold"),
+            font=("Segoe UI", self._font_size, "bold"),
             fg=PRICE_COLOR_GOOD,
             bg=OVERLAY_BG_COLOR,
-            padx=OVERLAY_PADDING,
-            pady=OVERLAY_PADDING // 2,
+            padx=self._padding,
+            pady=self._padding // 2,
             relief="flat",
             borderwidth=0,
         )
@@ -282,11 +290,11 @@ class PriceOverlay:
         self._suffix_label = tk.Label(
             self._frame,
             text="",
-            font=("Segoe UI", OVERLAY_FONT_SIZE, "bold"),
+            font=("Segoe UI", self._font_size, "bold"),
             fg=PRICE_COLOR_GOOD,
             bg=OVERLAY_BG_COLOR,
-            padx=OVERLAY_PADDING,
-            pady=OVERLAY_PADDING // 2,
+            padx=self._padding,
+            pady=self._padding // 2,
             relief="flat",
             borderwidth=0,
         )
@@ -307,10 +315,11 @@ class PriceOverlay:
                 break
         logger.info(f"POE2 theme font: {chosen_family}")
 
+        base = max(9, round(self._font_size * 0.7))
         self._poe2_font = tkfont.Font(
-            family=chosen_family, size=OVERLAY_FONT_SIZE + 2, weight="bold")
+            family=chosen_family, size=base, weight="bold")
         self._poe2_font_small = tkfont.Font(
-            family=chosen_family, size=max(9, OVERLAY_FONT_SIZE - 2))
+            family=chosen_family, size=max(8, base - 1))
 
         # Canvas is the single child of root; bg = transparent color key
         self._canvas = tk.Canvas(
@@ -374,6 +383,27 @@ class PriceOverlay:
                 ("show", text, tier, cursor_x, cursor_y, estimate, price_divine,
                  borderless))
 
+    def reshow(self, cursor_x: int, cursor_y: int):
+        """Reposition and re-display the overlay without re-rendering.
+
+        Used when the user re-hovers the same item — avoids the cost of
+        re-running the full pricing pipeline and prevents "Checking..."
+        flashes that replace an already-displayed result.
+        Thread-safe.
+        """
+        with self._lock:
+            self._pending_updates.append(("reshow", cursor_x, cursor_y))
+
+    def update_text(self, text: str):
+        """Update the displayed text in-place without re-rendering.
+
+        Used for dot animations (Checking. → Checking.. → Checking...)
+        to avoid full canvas redraws that cause visual flicker.
+        Thread-safe.
+        """
+        with self._lock:
+            self._pending_updates.append(("update_text", text))
+
     def hide(self):
         """Hide the price overlay. Thread-safe."""
         with self._lock:
@@ -400,6 +430,26 @@ class PriceOverlay:
 
     # ─── Internal Methods ────────────────────────────
 
+    @staticmethod
+    def _get_screen_size() -> Tuple[int, int]:
+        """Get screen size in physical pixels via Win32 API.
+
+        Uses GetSystemMetrics which returns the same physical-pixel coordinate
+        space as GetCursorPos, avoiding DPI mismatch with tkinter's
+        winfo_screenwidth/height on HiDPI displays.
+        """
+        try:
+            import ctypes
+            SM_CXSCREEN, SM_CYSCREEN = 0, 1
+            w = ctypes.windll.user32.GetSystemMetrics(SM_CXSCREEN)
+            h = ctypes.windll.user32.GetSystemMetrics(SM_CYSCREEN)
+            if w > 0 and h > 0:
+                return w, h
+        except Exception:
+            pass
+        # Fallback (non-Windows or error)
+        return 1920, 1080
+
     def _load_currency_icons(self):
         """Pre-load currency icon PNGs, resized to match font size."""
         if not PIL_AVAILABLE:
@@ -408,8 +458,8 @@ class PriceOverlay:
 
         from bundle_paths import get_resource
 
-        icon_size = OVERLAY_FONT_SIZE + 4  # ~18px at default font size
-        scrap_size = OVERLAY_FONT_SIZE * 3  # Larger — standalone overlay icon (42px)
+        icon_size = self._font_size + 4  # ~18px at default font size
+        scrap_size = self._font_size * 3  # Larger — standalone overlay icon (42px)
         for key, rel_path in self._CURRENCY_ICON_FILES.items():
             try:
                 img_path = get_resource(rel_path)
@@ -431,7 +481,8 @@ class PriceOverlay:
         # Short forms: "~130d" → ("~130", "divine", " ★3: ..."),  "~45c" → chaos
         m = self._CURRENCY_SHORT_RE.search(text)
         if m:
-            key = "divine" if m.group(1) == "d" else "chaos"
+            suffix = m.group(1)
+            key = "divine" if suffix == "d" else "exalted" if suffix == "ex" else "chaos"
             if key in self._currency_icons:
                 return text[:m.start()], key, text[m.end():]
 
@@ -493,11 +544,14 @@ class PriceOverlay:
         c = self._canvas
         c.delete("all")
         self._cv_items.clear()
+        # Reset canvas size to prevent old geometry from flashing when
+        # shrinking (e.g. full overlay with pips → small ✗ tag)
+        c.configure(width=1, height=1)
 
-        pad_x = 12
-        pad_y = 8
-        diamond_size = 4
-        rule_inset = 6
+        pad_x = round(10 * self._scale)
+        pad_y = round(3 * self._scale)
+        diamond_size = max(2, round(3 * self._scale))
+        rule_inset = round(6 * self._scale)
 
         # Measure text to compute canvas size
         font = self._poe2_font
@@ -535,7 +589,7 @@ class PriceOverlay:
             secondary_part = secondary_part.strip()
 
         # Check for JUNK/C/SCRAP — plain small tag, no ornate frame
-        is_plain = text in ("SCRAP", "\u2717") or (
+        is_plain = text in ("SCRAP", "\u2717", "UNID") or (
             grade_letter in ("C", "JUNK") and not estimate)
 
         if is_plain:
@@ -577,7 +631,7 @@ class PriceOverlay:
         # Grade badge
         badge_w = 0
         if grade_letter:
-            badge_w = font_sm.measure(grade_letter) + 12  # rect padding
+            badge_w = font_sm.measure(grade_letter) + round(8 * self._scale)  # rect padding
             x_cursor += badge_w + 6
 
         # Price text
@@ -592,8 +646,8 @@ class PriceOverlay:
             _, icon_key, _ = currency
             # Recalculate: price_part is just the prefix before currency
             price_part = currency[0]
-            price_w = font.measure(price_part) + 4
-            icon_w = OVERLAY_FONT_SIZE + 6  # icon size + gap
+            price_w = font.measure(price_part) + 6  # extra for serif overhang
+            icon_w = self._font_size + 10  # icon size + gaps
             if currency[2] and currency[2].strip():
                 secondary_part = currency[2].strip() + (
                     ("  " + secondary_part) if secondary_part else "")
@@ -608,7 +662,7 @@ class PriceOverlay:
         h = line_h + pad_y * 2
 
         # Minimum width for aesthetics
-        w = max(w, 80)
+        w = max(w, max(round(24 * self._scale), 24))
 
         c.configure(width=w, height=h)
 
@@ -618,12 +672,21 @@ class PriceOverlay:
         c.create_rectangle(1, 1, w - 1, h - 1, fill=bg_color,
                            outline="", tags="bg_fill")
 
-        # 1b. Edge vignette — dark strips along each edge for depth
+        # 1b. Edge vignette — blended strips along each edge for depth
         vig_w = max(3, w // 12)
-        c.create_rectangle(1, 1, vig_w, h - 1, fill=_POE2_VIGNETTE,
-                           outline="", stipple="gray25", tags="vignette")
-        c.create_rectangle(w - vig_w, 1, w - 1, h - 1, fill=_POE2_VIGNETTE,
-                           outline="", stipple="gray25", tags="vignette")
+        vig_strip = max(1, vig_w // 3)
+        vig_intensities = [0.35, 0.20, 0.08]  # strongest at edge
+        for i, intensity in enumerate(vig_intensities):
+            vc = self._blend_hex(bg_color, _POE2_VIGNETTE, intensity)
+            x0 = 1 + vig_strip * i
+            x1 = 1 + vig_strip * (i + 1)
+            c.create_rectangle(x0, 1, x1, h - 1, fill=vc,
+                               outline="", tags="vignette")
+            # Right side (mirror)
+            rx0 = w - 1 - vig_strip * (i + 1)
+            rx1 = w - 1 - vig_strip * i
+            c.create_rectangle(rx0, 1, rx1, h - 1, fill=vc,
+                               outline="", tags="vignette")
 
         # 1c. Blood splatters — small dark ovals for worn/gritty look
         for xf, yf, sw, sh in _GRUNGE_SPLATTERS:
@@ -638,22 +701,20 @@ class PriceOverlay:
                           int(x2f * w), int(y2f * h),
                           fill=_POE2_BLOOD_MID, width=1, tags="grunge")
 
-        # 1e. Sheen sweep strips — 3 translucent bands (leading, center, trailing)
+        # 1e. Sheen sweep strips — 7 blended bands with bell-curve profile
         # Placed here so they render under the border and text layers
         sheen_band = max(4, int(w * _SHEEN_WIDTH_FRAC))
-        strip_w = sheen_band // 3
+        n_strips = len(self._sheen_profile)
+        strip_w = max(1, sheen_band // n_strips)
         off = -sheen_band - 10  # start off-screen left
-        self._sheen_strips = [
-            c.create_rectangle(off, 2, off + strip_w, h - 2,
-                               fill="#ffffff", outline="", stipple="gray25",
-                               tags="sheen"),
-            c.create_rectangle(off + strip_w, 2, off + strip_w * 2, h - 2,
-                               fill="#ffffff", outline="", stipple="gray50",
-                               tags="sheen"),
-            c.create_rectangle(off + strip_w * 2, 2, off + sheen_band, h - 2,
-                               fill="#ffffff", outline="", stipple="gray25",
-                               tags="sheen"),
-        ]
+        self._sheen_bg = bg_color
+        self._sheen_strips = []
+        for i in range(n_strips):
+            sid = c.create_rectangle(
+                off + strip_w * i, 2,
+                off + strip_w * (i + 1), h - 2,
+                fill=bg_color, outline="", tags="sheen")
+            self._sheen_strips.append(sid)
 
         # 2. Border — double-line effect: outer dark, inner accent
         # Outer border
@@ -712,7 +773,7 @@ class PriceOverlay:
         # 7. Currency icon
         if icon_key and icon_key in self._currency_icons:
             icon = self._currency_icons[icon_key]
-            c.create_image(x + 2, cy, image=icon, anchor="w", tags="icon")
+            c.create_image(x + 4, cy, image=icon, anchor="w", tags="icon")
             x += icon_w
 
         # 8. Secondary text (non-star remainder, e.g. currency suffix)
@@ -723,15 +784,22 @@ class PriceOverlay:
 
         # 9. Star pips — small gold diamonds sitting on the bottom edge
         if star_count > 0:
-            pip_size = 2
-            pip_gap = 4
+            pip_size = max(1, round(2 * self._scale))
+            pip_gap = max(2, round(4 * self._scale))
             total_pip_w = star_count * (pip_size * 2) + \
                 (star_count - 1) * pip_gap
             pip_x = (w - total_pip_w) // 2 + pip_size
             pip_y = h - 1  # straddle the bottom border
             for _ in range(star_count):
-                self._draw_corner_diamond(c, pip_x, pip_y, pip_size)
+                c.create_polygon(
+                    pip_x, pip_y - pip_size,
+                    pip_x + pip_size, pip_y,
+                    pip_x, pip_y + pip_size,
+                    pip_x - pip_size, pip_y,
+                    fill=_POE2_CORNER_GOLD, outline="", tags="pip"
+                )
                 pip_x += pip_size * 2 + pip_gap
+            c.tag_raise("pip")
 
     @staticmethod
     def _draw_corner_diamond(canvas, cx, cy, size=4):
@@ -744,26 +812,72 @@ class PriceOverlay:
             fill=_POE2_CORNER_GOLD, outline="", tags="diamond"
         )
 
+    @staticmethod
+    def _blend_hex(c1: str, c2: str, t: float) -> str:
+        """Linearly interpolate two hex colors. t=0 → c1, t=1 → c2."""
+        r1, g1, b1 = int(c1[1:3], 16), int(c1[3:5], 16), int(c1[5:7], 16)
+        r2, g2, b2 = int(c2[1:3], 16), int(c2[3:5], 16), int(c2[5:7], 16)
+        r = int(r1 + (r2 - r1) * t)
+        g = int(g1 + (g2 - g1) * t)
+        b = int(b1 + (b2 - b1) * t)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
     def _process_pending(self):
-        """Process pending UI updates from other threads."""
+        """Process pending UI updates from other threads.
+
+        Only the final show or hide is executed — intermediate updates are
+        discarded to prevent flicker and stale-artifact rendering when
+        multiple detections queue up within the same 50ms polling window.
+        """
         with self._lock:
             updates = self._pending_updates[:]
             self._pending_updates.clear()
 
-        for update in updates:
-            try:
+        if updates:
+            # Find the last show/reshow/update_text and last hide in the batch
+            last_show = None
+            last_reshow = None
+            last_update_text = None
+            last_show_idx = -1
+            last_hide_idx = -1
+            last_update_text_idx = -1
+            for i, update in enumerate(updates):
                 if update[0] == "show":
-                    _, text, tier, cx, cy, estimate, price_divine, borderless = update
-                    self._do_show(text, tier, cx, cy, estimate, price_divine,
-                                  borderless)
+                    last_show = update
+                    last_show_idx = i
+                elif update[0] == "reshow":
+                    last_reshow = update
+                    last_show_idx = i  # reshow counts as a show for ordering
+                elif update[0] == "update_text":
+                    last_update_text = update
+                    last_update_text_idx = i
                 elif update[0] == "hide":
+                    last_hide_idx = i
+
+            # Execute only the final action
+            try:
+                if last_show_idx > last_hide_idx and last_show_idx > last_update_text_idx:
+                    # Prefer full show over reshow when both are pending
+                    if last_show and (not last_reshow or
+                            updates.index(last_show) > updates.index(last_reshow)):
+                        _, text, tier, cx, cy, estimate, price_divine, borderless = last_show
+                        self._do_show(text, tier, cx, cy, estimate, price_divine,
+                                      borderless)
+                    elif last_reshow:
+                        _, cx, cy = last_reshow
+                        self._do_reshow(cx, cy)
+                elif last_update_text_idx > last_hide_idx:
+                    # Lightweight text-only update (no re-render)
+                    _, text = last_update_text
+                    self._do_update_text(text)
+                elif last_hide_idx >= 0:
                     self._do_hide()
             except Exception as e:
                 logger.error(f"Overlay update error: {e}")
 
         # Schedule next check
         if self._root:
-            self._root.after(50, self._process_pending)
+            self._root.after(30, self._process_pending)
 
     def _do_show(self, text: str, tier: str, cursor_x: int, cursor_y: int,
                  estimate: bool = False, price_divine: float = 0,
@@ -776,6 +890,14 @@ class PriceOverlay:
             return
         if self._theme == THEME_POE2 and not self._canvas:
             return
+
+        # Make fully transparent immediately so DWM composites nothing at
+        # the old position.  withdraw() alone is unreliable on some Windows
+        # setups for WS_EX_LAYERED + transparentcolor windows — DWM can
+        # leave "ghost" pixels at the old position.  Setting alpha=0 is a
+        # direct instruction to the compositor and always works.
+        self._root.attributes('-alpha', 0)
+        self._root.update_idletasks()
 
         # Set text color based on tier
         color = {
@@ -912,13 +1034,14 @@ class PriceOverlay:
                 if want_border:
                     self._start_pulse()
 
-        # Position near cursor
+        # Position near cursor (offsets are absolute, not scaled)
         x = cursor_x + OVERLAY_OFFSET_X
         y = cursor_y + OVERLAY_OFFSET_Y
 
-        # Ensure it stays on screen
-        screen_w = self._root.winfo_screenwidth()
-        screen_h = self._root.winfo_screenheight()
+        # Use Win32 screen metrics (same physical-pixel coordinate space as
+        # GetCursorPos) instead of tkinter's winfo_screenwidth which returns
+        # DPI-scaled logical pixels and causes misplacement on HiDPI displays.
+        screen_w, screen_h = self._get_screen_size()
         self._root.update_idletasks()
         if self._theme == THEME_POE2:
             widget_w = self._canvas.winfo_reqwidth()
@@ -927,8 +1050,11 @@ class PriceOverlay:
             widget_w = self._frame.winfo_reqwidth()
             widget_h = self._frame.winfo_reqheight()
 
+        # Slide (don't flip) to keep overlay on-screen
         if x + widget_w > screen_w:
-            x = cursor_x - widget_w - 10
+            x = screen_w - widget_w
+        if x < 0:
+            x = 0
         if y < 0:
             y = cursor_y + 30
         if y + widget_h > screen_h:
@@ -936,10 +1062,12 @@ class PriceOverlay:
 
         self._root.geometry(f"+{x}+{y}")
 
-        # Show the window
+        # Ensure window is in shown state, then restore opacity.
+        # The window was made alpha=0 at the top of _do_show.
         self._root.deiconify()
         self._root.lift()
         self._root.attributes("-topmost", True)
+        self._root.attributes('-alpha', 0.92)
 
         # Win32: force window above borderless fullscreen games
         # tkinter's -topmost alone isn't sufficient against game windows
@@ -960,14 +1088,11 @@ class PriceOverlay:
 
         self._visible = True
 
-        # Cancel any leftover hide timer from a previous show
+        # Reset auto-hide safety timer — if no new show/reshow arrives
+        # within 3s the overlay hides itself (safety net for missed hides)
         if self._hide_timer:
             self._root.after_cancel(self._hide_timer)
-            self._hide_timer = None
-
-        # No auto-hide timer — the overlay stays visible until the cursor
-        # moves off the item, which triggers overlay.hide() via the
-        # ItemDetector's on_hide callback (item_detection.py:114-116).
+        self._hide_timer = self._root.after(3000, self._do_hide)
 
     def _start_pulse(self):
         """Pulse the border between colors at the configured speed."""
@@ -1039,24 +1164,104 @@ class PriceOverlay:
             _SHEEN_FRAME_MS, self._start_sheen)
 
     def _position_sheen_strips(self):
-        """Move the 3 sheen strips to the current _sheen_x position, clamped to border."""
-        if not self._canvas or len(self._sheen_strips) < 3:
+        """Move the sheen strips to the current _sheen_x position with blended colors."""
+        if not self._canvas or not self._sheen_strips:
             return
         c = self._canvas
         h = c.winfo_reqheight()
         w = c.winfo_reqwidth()
+        n_strips = len(self._sheen_strips)
         sheen_band = max(4, int(w * _SHEEN_WIDTH_FRAC))
-        strip_w = sheen_band // 3
+        strip_w = max(1, sheen_band // n_strips)
         x = self._sheen_x
         inset = 3  # stay inside the border
         for i, sid in enumerate(self._sheen_strips):
             x0 = max(inset, x + strip_w * i)
             x1 = min(w - inset, x + strip_w * (i + 1))
             c.coords(sid, x0, inset, x1, h - inset)
-            c.itemconfigure(sid, fill=_POE2_CORNER_GOLD)
+            intensity = self._sheen_profile[i] if i < len(self._sheen_profile) else 0.05
+            fill = self._blend_hex(self._sheen_bg, self._sheen_color, intensity)
+            c.itemconfigure(sid, fill=fill)
+
+    def _do_update_text(self, text: str):
+        """Update displayed text in-place without re-rendering the overlay.
+
+        Only changes the canvas text item content — no canvas clear, no
+        background redraw, no repositioning.  Used for dot animations.
+        """
+        if not self._root or not self._canvas:
+            return
+        price_id = self._cv_items.get("price_text")
+        if price_id:
+            self._canvas.itemconfigure(price_id, text=text)
+
+    def _do_reshow(self, cursor_x: int, cursor_y: int):
+        """Reposition and re-display the overlay without re-rendering.
+
+        Reuses the existing canvas/label content — just moves the window.
+        """
+        if not self._root:
+            return
+
+        # Make transparent before repositioning (same ghost-prevention as _do_show)
+        self._root.attributes('-alpha', 0)
+        self._root.update_idletasks()
+
+        # Position near cursor (same logic as _do_show)
+        x = cursor_x + OVERLAY_OFFSET_X
+        y = cursor_y + OVERLAY_OFFSET_Y
+
+        screen_w, screen_h = self._get_screen_size()
+        self._root.update_idletasks()
+        if self._theme == THEME_POE2 and self._canvas:
+            widget_w = self._canvas.winfo_reqwidth()
+            widget_h = self._canvas.winfo_reqheight()
+        elif self._frame:
+            widget_w = self._frame.winfo_reqwidth()
+            widget_h = self._frame.winfo_reqheight()
+        else:
+            return
+
+        if x + widget_w > screen_w:
+            x = screen_w - widget_w
+        if x < 0:
+            x = 0
+        if y < 0:
+            y = cursor_y + 30
+        if y + widget_h > screen_h:
+            y = screen_h - widget_h
+
+        self._root.geometry(f"+{x}+{y}")
+        self._root.deiconify()
+        self._root.lift()
+        self._root.attributes("-topmost", True)
+        self._root.attributes('-alpha', 0.92)
+
+        if self._hwnd:
+            try:
+                import ctypes
+                HWND_TOPMOST = -1
+                SWP_NOMOVE = 0x0002
+                SWP_NOSIZE = 0x0001
+                SWP_NOACTIVATE = 0x0010
+                SWP_SHOWWINDOW = 0x0040
+                ctypes.windll.user32.SetWindowPos(
+                    self._hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                )
+            except Exception:
+                pass
+
+        self._visible = True
+
+        # Reset auto-hide safety timer (reshow refreshes the countdown)
+        if self._hide_timer:
+            self._root.after_cancel(self._hide_timer)
+        self._hide_timer = self._root.after(3000, self._do_hide)
 
     def _do_hide(self):
         """Actually hide the overlay (must be on main thread)."""
+        logger.debug(f"_do_hide called, _visible={self._visible}")
         if self._root and self._visible:
             # Cancel auto-hide timer so it can't fire later and kill a
             # subsequent show_price (the root cause of the "flash and vanish" bug)
@@ -1082,6 +1287,9 @@ class PriceOverlay:
             else:
                 self._frame.configure(bg=self._NORMAL_BORDER_COLOR,
                                       padx=2, pady=2)
+            # Alpha=0 first to guarantee no ghost pixels, then withdraw
+            self._root.attributes('-alpha', 0)
+            self._root.update_idletasks()
             self._root.withdraw()
             self._visible = False
 
@@ -1155,6 +1363,9 @@ class ConsoleOverlay:
             print(f"  {symbol} {text}{flag}  (at {cursor_x}, {cursor_y})")
         except (UnicodeEncodeError, OSError):
             pass  # Windows cp1252 terminal can't encode some chars
+
+    def reshow(self, cursor_x: int, cursor_y: int):
+        pass
 
     def hide(self):
         pass

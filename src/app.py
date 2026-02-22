@@ -23,6 +23,14 @@ from urllib.request import Request
 # Ensure src/ is on sys.path so bare imports and uvicorn "server:app" work
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+
+def _log(msg):
+    """Print that won't crash under pythonw (sys.stdout is None)."""
+    try:
+        print(msg)
+    except Exception:
+        pass
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -83,7 +91,7 @@ class WindowApi:
         return ctypes.windll.user32.FindWindowW(None, WINDOW_TITLE)
 
     def _install_hook(self):
-        """Install a Win32 hook that silently blocks resize during guard periods."""
+        """Install a Win32 hook for resize guard and edge-resize on frameless window."""
         import ctypes
         from ctypes import wintypes, WINFUNCTYPE, POINTER, c_int, c_uint
 
@@ -92,8 +100,22 @@ class WindowApi:
             return
 
         WM_WINDOWPOSCHANGING = 0x0046
+        WM_NCHITTEST = 0x0084
         SWP_NOSIZE = 0x0001
         GWL_WNDPROC = -4
+
+        # WM_NCHITTEST return values for resize edges
+        HTCLIENT = 1
+        HTLEFT = 10
+        HTRIGHT = 11
+        HTTOP = 12
+        HTTOPLEFT = 13
+        HTTOPRIGHT = 14
+        HTBOTTOM = 15
+        HTBOTTOMLEFT = 16
+        HTBOTTOMRIGHT = 17
+
+        RESIZE_BORDER = 6  # pixels from edge that trigger resize cursor
 
         class WINDOWPOS(ctypes.Structure):
             _fields_ = [
@@ -103,6 +125,10 @@ class WindowApi:
                 ("cx", c_int), ("cy", c_int),
                 ("flags", c_uint),
             ]
+
+        class RECT(ctypes.Structure):
+            _fields_ = [("left", c_int), ("top", c_int),
+                        ("right", c_int), ("bottom", c_int)]
 
         # LRESULT is pointer-sized (8 bytes on 64-bit Windows)
         LRESULT = wintypes.LPARAM
@@ -126,6 +152,35 @@ class WindowApi:
             if msg == WM_WINDOWPOSCHANGING and time.time() < api_ref._guard_until:
                 pos = ctypes.cast(lparam, POINTER(WINDOWPOS)).contents
                 pos.flags |= SWP_NOSIZE  # silently prevent resize
+
+            # Edge resize: map cursor position near borders to resize handles
+            if msg == WM_NCHITTEST:
+                result = user32.CallWindowProcW(api_ref._original_proc,
+                                                hwnd, msg, wparam, lparam)
+                if result == HTCLIENT:
+                    rc = RECT()
+                    user32.GetWindowRect(hwnd, ctypes.byref(rc))
+                    x = (lparam & 0xFFFF)
+                    y = ((lparam >> 16) & 0xFFFF)
+                    # Convert unsigned to signed (for multi-monitor negative coords)
+                    if x >= 0x8000: x -= 0x10000
+                    if y >= 0x8000: y -= 0x10000
+
+                    left = x - rc.left < RESIZE_BORDER
+                    right = rc.right - x < RESIZE_BORDER
+                    top = y - rc.top < RESIZE_BORDER
+                    bottom = rc.bottom - y < RESIZE_BORDER
+
+                    if top and left:     return HTTOPLEFT
+                    if top and right:    return HTTOPRIGHT
+                    if bottom and left:  return HTBOTTOMLEFT
+                    if bottom and right: return HTBOTTOMRIGHT
+                    if left:             return HTLEFT
+                    if right:            return HTRIGHT
+                    if top:              return HTTOP
+                    if bottom:           return HTBOTTOM
+                return result
+
             return user32.CallWindowProcW(api_ref._original_proc,
                                           hwnd, msg, wparam, lparam)
 
@@ -224,7 +279,7 @@ def _tooltip_updater(tray):
         time.sleep(10)
 
 
-def _set_icon_and_show(get_hwnd, show_fn):
+def _set_icon_and_show(get_hwnd, show_fn, api_ref=None):
     """Background thread: set the taskbar icon, then reveal the window."""
     import ctypes
     from bundle_paths import get_resource
@@ -258,7 +313,11 @@ def _set_icon_and_show(get_hwnd, show_fn):
     except Exception:
         pass  # non-critical — falls back to executable icon
 
-    # Now reveal the window — user only ever sees the divine orb
+    # Install Win32 resize hook before showing the window
+    if api_ref:
+        api_ref._install_hook()
+
+    # Now reveal the window — user only ever sees the LAMA icon
     show_fn()
 
 
@@ -281,21 +340,21 @@ def main():
     try:
         import webview
     except ImportError:
-        print("=" * 50)
-        print("pywebview is required for standalone mode.")
-        print("Install it with:")
-        print()
-        print("    pip install pywebview")
-        print()
-        print("Then re-run: python app.py")
-        print("=" * 50)
+        _log("=" * 50)
+        _log("pywebview is required for standalone mode.")
+        _log("Install it with:")
+        _log("")
+        _log("    pip install pywebview")
+        _log("")
+        _log("Then re-run: python app.py")
+        _log("=" * 50)
         sys.exit(1)
 
     # If launched with --restart, wait for the old process to release the port
     if "--restart" in sys.argv:
-        print("Restart requested — waiting for old process to release port...")
+        _log("Restart requested — waiting for old process to release port...")
         if not wait_for_port_free():
-            print("ERROR: Port not freed within 10 seconds.")
+            _log("ERROR: Port not freed within 10 seconds.")
             sys.exit(1)
 
     # Start the server in a daemon thread
@@ -303,12 +362,12 @@ def main():
     server_thread.start()
 
     # Wait for it to be ready
-    print(f"Starting LAMA on port {PORT}...")
+    _log(f"Starting LAMA on port {PORT}...")
     if not wait_for_server():
-        print("ERROR: Server failed to start within 10 seconds.")
+        _log("ERROR: Server failed to start within 10 seconds.")
         sys.exit(1)
 
-    print("Server ready. Opening window...")
+    _log("Server ready. Opening window...")
 
     # Open the native window pointing at the dashboard
     api = WindowApi()
@@ -363,7 +422,7 @@ def main():
     # The icon thread sets IPropertyStore, then reveals the window.
     window = webview.create_window(
         WINDOW_TITLE,
-        url=f"http://127.0.0.1:{PORT}/dashboard",
+        url=f"http://127.0.0.1:{PORT}/dashboard?_t={int(time.time())}",
         width=WINDOW_WIDTH,
         height=WINDOW_HEIGHT,
         min_size=(900, 600),
@@ -377,15 +436,18 @@ def main():
 
     # Set the taskbar icon, then show the window
     threading.Thread(
-        target=_set_icon_and_show, args=(api._get_hwnd, api.show), daemon=True
+        target=_set_icon_and_show, args=(api._get_hwnd, api.show, api), daemon=True
     ).start()
 
     # This blocks until the window is destroyed (force_close / quit)
-    webview.start()
+    from bundle_paths import get_resource
+    ico_path = str(get_resource("resources/img/favicon.ico"))
+    webview.start(icon=ico_path)
 
-    print("Window closed. Shutting down.")
-    tray.stop()
-    # Daemon thread dies automatically when main exits
+    try:
+        tray.stop()
+    except Exception:
+        pass
     os._exit(0)
 
 

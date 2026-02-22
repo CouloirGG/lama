@@ -45,7 +45,9 @@ from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from item_lookup import ItemLookup
 from price_cache import PriceCache
+from game_commands import GameCommander
 from telemetry import TelemetryUploader
+from trade_actions import TradeActions
 from watchlist import WatchlistWorker
 
 logger = logging.getLogger("dashboard")
@@ -65,7 +67,7 @@ SETTINGS_FILE = SETTINGS_DIR / "dashboard_settings.json"
 POE2SCOUT_API = "https://poe2scout.com/api"
 
 # Bug report (mirrors config.py constants)
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
 LOG_FILE = SETTINGS_DIR / "overlay.log"
 DEBUG_DIR = SETTINGS_DIR / "debug"
 BUG_REPORT_LOG_LINES = 200
@@ -102,6 +104,7 @@ DEFAULT_SETTINGS = {
     "filter_color_preset": "default",
     "watchlist_queries": [],
     "watchlist_poll_interval": 300,
+    "watchlist_online_only": True,
     "start_with_windows": False,
     "overlay_show_grade": True,
     "overlay_show_price": True,
@@ -113,6 +116,8 @@ DEFAULT_SETTINGS = {
     "overlay_theme": "poe2",
     "overlay_pulse_style": "sheen",
     "telemetry_enabled": False,
+    "poesessid": "",
+    "nux_completed": False,
 }
 
 
@@ -374,12 +379,14 @@ class OverlayProcess:
         if self.started_at and self.state == "running":
             uptime = int(time.time() - self.started_at)
 
-        from config import APP_VERSION
+        from config import APP_VERSION, GIT_BRANCH, IS_DEV_BUILD
         return {
             "state": self.state,
             "uptime": uptime,
             "stats": dict(self.stats),
             "version": APP_VERSION,
+            "branch": GIT_BRANCH,
+            "is_dev": IS_DEV_BUILD,
         }
 
     def _classify_line(self, line: str) -> str:
@@ -468,6 +475,8 @@ watchlist_worker: Optional[WatchlistWorker] = None
 price_cache: Optional[PriceCache] = None
 item_lookup: Optional[ItemLookup] = None
 telemetry_uploader: Optional[TelemetryUploader] = None
+game_commander = GameCommander()
+trade_actions: Optional[TradeActions] = None
 
 
 # ---------------------------------------------------------------------------
@@ -476,7 +485,7 @@ telemetry_uploader: Optional[TelemetryUploader] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Set up the event loop reference and background tasks."""
-    global watchlist_worker, price_cache, item_lookup, telemetry_uploader
+    global watchlist_worker, price_cache, item_lookup, telemetry_uploader, trade_actions
 
     loop = asyncio.get_running_loop()
     overlay.set_loop(loop)
@@ -492,8 +501,16 @@ async def lifespan(app: FastAPI):
     watchlist_worker.update_queries(
         settings.get("watchlist_queries", []),
         settings.get("watchlist_poll_interval", 300),
+        online_only=settings.get("watchlist_online_only", True),
     )
+    # Propagate POESESSID to watchlist worker if configured
+    poesessid = settings.get("poesessid", "")
+    if poesessid:
+        watchlist_worker.set_session_id(poesessid)
     watchlist_worker.start(loop)
+
+    # Initialize trade actions (authenticated API calls)
+    trade_actions = TradeActions(lambda: load_settings().get("poesessid", ""))
 
     # Server-side PriceCache for Markets tab (works without overlay running)
     price_cache = PriceCache(league=league)
@@ -620,12 +637,33 @@ async def check_for_updates():
         logger.debug(f"Update check failed: {e}")
 
 
+def _merge_cache_rates(status: dict):
+    """Fill KPI exchange rates from server-side price_cache.
+
+    The overlay subprocess reports rates via [Status] log lines, but those
+    only appear when the overlay is running.  The server-side price_cache
+    refreshes independently, so we always have fresh rates available.
+    """
+    cache_stats = price_cache.get_stats()
+    stats = status.setdefault("stats", {})
+    for key in ("divine_to_chaos", "divine_to_exalted", "mirror_to_divine"):
+        if cache_stats.get(key):
+            stats[key] = cache_stats[key]
+    # Also fill cache metadata (items count, last refresh time)
+    if cache_stats.get("total_items"):
+        stats["cache_items"] = cache_stats["total_items"]
+    if cache_stats.get("last_refresh") and cache_stats["last_refresh"] != "Never":
+        stats["last_refresh"] = cache_stats["last_refresh"]
+
+
 async def status_broadcast_loop():
     """Push status updates to WebSocket clients every 5 seconds."""
     while True:
         await asyncio.sleep(5)
         if ws_manager.connections:
             status = overlay.get_status()
+            if price_cache:
+                _merge_cache_rates(status)
             await ws_manager.broadcast({"type": "status", **status})
 
 
@@ -654,6 +692,7 @@ class SettingsRequest(BaseModel):
     filter_color_preset: Optional[str] = None
     watchlist_queries: Optional[list] = None
     watchlist_poll_interval: Optional[int] = None
+    watchlist_online_only: Optional[bool] = None
     start_with_windows: Optional[bool] = None
     overlay_show_grade: Optional[bool] = None
     overlay_show_price: Optional[bool] = None
@@ -665,6 +704,8 @@ class SettingsRequest(BaseModel):
     overlay_theme: Optional[str] = None
     overlay_pulse_style: Optional[str] = None
     telemetry_enabled: Optional[bool] = None
+    poesessid: Optional[str] = None
+    nux_completed: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
@@ -672,7 +713,11 @@ class SettingsRequest(BaseModel):
 # ---------------------------------------------------------------------------
 @app.get("/api/status")
 async def get_status():
-    return overlay.get_status()
+    status = overlay.get_status()
+    # Merge server-side price_cache rates so KPIs work without overlay running
+    if price_cache:
+        _merge_cache_rates(status)
+    return status
 
 
 @app.post("/api/start")
@@ -721,9 +766,20 @@ async def restart_overlay(req: StartRequest = StartRequest()):
     return result
 
 
+def _redact_settings(settings: dict) -> dict:
+    """Return settings with sensitive fields redacted for API responses."""
+    out = dict(settings)
+    if out.get("poesessid"):
+        out["poesessid_set"] = True
+        out["poesessid"] = ""
+    else:
+        out["poesessid_set"] = False
+    return out
+
+
 @app.get("/api/settings")
 async def get_settings():
-    return load_settings()
+    return _redact_settings(load_settings())
 
 
 @app.post("/api/settings")
@@ -737,7 +793,7 @@ async def update_settings(req: SettingsRequest):
             settings[key] = updates.pop(key)
     deep_merge(settings, updates)
     save_settings(settings)
-    await ws_manager.broadcast({"type": "settings", "settings": settings})
+    await ws_manager.broadcast({"type": "settings", "settings": _redact_settings(settings)})
 
     # Update Windows auto-start registry if the setting changed
     if "start_with_windows" in updates:
@@ -755,12 +811,17 @@ async def update_settings(req: SettingsRequest):
         else:
             telemetry_uploader.stop_schedule()
 
-    # Notify watchlist worker if queries or interval changed
-    if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates):
+    # Propagate POESESSID to watchlist worker
+    if "poesessid" in updates and watchlist_worker:
+        watchlist_worker.set_session_id(settings.get("poesessid", ""))
+
+    # Notify watchlist worker if queries, interval, or online filter changed
+    if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates or "watchlist_online_only" in updates):
         queries = settings.get("watchlist_queries", [])
         watchlist_worker.update_queries(
             queries,
             settings.get("watchlist_poll_interval", 300),
+            online_only=settings.get("watchlist_online_only", True),
         )
         # Force-refresh all enabled queries so results appear immediately
         enabled = [q for q in queries if q.get("enabled", True) and q.get("id")]
@@ -859,6 +920,102 @@ async def refresh_watchlist_query(query_id: str):
         return {"error": "Watchlist not initialized"}
     watchlist_worker.force_refresh(query_id)
     return {"status": "queued", "query_id": query_id}
+
+
+# ---------------------------------------------------------------------------
+# Trade action endpoints (whisper, invite, hideout, trade, kick)
+# ---------------------------------------------------------------------------
+class TradeActionRequest(BaseModel):
+    player: str = ""
+    token: str = ""
+    whisper: str = ""
+
+
+@app.post("/api/trade/whisper")
+async def trade_whisper(req: TradeActionRequest):
+    """Send a trade whisper — via token API if available, else chat fallback."""
+    settings = load_settings()
+    poesessid = settings.get("poesessid", "")
+
+    if req.token and poesessid and trade_actions:
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, trade_actions.whisper_via_token, req.token
+        )
+        if result.get("status") == "sent":
+            return {**result, "method": "api"}
+        logger.warning(f"Whisper token API failed: {result.get('error')}, falling back to chat")
+
+    # The trade API whisper field is the full ready-to-paste message
+    # (e.g. "@CharName Hi, I would like to buy..."), so paste it directly.
+    if req.whisper:
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, game_commander.type_in_chat, req.whisper
+        )
+        return {**result, "method": "chat"}
+
+    if not req.player:
+        return {"error": "No whisper text or player name available"}
+
+    # Bare fallback — just open whisper prompt to player (no message)
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None, game_commander.type_in_chat, f"@{req.player} ", False
+    )
+    return {**result, "method": "chat"}
+
+
+@app.post("/api/trade/invite")
+async def trade_invite(req: TradeActionRequest):
+    """Send /invite <player> via chat."""
+    if not req.player:
+        return {"error": "Player name required"}
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, game_commander.invite, req.player)
+    return result
+
+
+@app.post("/api/trade/hideout")
+async def trade_hideout(req: TradeActionRequest):
+    """Visit a player's hideout — requires hideout_token + POESESSID.
+
+    POE2 has no /hideout <player> chat command (unlike POE1).
+    The only programmatic way is via the token API.
+    """
+    settings = load_settings()
+    poesessid = settings.get("poesessid", "")
+
+    if req.token and poesessid and trade_actions:
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None, trade_actions.hideout_via_token, req.token
+        )
+        if result.get("status") == "sent":
+            return {**result, "method": "api"}
+        return {**result, "method": "api"}
+
+    return {"error": "Hideout requires POESESSID + hideout token (POE2 has no /hideout <player> command)"}
+
+
+@app.post("/api/trade/tradewith")
+async def trade_tradewith(req: TradeActionRequest):
+    """Send /tradewith <player> via chat."""
+    if not req.player:
+        return {"error": "Player name required"}
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, game_commander.trade_with, req.player)
+    return result
+
+
+@app.post("/api/trade/kick")
+async def trade_kick(req: TradeActionRequest):
+    """Send /kick <player> via chat."""
+    if not req.player:
+        return {"error": "Player name required"}
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, game_commander.kick, req.player)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1325,23 +1482,18 @@ async def restart_app():
     # to be freed before binding.  This must happen before we tell the dashboard
     # to close, because closing pywebview triggers os._exit(0) in app.py which
     # would kill our daemon threads before Popen runs.
-    subprocess.Popen(restart_cmd, cwd=str(APP_DIR))
+    subprocess.Popen(restart_cmd, cwd=str(APP_DIR),
+                     creationflags=_HIDDEN_FLAGS, startupinfo=_HIDDEN_SI)
 
     # Now tell the dashboard to close the pywebview window
     await ws_manager.broadcast({"type": "app_restart"})
 
     def _kill_self():
         time.sleep(1.5)
-        # Belt-and-suspenders: force kill if webview didn't exit cleanly
-        try:
-            import ctypes
-            ctypes.windll.kernel32.TerminateProcess(
-                ctypes.windll.kernel32.GetCurrentProcess(), 0
-            )
-        except Exception:
-            os._exit(0)
+        os._exit(0)
 
-    threading.Thread(target=_kill_self, daemon=True).start()
+    # Use non-daemon thread so it survives even if main thread exits first
+    threading.Thread(target=_kill_self, daemon=False).start()
     return {"status": "restarting"}
 
 
@@ -1453,7 +1605,14 @@ async def serve_dashboard():
     dashboard_path = get_resource("resources/dashboard.html")
     if not dashboard_path.exists():
         return HTMLResponse("<h1>dashboard.html not found</h1>", status_code=404)
-    return HTMLResponse(dashboard_path.read_text(encoding="utf-8"))
+    return HTMLResponse(
+        dashboard_path.read_text(encoding="utf-8"),
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 @app.get("/favicon.ico")
@@ -1484,7 +1643,7 @@ async def websocket_endpoint(ws: WebSocket):
     await ws_manager.connect(ws)
     try:
         # Send initial state
-        settings = load_settings()
+        settings = _redact_settings(load_settings())
         init_msg = {
             "type": "init",
             **overlay.get_status(),

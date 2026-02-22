@@ -1,7 +1,7 @@
 # POE2 Price Overlay — Developer Reference
 
-> **Last updated:** 2026-02-18
-> **Status:** Working prototype — frameless desktop app + calibration shards + local mod scoring + DPS/defense integration + trade API pricing + 106-test regression suite
+> **Last updated:** 2026-02-20
+> **Status:** Working prototype — frameless desktop app + calibration shards + local mod scoring + DPS/defense integration + trade API pricing + resolution-scaled overlay + 106-test regression suite
 
 ## What This Is
 
@@ -214,14 +214,19 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 ### Item Detection (`item_detection.py`)
 - Polls cursor position at 8 fps
 - Triggers Ctrl+C when cursor is still for 3 frames within 20px radius
-- Content-based dedup: same clipboard text within 5s = skip
+- Content-based dedup: same clipboard text within 30s = skip (TTL-based)
 - `SetConsoleCtrlHandler(None, True)` prevents the programmatic Ctrl+C from killing Python
+- **Reshow callback:** when same item is re-detected after cursor movement, fires lightweight `_on_reshow` callback (reposition-only) instead of full `_on_change` pipeline
+- **Hide callback:** fires when cursor moves away from last triggered position, hides overlay
 
 ### Overlay (`overlay.py`)
 - tkinter-based, transparent, click-through, always-on-top
-- Thread-safe updates via `root.after()`
+- Thread-safe updates via pending queue polled every 50ms; queue collapses to final show/hide
 - Color-coded by tier: high (orange), good (gold), decent (teal), low (grey)
-- 4-second display duration
+- **Resolution scaling:** dimensions scale proportionally to game window height vs 1080p baseline (`OVERLAY_REFERENCE_HEIGHT`). Scale factor clamped to `[0.6, 1.5]`, applied to fonts, padding, icons, pip sizes
+- **Ghost pixel prevention:** uses `alpha=0` before repositioning instead of `withdraw()` — directly instructs DWM compositor to zero out old pixel region (reliable for WS_EX_LAYERED + transparentcolor windows)
+- **Screen positioning:** uses Win32 `GetSystemMetrics` for physical-pixel screen size (avoids DPI mismatch with `winfo_screenwidth`)
+- **Reshow path:** `reshow()` repositions without re-rendering canvas content (avoids "Checking..." flash on re-hover)
 
 ## Test Suite
 

@@ -4,18 +4,46 @@ All tunable constants in one place.
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from bundle_paths import get_resource
+from bundle_paths import get_resource, IS_FROZEN
 
 # ─────────────────────────────────────────────
 # Version
 # ─────────────────────────────────────────────
 _version_file = get_resource("resources/VERSION")
 APP_VERSION = _version_file.read_text().strip() if _version_file.exists() else "dev"
+
+# ─────────────────────────────────────────────
+# Dev build detection
+# ─────────────────────────────────────────────
+def _detect_git_branch() -> str | None:
+    """Return the current git branch name, or None if not in a git repo."""
+    if IS_FROZEN:
+        return None
+    try:
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            startupinfo=si,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+GIT_BRANCH = _detect_git_branch()
+IS_DEV_BUILD = GIT_BRANCH not in (None, "main")
 
 # ─────────────────────────────────────────────
 # POE2 Game Settings
@@ -33,11 +61,11 @@ DEFAULT_LEAGUE = "Fate of the Vaal"
 SCAN_FPS = 8  # 8 checks per second
 
 # Cooldown after a successful detection (seconds)
-DETECTION_COOLDOWN = 1.0
+DETECTION_COOLDOWN = 0.5
 
 # Cursor must be within this many pixels for N frames before triggering
 # This filters out camera panning (cursor moves = camera moves = everything changes)
-CURSOR_STILL_RADIUS = 20  # pixels
+CURSOR_STILL_RADIUS = 5   # pixels
 CURSOR_STILL_FRAMES = 3   # must be still for 3 consecutive frames (~375ms)
 
 # ─────────────────────────────────────────────
@@ -70,6 +98,7 @@ OVERLAY_BG_COLOR = "#1a1a2e"      # Dark background
 OVERLAY_BG_ALPHA = 0.85            # Background opacity
 OVERLAY_FONT_SIZE = 14
 OVERLAY_PADDING = 8
+OVERLAY_REFERENCE_HEIGHT = 1080  # Baseline resolution for overlay scaling
 
 # Overlay theme: "poe2" (gothic, default) or "classic" (original)
 OVERLAY_THEME = "poe2"
@@ -188,13 +217,13 @@ DEFENSE_ITEM_CLASSES = frozenset({
 # DPS thresholds: (terrible, low, decent, good) total DPS values
 # Keyed by minimum ilvl bracket
 DPS_BRACKETS_2H = {
-    82: (300, 450, 600, 800),   # endgame
+    82: (200, 350, 500, 700),   # endgame (~20-30% above 68)
     68: (150, 250, 400, 600),   # maps
     45: (60, 120, 200, 350),    # cruel
     0:  (30, 60, 120, 200),     # leveling
 }
 DPS_BRACKETS_1H = {
-    82: (180, 280, 400, 550),   # endgame
+    82: (100, 200, 300, 450),   # endgame (~20-30% above 68)
     68: (80, 150, 250, 400),    # maps
     45: (35, 70, 140, 220),     # cruel
     0:  (15, 35, 70, 120),      # leveling
@@ -202,13 +231,13 @@ DPS_BRACKETS_1H = {
 
 # Defense thresholds per slot: ilvl-keyed {min_ilvl: (terrible, low, decent, good)}
 DEFENSE_THRESHOLDS = {
-    "Body Armours": {82: (400, 700, 1000, 1400), 68: (200, 400, 700, 1000), 0: (50, 120, 250, 500)},
-    "Shields":      {82: (300, 500, 750, 1000),  68: (150, 300, 500, 750),  0: (40, 100, 200, 400)},
-    "Helmets":      {82: (200, 350, 500, 700),   68: (100, 200, 350, 500),  0: (30, 80, 160, 300)},
-    "Gloves":       {82: (160, 280, 400, 550),   68: (80, 160, 280, 400),   0: (25, 65, 130, 250)},
-    "Boots":        {82: (160, 280, 400, 550),   68: (80, 160, 280, 400),   0: (25, 65, 130, 250)},
-    "Bucklers":     {82: (200, 350, 500, 700),   68: (100, 200, 350, 500),  0: (30, 80, 160, 300)},
-    "Foci":         {82: (100, 200, 350, 500),   68: (50, 100, 200, 350),   0: (15, 50, 100, 200)},
+    "Body Armours": {82: (250, 500, 850, 1200), 68: (200, 400, 700, 1000), 0: (50, 120, 250, 500)},
+    "Shields":      {82: (180, 380, 600, 900),  68: (150, 300, 500, 750),  0: (40, 100, 200, 400)},
+    "Helmets":      {82: (120, 250, 420, 600),  68: (100, 200, 350, 500),  0: (30, 80, 160, 300)},
+    "Gloves":       {82: (100, 200, 340, 480),  68: (80, 160, 280, 400),   0: (25, 65, 130, 250)},
+    "Boots":        {82: (100, 200, 340, 480),  68: (80, 160, 280, 400),   0: (25, 65, 130, 250)},
+    "Bucklers":     {82: (120, 250, 420, 600),  68: (100, 200, 350, 500),  0: (30, 80, 160, 300)},
+    "Foci":         {82: (60, 120, 250, 420),   68: (50, 100, 200, 350),   0: (15, 50, 100, 200)},
 }
 
 # Trade API filter multipliers (search for items with >= X% of this item's stats)
@@ -242,7 +271,7 @@ CALIBRATION_LOG_FILE = CACHE_DIR / "calibration.jsonl"
 HARVESTER_STATE_FILE = CACHE_DIR / "harvester_state.json"
 
 # Calibration write-time filters
-CALIBRATION_MAX_PRICE_DIVINE = 300.0   # skip records above this
+CALIBRATION_MAX_PRICE_DIVINE = 1500.0  # skip records above this
 CALIBRATION_MIN_RESULTS = 3            # skip thin results (< 3 listings)
 
 # ─────────────────────────────────────────────
@@ -261,8 +290,8 @@ LOG_FILE = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "overlay.log"
 # ─────────────────────────────────────────────
 # Bug Reporting (Discord webhook)
 # ─────────────────────────────────────────────
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
-DISCORD_TELEMETRY_WEBHOOK_URL = os.environ.get("DISCORD_TELEMETRY_WEBHOOK_URL", "")
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+DISCORD_TELEMETRY_WEBHOOK_URL = os.environ.get("DISCORD_TELEMETRY_WEBHOOK_URL", "").strip()
 
 # Market Signals — Discord integration (coming soon)
 DISCORD_SIGNALS_CHANNEL_ID = os.environ.get("DISCORD_SIGNALS_CHANNEL_ID", "")
@@ -275,7 +304,8 @@ DEBUG_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "debug"
 # ─────────────────────────────────────────────
 # Flag Reporting (inaccurate price feedback)
 # ─────────────────────────────────────────────
-DISCORD_FLAG_WEBHOOK_URL = os.environ.get("DISCORD_FLAG_WEBHOOK_URL", "")
+DISCORD_FLAG_WEBHOOK_URL = os.environ.get("DISCORD_FLAG_WEBHOOK_URL", "").strip()
+DISCORD_RELEASE_WEBHOOK_URL = os.environ.get("DISCORD_RELEASE_WEBHOOK_URL", "").strip()
 FLAG_REPORT_DB = CACHE_DIR / "flag_reports.jsonl"
 FLAG_REPORT_COOLDOWN = 10  # seconds between flags
 

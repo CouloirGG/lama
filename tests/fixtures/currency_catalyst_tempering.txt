@@ -1,0 +1,10 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Tempering Catalyst
+--------
+Stack Size: 5/20
+--------
+Adds quality that enhances Defence modifiers on a ring, amulet or belt. Replaces other quality types.
+--------
+  to use, then   on a ring, amulet or belt to apply it.
+Press and hold   to unstack.

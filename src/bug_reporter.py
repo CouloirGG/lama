@@ -2,6 +2,9 @@
 LAMA - Bug Reporter
 Discord webhook-based bug reporting triggered by Ctrl+Shift+B.
 Opens a dark-themed dialog, collects logs + system info, uploads to Discord.
+
+When a recently priced item exists, defaults to "Price Inaccuracy" mode with
+auto-populated item data. User can toggle to "General Bug" mode.
 """
 
 import sys
@@ -35,16 +38,18 @@ class BugReporter:
 
     _COOLDOWN = 30  # seconds between reports
 
-    def __init__(self, root_fn, stats_fn, overlay):
+    def __init__(self, root_fn, stats_fn, overlay, item_context_fn=None):
         """
         Args:
             root_fn: callable returning the tkinter Tk instance
             stats_fn: callable returning session stats dict
             overlay: PriceOverlay instance for confirmation display
+            item_context_fn: callable returning last priced item dict or None
         """
         self._root_fn = root_fn
         self._stats_fn = stats_fn
         self._overlay = overlay
+        self._item_context_fn = item_context_fn
         self._last_report_time = 0
 
     def report(self):
@@ -71,13 +76,22 @@ class BugReporter:
         if not root:
             return
 
+        # Fetch item context for price inaccuracy mode
+        item_ctx = None
+        if self._item_context_fn:
+            try:
+                item_ctx = self._item_context_fn()
+            except Exception:
+                pass
+
         dialog = tk.Toplevel(root)
         dialog.title("Bug Report")
         dialog.configure(bg="#1a1a2e")
         dialog.resizable(False, False)
 
-        # Size and center
-        w, h = 400, 350
+        # Size and center — taller when showing item context
+        w = 400
+        h = 420 if item_ctx else 350
         sx = root.winfo_screenwidth()
         sy = root.winfo_screenheight()
         dialog.geometry(f"{w}x{h}+{(sx - w) // 2}+{(sy - h) // 2}")
@@ -113,46 +127,182 @@ class BugReporter:
             bg="#1a1a2e", fg="#707090", font=("Segoe UI", 9),
         ).pack(anchor="w", padx=16, pady=(16, 8))
 
-        # --- Title field ---
-        tk.Label(
-            dialog, text="Title:", bg="#1a1a2e", fg="#e0e0e0",
-            font=("Segoe UI", 10),
-        ).pack(anchor="w", padx=16, pady=(0, 4))
+        # --- Category toggle state ---
+        # "price" when Price Inaccuracy selected, "bug" when General Bug
+        category = {"current": "price" if item_ctx else "bug"}
 
-        title_var = tk.StringVar()
-        title_entry = tk.Entry(
-            dialog, textvariable=title_var,
-            bg="#2a2a3e", fg="#e0e0e0", insertbackground="#e0e0e0",
-            font=("Segoe UI", 10), relief="flat", bd=4,
-        )
-        title_entry.pack(fill="x", padx=16)
+        # Container for everything below the pills (rebuilt on toggle)
+        body_frame = tk.Frame(dialog, bg="#1a1a2e")
+        body_frame.pack(fill="both", expand=True, padx=0, pady=0)
 
-        # --- Description field ---
-        tk.Label(
-            dialog, text="What happened?", bg="#1a1a2e", fg="#e0e0e0",
-            font=("Segoe UI", 10),
-        ).pack(anchor="w", padx=16, pady=(12, 4))
+        # Mutable refs for title/desc widgets (rebuilt on toggle)
+        widgets = {"title_var": None, "desc_text": None, "title_entry": None}
 
-        desc_text = tk.Text(
-            dialog, height=5, wrap="word",
-            bg="#2a2a3e", fg="#e0e0e0", insertbackground="#e0e0e0",
-            font=("Segoe UI", 10), relief="flat", bd=4,
-        )
-        desc_text.pack(fill="x", padx=16)
+        def _build_body():
+            """Build the body content based on current category."""
+            for child in body_frame.winfo_children():
+                child.destroy()
 
-        # --- Info label ---
-        tk.Label(
-            dialog, text="Logs + system info attached automatically",
-            bg="#1a1a2e", fg="#707090", font=("Segoe UI", 9),
-        ).pack(anchor="w", padx=16, pady=(8, 0))
+            title_var = tk.StringVar()
+            widgets["title_var"] = title_var
 
-        # --- Buttons ---
+            if category["current"] == "price" and item_ctx:
+                # --- Item summary (read-only) ---
+                item_name = item_ctx.get("item_name", "Unknown")
+                base_type = item_ctx.get("base_type", "")
+                name_line = item_name
+                if base_type and base_type != item_name:
+                    name_line = f"{item_name} -- {base_type}"
+
+                tk.Label(
+                    body_frame, text=name_line,
+                    bg="#1a1a2e", fg="#ffd700", font=("Segoe UI", 11, "bold"),
+                    wraplength=360, justify="left",
+                ).pack(anchor="w", padx=16, pady=(4, 2))
+
+                grade = item_ctx.get("grade", "?")
+                display_text = item_ctx.get("display_text", "")
+                summary = display_text or f"Grade: {grade}"
+                tk.Label(
+                    body_frame, text=summary,
+                    bg="#1a1a2e", fg="#a0a0b0", font=("Segoe UI", 9),
+                    wraplength=360, justify="left",
+                ).pack(anchor="w", padx=16, pady=(0, 2))
+
+                # Top mods (muted)
+                mod_details = item_ctx.get("mod_details")
+                if mod_details and isinstance(mod_details, list):
+                    top_mods = [m.get("display", m.get("name", ""))
+                                for m in mod_details[:3] if isinstance(m, dict)]
+                    if top_mods:
+                        tk.Label(
+                            body_frame, text=", ".join(top_mods),
+                            bg="#1a1a2e", fg="#707090", font=("Segoe UI", 8),
+                            wraplength=360, justify="left",
+                        ).pack(anchor="w", padx=16, pady=(0, 6))
+
+                # Title pre-filled
+                title_var.set(f"Price: {item_name}")
+                desc_label_text = "What should the price be?"
+                info_label_text = "Logs + item data attached automatically"
+            else:
+                # General bug mode — standard labels
+                title_var.set("")
+                desc_label_text = "What happened?"
+                info_label_text = "Logs + system info attached automatically"
+
+            # --- Title field ---
+            tk.Label(
+                body_frame, text="Title:", bg="#1a1a2e", fg="#e0e0e0",
+                font=("Segoe UI", 10),
+            ).pack(anchor="w", padx=16, pady=(0, 4))
+
+            title_entry = tk.Entry(
+                body_frame, textvariable=title_var,
+                bg="#2a2a3e", fg="#e0e0e0", insertbackground="#e0e0e0",
+                font=("Segoe UI", 10), relief="flat", bd=4,
+            )
+            title_entry.pack(fill="x", padx=16)
+            widgets["title_entry"] = title_entry
+
+            # --- Description field ---
+            tk.Label(
+                body_frame, text=desc_label_text, bg="#1a1a2e", fg="#e0e0e0",
+                font=("Segoe UI", 10),
+            ).pack(anchor="w", padx=16, pady=(12, 4))
+
+            desc_text = tk.Text(
+                body_frame, height=4 if (category["current"] == "price" and item_ctx) else 5,
+                wrap="word",
+                bg="#2a2a3e", fg="#e0e0e0", insertbackground="#e0e0e0",
+                font=("Segoe UI", 10), relief="flat", bd=4,
+            )
+            desc_text.pack(fill="x", padx=16)
+            widgets["desc_text"] = desc_text
+
+            # --- Info label ---
+            tk.Label(
+                body_frame, text=info_label_text,
+                bg="#1a1a2e", fg="#707090", font=("Segoe UI", 9),
+            ).pack(anchor="w", padx=16, pady=(8, 0))
+
+            # --- Keyboard bindings ---
+            title_entry.bind("<Return>", lambda e: desc_text.focus_set())
+            desc_text.bind("<Control-Return>", lambda e: _send())
+
+            # Focus title
+            title_entry.focus_force()
+            title_entry.select_range(0, "end")
+
+        # --- Category pills (only when item context available) ---
+        if item_ctx:
+            pill_frame = tk.Frame(dialog, bg="#1a1a2e")
+            # Insert pill_frame right after the timestamp, before body_frame
+            pill_frame.pack(after=dialog.winfo_children()[0], anchor="w",
+                            padx=16, pady=(0, 8))
+
+            active_bg = "#3a3a5e"
+            active_fg = "#e0e0e0"
+            inactive_bg = "#2a2a3e"
+            inactive_fg = "#707090"
+
+            price_pill = tk.Button(pill_frame, text="Price Inaccuracy",
+                                   relief="flat", bd=0, padx=12, pady=4,
+                                   font=("Segoe UI", 9, "bold"), cursor="hand2")
+            price_pill.pack(side="left", padx=(0, 6))
+
+            bug_pill = tk.Button(pill_frame, text="General Bug",
+                                 relief="flat", bd=0, padx=12, pady=4,
+                                 font=("Segoe UI", 9), cursor="hand2")
+            bug_pill.pack(side="left")
+
+            def _update_pill_styles():
+                if category["current"] == "price":
+                    price_pill.configure(bg=active_bg, fg=active_fg,
+                                         activebackground=active_bg,
+                                         font=("Segoe UI", 9, "bold"))
+                    bug_pill.configure(bg=inactive_bg, fg=inactive_fg,
+                                       activebackground=inactive_bg,
+                                       font=("Segoe UI", 9))
+                else:
+                    price_pill.configure(bg=inactive_bg, fg=inactive_fg,
+                                         activebackground=inactive_bg,
+                                         font=("Segoe UI", 9))
+                    bug_pill.configure(bg=active_bg, fg=active_fg,
+                                       activebackground=active_bg,
+                                       font=("Segoe UI", 9, "bold"))
+
+            def _select_price():
+                if category["current"] != "price":
+                    category["current"] = "price"
+                    _update_pill_styles()
+                    _build_body()
+
+            def _select_bug():
+                if category["current"] != "bug":
+                    category["current"] = "bug"
+                    _update_pill_styles()
+                    _build_body()
+
+            price_pill.configure(command=_select_price)
+            bug_pill.configure(command=_select_bug)
+            _update_pill_styles()
+
+        # Build initial body
+        _build_body()
+
+        # --- Send / Cancel ---
         def _send():
-            title = title_var.get().strip() or f"Bug report {time.strftime('%Y-%m-%d %H:%M')}"
-            description = desc_text.get("1.0", "end").strip()
+            title = widgets["title_var"].get().strip() or f"Bug report {time.strftime('%Y-%m-%d %H:%M')}"
+            description = widgets["desc_text"].get("1.0", "end").strip()
+            cat = category["current"]
             dialog.destroy()
             self._last_report_time = time.time()
             data = self._collect_data()
+            # Attach item context for price inaccuracy reports
+            if cat == "price" and item_ctx:
+                data["item_context"] = item_ctx
+            data["category"] = "price_inaccuracy" if cat == "price" else "bug"
             threading.Thread(
                 target=self._upload, args=(title, description, data),
                 daemon=True, name="BugReportUpload",
@@ -180,13 +330,7 @@ class BugReporter:
         )
         cancel_btn.pack(side="left", padx=8)
 
-        # --- Keyboard bindings ---
-        title_entry.bind("<Return>", lambda e: desc_text.focus_set())
-        desc_text.bind("<Control-Return>", lambda e: _send())
         dialog.bind("<Escape>", lambda e: _cancel())
-
-        title_entry.focus_force()
-        title_entry.select_range(0, "end")
 
     def _collect_data(self):
         """Gather log tail, clipboard captures, system info, session stats."""
@@ -264,10 +408,19 @@ class BugReporter:
             "time": time.strftime("%Y-%m-%d %H:%M:%S"),
             "title": title,
             "description": description,
+            "category": data.get("category", "bug"),
             "system_info": data["system_info"],
             "session_stats": data["session_stats"],
             "clipboard_count": len(data["clipboards"]),
         }
+        # Add item context fields for price inaccuracy reports
+        item_ctx = data.get("item_context")
+        if item_ctx and data.get("category") == "price_inaccuracy":
+            record["item_name"] = item_ctx.get("item_name")
+            record["base_type"] = item_ctx.get("base_type")
+            record["grade"] = item_ctx.get("grade")
+            record["price_divine"] = item_ctx.get("price_divine")
+            record["user_correction"] = description
         try:
             BUG_REPORT_DB.parent.mkdir(parents=True, exist_ok=True)
             with open(BUG_REPORT_DB, "a", encoding="utf-8") as f:
@@ -286,9 +439,20 @@ class BugReporter:
             self._show_result("Report failed (no requests lib)", "low")
             return
 
+        is_price = data.get("category") == "price_inaccuracy"
+        item_ctx = data.get("item_context")
+        prefix = "[PRICE]" if is_price else "[BUG]"
+
         # Build message content (max 2000 chars for Discord)
-        message = f"**Bug Report: {title}**"
-        if description:
+        message = f"**{prefix} {title}**"
+        if is_price and item_ctx:
+            grade = item_ctx.get("grade", "?")
+            price = item_ctx.get("price_divine")
+            price_str = f"{price:.1f}d" if price else "?"
+            message += f"\nGrade: {grade} | Our estimate: {price_str}"
+            if description:
+                message += f"\nUser correction: **{description}**"
+        elif description:
             message += f"\n{description}"
         message += f"\n\n**System:** {data['system_info']}"
         message += f"\n**Session:** {data['session_stats']}"
@@ -306,6 +470,13 @@ class BugReporter:
             parts.append(f"=== {filename} ===\n")
             parts.append(content)
             parts.append("\n\n")
+        # Attach item clipboard text for price inaccuracy reports
+        if is_price and item_ctx:
+            clipboard_text = item_ctx.get("clipboard_text")
+            if clipboard_text:
+                parts.append("=== ITEM CLIPBOARD ===\n")
+                parts.append(clipboard_text)
+                parts.append("\n\n")
 
         combined = "".join(parts).encode("utf-8")
 

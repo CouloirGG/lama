@@ -6,6 +6,7 @@ and broadcasts results via WebSocket.
 """
 
 import asyncio
+import copy
 import logging
 import time
 from dataclasses import dataclass, field, asdict
@@ -50,21 +51,33 @@ class WatchlistWorker:
         self._log_buffer = log_buffer  # server's deque for log persistence
         self._queries: list[dict] = []
         self._poll_interval = WATCHLIST_DEFAULT_POLL_INTERVAL
+        self._online_only = True
         self._results: dict[str, WatchlistResult] = {}
         self._last_request_time = 0.0
         self._retry_after_until = 0.0
         self._task: Optional[asyncio.Task] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._force_refresh_ids: set[str] = set()
+        self._wake_event: Optional[asyncio.Event] = None
         self._session = requests.Session()
         self._session.headers["User-Agent"] = USER_AGENT
         self.query_states: dict[str, dict] = {}  # per-query state tracking
 
-    def update_queries(self, queries: list[dict], poll_interval: int = None):
+    def set_session_id(self, poesessid: str):
+        """Set or clear the POESESSID cookie for authenticated trade fetches."""
+        if poesessid:
+            self._session.cookies.set("POESESSID", poesessid, domain=".pathofexile.com")
+        else:
+            self._session.cookies.clear()
+
+    def update_queries(self, queries: list[dict], poll_interval: int = None,
+                       online_only: bool = None):
         """Update the query list (called when settings change)."""
         self._queries = queries[:WATCHLIST_MAX_QUERIES]
         if poll_interval is not None:
             self._poll_interval = max(60, poll_interval)
+        if online_only is not None:
+            self._online_only = online_only
         # Remove results/states for deleted queries, init states for new ones
         active_ids = {q.get("id") for q in self._queries}
         for qid in list(self._results.keys()):
@@ -97,6 +110,9 @@ class WatchlistWorker:
     def force_refresh(self, query_id: str):
         """Queue an immediate refresh for a single query."""
         self._force_refresh_ids.add(query_id)
+        # Wake up the poll loop so it doesn't wait for the 15s sleep
+        if self._wake_event:
+            self._wake_event.set()
 
     def get_results(self) -> dict[str, dict]:
         """Return all cached results as dicts."""
@@ -120,6 +136,8 @@ class WatchlistWorker:
     async def _poll_loop(self):
         """Main polling loop — round-robins through enabled queries."""
         try:
+            self._wake_event = asyncio.Event()
+
             # Brief startup delay
             await asyncio.sleep(5)
 
@@ -155,7 +173,12 @@ class WatchlistWorker:
                     if self._force_refresh_ids:
                         break
 
-                await asyncio.sleep(15)
+                # Sleep up to 15s, but wake immediately on force_refresh
+                self._wake_event.clear()
+                try:
+                    await asyncio.wait_for(self._wake_event.wait(), timeout=15)
+                except asyncio.TimeoutError:
+                    pass
 
         except asyncio.CancelledError:
             pass
@@ -239,8 +262,20 @@ class WatchlistWorker:
             return WatchlistResult(query_id=qid, error="Empty query body",
                                    last_checked=time.time())
 
+        # Deep-copy body so we don't mutate the stored query
+        body = copy.deepcopy(body)
+
+        # Inject online-only filter if enabled
+        if self._online_only:
+            body.setdefault("query", {}).setdefault("status", {})["option"] = "online"
+        else:
+            # Remove status filter so offline players are included
+            body.get("query", {}).pop("status", None)
+
         league_encoded = quote(self.league, safe="")
         search_url = f"{TRADE_API_BASE}/search/poe2/{league_encoded}"
+
+        logger.debug(f"Watchlist query {qid}: online_only={self._online_only}, status={body.get('query', {}).get('status')}")
 
         try:
             # Step 1: POST search
@@ -324,14 +359,24 @@ class WatchlistWorker:
                 type_line = item_data.get("typeLine", "")
                 display_name = f"{item_name} {type_line}".strip()
 
+                # Online status: account.online is a dict when online, False when offline
+                online_info = account.get("online")
+                is_online = isinstance(online_info, dict)
+                afk = online_info.get("status", "") == "afk" if is_online else False
+
                 listings.append({
                     "price": price_str,
                     "amount": amount,
                     "currency": currency,
                     "account": account.get("name", ""),
+                    "character": account.get("lastCharacterName", ""),
+                    "online": is_online,
+                    "afk": afk,
                     "whisper": whisper,
                     "indexed": indexed,
                     "item_name": display_name,
+                    "whisper_token": listing.get("whisper_token", ""),
+                    "hideout_token": listing.get("hideout_token", ""),
                 })
 
             # Compute price range

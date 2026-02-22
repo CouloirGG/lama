@@ -41,11 +41,11 @@ EXCHANGE_CATEGORIES = [
     "Essences",
     "Runes",
     "Expedition",
-    "SoulCores",
+    "SoulCores",      # includes Soul Cores + Theses (34 items)
     "Idols",
     "UncutGems",
     "LineageSupportGems",
-    "Ultimatum",
+    # "Ultimatum" intentionally omitted — duplicates SoulCores with stale pricing
     "Breach",
     "Delirium",
     "Ritual",
@@ -64,6 +64,37 @@ POE2SCOUT_CURRENCY_CATEGORIES = [
 ]
 
 REQUEST_DELAY = 0.3  # seconds between API calls
+
+# ─── Per-category source preference ──────────
+# poe2scout categories where poe.ninja is more accurate and should NOT be
+# overwritten.  For unlisted categories both sources agree well enough that
+# poe2scout (fetched second) can overwrite poe.ninja.
+NINJA_PREFERRED = {
+    "currency",           # more items (45 vs 37), includes incursion currency
+    "fragments",          # more items (20 vs 13), includes reliquary keys
+    "runes",              # poe2scout has wild outliers (Body Rune 298ex vs 1.4ex)
+    "ritual",             # poe.ninja more stable on mid-tier omens
+    "idol",               # large mid-tier disagreements on poe2scout
+    "lineagesupportgems", # poe.ninja more stable on mid/high-tier
+    "ultimatum",          # soul cores — poe.ninja SoulCores type is authoritative
+}
+
+# ─── Name aliases: in-game clipboard name → API name ─────
+# Some items have different names in-game vs on poe.ninja/poe2scout.
+# Keys must be lowercase.
+NAME_ALIASES = {
+    # Delirium: in-game uses "Distilled X", APIs use "Liquid/Diluted Liquid X"
+    "distilled ire": "diluted liquid ire",
+    "distilled paranoia": "liquid paranoia",
+    "distilled despair": "liquid despair",
+    "distilled guilt": "diluted liquid guilt",
+    "distilled greed": "diluted liquid greed",
+    "distilled disgust": "liquid disgust",
+    "distilled isolation": "concentrated liquid isolation",
+    "distilled suffering": "concentrated liquid suffering",
+    "distilled fear": "concentrated liquid fear",
+    "distilled envy": "liquid envy",
+}
 
 
 class PriceCache:
@@ -91,6 +122,9 @@ class PriceCache:
         """Look up price. Returns enriched dict or None."""
         with self._lock:
             key = item_name.strip().lower()
+
+            # Resolve name alias (e.g. in-game "Distilled Ire" → API "Diluted Liquid Ire")
+            key = NAME_ALIASES.get(key, key)
 
             # Direct match
             if key in self.prices:
@@ -144,9 +178,7 @@ class PriceCache:
             display = self._enrich(low)["display"]
             name = low["name"]
         else:
-            low_str = self._format_value(low_dv)
-            high_str = self._format_value(high_dv)
-            display = f"{low_str}-{high_str}"
+            display = self._format_range(low_dv, high_dv)
             name = f"{len(matches)} possible uniques"
 
         # Tier based on highest possible value
@@ -182,6 +214,30 @@ class PriceCache:
         if chaos >= 3:
             return f"{chaos:.0f} Chaos"
         return "< 3 Chaos"
+
+    def _format_range(self, low_dv: float, high_dv: float) -> str:
+        """Format a divine-value range with a single currency suffix.
+
+        Uses the high value to pick denomination, then expresses both
+        values in that unit so the overlay currency parser splits cleanly.
+        """
+        if high_dv >= 0.85:
+            lo = f"{low_dv:.0f}" if low_dv >= 10 else f"{low_dv:.1f}"
+            hi = f"{high_dv:.0f}" if high_dv >= 10 else f"{high_dv:.1f}"
+            return f"~{lo}-{hi}d"
+        ex_rate = self.divine_to_exalted
+        if ex_rate > 0:
+            low_ex = low_dv * ex_rate
+            high_ex = high_dv * ex_rate
+            if high_ex >= 1:
+                lo = f"{low_ex:.0f}" if low_ex >= 10 else f"{low_ex:.1f}"
+                hi = f"{high_ex:.0f}" if high_ex >= 10 else f"{high_ex:.1f}"
+                return f"~{lo}-{hi}ex"
+        low_c = low_dv * self.divine_to_chaos
+        high_c = high_dv * self.divine_to_chaos
+        lo = f"{low_c:.0f}" if low_c >= 10 else f"{low_c:.1f}"
+        hi = f"{high_c:.0f}" if high_c >= 10 else f"{high_c:.1f}"
+        return f"~{lo}-{hi}c"
 
     def lookup_from_text(self, ocr_text: str) -> Optional[dict]:
         """
@@ -541,9 +597,14 @@ class PriceCache:
             "category": category,
             "source": "poe2scout",
         }
-        # Preserve sparkline/image data from poe.ninja if it was fetched first
+        # Check if poe.ninja already has this item and is the preferred source
         existing = prices.get(key)
         if existing and existing.get("source") == "poe.ninja":
+            if category in NINJA_PREFERRED:
+                # poe.ninja is authoritative for this category — keep it,
+                # but still fill in items poe.ninja didn't have
+                return 0
+            # poe2scout overwrites price but preserves sparkline/image data
             for field in ("sparkline_data", "sparkline_change", "volume", "image_url"):
                 if field in existing:
                     entry[field] = existing[field]
@@ -669,24 +730,31 @@ class PriceCache:
         else:
             result["tier"] = "low"
 
-        # Display string - pick the most readable denomination
-        # Use 0.85 threshold for divine to handle poe2scout rounding
+        # Display string - shorthand format consistent with local scoring
+        # POE2 economy: Divine > Exalted (base trade currency) > Chaos
         if dv >= 0.85:
-            result["display"] = f"{dv:.1f} Divine" if dv < 10 else f"{dv:.0f} Divine"
-        elif is_currency and dv > 0:
-            # Currency items: show exchange rate (more useful than raw value)
-            per_divine = 1.0 / dv
-            per_exalted = per_divine / ex_rate if ex_rate > 0 else 0
-            if 2 <= per_exalted <= 100:
-                result["display"] = f"~{per_exalted:.0f} = 1 Exalted"
-            elif per_divine <= 10000:
-                result["display"] = f"~{per_divine:.0f} = 1 Divine"
-            else:
-                result["display"] = "< 1 Chaos"
+            result["display"] = f"~{dv:.0f}d" if dv >= 10 else f"~{dv:.1f}d"
+        elif ev >= 1:
+            result["display"] = f"~{ev:.0f}ex" if ev >= 10 else f"~{ev:.1f}ex"
         elif chaos >= 1:
-            result["display"] = f"{chaos:.0f} Chaos"
+            result["display"] = f"~{chaos:.0f}c"
         else:
-            result["display"] = "< 1 Chaos"
+            result["display"] = "< 1c"
+
+        # Currency-specific display cleanup
+        if is_currency:
+            name_lower = data.get("name", "").lower()
+            # Avoid self-referential display (Divine Orb = "1.0d", Exalted = "1.0ex")
+            if ("divine" in name_lower and result["display"].endswith("d")) or \
+               ("exalted" in name_lower and result["display"].endswith("ex")):
+                # Force chaos denomination
+                if chaos >= 1:
+                    result["display"] = f"{chaos:.0f}c"
+                else:
+                    result["display"] = "< 1c"
+            else:
+                # Strip ~ prefix for all currency
+                result["display"] = result["display"].lstrip("~").lstrip(" ")
 
         return result
 

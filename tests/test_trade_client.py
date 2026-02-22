@@ -194,3 +194,113 @@ def test_classify_implicit_as_common(client):
     key_m, common_m, key_f, common_f = client._classify_filters(mods, filters)
     assert len(common_m) == 1
     assert len(key_m) == 0
+
+
+# ── Weight-table-backed classification ──────────────────
+
+class _MockModDatabase:
+    """Lightweight mock of ModDatabase for classify_mod tests."""
+
+    def __init__(self, classifications: dict, loaded: bool = True):
+        """classifications: stat_id -> bool (True=key, False=common)"""
+        self._classifications = classifications
+        self.loaded = loaded
+
+    def classify_mod(self, stat_id, raw_text, mod_type):
+        return self._classifications.get(stat_id, False)
+
+
+def test_classify_with_mod_database_leech_as_key():
+    """Life leech (weight 2.0 in weight table) should be key, not common."""
+    mock_db = _MockModDatabase({
+        "explicit.stat_lifeleech": True,   # weight table: Key (2.0)
+        "explicit.stat_fire_res": False,   # weight table: Common (0.3)
+    })
+    tc = TradeClient(league="Fate of the Vaal", mod_database=mock_db)
+    mods = [
+        ParsedMod(raw_text="0.4% of Physical Damage leeches Life",
+                  stat_id="explicit.stat_lifeleech",
+                  value=0.4, mod_type="explicit"),
+        ParsedMod(raw_text="+30% to Fire Resistance",
+                  stat_id="explicit.stat_fire_res",
+                  value=30.0, mod_type="explicit"),
+    ]
+    filters = tc._build_stat_filters(mods)
+    key_m, common_m, key_f, common_f = tc._classify_filters(mods, filters)
+    assert len(key_m) == 1
+    assert "leech" in key_m[0].raw_text.lower()
+    assert len(common_m) == 1
+    assert "Fire Resistance" in common_m[0].raw_text
+
+
+def test_classify_with_mod_database_added_fire_as_key():
+    """Added Fire Damage (weight 2.0) should be key, not caught by pattern."""
+    mock_db = _MockModDatabase({
+        "explicit.stat_added_fire": True,
+    })
+    tc = TradeClient(league="Fate of the Vaal", mod_database=mock_db)
+    mods = [
+        ParsedMod(raw_text="Adds 10 to 20 Fire Damage to Attacks",
+                  stat_id="explicit.stat_added_fire",
+                  value=15.0, mod_type="explicit"),
+    ]
+    filters = tc._build_stat_filters(mods)
+    key_m, common_m, key_f, common_f = tc._classify_filters(mods, filters)
+    assert len(key_m) == 1
+    assert "Fire Damage" in key_m[0].raw_text
+    assert len(common_m) == 0
+
+
+def test_classify_fallback_without_mod_database(client):
+    """Without mod_database, fallback pattern matching still works."""
+    # client fixture has no mod_database — uses pattern fallback
+    mods = [
+        ParsedMod(raw_text="40% increased Critical Damage Bonus",
+                  stat_id="explicit.stat_crit",
+                  value=40.0, mod_type="explicit"),
+        ParsedMod(raw_text="+30% to Fire Resistance",
+                  stat_id="explicit.stat_fire_res",
+                  value=30.0, mod_type="explicit"),
+    ]
+    filters = client._build_stat_filters(mods)
+    key_m, common_m, key_f, common_f = client._classify_filters(mods, filters)
+    assert len(key_m) == 1
+    assert "Critical Damage" in key_m[0].raw_text
+    assert len(common_m) == 1
+    assert "Fire Resistance" in common_m[0].raw_text
+
+
+def test_classify_implicit_common_with_mod_database():
+    """Implicit mods remain common even when mod_database is loaded."""
+    mock_db = _MockModDatabase({
+        "implicit.stat_crit": False,  # classify_mod returns False for implicits
+    })
+    tc = TradeClient(league="Fate of the Vaal", mod_database=mock_db)
+    mods = [
+        ParsedMod(raw_text="40% increased Critical Damage Bonus",
+                  stat_id="implicit.stat_crit",
+                  value=40.0, mod_type="implicit"),
+    ]
+    filters = tc._build_stat_filters(mods)
+    key_m, common_m, key_f, common_f = tc._classify_filters(mods, filters)
+    assert len(common_m) == 1
+    assert len(key_m) == 0
+
+
+def test_classify_unloaded_mod_database_uses_fallback():
+    """When mod_database exists but isn't loaded, use pattern fallback."""
+    mock_db = _MockModDatabase(
+        {"explicit.stat_lifeleech": True},
+        loaded=False,
+    )
+    tc = TradeClient(league="Fate of the Vaal", mod_database=mock_db)
+    mods = [
+        ParsedMod(raw_text="0.4% of Physical Damage leeches Life",
+                  stat_id="explicit.stat_lifeleech",
+                  value=0.4, mod_type="explicit"),
+    ]
+    filters = tc._build_stat_filters(mods)
+    key_m, common_m, key_f, common_f = tc._classify_filters(mods, filters)
+    # Fallback: "leech" pattern catches it as common
+    assert len(common_m) == 1
+    assert len(key_m) == 0

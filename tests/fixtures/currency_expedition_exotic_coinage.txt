@@ -1,0 +1,7 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Exotic Coinage
+--------
+Stack Size: 156/50000
+--------
+Trade with Dannig in your Hideout.

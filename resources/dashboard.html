@@ -116,6 +116,19 @@
       from { opacity: 0; transform: translateY(8px) scale(0.97); }
       to   { opacity: 1; transform: translateY(0) scale(1); }
     }
+    @keyframes nuxFadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes nuxHighlight {
+      0%   { color: #8c7a5c; }
+      40%  { color: #c4a456; text-shadow: 0 0 6px rgba(196,164,86,0.4); }
+      100% { color: #c4a456; text-shadow: none; }
+    }
+    @keyframes nuxMarkerRing {
+      0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,0.7), 0 0 6px rgba(255,255,255,0.15); }
+      50%      { box-shadow: 0 0 0 3px rgba(255,255,255,0.95), 0 0 12px rgba(255,255,255,0.3); }
+    }
     .couloir-flyout {
       position: absolute;
       bottom: calc(100% + 8px);
@@ -513,13 +526,41 @@
       markets: "The Exchange Floor",
     };
 
+    // NUX text supports highlighted keywords: use { hl: "word" } for gold-animated emphasis
+    const NUX_STEPS = [
+      { id: "exchange-rates", tab: null, target: "exchange-rates", title: "Core Currencies", text: [
+        "The ", { hl: "big four", mark: "big-four" }, " currency rates from ", { hl: "poe.ninja" }, ", updated every ", { hl: "15 minutes" }, ". Use these to gauge whether an item is worth picking up."
+      ], position: "bottom" },
+      { id: "start-scanner", tab: "overlay", target: "start-scanner", title: "Start the Overlay", text: [
+        "Hit ", { hl: "Start", mark: "start" }, ", then hover over any item in-game and press ", { hl: "Ctrl+C" }, ". LAMA reads the clipboard and instantly shows a ", { hl: "price overlay" }, " on screen."
+      ], position: "bottom" },
+      { id: "item-lookup", tab: "overlay", target: "item-lookup", title: "Quick Price Check", text: [
+        "Don\u2019t want to run the overlay? ", { hl: "Paste", mark: "paste" }, " any item text here (", { hl: "Ctrl+C" }, " from in-game) for a one-off price lookup."
+      ], position: "bottom" },
+      { id: "overlay-settings", tab: "overlay", target: "overlay-settings", title: "Overlay Settings", text: [
+        "Tweak how the overlay appears \u2014 ", { hl: "font size", mark: "font-size" }, ", ", { hl: "display duration", mark: "duration" }, ", ", { hl: "theme", mark: "theme" }, ", and what info to show like ", { hl: "grade", mark: "grade" }, ", ", { hl: "price", mark: "price" }, ", and ", { hl: "DPS", mark: "dps" }, "."
+      ], position: "top" },
+      { id: "filter-tab", tab: "filter", target: "filter-tab", title: "Loot Filter", text: [
+        "LAMA auto-generates a loot filter based on ", { hl: "real market prices" }, ". Choose a ", { hl: "strictness", mark: "strictness" }, " level and it handles the rest \u2014 valuable items glow, junk fades out."
+      ], position: "bottom" },
+      { id: "watchlist-tab", tab: "watchlist", target: "watchlist-tab", title: "Item Watchlist", text: [
+        "Hunting for a specific unique or base? Set up ", { hl: "search queries" }, " that auto-refresh in the background. When a match appears, ", { hl: "whisper" }, ", ", { hl: "invite" }, ", or ", { hl: "trade" }, " with one click."
+      ], position: "bottom" },
+      { id: "markets-tab", tab: "markets", target: "markets-tab", title: "Live Markets", text: [
+        "Track currency ", { hl: "price trends", mark: "price-trends" }, " and spot opportunities. See which orbs are ", { hl: "rising", mark: "rising" }, " or ", { hl: "crashing", mark: "crashing" }, " \u2014 buy the dip, sell the peak."
+      ], position: "bottom" },
+      { id: "footer-controls", tab: null, target: "footer-controls", title: "Footer Controls", text: [
+        "Switch ", { hl: "leagues", mark: "leagues" }, " if you play multiple, ", { hl: "report bugs", mark: "bug-report" }, " or send feedback directly to the dev, and check ", { hl: "credits", mark: "credits" }, " from the Couloir menu."
+      ], position: "top" },
+    ];
+
     // -----------------------------------------------------------------------
     // Window Title Bar (frameless mode)
     // -----------------------------------------------------------------------
-    function WindowTitleBar({ wsConnected, overlayState }) {
+    function WindowTitleBar({ wsConnected, overlayState, isDev, version }) {
       const minimize = () => window.pywebview?.api?.minimize();
       const toggleMax = () => window.pywebview?.api?.toggle_maximize();
-      const close = () => window.pywebview?.api?.close();
+      const close = () => window.pywebview?.api?.quit();
       const showBadge = overlayState !== "stopped";
       const badgeConf = {
         running:  { color: T.green, label: "Scanning", pulse: true },
@@ -530,8 +571,20 @@
 
       return (
         <div className="window-titlebar pywebview-drag-region" style={{ height: 36 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: T.gold, textShadow: "0 0 12px rgba(196,164,86,0.3)" }}>
-            LAMA
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: T.gold, textShadow: "0 0 12px rgba(196,164,86,0.3)" }}>
+              LAMA
+            </span>
+            {isDev && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, color: "#1a1a2e",
+                background: T.amber, borderRadius: 8,
+                padding: "1px 6px", letterSpacing: 0.5, lineHeight: "14px",
+              }}>DEV</span>
+            )}
+            {version && (
+              <span style={{ fontSize: 9, color: T.textSecond, fontWeight: 400 }}>v{version}</span>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 10 }}>
             <div style={{
@@ -577,8 +630,9 @@
       }, [flyoutOpen]);
 
       return (
-        <div className="app-footer" style={{ position: "relative" }} ref={flyoutRef}>
+        <div className="app-footer" data-nux="footer-controls" style={{ position: "relative" }} ref={flyoutRef}>
           <select
+            data-nux-hl="leagues"
             value={selectedLeague || "Fate of the Vaal"}
             onChange={(e) => onLeagueChange(e.target.value)}
             style={{
@@ -592,7 +646,7 @@
             ))}
           </select>
           <Tooltip text="Send bug report with logs to Discord">
-            <button onClick={onBugReport} style={{
+            <button onClick={onBugReport} data-nux-hl="bug-report" style={{
               background: "transparent", border: "none", color: T.textSecond,
               fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
               transition: "color 0.15s",
@@ -627,6 +681,7 @@
           <img
             src="/img/couloir_avatar.png"
             alt="Couloir"
+            data-nux-hl="credits"
             onClick={() => setFlyoutOpen(!flyoutOpen)}
             style={{
               width: 22, height: 22, borderRadius: 4, cursor: "pointer",
@@ -702,6 +757,10 @@
                   <span>&#127760;</span>
                   <a className="couloir-flyout-link" href="https://couloir.gg" target="_blank" rel="noopener noreferrer">couloir.gg</a>
                 </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span>&#10084;</span>
+                  <a className="couloir-flyout-link" href="https://couloir.gg/supporters" target="_blank" rel="noopener noreferrer">Supporters</a>
+                </div>
               </div>
 
               {/* Credits */}
@@ -763,6 +822,170 @@
     }
 
     // -----------------------------------------------------------------------
+    // NUX Guided Tour Overlay
+    // -----------------------------------------------------------------------
+    function NUXOverlay({ step, current, total, onNext, onSkip }) {
+      const [rect, setRect] = useState(null);
+      const [markerRects, setMarkerRects] = useState([]);
+
+      // Collect markers from step text segments
+      const markers = useMemo(() => {
+        if (!Array.isArray(step.text)) return [];
+        let hlCount = 0;
+        const result = [];
+        for (const seg of step.text) {
+          if (typeof seg !== "string") {
+            if (seg.mark) result.push({ mark: seg.mark, hlIdx: hlCount });
+            hlCount++;
+          }
+        }
+        return result;
+      }, [step]);
+
+      const measure = useCallback(() => {
+        const el = document.querySelector(`[data-nux="${step.id}"]`);
+        if (el) {
+          const r = el.getBoundingClientRect();
+          const vw = window.innerWidth, vh = window.innerHeight;
+          const top = Math.max(0, r.top);
+          const left = Math.max(0, r.left);
+          const bottom = Math.min(vh, r.bottom);
+          const right = Math.min(vw, r.right);
+          setRect({ top, left, width: right - left, height: Math.max(40, bottom - top) });
+        }
+        // Measure marker elements
+        const mRects = markers.map(m => {
+          const mel = document.querySelector(`[data-nux-hl="${m.mark}"]`);
+          if (!mel) return null;
+          const mr = mel.getBoundingClientRect();
+          if (mr.width === 0 || mr.height === 0) return null;
+          return { ...m, rect: mr };
+        }).filter(Boolean);
+        setMarkerRects(mRects);
+      }, [step.id, markers]);
+
+      useEffect(() => {
+        const timer = setTimeout(measure, 150);
+        return () => clearTimeout(timer);
+      }, [measure]);
+
+      useEffect(() => {
+        const ro = new ResizeObserver(measure);
+        ro.observe(document.body);
+        window.addEventListener("resize", measure);
+        return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+      }, [measure]);
+
+      // Escape key dismisses tour
+      useEffect(() => {
+        const onKey = (e) => { if (e.key === "Escape") onSkip(); };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+      }, [onSkip]);
+
+      if (!rect) return null;
+
+      const pad = 8;
+      const t = rect.top - pad, l = rect.left - pad, w = rect.width + pad * 2, h = rect.height + pad * 2;
+
+      // Position tooltip card with auto-flip
+      const cardW = 320, cardH = 160, cardGap = 14;
+      const vh = window.innerHeight, vw = window.innerWidth;
+      let cardTop = 0;
+      let pos = step.position;
+      if (pos === "bottom" && (rect.top + rect.height + pad + cardGap + cardH > vh)) pos = "top";
+      else if (pos === "top" && (rect.top - pad - cardGap - cardH < 0)) pos = "bottom";
+
+      const cardLeft = Math.max(8, Math.min(rect.left + rect.width / 2 - cardW / 2, vw - cardW - 8));
+      const arrowLeft = Math.min(Math.max(20, rect.left + rect.width / 2 - cardLeft), cardW - 20);
+      let arrowStyle = { position: "absolute", width: 0, height: 0, borderStyle: "solid" };
+
+      if (pos === "bottom") {
+        cardTop = Math.min(rect.top + rect.height + pad + cardGap, vh - cardH - 8);
+        arrowStyle = { ...arrowStyle, top: -8, left: arrowLeft, borderWidth: "0 8px 8px 8px", borderColor: `transparent transparent ${T.borderGold} transparent` };
+      } else if (pos === "top") {
+        cardTop = Math.max(8, rect.top - pad - cardGap - cardH);
+        arrowStyle = { ...arrowStyle, bottom: -8, left: arrowLeft, borderWidth: "8px 8px 0 8px", borderColor: `${T.borderGold} transparent transparent transparent` };
+      } else if (pos === "right") {
+        cardTop = Math.max(8, Math.min(rect.top + rect.height / 2 - 60, vh - cardH - 8));
+        arrowStyle = { ...arrowStyle, top: 30, left: -8, borderWidth: "8px 8px 8px 0", borderColor: `transparent ${T.borderGold} transparent transparent` };
+      } else {
+        cardTop = Math.max(8, Math.min(rect.top + rect.height / 2 - 60, vh - cardH - 8));
+        arrowStyle = { ...arrowStyle, top: 30, right: -8, borderWidth: "8px 0 8px 8px", borderColor: `transparent transparent transparent ${T.borderGold}` };
+      }
+
+      const isLast = current >= total - 1;
+
+      // Render backdrop and card as separate sibling divs to avoid pointer-events inheritance issues
+      return (
+        <>
+          {/* Backdrop: 4 opaque rects around the cutout */}
+          <div style={{ position: "fixed", inset: 0, zIndex: 10000, pointerEvents: "none", animation: "nuxFadeIn 0.3s ease-out" }}>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: Math.max(0, t), background: "rgba(0,0,0,0.65)", pointerEvents: "auto" }} />
+            <div style={{ position: "absolute", top: t, left: 0, width: Math.max(0, l), height: h, background: "rgba(0,0,0,0.65)", pointerEvents: "auto" }} />
+            <div style={{ position: "absolute", top: t, left: l + w, right: 0, height: h, background: "rgba(0,0,0,0.65)", pointerEvents: "auto" }} />
+            <div style={{ position: "absolute", top: t + h, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.65)", pointerEvents: "auto" }} />
+            {/* Gold highlight ring */}
+            <div style={{
+              position: "absolute", top: t, left: l, width: w, height: h,
+              borderRadius: 6, boxShadow: `0 0 0 3px ${T.gold}44, 0 0 20px rgba(196,164,86,0.2)`,
+            }} />
+            {/* White marker rings on specific UI elements */}
+            {markerRects.map((m, i) => {
+              const mr = m.rect;
+              const delay = 0.3 + m.hlIdx * 0.15;
+              const padM = 5;
+              return (
+                <div key={i} style={{
+                  position: "fixed",
+                  left: mr.left - padM,
+                  top: mr.top - padM,
+                  width: mr.width + padM * 2,
+                  height: mr.height + padM * 2,
+                  borderRadius: Math.max(mr.width, mr.height) > 60 ? 8 : "50%",
+                  boxShadow: "0 0 0 2px rgba(255,255,255,0.7), 0 0 6px rgba(255,255,255,0.15)",
+                  pointerEvents: "none",
+                  opacity: 0,
+                  animation: `nuxFadeIn 0.3s ease-out ${delay}s forwards, nuxMarkerRing 1.5s ease-in-out ${delay + 0.3}s infinite`,
+                }} />
+              );
+            })}
+          </div>
+          {/* Tooltip card — completely separate from backdrop for clean pointer-events */}
+          <div style={{
+            position: "fixed", top: cardTop, left: pos === "left" ? undefined : cardLeft,
+            right: pos === "left" ? (vw - rect.left + pad + cardGap) : undefined,
+            width: cardW, zIndex: 10001,
+            background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 10,
+            padding: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+            animation: "flyoutIn 0.25s ease-out",
+          }}>
+            <div style={{ ...arrowStyle }} />
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.gold, marginBottom: 8 }}>{step.title}</div>
+            <div style={{ fontSize: 12, color: T.textSecond, lineHeight: 1.5, marginBottom: 16 }}>{
+              Array.isArray(step.text) ? step.text.map((seg, i) => {
+                if (typeof seg === "string") return <span key={i}>{seg}</span>;
+                const hlIdx = step.text.filter((s, j) => j < i && typeof s !== "string").length;
+                const delay = 0.3 + hlIdx * 0.15;
+                return <span key={i} style={{
+                  color: T.gold, fontWeight: 600,
+                  animation: `nuxHighlight 0.5s ease-out ${delay}s both`,
+                }}>{seg.hl}</span>;
+              }) : step.text
+            }</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 10, color: T.textMuted }}>{current + 1} of {total}</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={onSkip} style={{ ...BTN, background: "transparent", border: "none", color: T.textSecond, padding: "6px 12px", fontSize: 11 }}>Skip</button>
+                <button onClick={onNext} style={{ ...BTN_GOLD_ACTIVE, padding: "6px 16px", fontSize: 11 }}>{isLast ? "Done" : "Next"}</button>
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    // -----------------------------------------------------------------------
     // StatCard
     // -----------------------------------------------------------------------
     function CurrencyIcon({ src, size = 24 }) {
@@ -803,18 +1026,20 @@
       const e2c = d2c > 0 ? (d2e / d2c) : 0;
       const m2d = stats.mirror_to_divine || 0;
 
-      const refreshColor = stats.last_refresh === "never" ? T.textSecond : T.green;
+      const refreshText = stats.last_refresh && stats.last_refresh !== "never" ? stats.last_refresh : null;
 
       return (
-        <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginBottom: 8 }}>
+        <div data-nux="exchange-rates" style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px" }}>
+          <div data-nux-hl="big-four" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 8 }}>
             <StatCard label="1 Mirror" value={m2d > 0 ? `${m2d.toFixed(0)}` : "--"} sub={m2d > 0 ? "Divine" : null} color="#c084fc" iconLeft={ICON.mirror} iconRight={ICON.divine} tooltip="1 Mirror of Kalandra = X Divine Orbs" />
             <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
             <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} sub={d2c > 0 ? "Chaos" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
             <StatCard label="1 Chaos" value={e2c > 0 ? `${e2c.toFixed(0)}` : "--"} sub={e2c > 0 ? "Exalted" : null} color={T.amber} iconLeft={ICON.exalted} iconRight={ICON.chaos} tooltip="1 Chaos Orb = X Exalted Orbs" />
-            <StatCard label="Last Refresh" value={stats.last_refresh === "never" ? "--" : stats.last_refresh} color={refreshColor} tooltip="When price data was last fetched (refreshes every 15 min)" />
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4, padding: "2px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, padding: "2px 0" }}>
+            <span style={{ fontSize: 9, color: T.textMuted }}>
+              {refreshText ? `Updated ${refreshText}` : ""}
+            </span>
             <span style={{ fontSize: 9, color: T.textMuted, fontStyle: "italic" }}>
               Prices are estimates — always verify before trading
             </span>
@@ -999,7 +1224,7 @@
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
               <span style={{ fontSize: 12, color: T.textSecond }}>Scanner offline</span>
-              <button onClick={onStart} className="btn-gold-hover" style={{
+              <button onClick={onStart} className="btn-gold-hover" data-nux-hl="start" style={{
                 ...BTN, background: T.green, color: "#fff", padding: "5px 16px", fontSize: 11,
                 border: `1px solid ${T.green}`, marginLeft: "auto",
               }}>&#9654; Start</button>
@@ -1572,7 +1797,7 @@
 
     // Inventory preview: POE2-style grid with real item art + overlay price bars
     function InventoryPreview({ settings }) {
-      const CELL = 40, GAP = 2, COLS = 8, ROWS = 4;
+      const CELL = 48, GAP = 3, COLS = 8, ROWS = 4;
       const gridW = COLS * (CELL + GAP) - GAP;
       const gridH = ROWS * (CELL + GAP) - GAP;
       const rarityColors = { rare: "#ff7", unique: "#af6", magic: "#88f", normal: "#aaa" };
@@ -2001,7 +2226,7 @@
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {!collapsed && (
-                <button onClick={(e) => { e.stopPropagation(); handlePaste(); }} style={{
+                <button onClick={(e) => { e.stopPropagation(); handlePaste(); }} data-nux-hl="paste" style={{
                   background: "transparent", border: "none", fontSize: 10, fontWeight: 600,
                   cursor: "pointer", letterSpacing: "0.06em", color: T.gold, transition: "color 0.15s",
                 }}>PASTE FROM CLIPBOARD</button>
@@ -2093,9 +2318,9 @@
       );
     }
 
-    function SettingsField({ label, field, value, onUpdate, type = "number", step, min, max, helpText }) {
+    function SettingsField({ label, field, value, onUpdate, type = "number", step, min, max, helpText, nuxHl }) {
       return (
-        <div>
+        <div data-nux-hl={nuxHl || undefined}>
           <label style={FIELD_LABEL}>{label}</label>
           <input
             type={type}
@@ -2146,6 +2371,7 @@
                 Restart to apply setting changes
               </span>
             )}
+            <button onClick={() => onUpdate({ nux_completed: false })} style={{ ...BTN, background: "transparent", border: `1px solid ${T.borderGold}`, color: T.gold, padding: "4px 10px", fontSize: 10, marginLeft: isRunning ? 0 : "auto" }}>Replay Tour</button>
           </div>
           {/* Telemetry status line */}
           {telEnabled && (
@@ -2163,11 +2389,11 @@
             <div className="panel" style={{ ...CARD, padding: 12 }}>
               <div style={{ ...LABEL, marginBottom: 8 }}>Display</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
-                <SettingsField label="Font Size" field="font_size" value={settings.font_size} onUpdate={onUpdate} min={8} max={24} step={1} helpText="Text size (px)" />
-                <SettingsField label="Duration" field="overlay_duration" value={settings.overlay_duration} onUpdate={onUpdate} min={0.5} max={10} step={0.5} helpText="Seconds shown" />
+                <SettingsField label="Font Size" field="font_size" value={settings.font_size} onUpdate={onUpdate} min={8} max={24} step={1} helpText="Text size (px)" nuxHl="font-size" />
+                <SettingsField label="Duration" field="overlay_duration" value={settings.overlay_duration} onUpdate={onUpdate} min={0.5} max={10} step={0.5} helpText="Seconds shown" nuxHl="duration" />
               </div>
               {/* Theme selector */}
-              <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.border}33` }}>
+              <div data-nux-hl="theme" style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.border}33` }}>
                 <div style={{ ...LABEL, marginBottom: 8, fontSize: 9 }}>Theme</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   {[
@@ -2271,13 +2497,13 @@
                 <div style={{ ...LABEL, marginBottom: 6, fontSize: 9 }}>Toggle Overrides</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px 12px" }}>
                   {[
-                    ["Grade", "overlay_show_grade"],
-                    ["Price", "overlay_show_price"],
+                    ["Grade", "overlay_show_grade", "grade"],
+                    ["Price", "overlay_show_price", "price"],
                     ["Stars", "overlay_show_stars"],
                     ["Top Mods", "overlay_show_mods"],
-                    ["DPS/Defense", "overlay_show_dps"],
-                  ].map(([label, field]) => (
-                    <div key={field} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    ["DPS/Defense", "overlay_show_dps", "dps"],
+                  ].map(([label, field, nuxHl]) => (
+                    <div key={field} data-nux-hl={nuxHl || undefined} style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <Toggle value={settings[field] !== false} onChange={(v) => onUpdate({ [field]: v, overlay_display_preset: "custom" })} size="small" />
                       <span style={{ fontSize: 11, color: T.textSecond }}>{label}</span>
                     </div>
@@ -2310,7 +2536,7 @@
       return (
         <div style={{ marginBottom: 20 }}>
           <div style={{ ...LABEL, marginBottom: 10 }}>Strictness</div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div data-nux-hl="strictness" style={{ display: "flex", gap: 8 }}>
             {presets.map(p => {
               const active = value === p.id;
               return (
@@ -3333,16 +3559,36 @@
     // -----------------------------------------------------------------------
     // Watchlist — WatchlistListingsTable
     // -----------------------------------------------------------------------
-    function WatchlistListingsTable({ listings, tradeUrl }) {
-      const [copiedIdx, setCopiedIdx] = useState(null);
+    function WatchlistListingsTable({ listings, tradeUrl, poesessidSet }) {
+      const [actionFeedback, setActionFeedback] = useState({});
 
       if (!listings || listings.length === 0) return null;
 
-      const copyWhisper = (whisper, idx) => {
-        navigator.clipboard.writeText(whisper).then(() => {
-          setCopiedIdx(idx);
-          setTimeout(() => setCopiedIdx(null), 1200);
-        }).catch(() => {});
+      const doAction = async (action, listing, idx) => {
+        const body = {
+          player: listing.character || listing.account,
+          token: "",
+          whisper: listing.whisper || "",
+        };
+        if (action === "whisper") body.token = listing.whisper_token || "";
+        if (action === "hideout") body.token = listing.hideout_token || "";
+
+        setActionFeedback(prev => ({ ...prev, [`${idx}-${action}`]: "pending" }));
+        try {
+          const resp = await api(`/api/trade/${action}`, "POST", body);
+          if (resp.error) {
+            setActionFeedback(prev => ({ ...prev, [`${idx}-${action}`]: "error" }));
+          } else {
+            setActionFeedback(prev => ({ ...prev, [`${idx}-${action}`]: "ok" }));
+          }
+        } catch {
+          setActionFeedback(prev => ({ ...prev, [`${idx}-${action}`]: "error" }));
+        }
+        setTimeout(() => setActionFeedback(prev => {
+          const next = { ...prev };
+          delete next[`${idx}-${action}`];
+          return next;
+        }), 1200);
       };
 
       const formatTime = (indexed) => {
@@ -3358,62 +3604,103 @@
         } catch { return "--"; }
       };
 
+      const actionBtn = (label, action, listing, idx, opts = {}) => {
+        const key = `${idx}-${action}`;
+        const fb = actionFeedback[key];
+        const isOk = fb === "ok";
+        const isErr = fb === "error";
+        const isPending = fb === "pending";
+        const isApi = opts.isApi;
+        const isDisabled = isPending || opts.disabled;
+
+        let bg = T.input;
+        let color = T.textSecond;
+        let borderColor = T.border;
+        if (isOk) { bg = T.green; color = "#fff"; borderColor = T.green; }
+        else if (isErr) { bg = "#a83232"; color = "#fff"; borderColor = "#a83232"; }
+        else if (opts.disabled) { bg = T.input; color = T.textMuted; borderColor = `${T.border}66`; }
+        else if (opts.accent) { bg = `${T.gold}22`; borderColor = T.borderGold; color = T.gold; }
+
+        return (
+          <Tooltip text={opts.tooltip || label}>
+            <button
+              onClick={() => !opts.disabled && doAction(action, listing, idx)}
+              disabled={isDisabled}
+              style={{
+                ...BTN, padding: "1px 4px", fontSize: 9, lineHeight: "16px",
+                background: bg, color: color,
+                border: `1px solid ${borderColor}`,
+                opacity: isDisabled ? 0.4 : 1,
+                cursor: opts.disabled ? "not-allowed" : undefined,
+                minWidth: 0,
+              }}
+            >
+              {isOk ? "\u2713" : isErr ? "\u2717" : label}
+              {isApi && !isOk && !isErr && (
+                <span style={{ fontSize: 7, marginLeft: 1, color: T.green }} title="API mode">*</span>
+              )}
+            </button>
+          </Tooltip>
+        );
+      };
+
       return (
         <div style={{ maxHeight: 220, overflowY: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, ...MONO }}>
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${T.border}`, color: T.textMuted, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Price</th>
-                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Item</th>
-                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Account</th>
-                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>Listed</th>
-                <th style={{ textAlign: "right", padding: "4px 6px", fontWeight: 600 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listings.map((l, i) => (
-                <tr key={i} style={{ borderBottom: `1px solid ${T.border}22` }}>
-                  <td style={{ padding: "4px 6px", color: T.gold, fontWeight: 600, whiteSpace: "nowrap" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
-                      {l.price && l.price.toLowerCase().includes("divine") && <CurrencyIcon src={ICON.divine} size={14} />}
-                      {l.price && l.price.toLowerCase().includes("exalted") && <CurrencyIcon src={ICON.exalted} size={14} />}
-                      {l.price && l.price.toLowerCase().includes("chaos") && <CurrencyIcon src={ICON.chaos} size={14} />}
-                      {l.price ? l.price.replace(/\s*(divine|exalted|chaos)\s*/gi, " ").trim() : "--"}
-                    </span>
-                  </td>
-                  <td style={{ padding: "4px 6px", color: T.text, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {l.item_name || "--"}
-                  </td>
-                  <td style={{ padding: "4px 6px", color: T.textSecond, maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.account}</td>
-                  <td style={{ padding: "4px 6px", color: T.textMuted, whiteSpace: "nowrap" }}>{formatTime(l.indexed)}</td>
-                  <td style={{ padding: "4px 6px", textAlign: "right", whiteSpace: "nowrap" }}>
-                    <div style={{ display: "inline-flex", gap: 4 }}>
-                      {tradeUrl && (
-                        <Tooltip text="Open on trade site to visit hideout">
-                          <a href={tradeUrl} target="_blank" rel="noopener noreferrer" style={{
-                            ...BTN, padding: "2px 8px", fontSize: 10, textDecoration: "none",
-                            background: T.input, color: T.gold,
-                            border: `1px solid ${T.borderGold}`,
-                            display: "inline-block",
-                          }}>Buy</a>
-                        </Tooltip>
-                      )}
-                      {l.whisper && (
-                        <Tooltip text="Copy whisper message to clipboard">
-                          <button onClick={() => copyWhisper(l.whisper, i)} style={{
-                            ...BTN, padding: "2px 8px", fontSize: 10,
-                            background: copiedIdx === i ? T.green : T.input,
-                            color: copiedIdx === i ? "#fff" : T.textSecond,
-                            border: `1px solid ${copiedIdx === i ? T.green : T.border}`,
-                          }}>{copiedIdx === i ? "Copied" : "Whisper"}</button>
-                        </Tooltip>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {listings.map((l, i) => {
+            const hasWhisperToken = poesessidSet && !!l.whisper_token;
+            const hasHideoutToken = poesessidSet && !!l.hideout_token;
+            return (
+              <div key={i} style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "4px 6px", borderBottom: `1px solid ${T.border}22`,
+                fontSize: 11, ...MONO,
+              }}>
+                {/* Price */}
+                <span style={{ color: T.gold, fontWeight: 600, whiteSpace: "nowrap", minWidth: 50 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+                    {l.price && l.price.toLowerCase().includes("divine") && <CurrencyIcon src={ICON.divine} size={12} />}
+                    {l.price && l.price.toLowerCase().includes("exalted") && <CurrencyIcon src={ICON.exalted} size={12} />}
+                    {l.price && l.price.toLowerCase().includes("chaos") && <CurrencyIcon src={ICON.chaos} size={12} />}
+                    {l.price ? l.price.replace(/\s*(divine|exalted|chaos)\s*/gi, " ").trim() : "--"}
+                  </span>
+                </span>
+                {/* Account + online status */}
+                <span style={{ display: "flex", alignItems: "center", gap: 3, flex: 1, minWidth: 0, overflow: "hidden" }}>
+                  <Tooltip text={l.online ? (l.afk ? "AFK" : "Online") : "Offline"}>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                      background: l.online ? (l.afk ? T.gold : T.green) : "#a83232",
+                    }} />
+                  </Tooltip>
+                  <span style={{ color: T.textSecond, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10 }}>{l.account}</span>
+                </span>
+                {/* Listed */}
+                <span style={{ color: T.textMuted, whiteSpace: "nowrap", fontSize: 9 }}>{formatTime(l.indexed)}</span>
+                {/* Actions — need character name for in-game commands */}
+                {(l.character || l.account) ? (
+                  <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                    {actionBtn("Wh", "whisper", l, i, {
+                      tooltip: hasWhisperToken ? "Send whisper via API (no chat)" : "Send whisper via game chat",
+                      isApi: hasWhisperToken,
+                    })}
+                    {actionBtn("Inv", "invite", l, i, { tooltip: "Send /invite via game chat" })}
+                    {actionBtn("HO", "hideout", l, i, {
+                      tooltip: hasHideoutToken ? "Visit hideout via API (instant)" : "Requires POESESSID (POE2 has no /hideout <player> command)",
+                      accent: hasHideoutToken,
+                      isApi: hasHideoutToken,
+                      disabled: !hasHideoutToken,
+                    })}
+                    {actionBtn("Tr", "tradewith", l, i, { tooltip: "Send /tradewith via game chat" })}
+                    {actionBtn("Kk", "kick", l, i, { tooltip: "Send /kick via game chat" })}
+                  </div>
+                ) : (
+                  <Tooltip text="No player info available for this listing">
+                    <span style={{ fontSize: 8, color: T.textMuted, fontStyle: "italic" }}>--</span>
+                  </Tooltip>
+                )}
+              </div>
+            );
+          })}
         </div>
       );
     }
@@ -3468,8 +3755,9 @@
       );
     }
 
-    function WatchlistQueryCard({ query, result, queryState, tradeStats, tradeItems, onUpdate, onDelete, onRefresh }) {
+    function WatchlistQueryCard({ query, result, queryState, tradeStats, tradeItems, onUpdate, onDelete, onRefresh, poesessidSet }) {
       const [editing, setEditing] = useState(false);
+      const [refreshing, setRefreshing] = useState(false);
 
       const r = result || {};
       const hasResult = !!r.last_checked;
@@ -3519,10 +3807,17 @@
             )}
 
             <Tooltip text="Refresh now">
-              <button onClick={() => onRefresh(query.id)} style={{
-                ...BTN, padding: "3px 7px", fontSize: 12, background: "transparent",
-                border: `1px solid ${T.border}`, color: T.textSecond, lineHeight: 1,
-              }}>&#8635;</button>
+              <button onClick={() => {
+                onRefresh(query.id);
+                setRefreshing(true);
+                setTimeout(() => setRefreshing(false), 2000);
+              }} style={{
+                ...BTN, padding: "3px 7px", fontSize: 12,
+                background: refreshing ? `${T.green}22` : "transparent",
+                border: `1px solid ${refreshing ? T.green : T.border}`,
+                color: refreshing ? T.green : T.textSecond, lineHeight: 1,
+                transition: "all 0.2s",
+              }}>{refreshing ? "\u2713" : "\u21BB"}</button>
             </Tooltip>
             <Tooltip text="Edit query">
               <button onClick={() => setEditing(!editing)} style={{
@@ -3582,7 +3877,7 @@
           {/* Listings — always expanded when available */}
           {!editing && r.listings && r.listings.length > 0 && (
             <div style={{ padding: "0 12px 8px", flex: 1, minHeight: 0 }}>
-              <WatchlistListingsTable listings={r.listings} tradeUrl={r.trade_url} />
+              <WatchlistListingsTable listings={r.listings} tradeUrl={r.trade_url} poesessidSet={poesessidSet} />
             </div>
           )}
         </div>
@@ -3597,9 +3892,12 @@
       const [tradeItems, setTradeItems] = useState([]);
       const [loaded, setLoaded] = useState(false);
       const [addingSlot, setAddingSlot] = useState(null); // index of slot being added to
+      const [showPoesessid, setShowPoesessid] = useState(false);
+      const [poesessidInput, setPoesessidInput] = useState("");
 
       const queries = settings.watchlist_queries || [];
       const pollInterval = settings.watchlist_poll_interval || 300;
+      const onlineOnly = settings.watchlist_online_only !== false;
       const TOTAL_SLOTS = 6;
 
       // Lazy-load trade data on first render
@@ -3656,7 +3954,7 @@
             Watchlist prices are from the trade API and reflect current listings, not completed sales. Prices may include price-fixers.
           </div>
           {/* Settings row */}
-          <div className="panel" style={{ ...CARD, marginBottom: 16, display: "flex", alignItems: "center", gap: 16 }}>
+          <div className="panel" style={{ ...CARD, marginBottom: 16, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={FIELD_LABEL}>Poll Interval</span>
               <select value={pollInterval} onChange={(e) => handlePollIntervalChange(e.target.value)}
@@ -3667,6 +3965,60 @@
                 <option value={600}>10 minutes</option>
                 <option value={900}>15 minutes</option>
               </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Tooltip text="Only show listings from players currently online">
+                <span style={FIELD_LABEL}>Online Only</span>
+              </Tooltip>
+              <button onClick={() => onSettingsUpdate({ watchlist_online_only: !onlineOnly })}
+                style={{
+                  ...BTN, padding: "4px 12px", fontSize: 10,
+                  background: onlineOnly ? `${T.green}22` : T.input,
+                  border: `1px solid ${onlineOnly ? T.green : T.border}`,
+                  color: onlineOnly ? T.green : T.textMuted,
+                }}>
+                {onlineOnly ? "ON" : "OFF"}
+              </button>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Tooltip text="Your POE session ID enables API-based trade actions (whisper, hideout visit) without chat commands. Find it in your browser's DevTools (Application > Cookies > pathofexile.com). Never share this value.">
+                <span style={{ ...FIELD_LABEL, cursor: "help", borderBottom: `1px dashed ${T.textMuted}` }}>POESESSID</span>
+              </Tooltip>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type={showPoesessid ? "text" : "password"}
+                  value={poesessidInput}
+                  placeholder={settings.poesessid_set ? "(configured)" : "paste session ID"}
+                  onChange={(e) => setPoesessidInput(e.target.value)}
+                  onBlur={() => {
+                    if (poesessidInput) {
+                      onSettingsUpdate({ poesessid: poesessidInput });
+                      setPoesessidInput("");
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && poesessidInput) {
+                      onSettingsUpdate({ poesessid: poesessidInput });
+                      setPoesessidInput("");
+                    }
+                  }}
+                  style={{ ...FIELD_INPUT, width: 160, padding: "5px 10px", fontSize: 10 }}
+                />
+                <button onClick={() => setShowPoesessid(!showPoesessid)} style={{
+                  background: "transparent", border: "none", color: T.textMuted,
+                  cursor: "pointer", fontSize: 12, padding: "2px 4px",
+                }}>{showPoesessid ? "Hide" : "Show"}</button>
+                {settings.poesessid_set && (
+                  <button onClick={() => { onSettingsUpdate({ poesessid: "" }); setPoesessidInput(""); }} style={{
+                    ...BTN, padding: "2px 6px", fontSize: 9,
+                    background: "transparent", color: T.textMuted,
+                    border: `1px solid ${T.border}`,
+                  }}>Clear</button>
+                )}
+              </div>
+              {settings.poesessid_set && (
+                <span style={{ fontSize: 9, color: T.green }}>Active</span>
+              )}
             </div>
             <div style={{ flex: 1 }} />
             <div style={{ fontSize: 11, color: T.textMuted }}>
@@ -3693,6 +4045,7 @@
                     onUpdate={handleUpdate}
                     onDelete={handleDelete}
                     onRefresh={onRefresh}
+                    poesessidSet={settings.poesessid_set}
                   />
                 );
               } else if (slot.type === "adding") {
@@ -4547,7 +4900,7 @@
           </div>
 
           {/* Featured Chart */}
-          <FeaturedChart history={history} currencies={currencies} rates={rates} oldestHistoryTs={data?.oldest_history_ts || 0} />
+          <div data-nux-hl="price-trends"><FeaturedChart history={history} currencies={currencies} rates={rates} oldestHistoryTs={data?.oldest_history_ts || 0} /></div>
 
           {/* Market Signals */}
           <MarketSignals />
@@ -4587,8 +4940,8 @@
               <div />
               <div style={{ ...LABEL, fontSize: 8 }}>Currency</div>
               <div style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>Value</div>
-              <div style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>7d %</div>
-              <div style={{ ...LABEL, fontSize: 8, textAlign: "center" }}>Trend</div>
+              <div data-nux-hl="rising" style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>7d %</div>
+              <div data-nux-hl="crashing" style={{ ...LABEL, fontSize: 8, textAlign: "center" }}>Trend</div>
               <div style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>Vol</div>
             </div>
             {/* Table rows */}
@@ -4646,6 +4999,9 @@
       const [queryStates, setQueryStates] = useState({});
       const [updateInfo, setUpdateInfo] = useState(null);
       const [telemetryStatus, setTelemetryStatus] = useState({ last_upload: null, pending_samples: 0, enabled: false });
+      const [nuxStep, setNuxStep] = useState(0);
+      const [nuxDismissed, setNuxDismissed] = useState(false);
+      const [settingsLoaded, setSettingsLoaded] = useState(false);
       const logRef = useRef(null);
       const autoScrollRef = useRef(true);
 
@@ -4672,8 +5028,8 @@
       const handleWsMessage = useCallback((msg) => {
         switch (msg.type) {
           case "init":
-            setStatus({ state: msg.state, uptime: msg.uptime, stats: msg.stats });
-            if (msg.settings) setSettings(msg.settings);
+            setStatus({ state: msg.state, uptime: msg.uptime, stats: msg.stats, version: msg.version, is_dev: msg.is_dev });
+            if (msg.settings) { setSettings(msg.settings); setSettingsLoaded(true); }
             if (msg.log && msg.log.length > 0) {
               setLogs(msg.log);
             }
@@ -4788,6 +5144,7 @@
       const handleSettingsUpdate = (updates) => {
         const newSettings = { ...settings, ...updates };
         setSettings(newSettings);
+        if ("nux_completed" in updates && updates.nux_completed === false) { setNuxStep(0); setNuxDismissed(false); }
         api("/api/settings", "POST", updates).then(() => {
           if ("telemetry_enabled" in updates) refreshTelemetryStatus();
         });
@@ -4808,11 +5165,39 @@
         }
       };
 
+      // NUX guided tour
+      const nuxActive = settingsLoaded && settings.nux_completed !== true && !nuxDismissed;
+
+      const dismissNux = () => {
+        setNuxDismissed(true);
+        handleSettingsUpdate({ nux_completed: true });
+      };
+
+      const handleNuxNext = () => {
+        const nextIdx = nuxStep + 1;
+        if (nextIdx >= NUX_STEPS.length) {
+          dismissNux();
+          return;
+        }
+        const nextStep = NUX_STEPS[nextIdx];
+        if (nextStep.tab && nextStep.tab !== activeTab) {
+          setActiveTab(nextStep.tab);
+        }
+        setNuxStep(nextIdx);
+      };
+
+      const handleNuxSkip = () => {
+        dismissNux();
+      };
+
       return (
+        <>
         <div className="app-frame">
           <WindowTitleBar
             wsConnected={connected}
             overlayState={status.state}
+            isDev={status.is_dev}
+            version={status.version}
           />
           <GoldDivider />
           {updateInfo && (
@@ -4856,31 +5241,31 @@
             <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 16px" }}>
               {activeTab === "overlay" && (
                 <>
-                  <ScannerStatusCard status={status} onStart={handleStart} onStop={handleStop} onRestart={handleRestart} />
-                  <ItemLookupCard />
-                  <OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} telemetryStatus={telemetryStatus} onTelemetryUpload={() => { api("/api/telemetry/upload", "POST").then(refreshTelemetryStatus); }} />
+                  <div data-nux="start-scanner"><ScannerStatusCard status={status} onStart={handleStart} onStop={handleStop} onRestart={handleRestart} /></div>
+                  <div data-nux="item-lookup"><ItemLookupCard /></div>
+                  <div data-nux="overlay-settings"><OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} telemetryStatus={telemetryStatus} onTelemetryUpload={() => { api("/api/telemetry/upload", "POST").then(refreshTelemetryStatus); }} /></div>
                   <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
                 </>
               )}
               {activeTab === "filter" && (
-                <FilterTab
+                <div data-nux="filter-tab"><FilterTab
                   settings={settings}
                   onUpdate={handleSettingsUpdate}
                   onUpdateFilter={handleUpdateFilter}
                   filterUpdating={filterUpdating}
-                />
+                /></div>
               )}
               {activeTab === "watchlist" && (
-                <WatchlistTab
+                <div data-nux="watchlist-tab"><WatchlistTab
                   settings={settings}
                   watchlistResults={watchlistResults}
                   queryStates={queryStates}
                   onSettingsUpdate={handleSettingsUpdate}
                   onRefresh={handleWatchlistRefresh}
-                />
+                /></div>
               )}
               {activeTab === "markets" && (
-                <MarketsTab />
+                <div data-nux="markets-tab"><MarketsTab /></div>
               )}
             </div>
           </div>
@@ -4896,6 +5281,17 @@
           <BugReportModal open={bugModalOpen} onClose={() => setBugModalOpen(false)} />
           <FeedbackModal open={!!feedbackModal} feedbackType={feedbackModal || "feedback"} onClose={() => setFeedbackModal(null)} />
         </div>
+        {nuxActive && ReactDOM.createPortal(
+          <NUXOverlay
+            step={NUX_STEPS[nuxStep]}
+            current={nuxStep}
+            total={NUX_STEPS.length}
+            onNext={handleNuxNext}
+            onSkip={handleNuxSkip}
+          />,
+          document.body
+        )}
+        </>
       );
     }
 

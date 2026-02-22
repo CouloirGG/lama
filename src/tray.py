@@ -34,8 +34,8 @@ class TrayIcon:
 
         from bundle_paths import get_resource
 
-        # Load the divine_orb.png icon, resize to 64x64 for the tray
-        icon_path = get_resource("resources/img/divine_orb.png")
+        # Load the LAMA icon, resize to 64x64 for the tray
+        icon_path = get_resource("resources/img/lama_icon.png")
         try:
             image = Image.open(str(icon_path)).resize((64, 64), Image.LANCZOS)
         except Exception:

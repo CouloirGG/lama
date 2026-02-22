@@ -45,7 +45,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = (Get-Content resources/VERSION -Raw).Trim()
-          gh release create ${{ github.ref_name }} `
-            "dist/LAMA-Setup-$version.exe" `
-            --title "${{ github.ref_name }} — LAMA" `
-            --generate-notes
+          if (Test-Path ".github/RELEASE_NOTES.md") {
+            gh release create ${{ github.ref_name }} `
+              "dist/LAMA-Setup-$version.exe" `
+              --title "${{ github.ref_name }} — LAMA" `
+              --notes-file ".github/RELEASE_NOTES.md"
+          } else {
+            gh release create ${{ github.ref_name }} `
+              "dist/LAMA-Setup-$version.exe" `
+              --title "${{ github.ref_name }} — LAMA" `
+              --generate-notes
+          }

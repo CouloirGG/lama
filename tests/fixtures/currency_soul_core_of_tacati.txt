@@ -1,0 +1,10 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Soul Core of Tacati
+--------
+Stack Size: 1/20
+--------
+Adds the Tacati modifier to a rare item, replacing an existing modifier.
+--------
+  to use, then   on a rare item to apply it.
+Press and hold   to unstack.

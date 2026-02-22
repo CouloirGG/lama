@@ -8,7 +8,7 @@ import pytest
 
 from item_parser import ParsedItem
 from mod_parser import ParsedMod
-from mod_database import ModDatabase, Grade, _dps_factor, _defense_factor
+from mod_database import ModDatabase, Grade, ModScore, _dps_factor, _defense_factor, _skill_level_factor
 from tests.conftest import make_item, make_mod
 
 
@@ -34,8 +34,8 @@ GRADE_CASES = [
       ("crit_chance", 35, "35% increased Critical Hit Chance"),
       ("spirit", 30, "+30 to Spirit")]),
 
-    ("S3", "God Phys Bow (T1 %phys + T1 flat phys + T1 crit + T1 atk spd)",
-     {"S", "A"},
+    ("S3", "God Phys Bow no +skill levels (penalized by skill_level_factor)",
+     {"B", "A"},
      dict(name="Armageddon Thirst", base="Recurve Bow", cls="Bows"),
      [("%phys", 170, "170% increased Physical Damage"),
       ("phys_dmg", 50, "Adds 30 to 50 Physical Damage"),
@@ -64,15 +64,15 @@ GRADE_CASES = [
       ("life", 70, "+70 to maximum Life"),
       ("lightning_res", 30, "+30% to Lightning Resistance")]),
 
-    ("A4", "Good Two-Hand Sword (T1 %phys + T2 flat phys + T3 atk spd)",
-     {"S", "A"},
+    ("A4", "Good Two-Hand Sword no +skill levels (penalized by skill_level_factor)",
+     {"C", "B"},
      dict(name="Dread Edge", base="Broad Sword", cls="Two Hand Swords"),
      [("%phys", 160, "160% increased Physical Damage"),
       ("phys_dmg", 40, "Adds 25 to 40 Physical Damage"),
       ("atk_spd", 14, "14% increased Attack Speed")]),
 
-    ("A5", "Good Sceptre (T1 spell dmg + T1 ele dmg + cast speed)",
-     {"S", "A"},
+    ("A5", "Good Sceptre no +skill levels (penalized by skill_level_factor)",
+     {"C", "B"},
      dict(name="Vortex Sceptre", base="Blood Sceptre", cls="Sceptres"),
      [("spell_dmg", 85, "85% increased Spell Damage"),
       ("ele_dmg_atk", 35, "35% increased Elemental Damage with Attacks"),
@@ -244,8 +244,8 @@ GRADE_CASES = [
       ("all_res", 14, "+14% to all Elemental Resistances"),
       ("str", 40, "+40 to Strength")]),
 
-    ("E7", "Dagger with crit + spell + attack hybrid",
-     {"A", "S", "B"},
+    ("E7", "Dagger with crit + spell + attack hybrid (no +skill levels)",
+     {"C", "B"},
      dict(name="Soul Fang", base="Stiletto", cls="Daggers"),
      [("spell_dmg", 70, "70% increased Spell Damage"),
       ("crit_chance", 30, "30% increased Critical Hit Chance"),
@@ -267,8 +267,8 @@ GRADE_CASES = [
       ("crit_chance", 35, "35% increased Critical Hit Chance"),
       ("atk_spd", 24, "24% increased Attack Speed")]),
 
-    ("D2", "Good DPS bow (400 dps, ilvl 80) — grade unchanged",
-     {"S", "A"},
+    ("D2", "Good DPS bow (400 dps, ilvl 80) — no +skill levels penalty",
+     {"B", "A"},
      dict(name="Storm Thirst", base="Recurve Bow", cls="Bows", ilvl=80, total_dps=400),
      [("%phys", 170, "170% increased Physical Damage"),
       ("phys_dmg", 50, "Adds 30 to 50 Physical Damage"),
@@ -505,3 +505,42 @@ def test_defense_factor_high():
     """High defense gets factor >= 1.0."""
     f = _defense_factor(1000, "Body Armours")
     assert f >= 1.0, f"High defense body should get factor >= 1.0, got {f}"
+
+
+# ── Skill level factor tests ─────────────────────────
+
+def _make_mod_score(mod_group="SomeGroup"):
+    """Minimal ModScore for skill level factor testing."""
+    return ModScore(
+        raw_text="", stat_id="", value=0, mod_group=mod_group,
+        generation_type="prefix", tier=None, tier_label="",
+        percentile=0.5, weight=1.0, weighted_score=0.5, is_key_mod=True,
+    )
+
+
+def test_skill_level_factor_non_weapon():
+    """Non-weapon classes always return 1.0."""
+    mods = [_make_mod_score("PhysicalDamage")]
+    assert _skill_level_factor(mods, "Rings") == 1.0
+    assert _skill_level_factor(mods, "Body Armours") == 1.0
+    assert _skill_level_factor(mods, "Gloves") == 1.0
+    assert _skill_level_factor(mods, "Boots") == 1.0
+
+
+def test_skill_level_factor_weapon_without_skills():
+    """Weapons without +skill level mods get 0.5 penalty."""
+    mods = [_make_mod_score("PhysicalDamage"), _make_mod_score("AttackSpeed")]
+    assert _skill_level_factor(mods, "Bows") == 0.5
+    assert _skill_level_factor(mods, "Two Hand Swords") == 0.5
+    assert _skill_level_factor(mods, "Wands") == 0.5
+    assert _skill_level_factor(mods, "Sceptres") == 0.5
+    assert _skill_level_factor(mods, "Staves") == 0.5
+    assert _skill_level_factor(mods, "Daggers") == 0.5
+
+
+def test_skill_level_factor_weapon_with_skills():
+    """Weapons WITH +skill level mods return 1.0."""
+    for group in ("AllSkillLevels", "AddedGemLevels", "AddedSkillLevels"):
+        mods = [_make_mod_score("PhysicalDamage"), _make_mod_score(group)]
+        assert _skill_level_factor(mods, "Bows") == 1.0, f"Group {group} should bypass penalty"
+        assert _skill_level_factor(mods, "Wands") == 1.0, f"Group {group} should bypass penalty"

@@ -50,9 +50,6 @@ class GameWindowDetector:
     works on multi-monitor setups where POE2 may not be the "focused" window.
     """
 
-    # EnumWindows callback type
-    _WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
-
     def __init__(self):
         self._use_win32 = False
         self._poe2_rect: Optional[Tuple[int, int, int, int]] = None
@@ -99,29 +96,17 @@ class GameWindowDetector:
         return self._poe2_rect
 
     def _find_poe2_rect(self) -> Optional[Tuple[int, int, int, int]]:
-        """Find POE2 window rectangle by enumerating visible windows."""
+        """Find POE2 window rectangle using FindWindowW (no callback needed)."""
         if not self._use_win32:
             return (0, 0, 1920, 1080)
 
-        results = []
+        hwnd = self._user32.FindWindowW(None, POE2_WINDOW_TITLE)
+        if not hwnd:
+            return None
 
-        def callback(hwnd, _):
-            if self._user32.IsWindowVisible(hwnd):
-                length = self._user32.GetWindowTextLengthW(hwnd)
-                if length > 0:
-                    buf = ctypes.create_unicode_buffer(length + 1)
-                    self._user32.GetWindowTextW(hwnd, buf, length + 1)
-                    title = buf.value
-                    # Exact match on window title to avoid matching browser tabs
-                    if title == POE2_WINDOW_TITLE:
-                        # Get window rect via GetWindowRect
-                        class RECT(ctypes.Structure):
-                            _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
-                                        ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
-                        r = RECT()
-                        self._user32.GetWindowRect(hwnd, ctypes.byref(r))
-                        results.append((r.left, r.top, r.right, r.bottom))
-            return True
-
-        self._user32.EnumWindows(self._WNDENUMPROC(callback), 0)
-        return results[0] if results else None
+        class RECT(ctypes.Structure):
+            _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                        ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+        r = RECT()
+        self._user32.GetWindowRect(hwnd, ctypes.byref(r))
+        return (r.left, r.top, r.right, r.bottom)

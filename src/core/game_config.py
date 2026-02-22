@@ -58,7 +58,7 @@ class GameConfig:
 
     # ── Calibration ─────────────────────────────────────────
     calibration_log_file: Optional[Path] = None
-    calibration_max_price_divine: float = 300.0
+    calibration_max_price_divine: float = 1500.0
     calibration_min_results: int = 3
     shard_dir: Optional[Path] = None
     shard_refresh_interval: int = 86400   # seconds

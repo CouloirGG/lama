@@ -1,0 +1,14 @@
+Item Class: Stackable Currency
+Rarity: Currency
+Greater Essence of the Body
+--------
+Stack Size: 3/20
+--------
+Upgrades a normal item to rare with one guaranteed property.
+Can also be used on a map.
+--------
+Guaranteed modifier on Body Armours:
+(46-55)% increased Energy Shield
+--------
+  to use, then   on a normal item to apply it.
+Press and hold   to unstack.

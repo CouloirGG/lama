@@ -15,7 +15,7 @@
 - [x] **Harvester speed improvements** — (1) Fetch 50 items per query instead of 20 (2.5x samples/query), (2) burst-then-pause rate strategy (4 calls + 8s pause), (3) auto-wait through penalties instead of exiting, (4) skip dead category/bracket combos with `--reset-dead` CLI flag. Target ~20-25 min/pass.
 - [x] **Process name in Task Manager** — `pythonw.exe` is hard to find; set a custom process/app name so the app shows properly in Task Manager's Apps list (e.g., "POE2 Price Overlay")
 - [x] **ilvl breakpoint tables** — Scoring engine is now ilvl-aware: `identify_tier()` filters out unrollable mod tiers, percentile computed against rollable range only, DPS brackets expanded to 4 ilvl tiers (82/68/45/0), defense thresholds keyed by ilvl per slot, `price_cache._adjust_ilvl()` smoothed to 7 brackets. Diagnostic logging when ilvl caps a tier assignment.
-- [ ] **Common mod classification** — Heuristic-based; may occasionally misclassify an unusual valuable mod as "common". Mitigated by hybrid queries that always require key mods.
+- [x] **Common mod classification** — Fixed: `_classify_filters` now delegates to `ModDatabase.classify_mod()` (weight table backed by RePoE data) when loaded, falling back to heuristic patterns. Fixes misclassification of added elemental damage, life leech, flat energy shield, etc.
 - [x] **"Grants Skill:" edge cases** — Unusual skill grant formats might not be stripped by `_SKIP_LINE_RE`, leaking into trade queries.
 - [x] **Rate limiting under burst** — Fixed: adaptive rate limiting parses `X-Rate-Limit-Ip` headers from API responses, backs off proactively at 50% usage per window. Socket retry path also guarded against wasted calls when rate limited.
 - [ ] **Fancier ✗ dismiss indicator** — Current ✗ is plain Unicode in grey. Explore nicer options (custom icon, styled background, animation, etc.).
@@ -26,9 +26,21 @@
 - [x] **Automated regression test suite** — 106 pytest tests across 4 modules (item_parser, mod_parser, mod_database, trade_client). Fixtures from real clipboard captures. `RUN_TESTS.bat` spawns a PowerShell window per module for visual monitoring. Also runnable via `python -m pytest tests/ -v`.
 - [ ] **Currency icons in overlay** — Show small currency images (Divine, Exalted, Chaos, etc.) next to the price text in the overlay instead of just the name string. Makes prices instantly recognizable at a glance.
 - [ ] **Chanceable base icons** — Show a Chance Orb icon and the target unique's icon (e.g., Headhunter) in the overlay for chanceable normal bases. Visual support alongside the text.
+- [x] **Context-aware bug reporter** — Ctrl+Shift+B now detects recently priced items and defaults to "Price Inaccuracy" mode with auto-populated item data (name, grade, estimate, top mods). Category pills toggle between Price Inaccuracy and General Bug. Reports include full bug data (logs, system info) plus item context. Discord messages prefixed with `[PRICE]`/`[BUG]`, local JSONL records include category and item fields.
 - [x] **Pre-built calibration data shard** — Ship a curated `calibration.jsonl` with the repo so new users get reasonable price estimates from day one instead of starting from scratch. Update periodically as more data is collected. Consider league-aware shards (calibration data from one league may not apply to another). Harvester (`calibration_harvester.py`) can now generate these shards automatically.
 
 ## Completed
+
+### Session 26 (2026-02-20)
+- [x] **Auto-scale overlay to game window resolution** — Overlay dimensions (fonts, padding, icons, pip sizes) now scale proportionally to game window height relative to a 1080p baseline. Formula: `scale = game_h / 1080`, clamped to `[0.6, 1.5]`. At 864px: scale=0.80 (smaller overlay). At 1080p: scale=1.0 (unchanged). New `OVERLAY_REFERENCE_HEIGHT` constant in config.py.
+- [x] **Lightweight reshow path** — Re-hovering the same item after moving away now repositions the overlay without re-running the full pricing pipeline (no re-parse, re-score, or API calls). New `reshow()` method on PriceOverlay, `set_reshow_callback()` on ItemDetector, wired in main.py.
+- [x] **Fix overlay ghost pixels on Windows** — WS_EX_LAYERED + transparentcolor windows could leave "ghost" pixels at old positions when moved. Fixed by setting `alpha=0` before repositioning and restoring to `0.92` after — directly instructs DWM compositor, more reliable than `withdraw()`.
+- [x] **Fix DPI-aware screen positioning** — Overlay used tkinter's `winfo_screenwidth()` (DPI-scaled logical pixels) but cursor uses Win32 `GetCursorPos` (physical pixels), causing misplacement on HiDPI displays. Fixed with `GetSystemMetrics` for physical-pixel screen size.
+- [x] **Fix unicode logging crashes** — Arrow character `→` (U+2192) in logger calls crashes on Windows cp1252 consoles. Replaced with `->` in main.py, trade_client.py, mod_parser.py.
+- [x] **Collapse pending overlay updates** — Multiple show/hide updates could queue within 50ms, causing flicker and stale-artifact rendering. Now only the final show/hide in each batch is executed.
+
+### Session 25 (2026-02-20)
+- [x] **Trade action buttons** — Full trade flow in Watchlist tab: Whisper, Invite, Hideout, Trade, Kick buttons per listing. Chat command engine (`game_commands.py`) sends commands via keystroke simulation + clipboard paste. Authenticated mode (`trade_actions.py`) uses POESESSID + whisper_token/hideout_token for API-based actions without chat. POESESSID input with password masking + clear button in Watchlist settings. Token indicators show API vs chat mode per listing.
 
 ### Session 24 (2026-02-20)
 - [x] **ilvl breakpoint tables (PT-12)** — `identify_tier()` now skips tiers whose `required_level > item_level`, percentile denominator scoped to rollable tiers only, DPS brackets expanded from 2 to 4 ilvl tiers, defense thresholds changed from flat tuples to ilvl-keyed dicts, `_adjust_ilvl()` smoothed from 5 to 7 brackets removing cliff-edge at ilvl 80→75. All 40 tests pass.

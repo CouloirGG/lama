@@ -29,6 +29,7 @@ from config import (
     DEFAULT_LEAGUE,
     LOG_LEVEL,
     LOG_FILE,
+    OVERLAY_REFERENCE_HEIGHT,
 )
 from item_detection import ItemDetector
 from item_parser import ItemParser
@@ -44,6 +45,9 @@ from flag_reporter import FlagReporter
 from telemetry import TelemetryUploader
 
 logger = logging.getLogger("poe2-overlay")
+
+# Currency below this chaos threshold → silent skip (no overlay)
+_CURRENCY_SKIP_CHAOS = 2
 
 
 class LAMA:
@@ -71,12 +75,13 @@ class LAMA:
         self.item_detector = ItemDetector()
         self.item_parser = ItemParser()
         self.mod_parser = ModParser()
+        self.mod_database = ModDatabase()
         self.trade_client = TradeClient(
             league=self.league,
             divine_to_chaos_fn=lambda: self.price_cache.divine_to_chaos,
             divine_to_exalted_fn=lambda: self.price_cache.divine_to_exalted,
+            mod_database=self.mod_database,
         )
-        self.mod_database = ModDatabase()
         self.calibration = CalibrationEngine()
 
         # Deep query state: last scored item (for Ctrl+Shift+C trade lookup)
@@ -110,9 +115,20 @@ class LAMA:
         if use_console:
             self.overlay = ConsoleOverlay()
         else:
+            # Compute overlay scale factor from game window resolution
+            scale = 1.0
+            rect = self.item_detector.game_window._find_poe2_rect()
+            if rect:
+                game_h = rect[3] - rect[1]
+                scale = max(0.6, min(1.5, game_h / OVERLAY_REFERENCE_HEIGHT))
+                logger.info(f"Game window height {game_h}px -> overlay scale {scale:.2f}")
+            else:
+                logger.info("Game window not found — overlay scale defaulting to 1.0")
+
             theme = self._display_settings.get("overlay_theme", "poe2")
             pulse_style = self._display_settings.get("overlay_pulse_style", "sheen")
-            self.overlay = PriceOverlay(theme=theme, pulse_style=pulse_style)
+            self.overlay = PriceOverlay(theme=theme, pulse_style=pulse_style,
+                                        scale_factor=scale)
 
         # Apply custom tier styles to overlay (if any)
         if hasattr(self.overlay, 'load_custom_styles'):
@@ -139,6 +155,7 @@ class LAMA:
             root_fn=lambda: self.overlay._root,
             stats_fn=lambda: self.stats,
             overlay=self.overlay,
+            item_context_fn=lambda: self._get_item_context(),
         )
 
         # Flag reporter (Ctrl+Shift+F)
@@ -153,6 +170,7 @@ class LAMA:
         # Wire up detection callbacks
         self.item_detector.set_callback(self._on_change_detected)
         self.item_detector.set_hide_callback(self.overlay.hide)
+        self.item_detector.set_reshow_callback(self._on_reshow)
 
     @staticmethod
     def _load_display_settings() -> dict:
@@ -306,6 +324,14 @@ class LAMA:
 
     # ─── Core Pipeline ───────────────────────────────
 
+    def _on_reshow(self, cursor_x: int, cursor_y: int):
+        """Called when the user re-hovers the same item after moving away.
+
+        Repositions the existing overlay at the new cursor position without
+        re-running the pricing pipeline (no re-parse, re-score, or API calls).
+        """
+        self.overlay.reshow(cursor_x, cursor_y)
+
     def _on_change_detected(self, item_text: str, cursor_x: int, cursor_y: int):
         """
         Called by ItemDetector when Ctrl+C returns item data.
@@ -333,18 +359,40 @@ class LAMA:
                 + (" [unidentified]" if item.unidentified else "")
             )
 
-            # Skip worthless currency shards — not worth displaying
-            item_lower = (item.name or "").lower()
-            if any(s in item_lower for s in self._WORTHLESS_ITEMS):
-                logger.info(f"Worthless item: {item.name}")
+            # Currency: silent skip for low-value, clean overlay for valuable
+            if item.rarity == "currency":
+                result = self.price_cache.lookup(
+                    item_name=item.lookup_key,
+                    base_type=item.base_type,
+                    item_level=item.item_level,
+                )
+                if not result:
+                    logger.info(f"Unknown currency, skipping: {item.name}")
+                    self.overlay.hide()
+                    self.item_detector.suppress_reshow()
+                    return  # unknown currency → skip silently
+                chaos_val = result.get("divine_value", 0) * self.price_cache.divine_to_chaos
+                if chaos_val < _CURRENCY_SKIP_CHAOS:
+                    logger.info(f"Low-value currency ({chaos_val:.0f}c), skipping: {item.name}")
+                    self.overlay.hide()
+                    self.item_detector.suppress_reshow()
+                    return  # low-value currency → skip silently
+                # Show clean overlay for valuable currency
+                static_text = result["display"]
+                logger.info(f">>> PRICE {item.name}: {static_text}")
                 self.overlay.show_price(
-                    text="\u2717", tier="low",
-                    cursor_x=cursor_x, cursor_y=cursor_y,
+                    text=static_text,
+                    tier=result["tier"],
+                    cursor_x=cursor_x,
+                    cursor_y=cursor_y,
+                    price_divine=result.get("divine_value", 0),
                 )
                 self._cache_for_flag(
                     item_name=item.name, rarity=item.rarity,
-                    tier="low", display_text="\u2717",
+                    tier=result["tier"], display_text=static_text,
+                    price_divine=result.get("divine_value", 0),
                     clipboard_text=item_text)
+                self.stats["successful_lookups"] += 1
                 return
 
 
@@ -362,8 +410,8 @@ class LAMA:
                     price_str = "valuable"
                     tier = "good"
                     divine = 0
-                chanceable_text = f"Chance \u2192 {unique_name} ({price_str})"
-                logger.info(f"Chanceable base: {item.base_type} → {unique_name} ({price_str})")
+                chanceable_text = f"{price_str} Chance \u2192 {unique_name}"
+                logger.info(f"Chanceable base: {item.base_type} -> {unique_name} ({price_str})")
                 self.overlay.show_price(
                     text=chanceable_text,
                     tier=tier,
@@ -386,7 +434,7 @@ class LAMA:
                 if item.rarity == "unique":
                     result = self.price_cache.lookup_unidentified(base)
                     if result:
-                        unid_text = f"{base} (unid): {result['display']}"
+                        unid_text = f"{result['display']} unid"
                         logger.info(
                             f">>> PRICE [unid] {base}: {result['display']} "
                             f"({result['name']})"
@@ -409,7 +457,10 @@ class LAMA:
 
                 # Rare/magic/unknown unidentified — no mods to price
                 logger.info(f"Unidentified {item.rarity}: {base}")
-                self._show_dismiss(item, cursor_x, cursor_y)
+                self.overlay.show_price(
+                    text="UNID", tier="low",
+                    cursor_x=cursor_x, cursor_y=cursor_y,
+                )
                 return
 
             # Step 1c: Corrupted uniques → trade API for Vaal-outcome-aware pricing
@@ -419,8 +470,14 @@ class LAMA:
                     base_type=item.base_type,
                     item_level=item.item_level,
                 )
+                # Parse mods for roll-specific pricing
+                parsed_mods = []
+                if item.mods and self.mod_parser.loaded:
+                    parsed_mods = self.mod_parser.parse_mods(item)
                 self._price_unique_async(item, cursor_x, cursor_y,
-                                         static_result=static_result)
+                                         static_result=static_result,
+                                         parsed_mods=parsed_mods,
+                                         clipboard_text=item_text)
                 return
 
             # Step 2: Non-unique items with mods → local scoring (or trade API fallback)
@@ -450,8 +507,8 @@ class LAMA:
                 self._price_rare_async(item, cursor_x, cursor_y)
                 return
 
-            # Step 2b: Normal/magic items with sockets → trade API for base pricing
-            if (item.rarity in ("normal", "magic") and item.sockets >= 2):
+            # Step 2b: Normal/magic items with 2+ sockets → trade API for base pricing
+            if item.rarity in ("normal", "magic") and item.sockets >= 2:
                 self._price_base_async(item, cursor_x, cursor_y)
                 return
 
@@ -475,7 +532,7 @@ class LAMA:
             # Step 3: Display the price
             elapsed = (time.time() - start_time) * 1000
             matched_name = result.get("name", item.name)
-            static_text = f"{matched_name}: {result['display']}"
+            static_text = result['display']
             logger.info(
                 f">>> PRICE [{elapsed:.0f}ms] {matched_name}: "
                 f"{result['display']}"
@@ -521,7 +578,7 @@ class LAMA:
 
         # Show initial checking indicator
         self.overlay.show_price(
-            text=f"{display_name}: Checking.",
+            text="Checking...",
             tier="low",
             cursor_x=cursor_x,
             cursor_y=cursor_y,
@@ -536,12 +593,7 @@ class LAMA:
                 if _is_stale():
                     return
                 dots = (dots % 3) + 1
-                self.overlay.show_price(
-                    text=f"{display_name}: Checking{'.' * dots}",
-                    tier="low",
-                    cursor_x=cursor_x,
-                    cursor_y=cursor_y,
-                )
+                self.overlay.update_text(f"Checking{'.' * dots}")
 
         def _do_price():
             anim = threading.Thread(
@@ -554,7 +606,7 @@ class LAMA:
                     resolved = self.mod_parser.resolve_base_type(item.name)
                     if resolved:
                         item.base_type = resolved
-                        logger.info(f"Resolved base type: '{item.name}' → '{resolved}'")
+                        logger.info(f"Resolved base type: '{item.name}' -> '{resolved}'")
                     else:
                         logger.info(f"Could not resolve base type for '{item.name}'")
 
@@ -578,7 +630,7 @@ class LAMA:
                     return
                 if result:
                     self.overlay.show_price(
-                        text=f"{display_name}: {result.display}",
+                        text=result.display,
                         tier=result.tier,
                         cursor_x=cursor_x,
                         cursor_y=cursor_y,
@@ -592,7 +644,7 @@ class LAMA:
             except Exception as e:
                 logger.error(f"Rare pricing error: {e}", exc_info=True)
                 self.overlay.show_price(
-                    text=f"{display_name}: ?", tier="low",
+                    text="?", tier="low",
                     cursor_x=cursor_x, cursor_y=cursor_y,
                 )
                 self.stats["not_found"] += 1
@@ -610,7 +662,13 @@ class LAMA:
         display_name = item.base_type or item.name
         sockets = item.sockets
         ilvl = getattr(item, "item_level", 0) or 0
-        tag = f"{sockets}S, ilvl {ilvl}" if ilvl > 0 else f"{sockets}S"
+        # Build tag: " (3S, ilvl 82)" or " (ilvl 82)" or " (3S)" or ""
+        parts = []
+        if sockets:
+            parts.append(f"{sockets}S")
+        if ilvl > 0:
+            parts.append(f"ilvl {ilvl}")
+        tag = f" ({', '.join(parts)})" if parts else ""
 
         with self._trade_gen_lock:
             self._trade_generation += 1
@@ -622,7 +680,7 @@ class LAMA:
 
         # Show initial checking indicator
         self.overlay.show_price(
-            text=f"{display_name} ({tag}): Checking.",
+            text="Checking...",
             tier="low",
             cursor_x=cursor_x,
             cursor_y=cursor_y,
@@ -637,12 +695,7 @@ class LAMA:
                 if _is_stale():
                     return
                 dots = (dots % 3) + 1
-                self.overlay.show_price(
-                    text=f"{display_name} ({tag}): Checking{'.' * dots}",
-                    tier="low",
-                    cursor_x=cursor_x,
-                    cursor_y=cursor_y,
-                )
+                self.overlay.update_text(f"Checking{'.' * dots}")
 
         def _do_price():
             anim = threading.Thread(
@@ -658,7 +711,7 @@ class LAMA:
                     return
                 if result:
                     self.overlay.show_price(
-                        text=f"{display_name} ({tag}): {result.display}",
+                        text=result.display,
                         tier=result.tier,
                         cursor_x=cursor_x,
                         cursor_y=cursor_y,
@@ -671,7 +724,7 @@ class LAMA:
             except Exception as e:
                 logger.error(f"Base pricing error: {e}", exc_info=True)
                 self.overlay.show_price(
-                    text=f"{display_name}: ?", tier="low",
+                    text="?", tier="low",
                     cursor_x=cursor_x, cursor_y=cursor_y,
                 )
                 self.stats["not_found"] += 1
@@ -682,7 +735,8 @@ class LAMA:
         thread.start()
 
     def _price_unique_async(self, item, cursor_x: int, cursor_y: int,
-                            static_result: dict = None):
+                            static_result: dict = None, parsed_mods=None,
+                            clipboard_text=None):
         """Price a corrupted unique via the trade API in a background thread.
 
         Shows static price immediately if available, then upgrades with
@@ -692,18 +746,18 @@ class LAMA:
         sockets = getattr(item, "sockets", 0) or 0
         tag = f"{sockets}S corrupted" if sockets else "corrupted"
 
-        # Show static price while trade API loads
+        # Show static price immediately while trade API refines
         if static_result:
             static_display = static_result.get("display", "?")
             self.overlay.show_price(
-                text=f"{display_name} ({tag}): Checking.",
+                text=static_display,
                 tier=static_result.get("tier", "low"),
                 cursor_x=cursor_x, cursor_y=cursor_y,
                 price_divine=static_result.get("divine_value", 0),
             )
         else:
             self.overlay.show_price(
-                text=f"{display_name} ({tag}): Checking.",
+                text="Checking...",
                 tier="low",
                 cursor_x=cursor_x, cursor_y=cursor_y,
             )
@@ -724,41 +778,51 @@ class LAMA:
                 if _is_stale():
                     return
                 dots = (dots % 3) + 1
-                self.overlay.show_price(
-                    text=f"{display_name} ({tag}): Checking{'.' * dots}",
-                    tier="low",
-                    cursor_x=cursor_x, cursor_y=cursor_y,
-                )
+                self.overlay.update_text(f"Checking{'.' * dots}")
 
         def _do_price():
-            anim = threading.Thread(
-                target=_animate_dots, daemon=True, name="UniqueAnim")
-            anim.start()
+            # Only animate dots if we don't already have a static price shown
+            if not static_result:
+                anim = threading.Thread(
+                    target=_animate_dots, daemon=True, name="UniqueAnim")
+                anim.start()
             try:
                 if _is_stale():
                     return
 
                 result = self.trade_client.price_unique_item(
-                    item, is_stale=_is_stale)
+                    item, mods=parsed_mods, is_stale=_is_stale)
                 if _is_stale():
                     return
                 if result and result.min_price > 0:
                     self.overlay.show_price(
-                        text=f"{display_name} ({tag}): {result.display}",
+                        text=result.display,
                         tier=result.tier,
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         price_divine=result.min_price,
                     )
+                    self._cache_for_flag(
+                        item_name=display_name, base_type=item.base_type,
+                        rarity=item.rarity, tier=result.tier,
+                        display_text=result.display,
+                        price_divine=result.min_price,
+                        clipboard_text=clipboard_text)
                     self.stats["successful_lookups"] += 1
                 elif static_result:
                     # Trade API returned nothing — fall back to static
-                    static_display = static_result.get("display", "?")
                     self.overlay.show_price(
-                        text=f"{display_name}: {static_display}",
+                        text=static_result.get("display", "?"),
                         tier=static_result.get("tier", "low"),
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         price_divine=static_result.get("divine_value", 0),
                     )
+                    self._cache_for_flag(
+                        item_name=display_name, base_type=item.base_type,
+                        rarity=item.rarity,
+                        tier=static_result.get("tier", "low"),
+                        display_text=static_result.get("display", "?"),
+                        price_divine=static_result.get("divine_value", 0),
+                        clipboard_text=clipboard_text)
                     self.stats["successful_lookups"] += 1
                 else:
                     self._show_dismiss(item, cursor_x, cursor_y)
@@ -767,14 +831,14 @@ class LAMA:
                 logger.error(f"Unique pricing error: {e}", exc_info=True)
                 if static_result:
                     self.overlay.show_price(
-                        text=f"{display_name}: {static_result.get('display', '?')}",
+                        text=static_result.get("display", "?"),
                         tier=static_result.get("tier", "low"),
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         price_divine=static_result.get("divine_value", 0),
                     )
                 else:
                     self.overlay.show_price(
-                        text=f"{display_name}: ?", tier="low",
+                        text="?", tier="low",
                         cursor_x=cursor_x, cursor_y=cursor_y,
                     )
                 self.stats["not_found"] += 1
@@ -807,11 +871,22 @@ class LAMA:
         price_est = self.calibration.estimate(
             score.normalized_score, getattr(item, "item_class", "") or "",
             grade=score.grade.value)
+
+        # Check trade cache — deep query or auto-cal may have a real price
+        cached_trade = None
+        if hasattr(self, 'trade_client') and self.trade_client:
+            cached_trade = self.trade_client.lookup_cached(item, parsed_mods)
+        if cached_trade and cached_trade.min_price > 0:
+            price_est = cached_trade.min_price
+            logger.info(f"Using cached trade result: {cached_trade.display}")
+
         d2c = self.price_cache.divine_to_chaos
+        d2e = self.price_cache.divine_to_exalted
         ds = self._display_settings
         text = score.format_overlay_text(
             price_estimate=price_est,
             divine_to_chaos=d2c,
+            divine_to_exalted=d2e,
             show_grade=ds.get("overlay_show_grade", True),
             show_price=ds.get("overlay_show_price", True),
             show_stars=ds.get("overlay_show_stars", True),
@@ -854,7 +929,9 @@ class LAMA:
         is_borderless = (text == "\u2605")
         self.overlay.show_price(text=text, tier=overlay_tier,
                                 cursor_x=cursor_x, cursor_y=cursor_y,
-                                borderless=is_borderless)
+                                borderless=is_borderless,
+                                estimate=cached_trade.estimate if cached_trade else False,
+                                price_divine=cached_trade.min_price if cached_trade else (price_est or 0))
 
         # Cache for flag reporter
         mod_details = None
@@ -946,6 +1023,11 @@ class LAMA:
         with self._last_flaggable_lock:
             self._last_flaggable = data
 
+    def _get_item_context(self):
+        """Return last flaggable item snapshot (for bug reporter price context)."""
+        with self._last_flaggable_lock:
+            return self._last_flaggable
+
     def _flag_hotkey_loop(self):
         """Poll for Ctrl+Shift+F to trigger flag dialog."""
         import ctypes
@@ -995,7 +1077,7 @@ class LAMA:
             with self._trade_gen_lock:
                 return my_gen != self._trade_generation
 
-        self.overlay.show_price(text=f"{grade_str}: Checking.",
+        self.overlay.show_price(text="Checking...",
                                 tier="low",
                                 cursor_x=cursor_x, cursor_y=cursor_y)
         search_done = threading.Event()
@@ -1006,10 +1088,7 @@ class LAMA:
                 if _is_stale():
                     return
                 dots = (dots % 3) + 1
-                self.overlay.show_price(
-                    text=f"{grade_str}: Checking{'.' * dots}",
-                    tier="low",
-                    cursor_x=cursor_x, cursor_y=cursor_y)
+                self.overlay.update_text(f"Checking{'.' * dots}")
 
         def _do_deep():
             threading.Thread(target=_animate_dots, daemon=True,
@@ -1024,7 +1103,7 @@ class LAMA:
                     return
                 if result:
                     self.overlay.show_price(
-                        text=f"{display_name}: {result.display}",
+                        text=result.display,
                         tier=result.tier,
                         cursor_x=cursor_x, cursor_y=cursor_y,
                         estimate=result.estimate,
@@ -1033,13 +1112,13 @@ class LAMA:
                     self._log_calibration(score_result, result, item)
                 else:
                     self.overlay.show_price(
-                        text=f"{grade_str}: No listings", tier="low",
+                        text="No listings", tier="low",
                         cursor_x=cursor_x, cursor_y=cursor_y)
                     self.stats["not_found"] += 1
             except Exception as e:
                 logger.error(f"Deep query error: {e}", exc_info=True)
                 self.overlay.show_price(
-                    text=f"{grade_str}: ?", tier="low",
+                    text="?", tier="low",
                     cursor_x=cursor_x, cursor_y=cursor_y)
             finally:
                 search_done.set()
@@ -1168,11 +1247,11 @@ class LAMA:
                     self._log_calibration(score_result, result, item)
                     logger.info(
                         f"Auto-cal: {display_name} "
-                        f"grade={score_result.grade.value} → {result.display}")
+                        f"grade={score_result.grade.value} -> {result.display}")
                 else:
                     logger.info(
                         f"Auto-cal: {display_name} "
-                        f"grade={score_result.grade.value} → no listings")
+                        f"grade={score_result.grade.value} -> no listings")
             except Exception as e:
                 logger.warning(f"Auto-cal failed ({display_name}): {e}")
 
@@ -1193,11 +1272,6 @@ class LAMA:
                 text="\u2717", tier="low",
                 cursor_x=cursor_x, cursor_y=cursor_y,
             )
-
-    _WORTHLESS_ITEMS = (
-        "chance shard", "transmutation shard", "regal shard",
-        "artificer's shard",
-    )
 
     # Normal base types that can be chanced into valuable uniques.
     # Maps base_type (lowercase) → unique name for price lookup.
