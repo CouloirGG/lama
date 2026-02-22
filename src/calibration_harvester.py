@@ -55,18 +55,11 @@ CATEGORIES: Dict[str, Tuple[str, str]] = {
     "foci":             ("armour.focus",           "Foci"),
     "bows":             ("weapon.bow",             "Bows"),
     "crossbows":        ("weapon.crossbow",        "Crossbows"),
-    "one_hand_swords":  ("weapon.onesword",        "One Hand Swords"),
-    "two_hand_swords":  ("weapon.twosword",        "Two Hand Swords"),
-    "one_hand_axes":    ("weapon.oneaxe",          "One Hand Axes"),
-    "two_hand_axes":    ("weapon.twoaxe",          "Two Hand Axes"),
     "one_hand_maces":   ("weapon.onemace",         "One Hand Maces"),
     "two_hand_maces":   ("weapon.twomace",         "Two Hand Maces"),
-    "daggers":          ("weapon.dagger",          "Daggers"),
-    "claws":            ("weapon.claw",            "Claws"),
     "wands":            ("weapon.wand",            "Wands"),
     "staves":           ("weapon.staff",           "Staves"),
     "sceptres":         ("weapon.sceptre",         "Sceptres"),
-    "flails":           ("weapon.flail",           "Flails"),
 }
 
 # Price brackets: (label, min_price, max_price, currency)
