@@ -1,0 +1,149 @@
+name: Daily Calibration Harvest
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC (10pm PST)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      passes:
+        description: 'Number of passes per harvester'
+        required: false
+        default: '3'
+      elite_only:
+        description: 'Run elite harvester only'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 hour safety cap
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install requests python-dotenv
+
+      - name: Restore harvester state
+        uses: actions/cache@v4
+        with:
+          path: ~/.poe2-price-overlay/cache
+          key: harvester-state-${{ github.run_number }}
+          restore-keys: |
+            harvester-state-
+
+      - name: Set pass count
+        id: config
+        run: |
+          PASSES="${{ github.event.inputs.passes || '3' }}"
+          echo "passes=$PASSES" >> "$GITHUB_OUTPUT"
+
+      - name: Run standard harvester
+        if: ${{ github.event.inputs.elite_only != 'true' }}
+        working-directory: src
+        run: |
+          python calibration_harvester.py \
+            --passes ${{ steps.config.outputs.passes }} \
+            --resume
+        continue-on-error: true
+
+      - name: Run elite harvester
+        working-directory: src
+        run: |
+          python elite_harvester.py \
+            --passes ${{ steps.config.outputs.passes }} \
+            --resume
+        continue-on-error: true
+
+      - name: List harvester output
+        run: |
+          echo "=== Harvester output files ==="
+          ls -lh ~/.poe2-price-overlay/cache/*.jsonl 2>/dev/null || echo "No JSONL files found"
+          echo ""
+          echo "=== Sample counts ==="
+          for f in ~/.poe2-price-overlay/cache/*.jsonl; do
+            if [ -f "$f" ]; then
+              count=$(wc -l < "$f")
+              echo "  $(basename "$f"): $count records"
+            fi
+          done
+
+      - name: Generate shard
+        working-directory: src
+        run: |
+          JSONL_FILES=$(ls ~/.poe2-price-overlay/cache/calibration_shard_*.jsonl ~/.poe2-price-overlay/cache/elite_shard_*.jsonl 2>/dev/null)
+          if [ -z "$JSONL_FILES" ]; then
+            echo "No harvester output files found, skipping shard generation"
+            exit 0
+          fi
+          python shard_generator.py \
+            --input $JSONL_FILES \
+            --output ~/.poe2-price-overlay/cache/calibration-shard-latest.json.gz
+
+      - name: Generate harvest summary
+        run: |
+          python scripts/harvest_summary.py \
+            --dir ~/.poe2-price-overlay/cache/ \
+            --shard ~/.poe2-price-overlay/cache/calibration-shard-latest.json.gz \
+            >> "$GITHUB_STEP_SUMMARY"
+        continue-on-error: true
+
+      - name: Upload shard as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: calibration-shard-${{ github.run_number }}
+          path: ~/.poe2-price-overlay/cache/calibration-shard-latest.json.gz
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Attach shard to latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHARD=~/.poe2-price-overlay/cache/calibration-shard-latest.json.gz
+          if [ ! -f "$SHARD" ]; then
+            echo "No shard file to upload"
+            exit 0
+          fi
+
+          # Get league slug from first JSONL file
+          LEAGUE_SLUG=$(ls ~/.poe2-price-overlay/cache/calibration_shard_*.jsonl 2>/dev/null | head -1 | sed 's/.*calibration_shard_//;s/_[0-9].*//') || LEAGUE_SLUG="unknown"
+          DATE=$(date +%Y-%m-%d)
+          SHARD_NAME="calibration-shard-${LEAGUE_SLUG}-${DATE}.json.gz"
+
+          cp "$SHARD" "/tmp/$SHARD_NAME"
+
+          # Find latest release
+          LATEST=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null) || true
+          if [ -z "$LATEST" ]; then
+            echo "No releases found, skipping upload"
+            exit 0
+          fi
+
+          echo "Uploading $SHARD_NAME to release $LATEST"
+
+          # Delete old shard asset if it exists (replace with fresh data)
+          OLD_ASSETS=$(gh release view "$LATEST" --json assets -q '.assets[].name' | grep "^calibration-shard-" || true)
+          for old in $OLD_ASSETS; do
+            echo "  Removing old asset: $old"
+            gh release delete-asset "$LATEST" "$old" --yes 2>/dev/null || true
+          done
+
+          gh release upload "$LATEST" "/tmp/$SHARD_NAME" --clobber
+          echo "Shard uploaded successfully"
