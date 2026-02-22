@@ -7,11 +7,15 @@ across the full price spectrum — from exalted-tier through multi-mirror items.
 Complements the standard calibration_harvester.py by covering the 10ex-5mirror
 range that the standard harvester's 300d cap previously excluded.
 
+Supports multi-pass: each pass offsets deeper into trade results so successive
+runs sample different items from the same queries.
+
 Usage:
     python elite_harvester.py
     python elite_harvester.py --dry-run
     python elite_harvester.py --categories gloves,rings --max-queries 5
     python elite_harvester.py --league "Fate of the Vaal"
+    python elite_harvester.py --passes 3
     python elite_harvester.py --resume
 """
 
@@ -84,25 +88,31 @@ ELITE_BRACKETS = _EXALTED_BRACKETS + _DIVINE_BRACKETS + _MIRROR_BRACKETS
 
 RESULTS_PER_QUERY = 50
 
-# ─── State File ──────────────────────────────────────
+# ─── State & Output ─────────────────────────────────
 
 ELITE_STATE_FILE = CACHE_DIR / "elite_harvester_state.json"
 
 
-def get_elite_output_path(league: str) -> Path:
+def get_elite_output_path(league: str, pass_num: int = 1) -> Path:
     """Return path for elite harvester output."""
     league_slug = league.lower().replace(" ", "_")
     today = date.today().isoformat()
-    return CACHE_DIR / f"elite_shard_{league_slug}_{today}.jsonl"
+    return CACHE_DIR / f"elite_shard_{league_slug}_{today}_p{pass_num}.jsonl"
+
+
+def _state_file(pass_num: int) -> Path:
+    """Per-pass state file."""
+    return ELITE_STATE_FILE.parent / f"elite_harvester_state_p{pass_num}.json"
 
 
 # ─── State Management ────────────────────────────────
 
-def load_state() -> dict:
+def load_state(pass_num: int = 1) -> dict:
     """Load elite harvester state from disk."""
-    if ELITE_STATE_FILE.exists():
+    sf = _state_file(pass_num)
+    if sf.exists():
         try:
-            with open(ELITE_STATE_FILE, "r", encoding="utf-8") as f:
+            with open(sf, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
@@ -110,10 +120,11 @@ def load_state() -> dict:
             "query_plan_seed": "", "dead_combos": []}
 
 
-def save_state(state: dict):
+def save_state(state: dict, pass_num: int = 1):
     """Persist elite harvester state to disk."""
-    ELITE_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(ELITE_STATE_FILE, "w", encoding="utf-8") as f:
+    sf = _state_file(pass_num)
+    sf.parent.mkdir(parents=True, exist_ok=True)
+    with open(sf, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
 
 
@@ -152,10 +163,11 @@ def run_elite_harvester(league: str,
                         categories: Dict[str, Tuple[str, str]],
                         dry_run: bool = False,
                         max_queries: int = 0,
+                        pass_num: int = 1,
                         resume: bool = False):
-    """Execute the elite harvester."""
+    """Execute the elite harvester for a single pass."""
 
-    output_file = get_elite_output_path(league)
+    output_file = get_elite_output_path(league, pass_num)
 
     print(f"League: {league}")
     print(f"Categories: {len(categories)}")
@@ -165,16 +177,17 @@ def run_elite_harvester(league: str,
           f"{len(_MIRROR_BRACKETS)} mirror)")
     total_queries = len(categories) * len(ELITE_BRACKETS)
     print(f"Total queries: {total_queries}")
+    print(f"Pass: {pass_num}")
     print(f"Output: {output_file}")
 
     if max_queries > 0:
         print(f"Max queries: {max_queries}")
 
-    # Build deterministic query plan
-    today_seed = f"elite:{date.today().isoformat()}"
+    # Build deterministic query plan (seed varies by pass for different offsets)
+    today_seed = f"elite:{date.today().isoformat()}:p{pass_num}"
 
     # Load state for resumability
-    state = load_state()
+    state = load_state(pass_num)
 
     if resume and state.get("query_plan_seed"):
         seed = state["query_plan_seed"]
@@ -184,7 +197,7 @@ def run_elite_harvester(league: str,
         if state.get("query_plan_seed") != seed:
             state = {"completed_queries": [], "total_samples": 0,
                      "query_plan_seed": seed, "dead_combos": []}
-            save_state(state)
+            save_state(state, pass_num)
 
     plan = build_query_plan(categories, seed)
 
@@ -195,7 +208,7 @@ def run_elite_harvester(league: str,
                  and make_query_key(cn, bl) not in dead_combos]
 
     if not remaining:
-        print(f"All {total_queries} queries already completed. "
+        print(f"All {total_queries} queries already completed for pass {pass_num}. "
               f"({state['total_samples']} samples collected)")
         return
 
@@ -205,7 +218,7 @@ def run_elite_harvester(league: str,
           f"{f', {skipped_dead} dead' if skipped_dead else ''})")
 
     if dry_run:
-        print("\n--- DRY RUN: Elite Query Plan ---")
+        print(f"\n--- DRY RUN: Elite Query Plan (pass {pass_num}) ---")
         for i, (cn, ic, cf, bl) in enumerate(remaining):
             bracket = next(b for b in ELITE_BRACKETS if b[0] == bl)
             price_str = f"{bracket[1]}-{bracket[2]} {bracket[3]}"
@@ -236,7 +249,7 @@ def run_elite_harvester(league: str,
     # Initialize TradeClient
     trade_client = TradeClient(league=league)
 
-    print(f"\nStarting elite harvest...")
+    print(f"\nStarting elite harvest (pass {pass_num})...")
     session = trade_client._session
     queries_done = 0
     samples_this_run = 0
@@ -247,6 +260,9 @@ def run_elite_harvester(league: str,
     burst_count = 0
     t_start = time.time()
     effective_total = min(len(remaining), max_queries or len(remaining))
+
+    # Compute offset for this pass (each pass samples deeper into results)
+    offset = (pass_num - 1) * RESULTS_PER_QUERY
 
     for cat_name, item_class, cat_filter, bracket_label in remaining:
         if max_queries > 0 and queries_done >= max_queries:
@@ -277,7 +293,7 @@ def run_elite_harvester(league: str,
             wait = trade_client._rate_limited_until - time.time()
             if wait > LONG_PENALTY_THRESHOLD:
                 print(f"  Rate limited for {wait:.0f}s — saving state first...")
-                save_state(state)
+                save_state(state, pass_num)
             print(f"  Rate limited, waiting {wait:.0f}s...")
             time.sleep(wait + 1)
 
@@ -295,7 +311,7 @@ def run_elite_harvester(league: str,
                 retry_after = int(resp.headers.get("Retry-After", 5))
                 if retry_after > LONG_PENALTY_THRESHOLD:
                     print(f"  429 with penalty {retry_after}s — saving state...")
-                    save_state(state)
+                    save_state(state, pass_num)
                 print(f"  429 — waiting {retry_after}s...")
                 time.sleep(retry_after + 1)
                 burst_count = 0
@@ -322,11 +338,20 @@ def run_elite_harvester(league: str,
                 state["completed_queries"].append(query_key)
                 if query_key not in state.get("dead_combos", []):
                     state.setdefault("dead_combos", []).append(query_key)
-                save_state(state)
+                save_state(state, pass_num)
                 continue
 
-            available_ids = result_ids[:RESULTS_PER_QUERY]
-            print(f"  {total} total results, fetching {len(available_ids)}...")
+            # Offset into results for multi-pass
+            available_ids = result_ids[offset:offset + RESULTS_PER_QUERY]
+            if not available_ids:
+                print(f"  {total} total results, no new results at offset {offset}")
+                queries_done += 1
+                state["completed_queries"].append(query_key)
+                save_state(state, pass_num)
+                continue
+
+            print(f"  {total} total results, fetching {len(available_ids)} "
+                  f"(offset {offset})...")
 
         except Exception as e:
             print(f"  Search error: {e}")
@@ -364,7 +389,7 @@ def run_elite_harvester(league: str,
             print(f"  Fetch returned no listings")
             queries_done += 1
             state["completed_queries"].append(query_key)
-            save_state(state)
+            save_state(state, pass_num)
             continue
 
         # Step 3: Score each listing and write calibration records
@@ -414,7 +439,7 @@ def run_elite_harvester(league: str,
 
         queries_done += 1
         state["completed_queries"].append(query_key)
-        save_state(state)
+        save_state(state, pass_num)
 
     # Final progress bar
     elapsed = time.time() - t_start
@@ -422,10 +447,10 @@ def run_elite_harvester(league: str,
 
     # Final summary
     print(f"\n\n{'='*50}")
-    print(f"Elite harvest complete!")
+    print(f"Elite harvest complete (pass {pass_num})!")
     print(f"  Queries: {queries_done}")
     print(f"  Samples collected: {samples_this_run}")
-    print(f"  Total samples (all runs today): {state['total_samples']}")
+    print(f"  Total samples (all runs): {state['total_samples']}")
     print(f"  Skipped (no mods): {skipped_no_mods}")
     print(f"  Skipped (bad price): {skipped_low_price}")
     print(f"  Skipped (fake/price-fixer): {skipped_fake}")
@@ -434,7 +459,7 @@ def run_elite_harvester(league: str,
     print(f"  Output: {output_file}")
     print(f"{'='*50}")
 
-    save_state(state)
+    save_state(state, pass_num)
 
 
 # ─── CLI Entry Point ─────────────────────────────────
@@ -451,6 +476,12 @@ def main():
                              "(default: all). Use --dry-run to see names.")
     parser.add_argument("--max-queries", type=int, default=0,
                         help="Max number of queries to run (0 = unlimited)")
+    parser.add_argument("--passes", type=int, default=1,
+                        help="Number of passes with different offsets "
+                             "(default: 1). Each pass samples deeper into listings.")
+    parser.add_argument("--start-pass", type=int, default=1,
+                        help="First pass number to run (default: 1). "
+                             "Use with --passes to skip already-completed passes.")
     parser.add_argument("--resume", action="store_true",
                         help="Resume an interrupted run (reuses saved seed, "
                              "skips completed queries even across days)")
@@ -490,17 +521,30 @@ def main():
 
     # Reset state if requested
     if args.reset:
+        for p in range(1, args.passes + 1):
+            sf = _state_file(p)
+            if sf.exists():
+                sf.unlink()
+        # Also reset legacy state file
         if ELITE_STATE_FILE.exists():
             ELITE_STATE_FILE.unlink()
         print("Elite harvester state reset.")
 
-    run_elite_harvester(
-        league=args.league,
-        categories=cats,
-        dry_run=args.dry_run,
-        max_queries=args.max_queries,
-        resume=args.resume,
-    )
+    # Run each pass
+    for pass_num in range(args.start_pass, args.passes + 1):
+        if args.passes > 1:
+            print(f"\n{'#'*50}")
+            print(f"  PASS {pass_num} of {args.passes}")
+            print(f"{'#'*50}")
+
+        run_elite_harvester(
+            league=args.league,
+            categories=cats,
+            dry_run=args.dry_run,
+            max_queries=args.max_queries,
+            pass_num=pass_num,
+            resume=args.resume,
+        )
 
 
 if __name__ == "__main__":
