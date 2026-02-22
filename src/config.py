@@ -26,15 +26,18 @@ def _detect_git_branch() -> str | None:
     if IS_FROZEN:
         return None
     try:
-        si = subprocess.STARTUPINFO()
-        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        si.wShowWindow = 0
+        kwargs: dict = {}
+        if os.name == "nt":
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = 0
+            kwargs["startupinfo"] = si
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         result = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True, text=True, timeout=5,
             cwd=os.path.dirname(os.path.abspath(__file__)),
-            creationflags=subprocess.CREATE_NO_WINDOW,
-            startupinfo=si,
+            **kwargs,
         )
         if result.returncode == 0:
             return result.stdout.strip()
