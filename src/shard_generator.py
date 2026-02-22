@@ -38,7 +38,7 @@ _GRADE_NUM = {"S": 4, "A": 3, "B": 2, "C": 1, "JUNK": 0}
 _GRADE_FROM_NUM = {v: k for k, v in _GRADE_NUM.items()}
 
 # Quality filter thresholds
-MAX_PRICE_DIVINE = 300.0
+MAX_PRICE_DIVINE = 1500.0
 MIN_PRICE_DIVINE = 0.01
 OUTLIER_THRESHOLD = 3.0  # max ratio from median within (grade, class) group
 
