@@ -1,0 +1,429 @@
+# LAMA — Full QA Test Plan
+
+> **Version:** 0.2.5 | **Last Updated:** 2026-02-22
+> **Audience:** Alpha testers | **Author:** Couloir
+> **How to use:** Work through each section in order. Check the box when a test passes. Add notes in the "Result / Notes" column for anything unexpected.
+
+---
+
+## Legend
+
+| Symbol | Meaning |
+|--------|---------|
+| P# | Priority: P0 = blocker, P1 = critical, P2 = important, P3 = nice-to-have |
+| [ ] | Checkbox — mark when test passes |
+
+---
+
+## 1. Installation & First Launch
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 1.1 | P0 | Installer runs | Double-click `LAMA-Setup-0.2.5.exe` | Wizard appears, no admin prompt (lowest privileges) | |
+| 1.2 | P1 | Default install path | Click through wizard with defaults | Installs to `%LOCALAPPDATA%\LAMA` | |
+| 1.3 | P1 | Desktop shortcut | Check "Create desktop icon" task | Shortcut appears on desktop, launches app | |
+| 1.4 | P2 | Auto-start task | Check "Start with Windows" task | Registry key created at `HKCU\...\Run\LAMA` | |
+| 1.5 | P0 | First launch | Run LAMA from Start Menu or shortcut | Dashboard window appears (1100x750), no Python logo flash | |
+| 1.6 | P1 | Tray icon | Check system tray after launch | LAMA icon visible (not generic Python icon) | |
+| 1.7 | P2 | NUX walkthrough | First launch with fresh settings | Onboarding walkthrough appears, can click through or skip | |
+| 1.8 | P1 | Uninstall | Control Panel → Uninstall LAMA | Files removed, registry cleaned, no leftover folders | |
+
+---
+
+## 2. Dashboard — Window & Navigation
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 2.1 | P0 | Window renders | Launch app | Frameless window with custom title bar, Couloir branding | |
+| 2.2 | P1 | Title bar drag | Click and drag the title bar area | Window moves smoothly | |
+| 2.3 | P1 | Minimize button | Click minimize (—) | Window minimizes to taskbar | |
+| 2.4 | P1 | Maximize / restore | Click maximize (□) twice | Toggles between maximized and windowed | |
+| 2.5 | P1 | Close button (X) | Click close (×) | Window hides to tray (does NOT quit app) | |
+| 2.6 | P1 | Restore from tray | Double-click tray icon or "Show Dashboard" | Window restores from hidden state | |
+| 2.7 | P1 | Tray → Quit | Right-click tray → Quit | App fully exits (server + overlay subprocess terminated) | |
+| 2.8 | P2 | Edge resize | Drag from any window edge (6px border) | Window resizes, respects min size 900x600 | |
+| 2.9 | P1 | Tab navigation | Click each tab: Status, Overlay Settings, Loot Filter, Watchlist, Markets | Each tab loads without errors, content displays | |
+| 2.10 | P2 | Couloir footer | Check bottom of dashboard | Couloir branding visible, avatar flyout on click | |
+
+---
+
+## 3. Status Tab
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 3.1 | P0 | Overlay state display | Open Status tab | Shows current state: "Stopped" or "Running" | |
+| 3.2 | P0 | Start overlay | Click "Start" button | State changes to "Running", overlay subprocess spawns | |
+| 3.3 | P0 | Stop overlay | Click "Stop" button | State changes to "Stopped", subprocess terminated | |
+| 3.4 | P1 | Restart overlay | Click "Restart" button | Overlay stops then starts, state transitions visible | |
+| 3.5 | P1 | Statistics display | Start overlay, wait 60s | Uptime, triggers, success rate, cache items, exchange rates shown | |
+| 3.6 | P1 | Live log stream | Start overlay, hover items in POE2 | Log lines appear in real-time via WebSocket | |
+| 3.7 | P2 | Version info | Check status card | Shows version (0.2.5) and branch (dev/main) | |
+| 3.8 | P1 | Exchange rates | Check stats after price cache loads | Divine→Chaos, Divine→Exalted, Mirror→Divine displayed | |
+
+---
+
+## 4. Item Detection & Clipboard Pipeline
+
+> **Prerequisite:** Overlay is running, POE2 game is open with items visible.
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 4.1 | P0 | Basic currency detection | Hover over a Divine Orb in stash | Overlay appears with price (e.g., "1.0 Divine") within ~500ms | |
+| 4.2 | P0 | Rare item detection | Hover over a rare item | Overlay shows grade (S/A/B/C), price estimate, top mods | |
+| 4.3 | P0 | Unique item detection | Hover over a unique item | Overlay shows name + price from cache | |
+| 4.4 | P1 | Unidentified unique | Hover over an unidentified unique | Shows price range (e.g., "~5-50d") based on base type | |
+| 4.5 | P1 | Cursor-stop trigger | Move cursor to item, hold still | Detection triggers after cursor stays within 20px for 3 frames | |
+| 4.6 | P1 | Overlay hides on move | After overlay shows, move cursor away | Overlay disappears | |
+| 4.7 | P1 | Reshow (same item) | Move away from item, then back within 30s | Overlay repositions without re-querying (lightweight reshow) | |
+| 4.8 | P1 | Different item, same spot | Swap items in inventory, re-hover | Full pipeline triggers (new parse + price, not reshow) | |
+| 4.9 | P2 | Content dedup (30s) | Hover same item rapidly multiple times | Only first hover triggers full pipeline; subsequent = reshow | |
+| 4.10 | P1 | Low-value currency skip | Hover a low-value currency (<2 chaos) | Overlay hidden, no wobble re-trigger | |
+| 4.11 | P2 | Detection cooldown | Rapidly move between items | 0.5s cooldown between Ctrl+C sends respected | |
+| 4.12 | P1 | Non-POE2 window | Alt-tab away from game, hover desktop | No Ctrl+C sent, no overlay triggered | |
+| 4.13 | P2 | Parse failure | Copy non-item text to clipboard, hover | "Parse failed" in log, overlay stays hidden, no crash | |
+
+---
+
+## 5. Overlay Display & Theming
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 5.1 | P0 | Overlay appears near cursor | Trigger item detection | Overlay renders within ~50px of cursor position | |
+| 5.2 | P1 | Click-through | Click where overlay is displayed | Click passes through to game, overlay doesn't steal focus | |
+| 5.3 | P1 | Always-on-top | Open another window over game | Overlay stays above all windows | |
+| 5.4 | P1 | POE2 theme | Set theme to "poe2" in settings | Canvas with corner diamonds, blood splatters, serif font | |
+| 5.5 | P1 | Classic theme | Set theme to "classic" in settings | Simple Frame + Label, colored borders, no grunge | |
+| 5.6 | P2 | Sheen pulse | Set pulse to "sheen" | Light band sweeps left→right every ~900ms | |
+| 5.7 | P2 | Border pulse | Set pulse to "border" | Border color cycles at speed matching price tier | |
+| 5.8 | P2 | Both pulse | Set pulse to "both" | Sheen + border combined | |
+| 5.9 | P2 | No pulse | Set pulse to "none" | Static display, no animation | |
+| 5.10 | P1 | Auto-hide timer | Trigger overlay, wait | Overlay auto-hides after configured duration (default 2.0s) | |
+| 5.11 | P2 | Ghost pixel fix | Trigger overlay, then move to trigger reposition | No ghost/blur trail at previous position | |
+
+### 5a. Overlay Display Flags
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 5a.1 | P1 | Show grade | Enable "Show Grade" | Grade letter (S/A/B/C) visible on overlay | |
+| 5a.2 | P1 | Hide grade | Disable "Show Grade" | No grade letter on overlay | |
+| 5a.3 | P1 | Show price | Enable "Show Price" | Price estimate visible (e.g., "~130d") | |
+| 5a.4 | P1 | Show stars | Enable "Show Stars" | Star rating visible (e.g., "★★★") | |
+| 5a.5 | P2 | Show mods | Enable "Show Mods" | Top 3 mods summary visible | |
+| 5a.6 | P2 | Show DPS | Enable "Show DPS" | DPS/defense stat visible when combat penalty applies | |
+| 5a.7 | P2 | Font size | Change font size slider (9-20px) | Overlay text scales accordingly | |
+
+### 5b. Value Tier Styling
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 5b.1 | P2 | Mirror tier (5000d+) | Hover a mirror-value item | Rainbow pulse, text cycles colors | |
+| 5b.2 | P2 | Jackpot tier (1000d+) | Hover a 1000d+ item | Red-orange/gold fast pulse | |
+| 5b.3 | P2 | Big Hit (500d+) | Hover a 500d+ item | Orange/gold pulse | |
+| 5b.4 | P2 | Great Find (250d+) | Hover a 250d+ item | Gold/bronze slow pulse | |
+| 5b.5 | P2 | Good Find (100d+) | Hover a 100d+ item | Tarnished bronze static | |
+| 5b.6 | P3 | Worth Sell (50d+) | Hover a 50d+ item | Dark leather static | |
+| 5b.7 | P3 | Marginal (25d+) | Hover a 25d+ item | Grey static | |
+| 5b.8 | P3 | Vendor (<25d) | Hover a vendor-trash item | Grey static, "✗" or "SCRAP" for junk | |
+
+### 5c. Resolution & Multi-Monitor
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 5c.1 | P1 | 1080p game | Run POE2 at 1920x1080 | Overlay at reference size (scale=1.0) | |
+| 5c.2 | P2 | 1440p game | Run POE2 at 2560x1440 | Overlay ~33% larger (scale≈1.33) | |
+| 5c.3 | P2 | 4K game | Run POE2 at 3840x2160 | Overlay 2x larger (scale=2.0) | |
+| 5c.4 | P2 | 720p game | Run POE2 at 1280x720 | Overlay ~67% size (scale≈0.67) | |
+| 5c.5 | P2 | Multi-monitor | Game on monitor 2 | Overlay positions correctly on same monitor as game | |
+| 5c.6 | P2 | Off-screen guard | Hover item near screen edge | Overlay repositioned to stay fully on-screen | |
+
+---
+
+## 6. Deep Query (Ctrl+Shift+C)
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 6.1 | P1 | Deep query — rare item | Hover rare, let overlay show, then Ctrl+Shift+C | Trade API queried with full mod filters, extended results displayed | |
+| 6.2 | P1 | Progressive search | Deep query on niche item with few results | Filters progressively loosened: full → key mods → count-based | |
+| 6.3 | P2 | Niche item handling | Deep query a fractured/3-socket item | Special broad search triggered | |
+| 6.4 | P1 | No recent item | Ctrl+Shift+C with nothing recently priced | No-op, log message "No scored item for deep query" | |
+| 6.5 | P2 | Rate limiting | Rapid Ctrl+Shift+C presses | Max 1 req/sec respected, no 429 errors | |
+
+---
+
+## 7. Scoring & Calibration
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 7.1 | P0 | Mod scoring | Hover a rare item | Mods identified with tiers (T1/T2/T3), grade assigned | |
+| 7.2 | P1 | Grade thresholds | Score multiple items of varying quality | S=80%+, A=50-80%, B=20-50%, C=5-20%, JUNK=<5% | |
+| 7.3 | P1 | DPS penalty | Hover low-DPS weapon | DPS factor <1.0, reflected in grade/price | |
+| 7.4 | P1 | Defense penalty | Hover low-defense armor | Defense factor <1.0, reflected in grade/price | |
+| 7.5 | P1 | Calibration shard load | Check startup logs | "Loaded X calibration samples from shard" message | |
+| 7.6 | P1 | k-NN pricing | Hover rare with calibration data available | Price estimated via k-NN interpolation (log-price space) | |
+| 7.7 | P2 | User data overlay | After several items priced, check calibration | User data from calibration.jsonl weighted (2x if <7 days old) | |
+| 7.8 | P2 | Estimate cap | Item with limited data | Estimate capped at min(2x max observed, 500d) | |
+| 7.9 | P1 | RePoE cache | First launch with no cache | Downloads mods.json + base_items.json from RePoE, caches 7 days | |
+| 7.10 | P2 | Stale RePoE cache | Disconnect internet, launch | Falls back to stale cached mod data, log warning | |
+
+---
+
+## 8. Price Cache
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 8.1 | P0 | Initial load | Start overlay, check logs | Prices loaded from poe2scout + poe.ninja, 900+ items | |
+| 8.2 | P1 | Currency lookup | Hover Divine Orb | Instant price display (<10ms) | |
+| 8.3 | P1 | Exchange rates | Check status tab stats | Divine→Chaos, Divine→Exalted rates populated | |
+| 8.4 | P1 | Auto-refresh (15m) | Leave running 15+ minutes | "Price cache refreshed" in logs | |
+| 8.5 | P2 | Disk persistence | Stop overlay, restart | Cached prices loaded from disk instantly (no API wait) | |
+| 8.6 | P2 | Name aliases | Hover item with alias (OCR name ≠ API name) | Resolves correctly to cached price | |
+| 8.7 | P2 | poe2scout down | Disconnect internet, start overlay | Falls back to disk cache, log warning | |
+
+---
+
+## 9. Loot Filter Tab
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 9.1 | P1 | Filter update | Click "Update Filter" | Filter re-tiered with live prices, success toast | |
+| 9.2 | P1 | Strictness change | Change dropdown: Normal → Very Strict | Filter re-tiered with 4x thresholds (fewer items shown) | |
+| 9.3 | P1 | Output location | Check file written | Filter saved to `~/OneDrive/Documents/My Games/Path of Exile 2/` | |
+| 9.4 | P2 | Section visibility | Toggle currency section off | Currency section excluded from filter | |
+| 9.5 | P2 | Color preset | Select different color preset | Tier colors update in filter | |
+| 9.6 | P2 | Gear class override | Toggle a gear class | Class items show/hide in filter output | |
+| 9.7 | P2 | In-game reload | Update filter, reload in POE2 | Items display per new tier assignments | |
+| 9.8 | P2 | Filter file missing | Delete .filter from output dir, click update | Logs warning "No filter file found", no crash | |
+| 9.9 | P2 | Price cache empty | Update filter before prices load | Skips re-tiering, logs "No price data available" | |
+
+---
+
+## 10. Watchlist Tab
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 10.1 | P1 | Create query | Click "Add Query", fill in search params, save | Query appears in list, state = "idle" | |
+| 10.2 | P1 | Auto-poll | Wait 300s (or set shorter interval) | Query state cycles: idle → querying → cooldown, results appear | |
+| 10.3 | P1 | Force refresh | Click force-refresh button on a query | Immediate poll, results update | |
+| 10.4 | P1 | Results display | After poll completes | Listings table: count, price range, individual listings with prices | |
+| 10.5 | P1 | Enable / disable | Toggle query enabled | Disabled query stops polling, state = "disabled" | |
+| 10.6 | P2 | Edit query | Click edit on existing query | Modal pre-fills existing params, changes save | |
+| 10.7 | P2 | Delete query | Click delete, confirm | Query removed from list and settings | |
+| 10.8 | P2 | Max 6 queries | Try to add 7th query | Rejected, error message shown | |
+| 10.9 | P2 | Online-only filter | Enable "Online only" setting | Only online sellers shown in results | |
+| 10.10 | P2 | POESESSID auth | Set valid POESESSID in settings | Listing details fetched (price details visible) | |
+| 10.11 | P2 | Rate limit (429) | Rapid force-refreshes | Respects Retry-After, no ban, state shows cooldown | |
+| 10.12 | P2 | Error state | Invalid query params | State = "error", error message displayed | |
+
+---
+
+## 11. Bug Reporter (Ctrl+Shift+B)
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 11.1 | P1 | Open dialog | Press Ctrl+Shift+B | Dark-themed dialog appears above game window | |
+| 11.2 | P1 | Item context populated | Price an item first, then Ctrl+Shift+B | Item name, grade, price auto-populated | |
+| 11.3 | P1 | No item context | Ctrl+Shift+B with nothing recently priced | Empty form, "General Bug" mode | |
+| 11.4 | P1 | Category toggle | Click between "Price Inaccuracy" and "General Bug" pills | Form labels and title prefix change | |
+| 11.5 | P1 | Submit report | Fill in title + description, click Submit | "Report sent" confirmation, dialog closes | |
+| 11.6 | P1 | Discord upload | Check Discord channel after submit | Webhook message + gzipped JSON attachment received | |
+| 11.7 | P1 | Local backup | Check `~/.poe2-price-overlay/cache/bug_reports.jsonl` | Report saved locally as JSONL line | |
+| 11.8 | P1 | Cooldown (30s) | Submit report, immediately press Ctrl+Shift+B | Cooldown message, dialog does not open | |
+| 11.9 | P2 | Logs attached | Check Discord attachment contents | Last 200 log lines + 5 clipboard captures included | |
+| 11.10 | P2 | System info | Check Discord attachment contents | OS, Python version, app version, session stats included | |
+| 11.11 | P2 | Discord down | Disconnect internet, submit report | Local JSONL backup still saved, error logged | |
+
+---
+
+## 12. Price Flag (Ctrl+Shift+F)
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 12.1 | P1 | Open flag dialog | Price an item, then Ctrl+Shift+F | Small dialog with item name, displayed price | |
+| 12.2 | P1 | Submit correction | Enter actual price (e.g., "50d"), click Flag | Uploaded to Discord webhook + JSONL backup | |
+| 12.3 | P2 | Empty correction | Submit with no price entered | Still submits (reports inaccuracy without user estimate) | |
+| 12.4 | P1 | Cooldown (10s) | Submit flag, immediately Ctrl+Shift+F | Cooldown enforced, dialog does not open | |
+| 12.5 | P2 | No recent item | Ctrl+Shift+F with nothing recently priced | No-op, log message | |
+
+---
+
+## 13. Telemetry (Opt-In)
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 13.1 | P1 | Disabled by default | Check settings on fresh install | `telemetry_enabled: false` | |
+| 13.2 | P1 | Enable telemetry | Toggle "Telemetry" on in dashboard | Setting persisted, upload scheduler starts | |
+| 13.3 | P1 | Auto-upload (24h) | Enable telemetry, price several items, wait 24h (or check logs) | Upload triggered: gzipped JSON to Discord webhook | |
+| 13.4 | P1 | PII stripped | Inspect uploaded payload | No item names, clipboard data, or user details — only scores/grades/prices | |
+| 13.5 | P2 | Manual upload | Click manual upload button in dashboard | Immediate upload of pending samples | |
+| 13.6 | P2 | Pending count | Check dashboard after pricing items | "X samples pending" counter updates | |
+| 13.7 | P2 | Duplicate prevention | Restart app after upload | `telemetry_last_upload.json` prevents re-upload of same data | |
+| 13.8 | P2 | Disable telemetry | Toggle off | Upload scheduler stops, no further uploads | |
+
+---
+
+## 14. Settings Persistence
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 14.1 | P0 | Settings save | Change any setting in dashboard | Persisted to `~/.poe2-price-overlay/dashboard_settings.json` | |
+| 14.2 | P0 | Settings survive restart | Change settings, close app, relaunch | All custom settings restored | |
+| 14.3 | P1 | League change | Change league dropdown | Watchlist and price cache update for new league | |
+| 14.4 | P1 | Auto-start toggle | Toggle "Start with Windows" | Registry key `HKCU\...\Run\LAMA` added/removed | |
+| 14.5 | P2 | Partial update | POST only one changed key via API | Existing settings preserved (deep merge) | |
+| 14.6 | P2 | Corrupted settings file | Manually corrupt JSON file, relaunch | App loads defaults, no crash | |
+| 14.7 | P2 | POESESSID storage | Enter POESESSID in settings | Stored locally only, used for watchlist auth | |
+
+---
+
+## 15. WebSocket & Live Updates
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 15.1 | P1 | WS connection | Open dashboard | WebSocket connects to `ws://127.0.0.1:8450/ws` | |
+| 15.2 | P1 | Log streaming | Start overlay, trigger detections | Log lines appear in real-time on Status tab | |
+| 15.3 | P1 | State changes | Start/stop overlay | `state_change` messages broadcast, UI updates | |
+| 15.4 | P2 | Watchlist results | Watchlist query completes | `watchlist_result` message broadcast, tab updates | |
+| 15.5 | P2 | Reconnect | Kill WS connection (dev tools), wait | Dashboard reconnects automatically | |
+
+---
+
+## 16. API Endpoints
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 16.1 | P1 | GET /api/status | `curl http://127.0.0.1:8450/api/status` | JSON: state, uptime, stats, version, branch | |
+| 16.2 | P1 | POST /api/start | Call endpoint | Overlay starts, state → "running" | |
+| 16.3 | P1 | POST /api/stop | Call endpoint | Overlay stops, state → "stopped" | |
+| 16.4 | P1 | GET /api/settings | Call endpoint | Full settings dict returned | |
+| 16.5 | P1 | POST /api/settings | POST partial settings | Settings merged and persisted | |
+| 16.6 | P2 | GET /api/leagues | Call endpoint | League list from poe2scout returned | |
+| 16.7 | P2 | GET /api/log | Call endpoint | 500-line log buffer returned | |
+| 16.8 | P2 | GET /img/{name} | Request an image resource | Image served correctly | |
+
+---
+
+## 17. Auto-Update
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 17.1 | P1 | Update check | Launch app, wait for background check | GitHub releases API queried, current vs latest compared | |
+| 17.2 | P1 | Update banner | When newer version available | Gold banner in dashboard: "Update available: vX.Y.Z" | |
+| 17.3 | P2 | Silent install | Click update banner / accept | Installer downloaded and run silently | |
+| 17.4 | P2 | No update available | Already on latest version | No banner, no prompt | |
+| 17.5 | P2 | GitHub API down | Disconnect internet during check | Update check fails silently, app functions normally | |
+
+---
+
+## 18. Edge Cases & Error Recovery
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 18.1 | P1 | Overlay already running | Click "Start" when already running | Error message or no-op, no duplicate subprocess | |
+| 18.2 | P1 | Overlay crash | Kill overlay subprocess via Task Manager | State → "error", log message, can restart via Start button | |
+| 18.3 | P1 | Port 8450 in use | Run another server on 8450, launch LAMA | Error handled, user notified | |
+| 18.4 | P1 | No internet | Disconnect internet, start overlay | Cached prices used, overlay functions, log warnings | |
+| 18.5 | P2 | Trade API 429 | Trigger many trade queries rapidly | Waits for Retry-After header, retries, no ban | |
+| 18.6 | P2 | Clipboard garbage | Copy random non-item text, trigger detection | Parse fails gracefully, overlay hidden, no crash | |
+| 18.7 | P2 | Very long item name | Rare item with many mods + long name | Display truncated gracefully, full text in logs | |
+| 18.8 | P2 | Rapid tab switching | Click between tabs very quickly | No errors, no stale content | |
+| 18.9 | P2 | Font missing (Palatino) | System without Palatino Linotype | Falls back to Segoe UI or default system serif | |
+| 18.10 | P3 | Divine rate = 0 | Extreme edge: exchange rate unavailable | Filter re-tiering skipped (division-by-zero guard) | |
+
+---
+
+## 19. Integration Scenarios
+
+### Scenario A: Full Rare Item Pipeline
+
+> Walk through the complete lifecycle of pricing a single rare item.
+
+| Step | Action | Expected |
+|------|--------|----------|
+| 1 | Open POE2, have rare item in inventory | Game visible |
+| 2 | Start overlay from dashboard | State = "Running", logs streaming |
+| 3 | Hover cursor over rare item, hold still | Cursor-stop detected (20px radius, 3 frames) |
+| 4 | Wait for overlay | Ctrl+C sent → clipboard read → parsed → mods scored → grade assigned |
+| 5 | Check overlay display | Grade letter + price estimate + stars + tier styling visible |
+| 6 | Move cursor away | Overlay hides |
+| 7 | Move cursor back to same item within 30s | Overlay reshows (lightweight reposition, no re-query) |
+| 8 | Press Ctrl+Shift+C | Deep query: trade API queried, extended results shown |
+| 9 | Press Ctrl+Shift+F | Flag dialog opens with item data pre-filled |
+| 10 | Submit flag with correction | Uploaded to Discord + local JSONL backup |
+
+### Scenario B: Watchlist Monitoring Session
+
+| Step | Action | Expected |
+|------|--------|----------|
+| 1 | Open Watchlist tab | Empty query list |
+| 2 | Add query: "Rings, life ≥100" | Query appears, state = "idle" |
+| 3 | Wait for first poll (or force refresh) | State: idle → querying → results displayed |
+| 4 | Check results table | Listing count, price range, individual listings |
+| 5 | Add 5 more queries (total 6) | All 6 poll on schedule |
+| 6 | Try adding 7th query | Rejected: max 6 enforced |
+| 7 | Disable one query | State = "disabled", polling stops for that query |
+| 8 | Force refresh active query | Immediate poll, results update |
+
+### Scenario C: Filter Update Cycle
+
+| Step | Action | Expected |
+|------|--------|----------|
+| 1 | Open Loot Filter tab | Strictness dropdown, update button visible |
+| 2 | Set strictness to "Very Strict" | Setting saved |
+| 3 | Click "Update Filter" | Progress indicator, filter re-tiered with live prices |
+| 4 | Check output directory | Filter written to `~/OneDrive/Documents/My Games/Path of Exile 2/` |
+| 5 | Load filter in POE2 | Items display per new economy tiers |
+
+### Scenario D: Bug Report Flow
+
+| Step | Action | Expected |
+|------|--------|----------|
+| 1 | Price an item (hover in game) | Overlay shows price |
+| 2 | Notice price seems wrong | — |
+| 3 | Press Ctrl+Shift+B | Bug dialog opens with item data |
+| 4 | Toggle to "Price Inaccuracy" mode | Title pre-fills "Price: [item name]" |
+| 5 | Add description, click Submit | Upload to Discord + local backup |
+| 6 | Press Ctrl+Shift+B again immediately | Cooldown (30s) — dialog does not open |
+
+---
+
+## 20. Performance & Stability
+
+| # | Priority | Test | Steps | Expected | Result / Notes |
+|---|----------|------|-------|----------|----------------|
+| 20.1 | P1 | Sustained use (1 hour) | Leave overlay running, play normally | No memory leak, no slowdown, stable FPS | |
+| 20.2 | P1 | Rapid detection (50+ items/min) | Quickly hover items in stash tab | All items priced, no backlog, <500ms latency | |
+| 20.3 | P2 | Memory footprint | Check Task Manager after 1 hour | Overlay + Dashboard combined <300MB | |
+| 20.4 | P2 | Sheen animation smoothness | Watch overlay with sheen pulse for 30s | Smooth sweep, no stutter | |
+| 20.5 | P2 | 6 watchlist queries polling | All 6 active, observe over 10 minutes | All cycle within 300s, no rate limit hits | |
+| 20.6 | P3 | Large log buffer | Run for 1 hour with heavy use | Dashboard log display stays responsive | |
+
+---
+
+## 21. Security & Privacy Checklist
+
+| # | Priority | Check | Expected | Result / Notes |
+|---|----------|-------|----------|----------------|
+| 21.1 | P0 | POESESSID not leaked | Check bug reports, telemetry, logs | Session ID never transmitted externally | |
+| 21.2 | P0 | Telemetry PII | Inspect telemetry upload payload | No item names, clipboard data, or user identifiers | |
+| 21.3 | P1 | Local-only storage | Check `~/.poe2-price-overlay/` | Settings, logs, cache stored locally, not synced | |
+| 21.4 | P1 | No admin required | Install and run | No UAC prompt, installs to user directory | |
+| 21.5 | P2 | Log rotation | Check overlay.log after extended use | Log doesn't exceed ~10MB (rotation active) | |
+
+---
+
+## Test Environment Info
+
+Fill out before testing:
+
+| Field | Value |
+|-------|-------|
+| **Tester name** | |
+| **Date** | |
+| **LAMA version** | |
+| **Windows version** | |
+| **Screen resolution** | |
+| **POE2 resolution** | |
+| **DPI scaling** | |
+| **Multi-monitor?** | |
+| **Internet connection** | |
+| **Notes** | |
