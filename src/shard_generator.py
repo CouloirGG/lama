@@ -41,6 +41,7 @@ _GRADE_FROM_NUM = {v: k for k, v in _GRADE_NUM.items()}
 MAX_PRICE_DIVINE = 1500.0
 MIN_PRICE_DIVINE = 0.01
 OUTLIER_IQR_MULTIPLIER = 3.0  # IQR fence multiplier in log-price space
+OUTLIER_MAX_DROP_RATE = 0.20  # sanity cap — fail if outlier removal exceeds 20%
 
 
 def load_raw_records(input_paths: List[str]) -> List[dict]:
@@ -210,8 +211,14 @@ def generate_shard(records: List[dict], league: str, output_path: str):
 
     # Outlier removal
     cleaned, outlier_count = remove_outliers(filtered)
+    drop_rate = outlier_count / len(filtered) if filtered else 0
     print(f"  Outlier removal (IQR, log-price): {len(filtered)} -> {len(cleaned)} "
-          f"({outlier_count} outliers removed, fence={OUTLIER_IQR_MULTIPLIER}x IQR)")
+          f"({outlier_count} outliers removed, {drop_rate:.1%}, fence={OUTLIER_IQR_MULTIPLIER}x IQR)")
+    if drop_rate > OUTLIER_MAX_DROP_RATE:
+        print(f"  ERROR: Outlier removal dropped {drop_rate:.1%} of records "
+              f"(cap is {OUTLIER_MAX_DROP_RATE:.0%}). This suggests a bug in the "
+              f"outlier algorithm, not bad data. Aborting.")
+        sys.exit(1)
 
     # Dedup
     deduped, dup_count = dedup_records(cleaned)
