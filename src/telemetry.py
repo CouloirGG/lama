@@ -81,45 +81,59 @@ class TelemetryUploader:
 
     # ── Upload ───────────────────────────────────────
 
-    def upload(self, session_stats: dict | None = None) -> bool:
-        """Gzip payload and POST to Discord webhook. Returns success."""
-        if not DISCORD_TELEMETRY_WEBHOOK_URL:
-            logger.debug("Telemetry: no webhook URL configured")
-            return False
+    def upload(self, session_stats: dict | None = None) -> tuple[bool, str]:
+        """Gzip payload and POST to Discord webhook. Returns (success, reason)."""
+        url = DISCORD_TELEMETRY_WEBHOOK_URL
+        if not url:
+            logger.info("Telemetry upload: no webhook URL configured — skipping")
+            return False, "No webhook URL configured"
+
+        # Mask URL for safe logging (keep host + last 8 chars of path)
+        try:
+            masked = url.split("/webhooks/")[0] + "/webhooks/…" + url[-8:]
+        except Exception:
+            masked = url[:40] + "…"
+        logger.info(f"Telemetry upload: starting (webhook: {masked})")
 
         payload = self.collect_payload(session_stats)
-        if not payload["samples"]:
-            logger.info("Telemetry: no new samples to upload")
-            return True  # nothing to do is not a failure
+        n = len(payload["samples"])
+        if not n:
+            logger.info("Telemetry upload: no new samples since last upload")
+            return True, "No new samples"
+
+        logger.info(f"Telemetry upload: {n} samples, league={self.league}")
 
         # Gzip the JSON payload
         json_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         gzipped = gzip.compress(json_bytes)
+        logger.info(f"Telemetry upload: payload {len(json_bytes)}B → {len(gzipped)}B gzipped")
 
         ts_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"telemetry_{ts_str}.json.gz"
         message = (
             f"**Telemetry** v{APP_VERSION} | {self.league} | "
-            f"{len(payload['samples'])} samples"
+            f"{n} samples"
         )
 
         try:
             resp = requests.post(
-                DISCORD_TELEMETRY_WEBHOOK_URL,
+                url,
                 data={"content": message},
                 files={"file": (filename, gzipped, "application/gzip")},
                 timeout=15,
             )
             if resp.status_code in range(200, 300):
-                logger.info(f"Telemetry: uploaded {len(payload['samples'])} samples")
+                logger.info(f"Telemetry upload: success — {n} samples uploaded")
                 self._write_last_upload_ts()
-                return True
+                return True, f"Uploaded {n} samples"
             else:
-                logger.warning(f"Telemetry: upload failed HTTP {resp.status_code}")
-                return False
+                body = resp.text[:200] if resp.text else "(empty)"
+                reason = f"HTTP {resp.status_code}"
+                logger.warning(f"Telemetry upload: failed {reason} — {body}")
+                return False, reason
         except Exception as e:
-            logger.warning(f"Telemetry: upload error: {e}")
-            return False
+            logger.warning(f"Telemetry upload: exception — {e}")
+            return False, str(e)
 
     # ── Scheduling ───────────────────────────────────
 
@@ -152,8 +166,8 @@ class TelemetryUploader:
             logger.warning(f"Telemetry: scheduled upload failed: {e}")
         self._schedule_next()
 
-    def upload_now(self) -> bool:
-        """Manual trigger from dashboard."""
+    def upload_now(self) -> tuple[bool, str]:
+        """Manual trigger from dashboard. Returns (success, reason)."""
         return self.upload()
 
     # ── Status ───────────────────────────────────────

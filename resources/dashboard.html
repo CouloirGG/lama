@@ -2345,6 +2345,13 @@
       const telEnabled = settings.telemetry_enabled === true;
       const telPending = telemetryStatus?.pending_samples || 0;
       const telLast = telemetryStatus?.last_upload;
+      const [uploadState, setUploadState] = useState(null); // null | {status, msg}
+      useEffect(() => {
+        if (uploadState?.status === "done" || uploadState?.status === "error") {
+          const t = setTimeout(() => setUploadState(null), 3000);
+          return () => clearTimeout(t);
+        }
+      }, [uploadState]);
       const telLastStr = telLast ? (() => {
         const ago = Math.floor((Date.now() / 1000 - telLast) / 60);
         if (ago < 60) return `${ago}m ago`;
@@ -2378,10 +2385,25 @@
           {telEnabled && (
             <div style={{ fontSize: 10, color: T.textSecond, marginBottom: 12, marginLeft: 2 }}>
               Last upload: {telLastStr} &middot; {telPending} pending &middot;{" "}
-              <span
-                style={{ color: T.borderGold, cursor: "pointer", textDecoration: "underline" }}
-                onClick={onTelemetryUpload}
-              >Upload Now</span>
+              {uploadState?.status === "uploading" ? (
+                <span style={{ color: T.textSecond }}>Uploading...</span>
+              ) : uploadState?.status === "done" ? (
+                <span style={{ color: T.green }}>{uploadState.msg}</span>
+              ) : uploadState?.status === "error" ? (
+                <span style={{ color: T.red }}>{uploadState.msg}</span>
+              ) : (
+                <span
+                  style={{ color: T.borderGold, cursor: "pointer", textDecoration: "underline" }}
+                  onClick={() => {
+                    setUploadState({ status: "uploading" });
+                    onTelemetryUpload()
+                      .then(r => r?.error
+                        ? setUploadState({ status: "error", msg: r.error })
+                        : setUploadState({ status: "done", msg: r?.message || "Uploaded!" }))
+                      .catch(e => setUploadState({ status: "error", msg: e.message || "Upload failed" }));
+                  }}
+                >Upload Now</span>
+              )}
             </div>
           )}
           {!telEnabled && <div style={{ height: 8 }} />}
@@ -5255,7 +5277,7 @@
                 <>
                   <div data-nux="start-scanner"><ScannerStatusCard status={status} onStart={handleStart} onStop={handleStop} onRestart={handleRestart} /></div>
                   <div data-nux="item-lookup"><ItemLookupCard /></div>
-                  <div data-nux="overlay-settings"><OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} telemetryStatus={telemetryStatus} onTelemetryUpload={() => { api("/api/telemetry/upload", "POST").then(refreshTelemetryStatus); }} /></div>
+                  <div data-nux="overlay-settings"><OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} telemetryStatus={telemetryStatus} onTelemetryUpload={() => api("/api/telemetry/upload", "POST").then(r => { refreshTelemetryStatus(); return r; })} /></div>
                   <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
                 </>
               )}

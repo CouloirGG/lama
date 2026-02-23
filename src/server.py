@@ -1228,10 +1228,10 @@ async def telemetry_upload():
     if not settings.get("telemetry_enabled", False):
         return {"error": "Telemetry is disabled"}
     loop = asyncio.get_running_loop()
-    success = await loop.run_in_executor(None, telemetry_uploader.upload_now)
+    success, reason = await loop.run_in_executor(None, telemetry_uploader.upload_now)
     if success:
-        return {"status": "uploaded"}
-    return {"error": "Upload failed — check logs"}
+        return {"status": "uploaded", "message": reason}
+    return {"error": reason}
 
 
 @app.get("/api/telemetry/status")
