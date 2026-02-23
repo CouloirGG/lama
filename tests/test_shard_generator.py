@@ -10,7 +10,7 @@ from shard_generator import remove_outliers, OUTLIER_IQR_MULTIPLIER
 
 def _make_rec(price, grade="C", item_class="Rings"):
     return {"min_divine": price, "grade": grade, "item_class": item_class,
-            "score": 0.5}
+            "score": 0.5, "top_tier_count": 0, "mod_count": 4}
 
 
 # ── Basic behaviour ──────────────────────────────────────

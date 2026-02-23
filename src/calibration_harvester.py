@@ -349,6 +349,8 @@ def write_calibration_record(score_result, price_divine: float,
         "dps_factor": round(score_result.dps_factor, 3),
         "defense_factor": round(score_result.defense_factor, 3),
         "somv_factor": round(score_result.somv_factor, 3),
+        "top_tier_count": score_result.top_tier_count,
+        "mod_count": score_result.prefix_count + score_result.suffix_count,
     }
 
     output_file.parent.mkdir(parents=True, exist_ok=True)

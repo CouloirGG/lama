@@ -5,16 +5,17 @@ Pipeline: raw harvester JSONL -> quality filters -> dedup -> compact gzipped JSO
 
 Shard format (gzipped JSON):
 {
-  "version": 1,
+  "version": 2,
   "league": "Fate of the Vaal",
   "generated_at": "2026-02-18T12:00:00Z",
   "sample_count": 5432,
   "samples": [
-    {"s": 0.584, "g": 2, "p": 4.5, "c": "Rings", "d": 1.0, "f": 1.0, "v": 1.02}
+    {"s": 0.584, "g": 2, "p": 4.5, "c": "Rings", "d": 1.0, "f": 1.0, "v": 1.02, "t": 2, "n": 5}
   ]
 }
 
-Fields: s=score, g=grade_num, p=divine_price, c=item_class, d=dps_factor, f=defense_factor, v=somv_factor
+Fields: s=score, g=grade_num, p=divine_price, c=item_class, d=dps_factor, f=defense_factor,
+        v=somv_factor, t=top_tier_count, n=mod_count
 
 Usage:
     python shard_generator.py --input harvester_output.jsonl --output shard.json.gz
@@ -195,6 +196,8 @@ def compact_record(rec: dict) -> dict:
         "d": round(rec.get("dps_factor", 1.0), 3),
         "f": round(rec.get("defense_factor", 1.0), 3),
         "v": round(rec.get("somv_factor", 1.0), 3),
+        "t": rec.get("top_tier_count", 0),
+        "n": rec.get("mod_count", 4),
     }
 
 
@@ -233,7 +236,7 @@ def generate_shard(records: List[dict], league: str, output_path: str):
         league = leagues.pop() if len(leagues) == 1 else "unknown"
 
     shard = {
-        "version": 1,
+        "version": 2,
         "league": league,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "sample_count": len(samples),
@@ -318,6 +321,8 @@ def validate_shard(shard_path: str, seed: int = 42):
             grade_num=s.get("g", 1),
             dps_factor=s.get("d", 1.0),
             defense_factor=s.get("f", 1.0),
+            top_tier_count=s.get("t", 0),
+            mod_count=s.get("n", 4),
         )
 
     # Test on holdout
@@ -336,7 +341,9 @@ def validate_shard(shard_path: str, seed: int = 42):
 
         est = engine.estimate(s["s"], item_class, grade=grade,
                               dps_factor=s.get("d", 1.0),
-                              defense_factor=s.get("f", 1.0))
+                              defense_factor=s.get("f", 1.0),
+                              top_tier_count=s.get("t", 0),
+                              mod_count=s.get("n", 4))
         if est is None:
             continue
 

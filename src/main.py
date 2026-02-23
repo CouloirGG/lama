@@ -870,7 +870,9 @@ class LAMA:
         # Query calibration for price estimate
         price_est = self.calibration.estimate(
             score.normalized_score, getattr(item, "item_class", "") or "",
-            grade=score.grade.value)
+            grade=score.grade.value,
+            top_tier_count=score.top_tier_count,
+            mod_count=score.prefix_count + score.suffix_count)
 
         # Check trade cache — deep query or auto-cal may have a real price
         cached_trade = None
@@ -1169,6 +1171,8 @@ class LAMA:
                 "dps_factor": round(score_result.dps_factor, 3),
                 "defense_factor": round(score_result.defense_factor, 3),
                 "somv_factor": round(score_result.somv_factor, 3),
+                "top_tier_count": score_result.top_tier_count,
+                "mod_count": score_result.prefix_count + score_result.suffix_count,
             }
             CALIBRATION_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(CALIBRATION_LOG_FILE, "a", encoding="utf-8") as f:
@@ -1179,7 +1183,9 @@ class LAMA:
                 score_result.normalized_score,
                 trade_result.min_price,
                 getattr(item, "item_class", ""),
-                grade=score_result.grade.value)
+                grade=score_result.grade.value,
+                top_tier_count=score_result.top_tier_count,
+                mod_count=score_result.prefix_count + score_result.suffix_count)
         except Exception as e:
             logger.warning(f"Calibration log failed: {e}")
 
