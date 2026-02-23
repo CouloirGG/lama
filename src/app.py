@@ -242,6 +242,46 @@ class WindowApi:
             self._tray.stop()
         self.force_close()
 
+    def export_overlay_config(self, json_str):
+        """Open native Save dialog and write overlay config JSON."""
+        import webview
+        win = webview.windows[0] if webview.windows else None
+        if not win:
+            return {"ok": False, "error": "No window"}
+        result = win.create_file_dialog(
+            webview.SAVE_DIALOG,
+            save_filename="lama-overlay-config.json",
+            file_types=("JSON files (*.json)",),
+        )
+        if not result:
+            return {"ok": False}
+        path = result if isinstance(result, str) else result[0]
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(json_str)
+            return {"ok": True, "path": path}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def import_overlay_config(self):
+        """Open native Open dialog and read overlay config JSON."""
+        import webview
+        win = webview.windows[0] if webview.windows else None
+        if not win:
+            return {"ok": False, "error": "No window"}
+        result = win.create_file_dialog(
+            webview.OPEN_DIALOG,
+            file_types=("JSON files (*.json)",),
+        )
+        if not result:
+            return {"ok": False}
+        path = result if isinstance(result, str) else result[0]
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return {"ok": True, "data": f.read()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
 
 def _ensure_deps():
     """Auto-install missing dependencies (runs silently under pythonw)."""
