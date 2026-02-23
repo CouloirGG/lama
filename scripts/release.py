@@ -7,6 +7,7 @@ optionally post to Discord and/or write GitHub release notes.
 Usage:
     python scripts/release.py                  # Interactive mode
     python scripts/release.py --post           # Post to Discord
+    python scripts/release.py --post --no-edit # Post without editor prompt
     python scripts/release.py --write          # Write .github/RELEASE_NOTES.md
     python scripts/release.py --post --write   # Both
     python scripts/release.py --dry-run        # Show what would happen
@@ -16,11 +17,23 @@ Usage:
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+GITHUB_REPO_URL = "https://github.com/CouloirGG/lama"
+INSTALLER_FILENAME = "LAMA-Setup-{version}.exe"
+DISCORD_MESSAGE_TEMPLATE = """\
+\N{LLAMA} **LAMA v{version} — Alpha Build**
+
+**Download:** {download_url}
+**Installer:** {installer_url}
+
+**What's new:**
+{changelog}"""
 
 try:
     from dotenv import load_dotenv
@@ -145,10 +158,63 @@ def format_discord_embed(
         "color": 0xFFD700,  # Gold
         "fields": fields,
         "footer": {
-            "text": "Download at github.com/Couloir/LAMA/releases",
+            "text": f"Download at {GITHUB_REPO_URL}/releases",
         },
     }
     return {"embeds": [embed]}
+
+
+def compose_discord_message(
+    version: str, categories: dict[str, list[dict]],
+) -> str:
+    """Build a plain-text Discord message (markdown) from categorised commits."""
+    download_url = f"{GITHUB_REPO_URL}/releases/tag/v{version}"
+    installer = INSTALLER_FILENAME.format(version=version)
+    installer_url = f"{GITHUB_REPO_URL}/releases/download/v{version}/{installer}"
+    blocks = []
+    for cat_name in ("New Features", "Bug Fixes", "Improvements", "Other"):
+        items = categories.get(cat_name)
+        if not items:
+            continue
+        lines = [f"**{cat_name}**"]
+        for c in items:
+            lines.append(f"- {c['subject']}")
+        blocks.append("\n".join(lines))
+    changelog = "\n\n".join(blocks)
+    return DISCORD_MESSAGE_TEMPLATE.format(
+        version=version, download_url=download_url,
+        installer_url=installer_url, changelog=changelog,
+    )
+
+
+def edit_in_editor(text: str) -> str:
+    """Open *text* in the user's editor and return the edited result."""
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+    if not editor:
+        editor = "notepad" if sys.platform == "win32" else "vi"
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", delete=False, encoding="utf-8",
+    ) as f:
+        f.write(text)
+        tmp_path = f.name
+
+    try:
+        cmd = shlex.split(editor) + [tmp_path]
+        subprocess.run(cmd, check=True)
+        edited = Path(tmp_path).read_text(encoding="utf-8")
+        if not edited.strip():
+            print("  Editor returned empty text — keeping original.")
+            return text
+        return edited
+    except Exception as exc:
+        print(f"  Editor error ({exc}) — keeping original.")
+        return text
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +271,10 @@ def main():
         help="Include doc/TODO/version-bump commits",
     )
     parser.add_argument(
+        "--no-edit", action="store_true",
+        help="Skip the editor prompt (compose → confirm → post)",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Show actions without executing them",
     )
@@ -244,12 +314,53 @@ def main():
         do_post = answer in ("y", "yes")
 
     if do_post:
-        payload = format_discord_embed(version, categories)
-        if post_to_discord(payload, dry_run=args.dry_run):
-            print("  Posted to Discord" if not args.dry_run
-                  else "  Would post to Discord (dry-run)")
-        else:
-            print("  Failed to post to Discord", file=sys.stderr)
+        message = compose_discord_message(version, categories)
+
+        # Preview
+        print("\n--- Discord message preview ---")
+        print(message)
+        print(f"--- {len(message)}/2000 chars ---\n")
+
+        # Editor flow (skip with --no-edit or in dry-run)
+        if not args.no_edit and not args.dry_run:
+            edit_answer = input(
+                "Edit message before posting? [y/N/skip]: ",
+            ).strip().lower()
+            if edit_answer == "skip":
+                print("  Skipping Discord post.")
+                do_post = False
+            elif edit_answer in ("y", "yes"):
+                while True:
+                    message = edit_in_editor(message)
+                    print("\n--- Final message ---")
+                    print(message)
+                    print(f"--- {len(message)}/2000 chars ---\n")
+                    if len(message) > 2000:
+                        print("  WARNING: Message exceeds 2000-char Discord"
+                              " limit!")
+                        again = input(
+                            "Re-edit to trim? [Y/n]: ",
+                        ).strip().lower()
+                        if again in ("n", "no"):
+                            break
+                        continue
+                    break
+
+        if do_post:
+            if not args.dry_run:
+                confirm = input("Confirm post to Discord? [y/N]: "
+                                ).strip().lower()
+                if confirm not in ("y", "yes"):
+                    print("  Aborted.")
+                    do_post = False
+
+        if do_post:
+            payload = {"content": message}
+            if post_to_discord(payload, dry_run=args.dry_run):
+                print("  Posted to Discord" if not args.dry_run
+                      else "  Would post to Discord (dry-run)")
+            else:
+                print("  Failed to post to Discord", file=sys.stderr)
 
     # --- Release notes ---
     do_write = args.write
