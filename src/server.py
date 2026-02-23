@@ -111,6 +111,7 @@ DEFAULT_SETTINGS = {
     "overlay_show_stars": True,
     "overlay_show_mods": False,
     "overlay_show_dps": True,
+    "overlay_show_low_value": False,
     "overlay_display_preset": "standard",
     "overlay_tier_styles": {},
     "overlay_theme": "poe2",
@@ -699,6 +700,7 @@ class SettingsRequest(BaseModel):
     overlay_show_stars: Optional[bool] = None
     overlay_show_mods: Optional[bool] = None
     overlay_show_dps: Optional[bool] = None
+    overlay_show_low_value: Optional[bool] = None
     overlay_display_preset: Optional[str] = None
     overlay_tier_styles: Optional[dict] = None
     overlay_theme: Optional[str] = None

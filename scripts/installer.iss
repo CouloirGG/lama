@@ -63,3 +63,32 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall
+
+[UninstallDelete]
+; Always remove regenerable cache/debug data on uninstall
+Type: filesandordirs; Name: "{%USERPROFILE}\.poe2-price-overlay\cache"
+Type: filesandordirs; Name: "{%USERPROFILE}\.poe2-price-overlay\debug"
+Type: files;          Name: "{%USERPROFILE}\.poe2-price-overlay\overlay.log"
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DataDir, BackupDir: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    DataDir := ExpandConstant('{%USERPROFILE}\.poe2-price-overlay');
+    BackupDir := ExpandConstant('{%USERPROFILE}\OneDrive\POE2PriceOverlay');
+    if DirExists(DataDir) then
+    begin
+      if MsgBox('Remove all LAMA settings and user data?' + #13#10 +
+                'Choose No to keep settings for reinstall.',
+                mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      begin
+        DelTree(DataDir, True, True, True);
+        if DirExists(BackupDir) then
+          DelTree(BackupDir, True, True, True);
+      end;
+    end;
+  end;
+end;
