@@ -19,6 +19,7 @@ import argparse
 import json
 import logging
 import random
+import re
 import sys
 import time
 from datetime import date
@@ -183,6 +184,19 @@ def build_harvester_query(category_filter: str, price_min: float,
 
 # ─── Item Construction from Listing ──────────────────
 
+_MARKUP_RE = re.compile(r"\[([^]|]*?\|)?([^]]*?)\]")
+
+
+def strip_trade_markup(text: str) -> str:
+    """Strip trade API markup tags from mod text.
+
+    The trade API returns mod text with tags like [Evasion],
+    [Dexterity|Dexterity], [ItemRarity|Rarity of Items], etc.
+    We keep the display text (after |, or the whole tag if no |).
+    """
+    return _MARKUP_RE.sub(r"\2", text)
+
+
 def listing_to_parsed_item(listing: dict, item_class: str) -> Optional[ParsedItem]:
     """Convert a trade API listing into a ParsedItem + mod tuples.
 
@@ -217,18 +231,20 @@ def listing_to_parsed_item(listing: dict, item_class: str) -> Optional[ParsedIte
         item.energy_shield = int(es)
         item.total_defense = item.armour + item.evasion + item.energy_shield
 
-    # Collect all mod lines as (mod_type, text) tuples
+    # Collect all mod lines as (mod_type, text) tuples.
+    # Strip trade API markup tags ([Evasion], [Id|Display], etc.)
+    # so mod_parser regex templates can match the clean text.
     mods = []
     for mod_text in item_data.get("explicitMods", []):
-        mods.append(("explicit", mod_text))
+        mods.append(("explicit", strip_trade_markup(mod_text)))
     for mod_text in item_data.get("implicitMods", []):
-        mods.append(("implicit", mod_text))
+        mods.append(("implicit", strip_trade_markup(mod_text)))
     for mod_text in item_data.get("fracturedMods", []):
-        mods.append(("fractured", mod_text))
+        mods.append(("fractured", strip_trade_markup(mod_text)))
     for mod_text in item_data.get("enchantMods", []):
-        mods.append(("enchant", mod_text))
+        mods.append(("enchant", strip_trade_markup(mod_text)))
     for mod_text in item_data.get("craftedMods", []):
-        mods.append(("crafted", mod_text))
+        mods.append(("crafted", strip_trade_markup(mod_text)))
 
     item.mods = mods
     return item
