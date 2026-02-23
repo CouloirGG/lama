@@ -281,7 +281,7 @@
     const LABEL = { fontSize: 10, fontWeight: 700, color: T.textSecond, letterSpacing: "0.1em", textTransform: "uppercase" };
     const FIELD_LABEL = { fontSize: 10, fontWeight: 600, display: "block", marginBottom: 4, letterSpacing: "0.08em", color: T.textSecond };
     const FIELD_INPUT = { width: "100%", background: T.input, border: `1px solid ${T.border}`, borderRadius: 5, color: T.text, padding: "7px 10px", ...MONO, fontSize: 12 };
-    const CARD = { background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: 16 };
+    const CARD = { background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: 12 };
     const BTN = { border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 12, fontWeight: 600, cursor: "pointer", letterSpacing: "0.04em", transition: "all 0.15s ease" };
     const BTN_GOLD = { ...BTN, background: T.input, border: `1px solid ${T.borderGold}`, color: T.gold };
     const BTN_GOLD_ACTIVE = { ...BTN, background: T.gold, border: `1px solid ${T.gold}`, color: "#0d0b08" };
@@ -1016,19 +1016,16 @@
       return <img src={src} alt="" style={{ width: size, height: size, objectFit: "contain", imageRendering: "auto", verticalAlign: "middle" }} />;
     }
 
-    function StatCard({ label, value, sub, color, tooltip, iconLeft, iconRight }) {
-      const card = (
-        <div className="panel" style={{ ...CARD, padding: 10, textAlign: "center", minWidth: 0 }}>
-          <div style={{ ...LABEL, marginBottom: 4, fontSize: 9 }}>{label}</div>
-          <div style={{ ...MONO, fontSize: 18, fontWeight: 700, color: color || T.text, lineHeight: 1.2, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 }}>
-            {iconLeft && <CurrencyIcon src={iconLeft} size={22} />}
-            <span>{value}</span>
-            {iconRight && <CurrencyIcon src={iconRight} size={22} />}
-          </div>
-          {sub && <div style={{ fontSize: 9, color: T.textMuted, marginTop: 2 }}>{sub}</div>}
-        </div>
+    function StatCard({ label, value, color, tooltip, iconLeft, iconRight }) {
+      const inner = (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "default" }}>
+          <span style={{ fontSize: 9, fontWeight: 600, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</span>
+          {iconLeft && <CurrencyIcon src={iconLeft} size={16} />}
+          <span style={{ ...MONO, fontSize: 14, fontWeight: 700, color: color || T.text }}>{value}</span>
+          {iconRight && <CurrencyIcon src={iconRight} size={16} />}
+        </span>
       );
-      return tooltip ? <Tooltip text={tooltip}>{card}</Tooltip> : card;
+      return tooltip ? <Tooltip text={tooltip}>{inner}</Tooltip> : inner;
     }
 
     // -----------------------------------------------------------------------
@@ -1054,11 +1051,11 @@
 
       return (
         <div data-nux="exchange-rates" style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px" }}>
-          <div data-nux-hl="big-four" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 8 }}>
-            <StatCard label="1 Mirror" value={m2d > 0 ? `${m2d.toFixed(0)}` : "--"} sub={m2d > 0 ? "Divine" : null} color="#c084fc" iconLeft={ICON.mirror} iconRight={ICON.divine} tooltip="1 Mirror of Kalandra = X Divine Orbs" />
-            <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} sub={d2e > 0 ? "Exalted" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
-            <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} sub={d2c > 0 ? "Chaos" : null} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
-            <StatCard label="1 Chaos" value={e2c > 0 ? `${e2c.toFixed(0)}` : "--"} sub={e2c > 0 ? "Exalted" : null} color={T.amber} iconLeft={ICON.exalted} iconRight={ICON.chaos} tooltip="1 Chaos Orb = X Exalted Orbs" />
+          <div data-nux-hl="big-four" style={{ display: "flex", alignItems: "center", gap: 18, padding: "6px 12px", marginBottom: 4, background: T.card, border: `1px solid ${T.border}`, borderRadius: 6, flexWrap: "wrap" }}>
+            <StatCard label="1 Mirror" value={m2d > 0 ? `${m2d.toFixed(0)}` : "--"} color="#c084fc" iconLeft={ICON.mirror} iconRight={ICON.divine} tooltip="1 Mirror of Kalandra = X Divine Orbs" />
+            <StatCard label="1 Divine" value={d2e > 0 ? `${d2e.toFixed(0)}` : "--"} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.exalted} tooltip="1 Divine Orb = X Exalted Orbs" />
+            <StatCard label="1 Divine" value={d2c > 0 ? `${d2c.toFixed(0)}` : "--"} color={T.gold} iconLeft={ICON.divine} iconRight={ICON.chaos} tooltip="1 Divine Orb = X Chaos Orbs" />
+            <StatCard label="1 Chaos" value={e2c > 0 ? `${e2c.toFixed(0)}` : "--"} color={T.amber} iconLeft={ICON.chaos} iconRight={ICON.exalted} tooltip="1 Chaos Orb = X Exalted Orbs" />
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, padding: "2px 0" }}>
             <span style={{ fontSize: 9, color: T.textMuted }}>
@@ -1244,7 +1241,7 @@
 
       if (state === "stopped") {
         return (
-          <div className="panel" style={{ ...CARD, padding: 10, marginBottom: 12 }}>
+          <div className="panel" style={{ ...CARD, padding: 8, marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
               <span style={{ fontSize: 12, color: T.textSecond }}>Scanner offline</span>
@@ -1259,7 +1256,7 @@
 
       if (state === "starting") {
         return (
-          <div className="panel" style={{ ...CARD, padding: 10, marginBottom: 12 }}>
+          <div className="panel" style={{ ...CARD, padding: 8, marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 12, height: 12, border: `2px solid ${T.amber}`, borderTop: "2px solid transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
               <span style={{ fontSize: 11, fontWeight: 600, color: T.amber }}>Starting...</span>
@@ -1270,7 +1267,7 @@
 
       if (state === "error") {
         return (
-          <div className="panel" style={{ ...CARD, padding: 16, marginBottom: 12, borderColor: T.red + "44" }}>
+          <div className="panel" style={{ ...CARD, padding: 8, marginBottom: 8, borderColor: T.red + "44" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ color: T.red, fontSize: 14, fontWeight: 700 }}>Scanner Error</span>
@@ -1286,9 +1283,9 @@
 
       // Running state — compact card with health stats
       return (
-        <div className="panel" style={{ ...CARD, padding: 12, marginBottom: 12 }}>
+        <div className="panel" style={{ ...CARD, padding: 8, marginBottom: 8 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <Tooltip text="Number of item tooltips scanned via Ctrl+C">
                 <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Scans: <span style={{ color: T.textSecond, fontWeight: 600 }}>{stats.triggers}</span></span>
               </Tooltip>
@@ -1343,13 +1340,13 @@
                   background: active ? "rgba(196,164,86,0.15)" : "transparent",
                   border: "none",
                   color: active ? T.gold : T.textSecond,
-                  padding: "10px 24px 8px", fontSize: 13, fontWeight: 600,
+                  padding: "7px 20px 5px", fontSize: 13, fontWeight: 600,
                   cursor: "pointer", letterSpacing: "0.04em",
                   borderRadius: "6px 6px 0 0",
                 }}
               >
                 <div>{tab.label}</div>
-                <div style={{ fontSize: 8, color: active ? T.textSecond : T.textMuted, marginTop: 2, fontWeight: 400, letterSpacing: "0.06em" }}>
+                <div style={{ fontSize: 8, color: active ? T.textSecond : T.textMuted, marginTop: 1, fontWeight: 400, letterSpacing: "0.06em" }}>
                   {TAB_SUBTITLES[tab.id]}
                 </div>
               </button>
@@ -2342,7 +2339,7 @@
       };
 
       return (
-        <div className="panel" style={{ ...CARD, padding: 12, marginBottom: 12 }}>
+        <div className="panel" style={{ ...CARD, padding: 10, marginBottom: 8 }}>
           <div
             style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none" }}
             onClick={() => setCollapsed(!collapsed)}
@@ -2366,7 +2363,7 @@
             </div>
           </div>
           {!collapsed && (
-            <div style={{ marginTop: 10 }}>
+            <div style={{ marginTop: 6 }}>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
@@ -2378,10 +2375,10 @@
                   }, 50);
                 }}
                 placeholder="Paste item text here (Ctrl+C on any item in-game)..."
-                rows={4}
-                style={{ ...FIELD_INPUT, resize: "vertical", marginBottom: 8, fontSize: 11 }}
+                rows={3}
+                style={{ ...FIELD_INPUT, resize: "vertical", marginBottom: 6, fontSize: 11 }}
               />
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
                 <button onClick={() => doLookup(text)} disabled={loading || !text.trim()} style={{
                   ...BTN_GOLD_ACTIVE, opacity: (loading || !text.trim()) ? 0.5 : 1,
                   padding: "8px 24px",
@@ -2395,7 +2392,7 @@
               )}
 
               {result && result.item && (
-                <div style={{ background: T.input, border: `1px solid ${T.border}`, borderRadius: 6, padding: 12 }}>
+                <div style={{ background: T.input, border: `1px solid ${T.border}`, borderRadius: 6, padding: 10 }}>
                   {/* Item header */}
                   <div style={{ marginBottom: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>
@@ -2485,9 +2482,9 @@
         return `${Math.floor(ago / 1440)}d ago`;
       })() : "never";
       return (
-        <div style={{ marginTop: 12, marginBottom: 12 }}>
+        <div style={{ marginTop: 8, marginBottom: 8 }}>
           {/* Toggles row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 4, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 2, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Toggle value={settings.auto_start !== false} onChange={(v) => onUpdate({ auto_start: v })} size="small" />
               <span style={{ fontSize: 11, color: T.textSecond }}>Auto-start overlay on launch</span>
@@ -2532,18 +2529,18 @@
               )}
             </div>
           )}
-          {!telEnabled && <div style={{ height: 8 }} />}
+          {!telEnabled && <div style={{ height: 4 }} />}
           {/* Display & Detection settings — two grouped columns */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div className="panel" style={{ ...CARD, padding: 12 }}>
-              <div style={{ ...LABEL, marginBottom: 8 }}>Display</div>
+              <div style={{ ...LABEL, marginBottom: 4 }}>Display</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 16px" }}>
                 <SettingsField label="Font Size" field="font_size" value={settings.font_size} onUpdate={onUpdate} min={8} max={24} step={1} helpText="Text size (px)" nuxHl="font-size" />
                 <SettingsField label="Duration" field="overlay_duration" value={settings.overlay_duration} onUpdate={onUpdate} min={0.5} max={10} step={0.5} helpText="Seconds shown" nuxHl="duration" />
               </div>
               {/* Theme selector */}
-              <div data-nux-hl="theme" style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.border}33` }}>
-                <div style={{ ...LABEL, marginBottom: 8, fontSize: 9 }}>Theme</div>
+              <div data-nux-hl="theme" style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.border}33` }}>
+                <div style={{ ...LABEL, marginBottom: 4, fontSize: 9 }}>Theme</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   {[
                     { id: "poe2", label: "POE2 Gothic", desc: "Dark parchment, serif" },
@@ -2571,8 +2568,8 @@
                 </div>
               </div>
               {/* Pulse Style selector */}
-              <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.border}33` }}>
-                <div style={{ ...LABEL, marginBottom: 8, fontSize: 9 }}>Pulse Style</div>
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.border}33` }}>
+                <div style={{ ...LABEL, marginBottom: 4, fontSize: 9 }}>Pulse Style</div>
                 <div style={{ display: "flex", gap: 4 }}>
                   {[
                     { id: "sheen", label: "Sheen", desc: "Light sweep", poe2Only: true },
@@ -2612,8 +2609,8 @@
                 )}
               </div>
               {/* Display Preset selector */}
-              <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.border}33` }}>
-                <div style={{ ...LABEL, marginBottom: 8, fontSize: 9 }}>Display Preset</div>
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.border}33` }}>
+                <div style={{ ...LABEL, marginBottom: 4, fontSize: 9 }}>Display Preset</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   {OVERLAY_PRESETS.map(p => {
                     const activePreset = detectOverlayPreset(settings);
@@ -3931,7 +3928,7 @@
         }}>
           {/* Header row */}
           <div style={{
-            display: "flex", alignItems: "center", gap: 8, padding: "10px 12px",
+            display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
             borderBottom: `1px solid ${T.border}`,
             background: T.input,
           }}>
@@ -3997,7 +3994,7 @@
 
           {/* Price summary + status badge — always visible */}
           {!editing && (
-            <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${T.border}22` }}>
+            <div style={{ padding: "6px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${T.border}22` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 {priceRange ? (
                   <div style={{ fontSize: 14, fontWeight: 700, color: T.gold, ...MONO, display: "flex", alignItems: "center", gap: 4 }}>
@@ -4099,11 +4096,11 @@
 
       return (
         <div>
-          <div style={{ fontSize: 10, color: T.textMuted, fontStyle: "italic", padding: "8px 0 4px", borderBottom: `1px solid ${T.border}22`, marginBottom: 12 }}>
+          <div style={{ fontSize: 10, color: T.textMuted, fontStyle: "italic", padding: "8px 0 4px", borderBottom: `1px solid ${T.border}22`, marginBottom: 8 }}>
             Watchlist prices are from the trade API and reflect current listings, not completed sales. Prices may include price-fixers.
           </div>
           {/* Settings row */}
-          <div className="panel" style={{ ...CARD, marginBottom: 16, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div className="panel" style={{ ...CARD, marginBottom: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={FIELD_LABEL}>Poll Interval</span>
               <select value={pollInterval} onChange={(e) => handlePollIntervalChange(e.target.value)}
@@ -4179,7 +4176,7 @@
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(2, 1fr)",
-            gap: 12,
+            gap: 10,
           }}>
             {slots.map((slot, idx) => {
               if (slot.type === "query") {
@@ -4221,7 +4218,7 @@
                       border: `2px dashed ${T.border}`,
                       borderRadius: 8,
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      minHeight: 120,
+                      minHeight: 80,
                       cursor: queries.length < TOTAL_SLOTS ? "pointer" : "default",
                       transition: "border-color 0.15s, background 0.15s",
                     }}
@@ -4266,7 +4263,7 @@
       };
 
       return (
-        <div className="panel" style={{ ...CARD, padding: 12, marginTop: 0, marginBottom: 0 }}>
+        <div className="panel" style={{ ...CARD, padding: 10, marginTop: 0, marginBottom: 0 }}>
           <div
             style={{
               display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -4305,8 +4302,8 @@
           {!collapsed && (
             <div ref={logRef} style={{
               background: T.input, border: `1px solid ${T.border}`, borderRadius: 6,
-              ...MONO, fontSize: 11.5, lineHeight: 1.7, height: 280, overflowY: "auto", padding: "12px 16px",
-              marginTop: 8,
+              ...MONO, fontSize: 11.5, lineHeight: 1.4, height: 180, overflowY: "auto", padding: "8px 12px",
+              marginTop: 6,
             }}>
               {logs.length === 0 && <div style={{ color: T.textMuted, fontStyle: "italic" }}>The Atlas is quiet... for now.</div>}
               {logs.map((log, i) => (
