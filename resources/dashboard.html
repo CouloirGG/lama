@@ -297,7 +297,7 @@
       "overlay_theme", "overlay_pulse_style", "font_size", "overlay_duration",
       "overlay_display_preset", "overlay_show_grade", "overlay_show_price",
       "overlay_show_stars", "overlay_show_mods", "overlay_show_dps",
-      "overlay_tier_styles",
+      "overlay_show_low_value", "overlay_tier_styles",
     ];
 
     // -----------------------------------------------------------------------
@@ -1232,6 +1232,72 @@
     }
 
     // -----------------------------------------------------------------------
+    // WelcomeModal — first-run welcome screen before NUX tour
+    // -----------------------------------------------------------------------
+    function WelcomeModal({ open, leagues, selectedLeague, onLeagueChange, onStartTour, onSkip }) {
+      useEffect(() => {
+        if (!open) return;
+        const handler = (e) => {
+          if (e.key === "Enter") { e.preventDefault(); onStartTour(); }
+          if (e.key === "Escape") { e.preventDefault(); onSkip(); }
+        };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+      }, [open, onStartTour, onSkip]);
+
+      if (!open) return null;
+
+      return (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1100,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 10,
+            padding: 28, width: 380, maxWidth: "90vw", animation: "flyoutIn 0.25s ease-out",
+            textAlign: "center",
+          }} onClick={e => e.stopPropagation()}>
+            <img src="/img/lama_icon.png" alt="LAMA" style={{ width: 64, height: 64, marginBottom: 12, borderRadius: 8 }} />
+
+            <div style={{ fontSize: 18, fontWeight: 700, color: T.gold, marginBottom: 4 }}>
+              Welcome to LAMA
+            </div>
+            <div style={{ fontSize: 11, color: T.textSecond, marginBottom: 16 }}>
+              Live Auction Market Assessor
+            </div>
+
+            <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${T.borderGold}, transparent)`, marginBottom: 18 }} />
+
+            <div style={{ textAlign: "left", marginBottom: 16 }}>
+              <label style={FIELD_LABEL}>League</label>
+              <select
+                value={selectedLeague}
+                onChange={e => onLeagueChange(e.target.value)}
+                style={{ ...FIELD_INPUT, cursor: "pointer" }}
+              >
+                {leagues.map(l => (
+                  <option key={l.value} value={l.value}>{l.label}</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 6 }}>
+                Different leagues have different prices. You can change this later in the footer.
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <button onClick={onSkip} style={{
+                ...BTN, background: T.input, border: `1px solid ${T.border}`, color: T.textSecond, padding: "8px 18px",
+              }}>Skip Setup</button>
+              <button onClick={onStartTour} style={{
+                ...BTN_GOLD_ACTIVE, padding: "8px 18px",
+              }}>Start Tour</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
     // ScannerStatusCard — hero card at top of Overlay tab
     // -----------------------------------------------------------------------
     function ScannerStatusCard({ status, onStart, onStop, onRestart }) {
@@ -1443,7 +1509,10 @@
 
     // Build overlay text for a sample item based on current toggle settings
     function buildSampleText(sample, settings, theme) {
-      if (sample.isJunk) return "\u2717";
+      if (sample.isJunk) {
+        if (settings.overlay_show_low_value === false) return "";
+        return "\u2717";
+      }
       const showGrade = settings.overlay_show_grade !== false;
       const showPrice = settings.overlay_show_price !== false;
       const showStars = settings.overlay_show_stars !== false;
@@ -1695,6 +1764,7 @@
               </div>
               {/* LAMA overlay tag */}
               {(() => {
+                if (!text) return null;
                 const isPoe2 = settings.overlay_theme === "poe2";
                 const defaultBg = isPoe2 ? "#1a120c" : "#1a1a2e";
                 const defaultBorder = isPoe2 ? "#3d2e1e" : "#333355";
@@ -1911,6 +1981,7 @@
     function OverlaySampleChip({ sample, settings, compact }) {
       const isPoe2 = settings.overlay_theme === "poe2";
       const text = buildSampleText(sample, settings, settings.overlay_theme);
+      if (!text) return null;
       const isBorderless = text === "\u2605";
       const isJunk = sample.isJunk;
       const fontSize = settings.font_size || 14;
@@ -2648,9 +2719,10 @@
                     ["Stars", "overlay_show_stars"],
                     ["Top Mods", "overlay_show_mods"],
                     ["DPS/Defense", "overlay_show_dps", "dps"],
+                    ["Low Value", "overlay_show_low_value", "low-value"],
                   ].map(([label, field, nuxHl]) => (
                     <div key={field} data-nux-hl={nuxHl || undefined} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <Toggle value={settings[field] !== false} onChange={(v) => onUpdate({ [field]: v, overlay_display_preset: "custom" })} size="small" />
+                      <Toggle value={settings[field] !== false} onChange={(v) => onUpdate({ [field]: v, ...(field !== "overlay_show_low_value" && { overlay_display_preset: "custom" }) })} size="small" />
                       <span style={{ fontSize: 11, color: T.textSecond }}>{label}</span>
                     </div>
                   ))}
@@ -5133,7 +5205,7 @@
     // -----------------------------------------------------------------------
     function Dashboard() {
       const [status, setStatus] = useState({ state: "stopped", uptime: 0, stats: { uptime_min: 0, triggers: 0, prices_shown: 0, success_rate: 0, cache_items: 0, last_refresh: "never", divine_to_chaos: 0, divine_to_exalted: 0, mirror_to_divine: 0, calibration_samples: 0 } });
-      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, start_with_windows: false, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {}, filter_gear_classes: {}, filter_color_preset: "default", overlay_show_grade: true, overlay_show_price: true, overlay_show_stars: true, overlay_show_mods: false, overlay_show_dps: true, overlay_display_preset: "standard", overlay_tier_styles: {} });
+      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, start_with_windows: false, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {}, filter_gear_classes: {}, filter_color_preset: "default", overlay_show_grade: true, overlay_show_price: true, overlay_show_stars: true, overlay_show_mods: false, overlay_show_dps: true, overlay_show_low_value: false, overlay_display_preset: "standard", overlay_tier_styles: {} });
       const [leagues, setLeagues] = useState([{ value: "Fate of the Vaal", label: "Fate of the Vaal" }]);
       const [logs, setLogs] = useState([]);
       const [autoStartDone, setAutoStartDone] = useState(false);
@@ -5148,6 +5220,8 @@
       const [nuxStep, setNuxStep] = useState(0);
       const [nuxDismissed, setNuxDismissed] = useState(false);
       const [settingsLoaded, setSettingsLoaded] = useState(false);
+      const [welcomeOpen, setWelcomeOpen] = useState(false);
+      const welcomeShownRef = useRef(false);
       const logRef = useRef(null);
       const autoScrollRef = useRef(true);
 
@@ -5184,6 +5258,15 @@
           }, 400);
         });
         return () => cancelAnimationFrame(id);
+      }, [settingsLoaded]);
+
+      // Auto-open welcome modal on first run (once per page load)
+      useEffect(() => {
+        if (!settingsLoaded) return;
+        if (settings.nux_completed === true) return;
+        if (welcomeShownRef.current) return;
+        welcomeShownRef.current = true;
+        setWelcomeOpen(true);
       }, [settingsLoaded]);
 
       // WebSocket handler
@@ -5327,13 +5410,16 @@
         }
       };
 
-      // NUX guided tour
-      const nuxActive = settingsLoaded && settings.nux_completed !== true && !nuxDismissed;
+      // NUX guided tour — gated behind welcome modal
+      const nuxActive = settingsLoaded && settings.nux_completed !== true && !nuxDismissed && !welcomeOpen;
 
       const dismissNux = () => {
         setNuxDismissed(true);
         handleSettingsUpdate({ nux_completed: true });
       };
+
+      const handleWelcomeStartTour = () => setWelcomeOpen(false);
+      const handleWelcomeSkip = () => { setWelcomeOpen(false); dismissNux(); };
 
       const handleNuxNext = () => {
         const nextIdx = nuxStep + 1;
@@ -5442,6 +5528,14 @@
           />
           <BugReportModal open={bugModalOpen} onClose={() => setBugModalOpen(false)} />
           <FeedbackModal open={!!feedbackModal} feedbackType={feedbackModal || "feedback"} onClose={() => setFeedbackModal(null)} />
+          <WelcomeModal
+            open={welcomeOpen}
+            leagues={leagues}
+            selectedLeague={settings.league}
+            onLeagueChange={handleLeagueChange}
+            onStartTour={handleWelcomeStartTour}
+            onSkip={handleWelcomeSkip}
+          />
         </div>
         {nuxActive && ReactDOM.createPortal(
           <NUXOverlay
