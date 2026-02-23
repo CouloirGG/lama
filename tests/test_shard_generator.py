@@ -1,16 +1,19 @@
-"""Tests for shard_generator.remove_outliers — IQR in log-price space."""
+"""Tests for shard_generator — IQR outlier removal and mod groups in shards."""
 
 import math
 import random
 
 import pytest
 
-from shard_generator import remove_outliers, OUTLIER_IQR_MULTIPLIER
+from shard_generator import remove_outliers, compact_record, OUTLIER_IQR_MULTIPLIER
 
 
-def _make_rec(price, grade="C", item_class="Rings"):
-    return {"min_divine": price, "grade": grade, "item_class": item_class,
-            "score": 0.5, "top_tier_count": 0, "mod_count": 4}
+def _make_rec(price, grade="C", item_class="Rings", mod_groups=None):
+    rec = {"min_divine": price, "grade": grade, "item_class": item_class,
+           "score": 0.5, "top_tier_count": 0, "mod_count": 4}
+    if mod_groups is not None:
+        rec["mod_groups"] = mod_groups
+    return rec
 
 
 # ── Basic behaviour ──────────────────────────────────────
@@ -137,3 +140,39 @@ class TestDropRateGuard:
         assert drop_rate < 0.20, (
             f"Overall drop rate {drop_rate:.1%} exceeds 20% cap — "
             f"outlier algorithm is too aggressive")
+
+
+# ── Mod groups in shards ────────────────────────────────
+
+class TestModGroupsInShard:
+    def test_compact_record_with_mod_groups(self):
+        """compact_record should include 'm' field with integer indices."""
+        mod_to_idx = {"IncreasedLife": 0, "FireResist": 1, "ColdResist": 2}
+        rec = _make_rec(5.0, mod_groups=["IncreasedLife", "ColdResist"])
+        compact = compact_record(rec, mod_to_idx)
+
+        assert "m" in compact
+        assert compact["m"] == [0, 2]  # sorted indices
+
+    def test_compact_record_without_mod_groups(self):
+        """compact_record should omit 'm' when no mod_groups present."""
+        mod_to_idx = {"IncreasedLife": 0}
+        rec = _make_rec(5.0)
+        compact = compact_record(rec, mod_to_idx)
+
+        assert "m" not in compact
+
+    def test_compact_record_no_mod_index(self):
+        """compact_record with no mod_to_idx should not include 'm'."""
+        rec = _make_rec(5.0, mod_groups=["IncreasedLife"])
+        compact = compact_record(rec)
+
+        assert "m" not in compact
+
+    def test_compact_record_deduplicates_mod_groups(self):
+        """Duplicate mod groups should be collapsed."""
+        mod_to_idx = {"IncreasedLife": 0, "FireResist": 1}
+        rec = _make_rec(5.0, mod_groups=["IncreasedLife", "IncreasedLife", "FireResist"])
+        compact = compact_record(rec, mod_to_idx)
+
+        assert compact["m"] == [0, 1]

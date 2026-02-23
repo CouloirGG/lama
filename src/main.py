@@ -183,6 +183,7 @@ class LAMA:
             "overlay_show_stars": True,
             "overlay_show_mods": False,
             "overlay_show_dps": True,
+            "overlay_show_low_value": False,
             "overlay_tier_styles": {},
             "overlay_theme": "poe2",
             "overlay_pulse_style": "sheen",
@@ -872,7 +873,8 @@ class LAMA:
             score.normalized_score, getattr(item, "item_class", "") or "",
             grade=score.grade.value,
             top_tier_count=score.top_tier_count,
-            mod_count=len(score.mod_scores))
+            mod_count=len(score.mod_scores),
+            mod_groups=[ms.mod_group for ms in score.mod_scores if ms.mod_group])
 
         # Check trade cache — deep query or auto-cal may have a real price
         cached_trade = None
@@ -929,11 +931,15 @@ class LAMA:
 
         # Borderless mode: when all display toggles are off, text is just "★"
         is_borderless = (text == "\u2605")
-        self.overlay.show_price(text=text, tier=overlay_tier,
-                                cursor_x=cursor_x, cursor_y=cursor_y,
-                                borderless=is_borderless,
-                                estimate=cached_trade.estimate if cached_trade else False,
-                                price_divine=cached_trade.min_price if cached_trade else (price_est or 0))
+        # Suppress ✗ overlay for JUNK/C when low-value display is off
+        if text == "\u2717" and not ds.get("overlay_show_low_value", False):
+            pass  # suppress overlay, fall through to logging/caching
+        else:
+            self.overlay.show_price(text=text, tier=overlay_tier,
+                                    cursor_x=cursor_x, cursor_y=cursor_y,
+                                    borderless=is_borderless,
+                                    estimate=cached_trade.estimate if cached_trade else False,
+                                    price_divine=cached_trade.min_price if cached_trade else (price_est or 0))
 
         # Cache for flag reporter
         mod_details = None
@@ -1173,6 +1179,7 @@ class LAMA:
                 "somv_factor": round(score_result.somv_factor, 3),
                 "top_tier_count": score_result.top_tier_count,
                 "mod_count": len(score_result.mod_scores),
+                "mod_groups": [ms.mod_group for ms in score_result.mod_scores if ms.mod_group],
             }
             CALIBRATION_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(CALIBRATION_LOG_FILE, "a", encoding="utf-8") as f:
@@ -1185,7 +1192,8 @@ class LAMA:
                 getattr(item, "item_class", ""),
                 grade=score_result.grade.value,
                 top_tier_count=score_result.top_tier_count,
-                mod_count=len(score_result.mod_scores))
+                mod_count=len(score_result.mod_scores),
+                mod_groups=[ms.mod_group for ms in score_result.mod_scores if ms.mod_group])
         except Exception as e:
             logger.warning(f"Calibration log failed: {e}")
 
@@ -1273,7 +1281,7 @@ class LAMA:
                 text="SCRAP", tier="scrap",
                 cursor_x=cursor_x, cursor_y=cursor_y,
             )
-        else:
+        elif self._display_settings.get("overlay_show_low_value", False):
             self.overlay.show_price(
                 text="\u2717", tier="low",
                 cursor_x=cursor_x, cursor_y=cursor_y,

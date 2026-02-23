@@ -92,3 +92,69 @@ def test_calibration_accuracy_within_2x():
         f"Calibration accuracy {pct:.1f}% is below 20% target "
         f"({within_2x}/{total_tested} within 2x)"
     )
+
+
+def test_mod_identity_improves_accuracy():
+    """Items with different mod groups but same score should get different estimates."""
+    engine = CalibrationEngine()
+    engine.set_mod_weights({
+        "CriticalStrikeMultiplier": 3.0,
+        "SpellDamage": 2.0,
+        "FireResist": 0.3,
+        "ColdResist": 0.3,
+    })
+
+    premium_mods = ["CriticalStrikeMultiplier", "SpellDamage"]
+    filler_mods = ["FireResist", "ColdResist"]
+
+    # Insert 20 premium items at 50 divine
+    for _ in range(20):
+        engine._insert(score=0.6, divine=50.0, item_class="Rings",
+                       grade_num=3, top_tier_count=2, mod_count=4,
+                       mod_groups=premium_mods)
+
+    # Insert 20 filler items at 2 divine
+    for _ in range(20):
+        engine._insert(score=0.6, divine=2.0, item_class="Rings",
+                       grade_num=3, top_tier_count=2, mod_count=4,
+                       mod_groups=filler_mods)
+
+    # Query with premium mods
+    est_premium = engine.estimate(0.6, "Rings", grade="A",
+                                  top_tier_count=2, mod_count=4,
+                                  mod_groups=premium_mods)
+    # Query with filler mods
+    est_filler = engine.estimate(0.6, "Rings", grade="A",
+                                 top_tier_count=2, mod_count=4,
+                                 mod_groups=filler_mods)
+
+    assert est_premium is not None
+    assert est_filler is not None
+    assert est_premium > est_filler * 2, (
+        f"Premium estimate ({est_premium:.1f}) should be >2x filler ({est_filler:.1f})"
+    )
+
+
+def test_mod_groups_backward_compatible():
+    """Samples without mod_groups should still produce valid estimates."""
+    engine = CalibrationEngine()
+
+    # Insert samples without mod_groups (legacy data)
+    for price in [1.0, 2.0, 5.0, 10.0, 20.0] * 10:
+        engine._insert(score=0.5, divine=price, item_class="Rings",
+                       grade_num=2)
+
+    # Estimate without mod_groups
+    est_no_mods = engine.estimate(0.5, "Rings", grade="B")
+    assert est_no_mods is not None
+
+    # Estimate with mod_groups (against samples without)
+    est_with_mods = engine.estimate(0.5, "Rings", grade="B",
+                                    mod_groups=["IncreasedLife", "FireResist"])
+    assert est_with_mods is not None
+
+    # Both should be in a reasonable range (within 5x of each other)
+    ratio = max(est_no_mods, est_with_mods) / min(est_no_mods, est_with_mods)
+    assert ratio < 5.0, (
+        f"Estimates diverged too much: {est_no_mods:.1f} vs {est_with_mods:.1f}"
+    )

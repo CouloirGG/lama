@@ -34,12 +34,13 @@ logger = logging.getLogger(__name__)
 _GRADE_NUM = {"S": 4, "A": 3, "B": 2, "C": 1, "JUNK": 0}
 
 # Sample tuple: (score, divine, grade_num, dps_factor, defense_factor,
-#                top_tier_count, mod_count, timestamp, is_user)
+#                top_tier_count, mod_count, timestamp, is_user, mod_groups)
 # top_tier_count: number of T1/T2 mods with weight >= 1.0 (0-6)
 # mod_count: total parsed mods on the item (0-12)
 # timestamp: epoch seconds (0 for shard data)
 # is_user: True for user's own data (recency-weighted), False for shard data
-Sample = Tuple[float, float, int, float, float, int, int, int, bool]
+# mod_groups: sorted tuple of mod group name strings (empty tuple for legacy data)
+Sample = Tuple[float, float, int, float, float, int, int, int, bool, Tuple[str, ...]]
 
 
 class CalibrationEngine:
@@ -53,6 +54,7 @@ class CalibrationEngine:
     MOD_COUNT_WEIGHT = 0.15    # total mod count difference weight (r=0.114)
     DPS_WEIGHT = 0.10          # DPS factor difference weight (r=0.039)
     DEFENSE_WEIGHT = 0.10      # defense factor difference weight (r=0.028)
+    MOD_IDENTITY_WEIGHT = 0.50 # weighted Jaccard distance on mod groups
 
     # Group-prior blending: when k-NN neighbors are distant, blend toward
     # group median to prevent wild extrapolation
@@ -74,6 +76,8 @@ class CalibrationEngine:
         # Group median cache: (grade_num, item_class) -> median log-price
         self._group_medians: Dict[Tuple[int, str], float] = {}
         self._group_medians_dirty: bool = True
+        # Mod importance weights: mod_group -> weight (from _WEIGHT_TABLE)
+        self._mod_weights: Dict[str, float] = {}
 
     @property
     def _k(self) -> int:
@@ -82,6 +86,25 @@ class CalibrationEngine:
         if n < 60:
             return 5
         return min(20, max(12, n // 5))
+
+    def set_mod_weights(self, weights: Dict[str, float]):
+        """Set mod importance weights for weighted Jaccard distance."""
+        self._mod_weights = dict(weights)
+
+    def _auto_populate_mod_weights(self):
+        """Build _mod_weights from sample data + mod_database lookup."""
+        try:
+            from mod_database import _get_weight_for_group
+        except ImportError:
+            return
+        groups = set()
+        for s in self._global:
+            for g in s[9]:
+                groups.add(g)
+        for g in groups:
+            if g not in self._mod_weights:
+                w = _get_weight_for_group(g)
+                self._mod_weights[g] = w if w is not None else 0.3
 
     def load(self, log_file: Path) -> int:
         """Read calibration JSONL, return total sample count.
@@ -141,12 +164,14 @@ class CalibrationEngine:
                     defense_factor = rec.get("defense_factor", 1.0)
                     top_tier_count = rec.get("top_tier_count", 0)
                     mod_count = rec.get("mod_count", 4)
+                    mod_groups = rec.get("mod_groups", [])
                     self._insert(float(score), float(divine),
                                  item_class, grade_num,
                                  dps_factor, defense_factor,
                                  top_tier_count=top_tier_count,
                                  mod_count=mod_count,
-                                 ts=ts, is_user=True)
+                                 ts=ts, is_user=True,
+                                 mod_groups=mod_groups)
                     count += 1
         except Exception as e:
             logger.warning(f"Calibration: load error: {e}")
@@ -155,6 +180,8 @@ class CalibrationEngine:
             logger.info(f"Calibration: {count} user samples loaded "
                          f"({len(self._by_class)} item classes)"
                          + (f", {skipped} filtered" if skipped else ""))
+        if not self._mod_weights:
+            self._auto_populate_mod_weights()
         return count
 
     def load_shard(self, shard_path: Path) -> int:
@@ -182,6 +209,15 @@ class CalibrationEngine:
                     shard = json.load(f)
 
             samples = shard.get("samples", [])
+
+            # Load mod group index (v3+ shards)
+            mod_index = shard.get("mod_index", [])
+            idx_to_group = {}
+            for i, entry in enumerate(mod_index):
+                if isinstance(entry, list) and len(entry) >= 2:
+                    idx_to_group[i] = entry[0]
+                    self._mod_weights[entry[0]] = entry[1]
+
             count = 0
             for s in samples:
                 score = s.get("s")
@@ -197,13 +233,16 @@ class CalibrationEngine:
                 defense_factor = s.get("f", 1.0)
                 top_tier_count = s.get("t", 0)
                 mod_count = s.get("n", 4)
+                mod_groups = [idx_to_group[idx] for idx in s.get("m", [])
+                              if idx in idx_to_group]
 
                 self._insert(float(score), float(price),
                              item_class, grade_num,
                              dps_factor, defense_factor,
                              top_tier_count=top_tier_count,
                              mod_count=mod_count,
-                             ts=0, is_user=False)
+                             ts=0, is_user=False,
+                             mod_groups=mod_groups)
                 count += 1
 
             if count:
@@ -308,7 +347,8 @@ class CalibrationEngine:
 
     def add_sample(self, score: float, divine: float,
                    item_class: str, grade: str = "",
-                   top_tier_count: int = 0, mod_count: int = 4):
+                   top_tier_count: int = 0, mod_count: int = 4,
+                   mod_groups: list = None):
         """Live-add a calibration point (called after each deep query)."""
         if divine <= 0:
             return
@@ -317,18 +357,21 @@ class CalibrationEngine:
         grade_num = _GRADE_NUM.get(grade, 1)
         self._insert(score, divine, item_class, grade_num,
                      top_tier_count=top_tier_count, mod_count=mod_count,
-                     ts=int(time.time()), is_user=True)
+                     ts=int(time.time()), is_user=True,
+                     mod_groups=mod_groups)
 
     def estimate(self, score: float, item_class: str,
                  grade: str = "", dps_factor: float = 1.0,
                  defense_factor: float = 1.0,
                  top_tier_count: int = 0,
-                 mod_count: int = 4) -> Optional[float]:
+                 mod_count: int = 4,
+                 mod_groups: list = None) -> Optional[float]:
         """Return estimated divine value, or None if insufficient data.
 
         Tries class-specific data first, falls back to global.
         """
         grade_num = _GRADE_NUM.get(grade, 1)
+        mg_set = frozenset(mod_groups) if mod_groups else frozenset()
 
         # Try class-specific
         class_samples = self._by_class.get(item_class)
@@ -336,14 +379,14 @@ class CalibrationEngine:
             return self._interpolate(score, class_samples, grade_num,
                                      dps_factor, defense_factor,
                                      top_tier_count, mod_count,
-                                     item_class)
+                                     item_class, mod_groups=mg_set)
 
         # Fall back to global
         if len(self._global) >= self.MIN_GLOBAL_SAMPLES:
             return self._interpolate(score, self._global, grade_num,
                                      dps_factor, defense_factor,
                                      top_tier_count, mod_count,
-                                     item_class)
+                                     item_class, mod_groups=mg_set)
 
         return None
 
@@ -357,10 +400,12 @@ class CalibrationEngine:
                 item_class: str, grade_num: int,
                 dps_factor: float = 1.0, defense_factor: float = 1.0,
                 top_tier_count: int = 0, mod_count: int = 4,
-                ts: int = 0, is_user: bool = False):
+                ts: int = 0, is_user: bool = False,
+                mod_groups: list = None):
         """Insert a sample into class-specific and global lists (sorted)."""
+        mg_tuple = tuple(sorted(set(mod_groups))) if mod_groups else ()
         entry: Sample = (score, divine, grade_num, dps_factor, defense_factor,
-                         top_tier_count, mod_count, ts, is_user)
+                         top_tier_count, mod_count, ts, is_user, mg_tuple)
         self._group_medians_dirty = True
         insort(self._global, entry)
         if item_class:
@@ -403,15 +448,33 @@ class CalibrationEngine:
 
         self._group_medians_dirty = False
 
+    def _weighted_jaccard_distance(self, set_a: frozenset, set_b: frozenset) -> float:
+        """Weighted Jaccard distance in [0.0, MOD_IDENTITY_WEIGHT].
+        Returns 0.0 when either set is empty (neutral for legacy data).
+        """
+        if not set_a or not set_b:
+            return 0.0
+        union = set_a | set_b
+        intersection = set_a & set_b
+        if not union:
+            return 0.0
+        w_union = sum(self._mod_weights.get(g, 0.3) for g in union)
+        w_inter = sum(self._mod_weights.get(g, 0.3) for g in intersection)
+        if w_union == 0:
+            return 0.0
+        return (1.0 - w_inter / w_union) * self.MOD_IDENTITY_WEIGHT
+
     def _interpolate(self, score: float, samples: List[Sample],
                      grade_num: int = 1, dps_factor: float = 1.0,
                      defense_factor: float = 1.0,
                      top_tier_count: int = 0, mod_count: int = 4,
-                     item_class: str = "") -> float:
+                     item_class: str = "",
+                     mod_groups: frozenset = None) -> float:
         """k-NN inverse-distance-weighted interpolation in log-price space.
 
         Distance = |score_diff| + 0.40*|grade_diff| + 0.35*|ttc_diff|
                  + 0.15*|mc_diff| + 0.10*|dps_diff| + 0.10*|def_diff|
+                 + weighted_jaccard(mod_groups)
 
         1. Compute multi-dimensional distance
         2. Sort by distance, take k nearest
@@ -419,6 +482,8 @@ class CalibrationEngine:
         4. Weighted average of log(divine), then exp() back
         5. Blend toward group median when neighbors are distant
         """
+        if mod_groups is None:
+            mod_groups = frozenset()
         k = self._k
         now = time.time()
 
@@ -429,7 +494,9 @@ class CalibrationEngine:
             def_d = abs(s[4] - defense_factor) * self.DEFENSE_WEIGHT
             ttc_d = abs(s[5] - top_tier_count) * self.TOP_TIER_WEIGHT
             mc_d = abs(s[6] - mod_count) * self.MOD_COUNT_WEIGHT
-            return score_d + grade_d + ttc_d + mc_d + dps_d + def_d
+            s_mods = frozenset(s[9]) if s[9] else frozenset()
+            mod_d = self._weighted_jaccard_distance(mod_groups, s_mods)
+            return score_d + grade_d + ttc_d + mc_d + dps_d + def_d + mod_d
 
         by_dist = sorted(samples, key=_dist)
         neighbors = by_dist[:k]
@@ -440,7 +507,7 @@ class CalibrationEngine:
 
         for s in neighbors:
             (s_score, s_divine, s_grade, s_dps, s_def,
-             s_ttc, s_mc, s_ts, s_user) = s
+             s_ttc, s_mc, s_ts, s_user, s_mg) = s
             dist = _dist(s)
             dist_sum += dist
             w = 1.0 / (dist + self._EPSILON)
