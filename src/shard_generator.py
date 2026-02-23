@@ -40,7 +40,7 @@ _GRADE_FROM_NUM = {v: k for k, v in _GRADE_NUM.items()}
 # Quality filter thresholds
 MAX_PRICE_DIVINE = 1500.0
 MIN_PRICE_DIVINE = 0.01
-OUTLIER_THRESHOLD = 3.0  # max ratio from median within (grade, class) group
+OUTLIER_IQR_MULTIPLIER = 3.0  # IQR fence multiplier in log-price space
 
 
 def load_raw_records(input_paths: List[str]) -> List[dict]:
@@ -115,8 +115,10 @@ def quality_filter(records: List[dict]) -> Tuple[List[dict], dict]:
 def remove_outliers(records: List[dict]) -> Tuple[List[dict], int]:
     """Remove price outliers within each (grade, item_class) group.
 
-    For groups with >= 3 records, compute median price and remove records
-    where max(price/median, median/price) > OUTLIER_THRESHOLD.
+    Uses IQR fences in log-price space — statistically sound for
+    log-normally distributed price data and adapts to each group's
+    actual spread.  Groups with < 5 records are kept as-is (IQR needs
+    a reasonable sample size).
     """
     from collections import defaultdict
 
@@ -129,18 +131,30 @@ def remove_outliers(records: List[dict]) -> Tuple[List[dict], int]:
     kept = []
     removed = 0
     for key, group in groups.items():
-        if len(group) < 3:
+        if len(group) < 5:
             kept.extend(group)
             continue
-        prices = sorted(r["min_divine"] for r in group)
-        median = prices[len(prices) // 2]
-        if median <= 0:
+
+        log_prices = sorted(math.log(r["min_divine"]) for r in group
+                            if r["min_divine"] > 0)
+        if len(log_prices) < 5:
             kept.extend(group)
             continue
+
+        n = len(log_prices)
+        q1 = log_prices[n // 4]
+        q3 = log_prices[(3 * n) // 4]
+        iqr = q3 - q1
+        lower = q1 - OUTLIER_IQR_MULTIPLIER * iqr
+        upper = q3 + OUTLIER_IQR_MULTIPLIER * iqr
+
         for rec in group:
             price = rec["min_divine"]
-            ratio = max(price / median, median / price)
-            if ratio > OUTLIER_THRESHOLD:
+            if price <= 0:
+                removed += 1
+                continue
+            lp = math.log(price)
+            if lp < lower or lp > upper:
                 removed += 1
             else:
                 kept.append(rec)
@@ -196,8 +210,8 @@ def generate_shard(records: List[dict], league: str, output_path: str):
 
     # Outlier removal
     cleaned, outlier_count = remove_outliers(filtered)
-    print(f"  Outlier removal: {len(filtered)} -> {len(cleaned)} "
-          f"({outlier_count} outliers removed, threshold={OUTLIER_THRESHOLD}x)")
+    print(f"  Outlier removal (IQR, log-price): {len(filtered)} -> {len(cleaned)} "
+          f"({outlier_count} outliers removed, fence={OUTLIER_IQR_MULTIPLIER}x IQR)")
 
     # Dedup
     deduped, dup_count = dedup_records(cleaned)
