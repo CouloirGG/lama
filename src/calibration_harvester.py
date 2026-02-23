@@ -351,6 +351,7 @@ def write_calibration_record(score_result, price_divine: float,
         "somv_factor": round(score_result.somv_factor, 3),
         "top_tier_count": score_result.top_tier_count,
         "mod_count": len(score_result.mod_scores),
+        "mod_groups": [ms.mod_group for ms in score_result.mod_scores if ms.mod_group],
     }
 
     output_file.parent.mkdir(parents=True, exist_ok=True)

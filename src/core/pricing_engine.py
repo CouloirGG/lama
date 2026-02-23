@@ -135,6 +135,7 @@ class PricingEngine:
                 defense_factor=getattr(score, "defense_factor", 1.0),
                 top_tier_count=getattr(score, "top_tier_count", 0),
                 mod_count=len(getattr(score, "mod_scores", [])) or 4,
+                mod_groups=[ms.mod_group for ms in getattr(score, "mod_scores", []) if ms.mod_group],
             )
         except Exception as e:
             logger.debug(f"Calibration estimate failed: {e}")

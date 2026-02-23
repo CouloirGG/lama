@@ -5,17 +5,18 @@ Pipeline: raw harvester JSONL -> quality filters -> dedup -> compact gzipped JSO
 
 Shard format (gzipped JSON):
 {
-  "version": 2,
+  "version": 3,
   "league": "Fate of the Vaal",
   "generated_at": "2026-02-18T12:00:00Z",
   "sample_count": 5432,
+  "mod_index": [["IncreasedLife", 2.0], ["FireResist", 0.3], ...],
   "samples": [
-    {"s": 0.584, "g": 2, "p": 4.5, "c": "Rings", "d": 1.0, "f": 1.0, "v": 1.02, "t": 2, "n": 5}
+    {"s": 0.584, "g": 2, "p": 4.5, "c": "Rings", "d": 1.0, "f": 1.0, "v": 1.02, "t": 2, "n": 5, "m": [0, 1]}
   ]
 }
 
 Fields: s=score, g=grade_num, p=divine_price, c=item_class, d=dps_factor, f=defense_factor,
-        v=somv_factor, t=top_tier_count, n=mod_count
+        v=somv_factor, t=top_tier_count, n=mod_count, m=mod_group_indices (into mod_index)
 
 Usage:
     python shard_generator.py --input harvester_output.jsonl --output shard.json.gz
@@ -186,9 +187,9 @@ def dedup_records(records: List[dict]) -> Tuple[List[dict], int]:
     return deduped, dup_count
 
 
-def compact_record(rec: dict) -> dict:
+def compact_record(rec: dict, mod_to_idx: dict = None) -> dict:
     """Convert a full record to compact shard format."""
-    return {
+    compact = {
         "s": round(rec["score"], 3),
         "g": _GRADE_NUM.get(rec.get("grade", "C"), 1),
         "p": round(rec["min_divine"], 4),
@@ -199,6 +200,13 @@ def compact_record(rec: dict) -> dict:
         "t": rec.get("top_tier_count", 0),
         "n": rec.get("mod_count", 4),
     }
+    if mod_to_idx:
+        groups = rec.get("mod_groups", [])
+        if groups:
+            compact["m"] = sorted(set(
+                mod_to_idx[g] for g in groups if g in mod_to_idx
+            ))
+    return compact
 
 
 def generate_shard(records: List[dict], league: str, output_path: str):
@@ -227,8 +235,28 @@ def generate_shard(records: List[dict], league: str, output_path: str):
     deduped, dup_count = dedup_records(cleaned)
     print(f"  Dedup: {len(cleaned)} -> {len(deduped)} ({dup_count} duplicates removed)")
 
+    # Build mod group index from all records
+    all_mod_groups = set()
+    for rec in deduped:
+        for g in rec.get("mod_groups", []):
+            if g:
+                all_mod_groups.add(g)
+
+    sorted_groups = sorted(all_mod_groups)
+    mod_to_idx = {g: i for i, g in enumerate(sorted_groups)}
+
+    # Build mod_index with weights: [[group_name, weight], ...]
+    mod_index = []
+    if sorted_groups:
+        try:
+            from mod_database import _get_weight_for_group
+            mod_index = [[g, _get_weight_for_group(g) or 0.3]
+                         for g in sorted_groups]
+        except ImportError:
+            mod_index = [[g, 0.3] for g in sorted_groups]
+
     # Compact format
-    samples = [compact_record(r) for r in deduped]
+    samples = [compact_record(r, mod_to_idx) for r in deduped]
 
     # Detect league from records if not specified
     if not league:
@@ -236,12 +264,14 @@ def generate_shard(records: List[dict], league: str, output_path: str):
         league = leagues.pop() if len(leagues) == 1 else "unknown"
 
     shard = {
-        "version": 2,
+        "version": 3,
         "league": league,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "sample_count": len(samples),
         "samples": samples,
     }
+    if mod_index:
+        shard["mod_index"] = mod_index
 
     # Write gzipped JSON
     out = Path(output_path)
@@ -312,6 +342,20 @@ def validate_shard(shard_path: str, seed: int = 42):
     from calibration import CalibrationEngine
     engine = CalibrationEngine()
 
+    # Load mod index (v3+ shards)
+    mod_index = shard.get("mod_index", [])
+    idx_to_group = {}
+    weights = {}
+    for i, entry in enumerate(mod_index):
+        if isinstance(entry, list) and len(entry) >= 2:
+            idx_to_group[i] = entry[0]
+            weights[entry[0]] = entry[1]
+    if weights:
+        engine.set_mod_weights(weights)
+
+    def _sample_mod_groups(s):
+        return [idx_to_group[idx] for idx in s.get("m", []) if idx in idx_to_group]
+
     for i in train_idx:
         s = samples[i]
         engine._insert(
@@ -323,6 +367,7 @@ def validate_shard(shard_path: str, seed: int = 42):
             defense_factor=s.get("f", 1.0),
             top_tier_count=s.get("t", 0),
             mod_count=s.get("n", 4),
+            mod_groups=_sample_mod_groups(s),
         )
 
     # Test on holdout
@@ -343,7 +388,8 @@ def validate_shard(shard_path: str, seed: int = 42):
                               dps_factor=s.get("d", 1.0),
                               defense_factor=s.get("f", 1.0),
                               top_tier_count=s.get("t", 0),
-                              mod_count=s.get("n", 4))
+                              mod_count=s.get("n", 4),
+                              mod_groups=_sample_mod_groups(s))
         if est is None:
             continue
 
