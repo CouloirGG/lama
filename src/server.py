@@ -41,11 +41,15 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from builds_client import BuildsClient
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from item_lookup import ItemLookup
+from oauth import OAuthManager
 from price_cache import PriceCache
 from game_commands import GameCommander
+from stash_client import StashClient
+from stash_scorer import StashScorer, TabSummary
 from telemetry import TelemetryUploader
 from trade_actions import TradeActions
 from watchlist import WatchlistWorker
@@ -479,6 +483,20 @@ telemetry_uploader: Optional[TelemetryUploader] = None
 game_commander = GameCommander()
 trade_actions: Optional[TradeActions] = None
 
+# Character viewer
+builds_client = BuildsClient()
+
+# Stash viewer
+oauth_manager: Optional[OAuthManager] = None
+stash_client: Optional[StashClient] = None
+stash_scorer: Optional[StashScorer] = None
+stash_data: dict = {
+    "tabs": [],           # List[TabSummary serialized]
+    "last_refresh": None,
+    "total_value": 0.0,
+    "refreshing": False,
+}
+
 
 # ---------------------------------------------------------------------------
 # FastAPI app
@@ -487,6 +505,7 @@ trade_actions: Optional[TradeActions] = None
 async def lifespan(app: FastAPI):
     """Set up the event loop reference and background tasks."""
     global watchlist_worker, price_cache, item_lookup, telemetry_uploader, trade_actions
+    global oauth_manager, stash_client, stash_scorer
 
     loop = asyncio.get_running_loop()
     overlay.set_loop(loop)
@@ -540,6 +559,17 @@ async def lifespan(app: FastAPI):
     telemetry_uploader = TelemetryUploader(league=league)
     if settings.get("telemetry_enabled", False):
         telemetry_uploader.start_schedule()
+
+    # Initialize OAuth + Stash viewer
+    oauth_manager = OAuthManager()
+    stash_client = StashClient(oauth_manager)
+    stash_scorer = StashScorer()
+    def _init_scorer():
+        try:
+            stash_scorer.initialize()
+        except Exception as e:
+            logger.warning(f"StashScorer init failed: {e}")
+    threading.Thread(target=_init_scorer, daemon=True).start()
 
     logger.info("LAMA dashboard server ready")
     try:
@@ -1081,6 +1111,355 @@ async def get_trade_items():
         logger.warning(f"Failed to load trade items: {e}")
         return []
 
+
+
+# ---------------------------------------------------------------------------
+# Character lookup endpoints (poe.ninja Builds API)
+# ---------------------------------------------------------------------------
+class CharacterLookupRequest(BaseModel):
+    account: str
+    character: str
+
+
+@app.post("/api/character/lookup")
+async def character_lookup(req: CharacterLookupRequest):
+    """Look up a character by account + name via poe.ninja."""
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character name required"})
+    loop = asyncio.get_running_loop()
+    char_data = await loop.run_in_executor(
+        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+    )
+    if not char_data:
+        return JSONResponse(status_code=404, content={"error": "Character not found. Make sure the account and character names are correct, and the character is on the current league's ladder."})
+
+    # Auto-save to recent characters
+    _save_recent_character(
+        req.account.strip(), char_data.name,
+        char_data.ascendancy or char_data.char_class, char_data.level,
+    )
+
+    return builds_client.serialize_character(char_data)
+
+
+@app.get("/api/character/saved")
+async def get_saved_characters():
+    """Return saved characters list (most recent first)."""
+    settings = load_settings()
+    return settings.get("saved_characters", [])
+
+
+class CharacterDeleteRequest(BaseModel):
+    account: str
+    character: str = ""
+
+
+@app.post("/api/character/delete")
+async def delete_saved_character(req: CharacterDeleteRequest):
+    """Remove a saved character (or entire account if no character specified)."""
+    settings = load_settings()
+    saved = settings.get("saved_characters", [])
+    acct_lower = req.account.strip().lower()
+
+    if req.character.strip():
+        # Remove specific character
+        char_lower = req.character.strip().lower()
+        for acct in saved:
+            if acct["accountName"].lower() == acct_lower:
+                acct["characters"] = [
+                    c for c in acct["characters"]
+                    if c["name"].lower() != char_lower
+                ]
+                break
+        # Remove accounts with no characters
+        saved = [a for a in saved if a["characters"]]
+    else:
+        # Remove entire account
+        saved = [a for a in saved if a["accountName"].lower() != acct_lower]
+
+    settings["saved_characters"] = saved
+    save_settings(settings)
+    return {"status": "ok", "saved": saved}
+
+
+def _save_recent_character(account: str, name: str, char_class: str, level: int):
+    """Save a character to the recent characters list in settings."""
+    settings = load_settings()
+    saved = settings.get("saved_characters", [])
+
+    char_entry = {
+        "name": name,
+        "class": char_class,
+        "level": level,
+        "lastLookup": int(time.time()),
+    }
+
+    # Find or create account
+    acct = None
+    for a in saved:
+        if a["accountName"].lower() == account.lower():
+            acct = a
+            break
+
+    if acct:
+        # Upsert character
+        existing_idx = next(
+            (i for i, c in enumerate(acct["characters"])
+             if c["name"].lower() == name.lower()), -1
+        )
+        if existing_idx >= 0:
+            acct["characters"][existing_idx] = char_entry
+        else:
+            acct["characters"].append(char_entry)
+        acct["lastUsed"] = int(time.time())
+    else:
+        saved.append({
+            "accountName": account,
+            "characters": [char_entry],
+            "lastUsed": int(time.time()),
+        })
+
+    # Sort by most recent first
+    saved.sort(key=lambda a: a.get("lastUsed", 0), reverse=True)
+
+    settings["saved_characters"] = saved
+    save_settings(settings)
+
+
+class PopularItemsRequest(BaseModel):
+    account: str
+    character: str
+    slot: str
+
+
+@app.post("/api/character/popular-items")
+async def character_popular_items(req: PopularItemsRequest):
+    """Fetch popular items for a slot, relative to a character's class/skill."""
+    if not req.account.strip() or not req.character.strip() or not req.slot.strip():
+        return JSONResponse(status_code=400, content={"error": "Account, character, and slot required"})
+    loop = asyncio.get_running_loop()
+
+    # Look up character first (cached)
+    char_data = await loop.run_in_executor(
+        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+    )
+    if not char_data:
+        return JSONResponse(status_code=404, content={"error": "Character not found"})
+
+    # Fetch popular items for the slot
+    result = await loop.run_in_executor(
+        None, builds_client.get_popular_items_for_slot, char_data, req.slot.strip()
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
+# OAuth endpoints (stash viewer authentication)
+# ---------------------------------------------------------------------------
+@app.post("/api/oauth/start")
+async def oauth_start():
+    """Initiate OAuth PKCE flow — opens browser for GGG authorization."""
+    if not oauth_manager:
+        return JSONResponse(status_code=503, content={"error": "OAuth not initialized"})
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, oauth_manager.authorize)
+    if result.get("connected"):
+        await ws_manager.broadcast({"type": "oauth_status", **oauth_manager.get_status()})
+    return result
+
+
+@app.get("/api/oauth/status")
+async def oauth_status():
+    """Return current OAuth connection status."""
+    if not oauth_manager:
+        return {"connected": False, "account_name": None}
+    return oauth_manager.get_status()
+
+
+@app.post("/api/oauth/disconnect")
+async def oauth_disconnect():
+    """Revoke tokens and clear OAuth connection."""
+    if not oauth_manager:
+        return {"status": "not_connected"}
+    oauth_manager.disconnect()
+    # Clear cached stash data
+    stash_data["tabs"] = []
+    stash_data["last_refresh"] = None
+    stash_data["total_value"] = 0.0
+    await ws_manager.broadcast({"type": "oauth_status", "connected": False, "account_name": None})
+    return {"status": "disconnected"}
+
+
+# ---------------------------------------------------------------------------
+# Stash viewer endpoints
+# ---------------------------------------------------------------------------
+@app.get("/api/stash/status")
+async def get_stash_status():
+    """Return stash viewer status summary."""
+    oauth = oauth_manager.get_status() if oauth_manager else {"connected": False}
+    return {
+        **oauth,
+        "last_refresh": stash_data.get("last_refresh"),
+        "tab_count": len(stash_data.get("tabs", [])),
+        "total_value": stash_data.get("total_value", 0),
+        "refreshing": stash_data.get("refreshing", False),
+    }
+
+
+@app.post("/api/stash/refresh")
+async def refresh_stash():
+    """Trigger a full stash fetch + score. Runs in background thread."""
+    if not oauth_manager or not oauth_manager.connected:
+        return JSONResponse(status_code=401, content={"error": "Not connected — use OAuth to connect first"})
+    if not stash_client:
+        return JSONResponse(status_code=503, content={"error": "Stash client not initialized"})
+    if stash_data.get("refreshing"):
+        return {"status": "already_refreshing"}
+
+    settings = load_settings()
+    league = settings.get("league", "Fate of the Vaal")
+    loop = asyncio.get_running_loop()
+
+    stash_data["refreshing"] = True
+
+    def _run_refresh():
+        try:
+            # Update exchange rate for scoring
+            if price_cache and stash_scorer:
+                d2c = getattr(price_cache, "divine_to_chaos", 0)
+                if d2c:
+                    stash_scorer.set_divine_to_chaos(d2c)
+
+            # Progress callback → WS broadcast
+            def progress_cb(tab_name, done, total):
+                asyncio.run_coroutine_threadsafe(
+                    ws_manager.broadcast({
+                        "type": "stash_progress",
+                        "tab": tab_name,
+                        "done": done,
+                        "total": total,
+                    }),
+                    loop,
+                )
+
+            # Fetch all tabs
+            tab_results = stash_client.fetch_all_tabs(league, progress_cb=progress_cb)
+
+            # Score all items
+            tab_summaries = []
+            if stash_scorer and stash_scorer.ready:
+                for tab, items in tab_results:
+                    summary = stash_scorer.score_tab(tab, items)
+                    tab_summaries.append(summary)
+            else:
+                # Without scorer, still show tab metadata
+                for tab, items in tab_results:
+                    tab_summaries.append(TabSummary(
+                        id=tab.id, name=tab.name, type=tab.type,
+                        colour=tab.colour, item_count=len(items),
+                    ))
+
+            total_value = sum(t.total_divine for t in tab_summaries)
+
+            # Serialize tab summaries for API
+            serialized_tabs = []
+            for ts in tab_summaries:
+                serialized_tabs.append({
+                    "id": ts.id,
+                    "name": ts.name,
+                    "type": ts.type,
+                    "colour": ts.colour,
+                    "item_count": ts.item_count,
+                    "scored_count": ts.scored_count,
+                    "total_divine": ts.total_divine,
+                    "items": [
+                        {
+                            "name": si.name,
+                            "base_type": si.base_type,
+                            "item_class": si.item_class,
+                            "rarity": si.rarity,
+                            "item_level": si.item_level,
+                            "grade": si.grade,
+                            "score": si.score,
+                            "estimate_divine": si.estimate_divine,
+                            "estimate_chaos": si.estimate_chaos,
+                            "icon_url": si.icon_url,
+                            "stack_size": si.stack_size,
+                            "listed_price": si.listed_price,
+                            "mods": si.mods,
+                            "top_mods": si.top_mods,
+                            "total_dps": si.total_dps,
+                            "total_defense": si.total_defense,
+                        }
+                        for si in ts.items
+                    ],
+                })
+
+            stash_data["tabs"] = serialized_tabs
+            stash_data["total_value"] = round(total_value, 2)
+            stash_data["last_refresh"] = time.strftime("%H:%M:%S")
+            stash_data["refreshing"] = False
+
+            # Save wealth snapshot
+            StashScorer.save_wealth_snapshot(tab_summaries)
+
+            # Broadcast completion
+            asyncio.run_coroutine_threadsafe(
+                ws_manager.broadcast({
+                    "type": "stash_complete",
+                    "total_value": round(total_value, 2),
+                    "tab_count": len(tab_summaries),
+                }),
+                loop,
+            )
+
+            logger.info(f"Stash refresh complete: {total_value:.1f} divine across {len(tab_summaries)} tabs")
+
+        except Exception as e:
+            logger.error(f"Stash refresh failed: {e}")
+            stash_data["refreshing"] = False
+            asyncio.run_coroutine_threadsafe(
+                ws_manager.broadcast({
+                    "type": "stash_error",
+                    "error": str(e),
+                }),
+                loop,
+            )
+
+    threading.Thread(target=_run_refresh, daemon=True).start()
+    return {"status": "refreshing"}
+
+
+@app.get("/api/stash/tabs")
+async def get_stash_tabs():
+    """Return stash tab summaries (without full item lists)."""
+    return [
+        {
+            "id": t["id"],
+            "name": t["name"],
+            "type": t["type"],
+            "colour": t["colour"],
+            "item_count": t["item_count"],
+            "scored_count": t.get("scored_count", 0),
+            "total_divine": t.get("total_divine", 0),
+        }
+        for t in stash_data.get("tabs", [])
+    ]
+
+
+@app.get("/api/stash/tabs/{tab_id}")
+async def get_stash_tab_items(tab_id: str):
+    """Return scored items for a specific stash tab."""
+    for tab in stash_data.get("tabs", []):
+        if tab["id"] == tab_id:
+            return tab
+    return JSONResponse(status_code=404, content={"error": "Tab not found"})
+
+
+@app.get("/api/stash/wealth-history")
+async def get_wealth_history():
+    """Return wealth history for sparkline display."""
+    return StashScorer.load_wealth_history()
 
 
 # ---------------------------------------------------------------------------
@@ -1655,6 +2034,14 @@ async def websocket_endpoint(ws: WebSocket):
         if watchlist_worker:
             init_msg["watchlist_results"] = watchlist_worker.get_results()
             init_msg["watchlist_states"] = watchlist_worker.get_query_states()
+        if oauth_manager:
+            init_msg["oauth_status"] = oauth_manager.get_status()
+        init_msg["stash_status"] = {
+            "last_refresh": stash_data.get("last_refresh"),
+            "tab_count": len(stash_data.get("tabs", [])),
+            "total_value": stash_data.get("total_value", 0),
+            "refreshing": stash_data.get("refreshing", False),
+        }
         await ws.send_json(init_msg)
         # Keep alive
         while True:

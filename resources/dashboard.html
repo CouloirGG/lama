@@ -545,6 +545,7 @@
     ];
     const TAB_SUBTITLES = {
       overlay: "Your Eyes in Wraeclast",
+      stash: "Profile & Gear",
       filter: "Separate Treasure from Trash",
       watchlist: "The Trade Board",
       markets: "The Exchange Floor",
@@ -642,6 +643,7 @@
     // -----------------------------------------------------------------------
     function BrandFooter({ leagues, selectedLeague, onLeagueChange, onBugReport, onFeedback, onFeatureRequest, onRestartApp }) {
       const [flyoutOpen, setFlyoutOpen] = useState(false);
+      const [confirmRestart, setConfirmRestart] = useState(false);
       const flyoutRef = useRef(null);
 
       useEffect(() => {
@@ -669,34 +671,43 @@
               <option key={lg.value} value={lg.value}>{lg.label}</option>
             ))}
           </select>
-          <Tooltip text="Send bug report with logs to Discord">
-            <button onClick={onBugReport} data-nux-hl="bug-report" style={{
-              background: "transparent", border: "none", color: T.textSecond,
-              fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
-              transition: "color 0.15s",
-            }} onMouseEnter={e => e.target.style.color = T.amber} onMouseLeave={e => e.target.style.color = T.textSecond}>Bug Report</button>
-          </Tooltip>
-          <Tooltip text="Send us feedback or suggestions">
-            <button onClick={onFeedback} style={{
-              background: "transparent", border: "none", color: T.textSecond,
-              fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
-              transition: "color 0.15s",
-            }} onMouseEnter={e => e.target.style.color = T.gold} onMouseLeave={e => e.target.style.color = T.textSecond}>Feedback</button>
-          </Tooltip>
-          <Tooltip text="Request a new feature">
-            <button onClick={onFeatureRequest} style={{
-              background: "transparent", border: "none", color: T.textSecond,
-              fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
-              transition: "color 0.15s",
-            }} onMouseEnter={e => e.target.style.color = T.cyan} onMouseLeave={e => e.target.style.color = T.textSecond}>Feature Request</button>
-          </Tooltip>
-          <Tooltip text="Restart the entire app (server + overlay)">
-            <button onClick={onRestartApp} style={{
-              background: "transparent", border: "none", color: T.textSecond,
-              fontSize: 10, cursor: "pointer", padding: "2px 6px", letterSpacing: "0.04em",
-              transition: "color 0.15s",
-            }} onMouseEnter={e => e.target.style.color = T.text} onMouseLeave={e => e.target.style.color = T.textSecond}>Restart App</button>
-          </Tooltip>
+          {[
+            { label: "Bug Report", onClick: onBugReport, hover: T.amber, nux: "bug-report", tip: "Send bug report with logs to Discord" },
+            { label: "Feedback", onClick: onFeedback, hover: T.gold, tip: "Send us feedback or suggestions" },
+            { label: "Feature Request", onClick: onFeatureRequest, hover: T.cyan, tip: "Request a new feature" },
+            { label: "Restart App", onClick: () => setConfirmRestart(true), hover: T.text, tip: "Restart the entire app (server + overlay)" },
+          ].map(p => (
+            <Tooltip key={p.label} text={p.tip}>
+              <button onClick={p.onClick} data-nux-hl={p.nux || undefined} style={{
+                background: "rgba(107,90,62,0.10)", border: `1px solid ${T.border}`, borderRadius: 10,
+                color: T.textSecond, fontSize: 9, cursor: "pointer", padding: "2px 10px",
+                letterSpacing: "0.04em", transition: "all 0.15s", lineHeight: "16px",
+              }} onMouseEnter={e => { e.target.style.color = p.hover; e.target.style.borderColor = p.hover + "55"; }}
+                 onMouseLeave={e => { e.target.style.color = T.textSecond; e.target.style.borderColor = T.border; }}>{p.label}</button>
+            </Tooltip>
+          ))}
+          {confirmRestart && (
+            <div style={{
+              position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1100,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }} onClick={() => setConfirmRestart(false)}>
+              <div style={{
+                background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 8,
+                padding: 20, width: 280, textAlign: "center",
+              }} onClick={e => e.stopPropagation()}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.gold, marginBottom: 8 }}>Restart App?</div>
+                <div style={{ fontSize: 11, color: T.textSecond, marginBottom: 16 }}>This will restart the server and overlay scanner.</div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+                  <button onClick={() => setConfirmRestart(false)} style={{
+                    ...BTN, background: T.input, border: `1px solid ${T.border}`, color: T.textSecond, padding: "6px 16px",
+                  }}>Cancel</button>
+                  <button onClick={() => { setConfirmRestart(false); onRestartApp(); }} style={{
+                    ...BTN, background: T.red, border: `1px solid ${T.red}`, color: "#fff", padding: "6px 16px",
+                  }}>Restart</button>
+                </div>
+              </div>
+            </div>
+          )}
           <div style={{ flex: 1 }} />
           <a className="footer-email" href="mailto:hello@couloir.gg">hello@couloir.gg</a>
           <span style={{ fontSize: 11, fontWeight: 800, color: "#5c4f3d", letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -1298,86 +1309,68 @@
     }
 
     // -----------------------------------------------------------------------
-    // ScannerStatusCard — hero card at top of Overlay tab
+    // ScannerStatusBar — compact toggle + inline stats
     // -----------------------------------------------------------------------
-    function ScannerStatusCard({ status, onStart, onStop, onRestart }) {
+    function ScannerStatusBar({ status, onStart, onStop, onRestart }) {
       const { state, stats, uptime } = status;
-      const isRunning = state === "running" || state === "starting";
+      const isRunning = state === "running";
+      const isStarting = state === "starting";
+      const isError = state === "error";
       const calSamples = stats.calibration_samples || 0;
 
-      if (state === "stopped") {
-        return (
-          <div className="panel" style={{ ...CARD, padding: 8, marginBottom: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.red, flexShrink: 0 }} />
-              <span style={{ fontSize: 12, color: T.textSecond }}>Scanner offline</span>
-              <button onClick={onStart} className="btn-gold-hover" data-nux-hl="start" style={{
-                ...BTN, background: T.green, color: "#fff", padding: "5px 16px", fontSize: 11,
-                border: `1px solid ${T.green}`, marginLeft: "auto",
-              }}>&#9654; Start</button>
-            </div>
-          </div>
-        );
-      }
+      const active = isRunning || isStarting;
+      const pillOn = {
+        background: `linear-gradient(135deg, ${T.green}, #2d6b3f)`,
+        border: `1.5px solid ${T.green}`,
+        color: "#fff", boxShadow: `0 0 8px ${T.green}44`,
+      };
+      const pillOff = {
+        background: "rgba(168,50,50,0.15)",
+        border: `1.5px solid ${T.red}88`,
+        color: T.red,
+      };
+      const pillBase = {
+        ...BTN, borderRadius: 12, padding: "3px 14px", fontSize: 11,
+        fontWeight: 700, letterSpacing: "0.05em", cursor: "pointer",
+        transition: "all 0.2s",
+      };
 
-      if (state === "starting") {
-        return (
-          <div className="panel" style={{ ...CARD, padding: 8, marginBottom: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 12, height: 12, border: `2px solid ${T.amber}`, borderTop: "2px solid transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: T.amber }}>Starting...</span>
-            </div>
-          </div>
-        );
-      }
-
-      if (state === "error") {
-        return (
-          <div className="panel" style={{ ...CARD, padding: 8, marginBottom: 8, borderColor: T.red + "44" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ color: T.red, fontSize: 14, fontWeight: 700 }}>Scanner Error</span>
-                <span style={{ fontSize: 11, color: T.textSecond }}>Check console for details</span>
-              </div>
-              <button onClick={onRestart} className="btn-gold-hover" style={{
-                ...BTN, background: T.input, border: `1px solid ${T.borderGold}`, color: T.gold, padding: "6px 16px",
-              }}>&#8635; Restart</button>
-            </div>
-          </div>
-        );
-      }
-
-      // Running state — compact card with health stats
       return (
-        <div className="panel" style={{ ...CARD, padding: 8, marginBottom: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0", marginBottom: 4 }}>
+          <button
+            data-nux-hl="start"
+            onClick={() => active ? onStop() : onStart()}
+            style={{ ...pillBase, ...(active ? pillOn : pillOff) }}
+          >{active ? "ENABLED" : "DISABLED"}</button>
+          {isStarting && (
+            <>
+              <div style={{ width: 10, height: 10, border: `2px solid ${T.amber}`, borderTop: "2px solid transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              <span style={{ fontSize: 10, fontWeight: 600, color: T.amber }}>Enabling...</span>
+            </>
+          )}
+          {isError && (
+            <>
+              <span style={{ fontSize: 10, fontWeight: 700, color: T.red }}>Error</span>
+              <span style={{ fontSize: 10, color: T.textMuted }}>Check logs</span>
+              <Tooltip text="Retry"><button onClick={onRestart} style={{ ...BTN, background: "transparent", border: `1px solid ${T.border}`, borderRadius: 10, color: T.textSecond, padding: "1px 8px", fontSize: 9, cursor: "pointer" }}>&#8635;</button></Tooltip>
+            </>
+          )}
+          {isRunning && (
+            <>
               <Tooltip text="Number of item tooltips scanned via Ctrl+C">
                 <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Scans: <span style={{ color: T.textSecond, fontWeight: 600 }}>{stats.triggers}</span></span>
               </Tooltip>
               <Tooltip text="Percentage of scans that found a price">
-                <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Hit Rate: <span style={{ color: stats.success_rate >= 50 ? T.green : stats.success_rate > 0 ? T.amber : T.textSecond, fontWeight: 600 }}>{stats.success_rate}%</span></span>
+                <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Hit: <span style={{ color: stats.success_rate >= 50 ? T.green : stats.success_rate > 0 ? T.amber : T.textSecond, fontWeight: 600 }}>{stats.success_rate}%</span></span>
               </Tooltip>
               <Tooltip text="Calibration data points for score-to-price estimation">
-                <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Calibration: <span style={{ color: calSamples >= 1000 ? T.green : calSamples > 0 ? T.amber : T.textSecond, fontWeight: 600 }}>{calSamples > 0 ? calSamples.toLocaleString() : "--"}</span></span>
+                <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Cal: <span style={{ color: calSamples >= 1000 ? T.green : calSamples > 0 ? T.amber : T.textSecond, fontWeight: 600 }}>{calSamples > 0 ? calSamples.toLocaleString() : "--"}</span></span>
               </Tooltip>
-              <Tooltip text="Time since overlay was started">
-                <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}>Uptime: <span style={{ color: T.green, fontWeight: 600 }}>{formatUptime(uptime)}</span></span>
+              <Tooltip text="Time since overlay was enabled">
+                <span style={{ fontSize: 10, color: T.textMuted, ...MONO, cursor: "default" }}><span style={{ color: T.green, fontWeight: 600 }}>{formatUptime(uptime)}</span></span>
               </Tooltip>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button onClick={onStop} className="btn-danger-hover" style={{
-                ...BTN, background: T.red, color: "#fff", padding: "5px 14px", fontSize: 10,
-                border: `1px solid ${T.red}`,
-              }}>&#9632; Stop</button>
-              <Tooltip text="Restart overlay">
-                <button onClick={onRestart} style={{
-                  ...BTN, background: "transparent", color: T.textSecond, padding: "5px 10px", fontSize: 10,
-                  border: `1px solid ${T.border}`,
-                }}>&#8635;</button>
-              </Tooltip>
-            </div>
-          </div>
+            </>
+          )}
         </div>
       );
     }
@@ -1386,38 +1379,51 @@
     // TabBar
     // -----------------------------------------------------------------------
     function TabBar({ activeTab, onTabChange }) {
-      const tabs = [
+      const leftTabs = [
         { id: "overlay", label: "Overlay" },
         { id: "filter", label: "Loot Filter" },
         { id: "watchlist", label: "Watchlist" },
         { id: "markets", label: "Markets" },
       ];
+      const rightTabs = [
+        { id: "stash", label: "Character" },
+      ];
+
+      const renderTab = (tab) => {
+        const active = activeTab === tab.id;
+        return (
+          <button
+            key={tab.id}
+            className={`poe-tab ${active ? "poe-tab-active" : ""}`}
+            onClick={() => onTabChange(tab.id)}
+            style={{
+              background: active ? "rgba(196,164,86,0.15)" : "transparent",
+              border: "none",
+              color: active ? (tab.comingSoon ? T.textSecond : T.gold) : T.textMuted,
+              padding: "7px 20px 5px", fontSize: 13, fontWeight: 600,
+              cursor: "pointer", letterSpacing: "0.04em",
+              borderRadius: "6px 6px 0 0",
+              opacity: tab.comingSoon ? 0.7 : 1,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              {tab.label}
+              {tab.comingSoon && (
+                <span style={{ fontSize: 8, fontWeight: 700, color: T.amber, background: "rgba(184,134,11,0.15)", border: `1px solid rgba(184,134,11,0.3)`, borderRadius: 3, padding: "1px 4px", letterSpacing: "0.06em", textTransform: "uppercase" }}>SOON</span>
+              )}
+            </div>
+            <div style={{ fontSize: 8, color: active ? T.textSecond : T.textMuted, marginTop: 1, fontWeight: 400, letterSpacing: "0.06em" }}>
+              {TAB_SUBTITLES[tab.id]}
+            </div>
+          </button>
+        );
+      };
 
       return (
         <div style={{ display: "flex", gap: 2, marginBottom: 0, borderBottom: `1px solid ${T.border}` }}>
-          {tabs.map(tab => {
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                className={`poe-tab ${active ? "poe-tab-active" : ""}`}
-                onClick={() => onTabChange(tab.id)}
-                style={{
-                  background: active ? "rgba(196,164,86,0.15)" : "transparent",
-                  border: "none",
-                  color: active ? T.gold : T.textSecond,
-                  padding: "7px 20px 5px", fontSize: 13, fontWeight: 600,
-                  cursor: "pointer", letterSpacing: "0.04em",
-                  borderRadius: "6px 6px 0 0",
-                }}
-              >
-                <div>{tab.label}</div>
-                <div style={{ fontSize: 8, color: active ? T.textSecond : T.textMuted, marginTop: 1, fontWeight: 400, letterSpacing: "0.06em" }}>
-                  {TAB_SUBTITLES[tab.id]}
-                </div>
-              </button>
-            );
-          })}
+          {leftTabs.map(renderTab)}
+          <div style={{ flex: 1 }} />
+          {rightTabs.map(renderTab)}
         </div>
       );
     }
@@ -2370,7 +2376,7 @@
       const [result, setResult] = useState(null);
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState(null);
-      const [collapsed, setCollapsed] = useState(false);
+      const [collapsed, setCollapsed] = useState(true);
 
       const doLookup = async (itemText) => {
         if (!itemText || !itemText.trim()) return;
@@ -5027,6 +5033,1162 @@
       );
     }
 
+    // -----------------------------------------------------------------------
+    // CharacterViewer — poe.ninja character lookup
+    // -----------------------------------------------------------------------
+    const MOD_TYPE_COLORS = {
+      enchantMods: "#e879b9",    // pink
+      implicitMods: "#c4a456",   // gold (implicit)
+      explicitMods: "#d4c9a8",   // default text
+      fracturedMods: "#e6b422",  // gold
+      craftedMods: "#6bdbca",    // cyan
+      desecratedMods: "#b07cd8", // purple
+      runeMods: "#d4a045",       // amber
+    };
+    const MOD_TYPE_LABELS = {
+      enchantMods: "Enchant",
+      implicitMods: "Implicit",
+      explicitMods: null,        // no label for explicit (most common)
+      fracturedMods: "Fractured",
+      craftedMods: "Crafted",
+      desecratedMods: "Desecrated",
+      runeMods: "Rune",
+    };
+    const MOD_TYPE_ORDER = ["enchantMods", "implicitMods", "explicitMods", "fracturedMods", "craftedMods", "desecratedMods", "runeMods"];
+
+    // -------------------------------------------------------------------
+    // Stat parsing for STAT CHECK feature (ported from mobile)
+    // -------------------------------------------------------------------
+    const STAT_PATTERNS = [
+      { key: "life", pattern: /\+?(\d+) to maximum Life/i },
+      { key: "mana", pattern: /\+?(\d+) to maximum Mana/i },
+      { key: "energyShield", pattern: /\+?(\d+) to maximum Energy Shield/i },
+      { key: "fireRes", pattern: /\+?(\d+)%? (?:to )?Fire Resistance/i },
+      { key: "coldRes", pattern: /\+?(\d+)%? (?:to )?Cold Resistance/i },
+      { key: "lightningRes", pattern: /\+?(\d+)%? (?:to )?Lightning Resistance/i },
+      { key: "chaosRes", pattern: /\+?(\d+)%? (?:to )?Chaos Resistance/i },
+      { key: "strength", pattern: /\+?(\d+) to Strength/i },
+      { key: "dexterity", pattern: /\+?(\d+) to Dexterity/i },
+      { key: "intelligence", pattern: /\+?(\d+) to Intelligence/i },
+      { key: "movementSpeed", pattern: /(\d+)% increased Movement Speed/i },
+      { key: "attackSpeed", pattern: /(\d+)% increased Attack Speed/i },
+    ];
+
+    const T1_MAX = {
+      Helm:       { life: 100, mana: 85, energyShield: 110, fireRes: 46, coldRes: 46, lightningRes: 46, chaosRes: 26, strength: 55, dexterity: 55, intelligence: 55 },
+      BodyArmour: { life: 130, mana: 100, energyShield: 150, fireRes: 46, coldRes: 46, lightningRes: 46, chaosRes: 26, strength: 55, dexterity: 55, intelligence: 55 },
+      Gloves:     { life: 100, mana: 85, energyShield: 110, fireRes: 46, coldRes: 46, lightningRes: 46, chaosRes: 26, strength: 55, dexterity: 55, intelligence: 55, attackSpeed: 16 },
+      Boots:      { life: 100, mana: 85, energyShield: 110, fireRes: 46, coldRes: 46, lightningRes: 46, chaosRes: 26, strength: 55, dexterity: 55, intelligence: 55, movementSpeed: 30 },
+      Shield:     { life: 100, mana: 85, energyShield: 150, fireRes: 46, coldRes: 46, lightningRes: 46, chaosRes: 26, strength: 55, dexterity: 55, intelligence: 55 },
+      Offhand:    { life: 100, mana: 85, energyShield: 150, fireRes: 46, coldRes: 46, lightningRes: 46, chaosRes: 26, strength: 55, dexterity: 55, intelligence: 55 },
+      Belt:       { life: 100, mana: 85, fireRes: 46, coldRes: 46, lightningRes: 46, chaosRes: 26, strength: 55, dexterity: 55, intelligence: 55 },
+      Amulet:     { life: 85, mana: 85, energyShield: 80, fireRes: 46, coldRes: 46, lightningRes: 46, chaosRes: 26, strength: 55, dexterity: 55, intelligence: 55 },
+      Ring:       { life: 75, mana: 75, energyShield: 60, fireRes: 46, coldRes: 46, lightningRes: 46, chaosRes: 26, strength: 55, dexterity: 55, intelligence: 55 },
+      Ring2:      { life: 75, mana: 75, energyShield: 60, fireRes: 46, coldRes: 46, lightningRes: 46, chaosRes: 26, strength: 55, dexterity: 55, intelligence: 55 },
+      Weapon:     { attackSpeed: 27 },
+      Weapon2:    { attackSpeed: 27 },
+    };
+
+    function getSlotMaxes(slot) {
+      if (slot === "Body Armour") return T1_MAX.BodyArmour || {};
+      if (slot === "Helmet") return T1_MAX.Helm || {};
+      return T1_MAX[slot] || {};
+    }
+
+    // Valuable mods per slot category for upgrade potential
+    function getValuableMods(slot) {
+      const base = [
+        { key: "life", label: "Life" },
+        { key: "fireRes", label: "Fire Res" },
+        { key: "coldRes", label: "Cold Res" },
+        { key: "lightningRes", label: "Lightning Res" },
+      ];
+      if (slot === "Boots") base.push({ key: "movementSpeed", label: "Move Speed" });
+      if (slot === "Gloves" || slot === "Weapon" || slot === "Weapon2") base.push({ key: "attackSpeed", label: "Atk Speed" });
+      return base;
+    }
+
+    function parseItemStats(item) {
+      const stats = {
+        life: 0, mana: 0, energyShield: 0,
+        fireRes: 0, coldRes: 0, lightningRes: 0, chaosRes: 0,
+        strength: 0, dexterity: 0, intelligence: 0,
+        movementSpeed: 0, attackSpeed: 0,
+      };
+      const allMods = [
+        ...(item.implicitMods || []),
+        ...(item.explicitMods || []),
+        ...(item.craftedMods || []),
+        ...(item.enchantMods || []),
+        ...(item.fracturedMods || []),
+        ...(item.runeMods || []),
+      ];
+      for (const mod of allMods) {
+        let matched = false;
+        for (const { key, pattern } of STAT_PATTERNS) {
+          const m = mod.match(pattern);
+          if (m) { stats[key] += parseInt(m[1], 10); matched = true; break; }
+        }
+        if (!matched) {
+          const dualRes = mod.match(/\+?(\d+)%? to (Fire|Cold|Lightning|Chaos) and (Fire|Cold|Lightning|Chaos) Resistance/i);
+          if (dualRes) {
+            const val = parseInt(dualRes[1], 10);
+            const a = dualRes[2].toLowerCase(), b = dualRes[3].toLowerCase();
+            if (a === "fire" || b === "fire") stats.fireRes += val;
+            if (a === "cold" || b === "cold") stats.coldRes += val;
+            if (a === "lightning" || b === "lightning") stats.lightningRes += val;
+            if (a === "chaos" || b === "chaos") stats.chaosRes += val;
+            matched = true;
+          }
+        }
+        if (!matched) {
+          const allEleRes = mod.match(/\+?(\d+)%? to all Elemental Resistances/i);
+          if (allEleRes) {
+            const val = parseInt(allEleRes[1], 10);
+            stats.fireRes += val; stats.coldRes += val; stats.lightningRes += val;
+          }
+        }
+      }
+      return stats;
+    }
+
+    function matchesCurrentItem(popularName, currentItem) {
+      if (!currentItem) return false;
+      const lc = popularName.toLowerCase();
+      if (currentItem.name && currentItem.name.toLowerCase() === lc) return true;
+      if (currentItem.typeLine && currentItem.typeLine.toLowerCase() === lc) return true;
+      if (lc.startsWith("rare ") && ((currentItem.explicitMods || []).length > 0 || (currentItem.craftedMods || []).length > 0)) return true;
+      return false;
+    }
+
+    // -------------------------------------------------------------------
+    // CurrentItemMods — YOUR ITEM card mods display
+    // -------------------------------------------------------------------
+    function CurrentItemMods({ item }) {
+      const sections = useMemo(() => {
+        const result = [];
+        if (item.enchantMods?.length) result.push({ label: "Enchant", mods: item.enchantMods, color: "#e879b9" });
+        if (item.implicitMods?.length) result.push({ label: "Implicit", mods: item.implicitMods, color: "#c4a456" });
+        if (item.explicitMods?.length) result.push({ label: null, mods: item.explicitMods, color: T.text });
+        if (item.fracturedMods?.length) result.push({ label: "Fractured", mods: item.fracturedMods, color: "#e6b422" });
+        if (item.craftedMods?.length) result.push({ label: "Crafted", mods: item.craftedMods, color: "#6bdbca" });
+        if (item.desecratedMods?.length) result.push({ label: "Desecrated", mods: item.desecratedMods, color: "#b07cd8" });
+        if (item.runeMods?.length) result.push({ label: "Rune", mods: item.runeMods, color: "#d4a045" });
+        return result;
+      }, [item]);
+
+      if (sections.length === 0) return null;
+      return (
+        <div style={{ marginTop: 6 }}>
+          {item.typeLine && item.name && item.typeLine !== item.name && (
+            <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 2 }}>{item.typeLine}</div>
+          )}
+          {sections.map((section, si) => (
+            <div key={si}>
+              {section.label && <div style={{ fontSize: 8, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 3 }}>{section.label}</div>}
+              {section.mods.map((mod, mi) => (
+                <div key={mi} style={{ fontSize: 10, color: section.color, padding: "1px 0" }}>{mod}</div>
+              ))}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // -------------------------------------------------------------------
+    // ItemStatSummary — STAT CHECK panel
+    // -------------------------------------------------------------------
+    function ItemStatSummary({ item, allEquipment }) {
+      const stats = useMemo(() => parseItemStats(item), [item]);
+      const slotMaxes = useMemo(() => getSlotMaxes(item.slot || ""), [item.slot]);
+
+      const totalEleRes = stats.fireRes + stats.coldRes + stats.lightningRes;
+      const hasResists = totalEleRes > 0 || stats.chaosRes > 0;
+      const hasDefenses = stats.life > 0 || stats.mana > 0 || stats.energyShield > 0;
+      const hasAttributes = stats.strength > 0 || stats.dexterity > 0 || stats.intelligence > 0;
+
+      const upgradePotential = useMemo(() => {
+        const valuableMods = getValuableMods(item.slot || "");
+        const missing = [], lowRoll = [];
+        for (const { key, label } of valuableMods) {
+          const val = stats[key];
+          const max = slotMaxes[key];
+          if (!max) continue;
+          if (val === 0) missing.push(label);
+          else if (val < max * 0.5) lowRoll.push(`${label} (${val}/${max})`);
+        }
+        return { missing, lowRoll };
+      }, [stats, slotMaxes, item.slot]);
+
+      if (!hasResists && !hasDefenses && !hasAttributes && !stats.movementSpeed && !stats.attackSpeed && upgradePotential.missing.length === 0) return null;
+
+      const fmtStat = (key, val, prefix) => {
+        const max = slotMaxes[key];
+        return max ? `${prefix}${val} / ${max}` : `${prefix}${val}`;
+      };
+
+      const parts = [];
+      if (stats.life > 0) parts.push({ label: "Life", value: fmtStat("life", stats.life, "+"), color: "#c44" });
+      if (stats.mana > 0) parts.push({ label: "Mana", value: fmtStat("mana", stats.mana, "+"), color: "#66b" });
+      if (stats.energyShield > 0) parts.push({ label: "ES", value: fmtStat("energyShield", stats.energyShield, "+"), color: "#6bf" });
+
+      const resLines = [];
+      if (stats.fireRes > 0) resLines.push(slotMaxes.fireRes ? `Fire ${stats.fireRes}/${slotMaxes.fireRes}%` : `Fire ${stats.fireRes}%`);
+      if (stats.coldRes > 0) resLines.push(slotMaxes.coldRes ? `Cold ${stats.coldRes}/${slotMaxes.coldRes}%` : `Cold ${stats.coldRes}%`);
+      if (stats.lightningRes > 0) resLines.push(slotMaxes.lightningRes ? `Ltng ${stats.lightningRes}/${slotMaxes.lightningRes}%` : `Ltng ${stats.lightningRes}%`);
+      if (stats.chaosRes > 0) resLines.push(slotMaxes.chaosRes ? `Chaos ${stats.chaosRes}/${slotMaxes.chaosRes}%` : `Chaos ${stats.chaosRes}%`);
+
+      if (hasResists) parts.push({ label: "Resists", value: `${totalEleRes + stats.chaosRes}% total`, color: T.text });
+      if (stats.movementSpeed > 0) parts.push({ label: "Move", value: fmtStat("movementSpeed", stats.movementSpeed, ""), color: T.cyan });
+      if (stats.attackSpeed > 0) parts.push({ label: "AtkSpd", value: fmtStat("attackSpeed", stats.attackSpeed, ""), color: T.cyan });
+
+      if (hasAttributes) {
+        const attrParts = [];
+        if (stats.strength > 0) attrParts.push(`Str ${stats.strength}`);
+        if (stats.dexterity > 0) attrParts.push(`Dex ${stats.dexterity}`);
+        if (stats.intelligence > 0) attrParts.push(`Int ${stats.intelligence}`);
+        parts.push({ label: "Attr", value: attrParts.join(", "), color: T.textSecond });
+      }
+
+      return (
+        <div style={{ marginTop: 8, padding: "8px 0", borderTop: `1px solid ${T.border}` }}>
+          <div style={{ ...LABEL, fontSize: 9, marginBottom: 6 }}>STAT CHECK</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
+            {parts.map((p, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                <span style={{ fontSize: 9, color: T.textMuted }}>{p.label}</span>
+                <span style={{ ...MONO, fontSize: 10, color: p.color }}>{p.value}</span>
+              </div>
+            ))}
+          </div>
+          {resLines.length > 0 && (
+            <div style={{ fontSize: 9, color: T.textMuted, marginTop: 3 }}>This item: {resLines.join(" \u00B7 ")}</div>
+          )}
+          {upgradePotential.missing.length > 0 && (
+            <div style={{ fontSize: 9, color: T.amber, marginTop: 2 }}>Missing: {upgradePotential.missing.join(", ")}</div>
+          )}
+          {upgradePotential.lowRoll.length > 0 && (
+            <div style={{ fontSize: 9, color: T.textSecond, marginTop: 2 }}>Low roll: {upgradePotential.lowRoll.join(", ")}</div>
+          )}
+        </div>
+      );
+    }
+
+    // -------------------------------------------------------------------
+    // MetaInsight — text analysis of user's item vs meta
+    // -------------------------------------------------------------------
+    function MetaInsight({ items, currentItem }) {
+      const lines = useMemo(() => {
+        if (items.length === 0) return [];
+        const result = [];
+
+        let matchIdx = -1;
+        if (currentItem) {
+          matchIdx = items.findIndex(i => matchesCurrentItem(i.name, currentItem));
+        }
+
+        // Line 1: User's item status
+        if (currentItem && matchIdx >= 0) {
+          const match = items[matchIdx];
+          const isRareAgg = match.name.toLowerCase().startsWith("rare ");
+          if (isRareAgg) {
+            result.push({ text: `${match.percentage.toFixed(1)}% of builds use a crafted rare here \u2014 you're in the meta`, color: T.text });
+          } else {
+            result.push({ text: `Your ${currentItem.name || currentItem.typeLine} is #${matchIdx + 1} \u2014 ${match.percentage.toFixed(1)}% of builds`, color: T.text });
+          }
+        } else if (currentItem) {
+          result.push({ text: `Your ${currentItem.typeLine || currentItem.name || "item"} is not in the top ${items.length} for this slot`, color: T.textSecond });
+        }
+
+        // Line 2: Top alternative
+        const topPick = items[0];
+        const topIsUsers = matchIdx === 0;
+        if (topIsUsers) {
+          const isUserRare = currentItem && ((currentItem.explicitMods || []).length > 0 || (currentItem.craftedMods || []).length > 0);
+          const alt = isUserRare ? items.find(i => i.rarity === "unique") : items[1];
+          if (alt) {
+            let altText = isUserRare ? `Top unique: ${alt.name} \u2014 ${alt.percentage.toFixed(1)}%` : `Runner-up: ${alt.name} \u2014 ${alt.percentage.toFixed(1)}%`;
+            if (alt.priceText) altText += ` \u00B7 ${alt.priceText}`;
+            result.push({ text: altText, color: T.textSecond });
+          }
+        } else {
+          let topText = `#1 pick: ${topPick.name} \u2014 ${topPick.percentage.toFixed(1)}%`;
+          if (topPick.priceText) topText += ` \u00B7 ${topPick.priceText}`;
+          result.push({ text: topText, color: T.text });
+        }
+
+        // Line 3: Unique vs rare composition
+        let uniqueCount = 0, rareCount = 0;
+        for (const item of items) {
+          if (item.rarity === "unique") uniqueCount++;
+          else if (item.rarity === "rare") rareCount++;
+        }
+        if (uniqueCount > 0 && rareCount > 0) result.push({ text: `Slot meta: ${uniqueCount} unique, ${rareCount} rare in top ${items.length}`, color: T.textMuted });
+        else if (uniqueCount > 0) result.push({ text: `Slot is dominated by uniques (${uniqueCount}/${items.length})`, color: T.textMuted });
+        else if (rareCount > 0) result.push({ text: `Slot favors crafted rares (${rareCount}/${items.length})`, color: T.textMuted });
+
+        return result;
+      }, [items, currentItem]);
+
+      if (lines.length === 0) return null;
+      return (
+        <div className="panel" style={{ ...CARD, marginBottom: 10 }}>
+          <div style={{ ...LABEL, fontSize: 9, marginBottom: 4 }}>META INSIGHT</div>
+          {lines.map((line, i) => (
+            <div key={i} style={{ fontSize: 11, color: line.color, lineHeight: 1.5 }}>{line.text}</div>
+          ))}
+        </div>
+      );
+    }
+
+    // -------------------------------------------------------------------
+    // PopularItemsView — drill-down from equipment slot
+    // -------------------------------------------------------------------
+    function PopularItemsView({ result, loading, onBack, allEquipment }) {
+      const maxPct = useMemo(() => {
+        if (!result?.items?.length) return 100;
+        return Math.max(...result.items.map(i => i.percentage));
+      }, [result]);
+
+      return (
+        <div>
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <button onClick={onBack} style={{ ...BTN, fontSize: 11, padding: "4px 10px", background: T.input, border: `1px solid ${T.border}`, color: T.textSecond }}>
+              \u2190 Back
+            </button>
+            <div style={{ ...LABEL, fontSize: 10 }}>Popular {result?.slotDisplay || result?.slot || "Items"}</div>
+          </div>
+
+          {/* YOUR ITEM card */}
+          {result?.currentItem && (
+            <div className="panel" style={{ ...CARD, marginBottom: 10, borderLeft: `3px solid ${T.gold}` }}>
+              <div style={{ ...LABEL, fontSize: 9, marginBottom: 4 }}>YOUR ITEM</div>
+              <div style={{
+                fontSize: 13, fontWeight: 600,
+                color: (result.currentItem.rarity === "unique" || result.currentItem.rarity === "3") ? "#af6025" : T.text,
+              }}>
+                {result.currentItem.name || result.currentItem.typeLine}
+              </div>
+              <CurrentItemMods item={result.currentItem} />
+              <ItemStatSummary item={result.currentItem} allEquipment={allEquipment} />
+            </div>
+          )}
+
+          {/* Meta Insight */}
+          {!loading && result && result.items.length > 0 && (
+            <MetaInsight items={result.items} currentItem={result.currentItem} />
+          )}
+
+          {/* Loading / Empty / List */}
+          {loading ? (
+            <div style={{ textAlign: "center", padding: 24 }}>
+              <div style={{ fontSize: 12, color: T.textSecond }}>Loading popular items...</div>
+            </div>
+          ) : !result || result.items.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 24 }}>
+              <div style={{ fontSize: 12, color: T.textMuted }}>No popular item data available</div>
+              <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>Try a different character class or skill</div>
+            </div>
+          ) : (
+            <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "8px 12px", borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: 700, color: T.textSecond, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                Top {result.items.length} Items
+              </div>
+              {result.items.map((item, idx) => {
+                const isCurrentItem = matchesCurrentItem(item.name, result.currentItem);
+                return (
+                  <div key={`${item.name}-${idx}`} style={{
+                    display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
+                    background: isCurrentItem ? "rgba(196,164,86,0.08)" : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
+                    borderLeft: isCurrentItem ? `2px solid ${T.gold}` : "2px solid transparent",
+                  }}>
+                    <div style={{ fontSize: 10, color: T.textMuted, width: 22, textAlign: "right", flexShrink: 0 }}>{idx + 1}.</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{
+                          fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                          color: item.rarity === "unique" ? "#af6025" : item.rarity === "rare" ? "#ff7" : T.text,
+                        }}>{item.name}</span>
+                        {isCurrentItem && <span style={{ fontSize: 8, color: T.gold, fontWeight: 700 }}>(yours)</span>}
+                      </div>
+                      {item.priceText && <div style={{ fontSize: 9, color: T.textMuted }}>{item.priceText}</div>}
+                      <div style={{ height: 3, background: T.input, borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
+                        <div style={{ height: "100%", borderRadius: 2, background: isCurrentItem ? T.gold : T.textMuted, width: `${(item.percentage / maxPct) * 100}%`, transition: "width 0.3s" }} />
+                      </div>
+                    </div>
+                    <div style={{ ...MONO, fontSize: 10, color: T.textSecond, flexShrink: 0, width: 40, textAlign: "right" }}>
+                      {item.percentage.toFixed(1)}%
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function CharacterViewer() {
+      const [account, setAccount] = useState("");
+      const [character, setCharacter] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [charData, setCharData] = useState(null);
+      const [expandedSlot, setExpandedSlot] = useState(null);
+      const [savedAccounts, setSavedAccounts] = useState([]);
+
+      // Popular items drill-down state
+      const [popularSlot, setPopularSlot] = useState(null);
+      const [popularResult, setPopularResult] = useState(null);
+      const [popularLoading, setPopularLoading] = useState(false);
+
+      // Load saved characters on mount
+      useEffect(() => {
+        api("/api/character/saved").then(r => {
+          if (r && Array.isArray(r)) setSavedAccounts(r);
+        });
+      }, []);
+
+      const refreshSaved = async () => {
+        const r = await api("/api/character/saved");
+        if (r && Array.isArray(r)) setSavedAccounts(r);
+      };
+
+      const handleLookup = async () => {
+        if (!account.trim() || !character.trim()) return;
+        setLoading(true);
+        setError(null);
+        setCharData(null);
+        setPopularSlot(null);
+        const result = await api("/api/character/lookup", "POST", { account: account.trim(), character: character.trim() });
+        if (result && result.error) {
+          setError(result.error);
+        } else if (result && result.name) {
+          setCharData(result);
+          refreshSaved(); // update saved list after successful lookup
+        } else {
+          setError("Unexpected response from server.");
+        }
+        setLoading(false);
+      };
+
+      const handleSelectSaved = (acctName, charName) => {
+        setAccount(acctName);
+        setCharacter(charName);
+        // Auto-lookup
+        setLoading(true);
+        setError(null);
+        setCharData(null);
+        setPopularSlot(null);
+        api("/api/character/lookup", "POST", { account: acctName, character: charName }).then(result => {
+          if (result && result.error) {
+            setError(result.error);
+          } else if (result && result.name) {
+            setCharData(result);
+            refreshSaved();
+          } else {
+            setError("Unexpected response from server.");
+          }
+          setLoading(false);
+        });
+      };
+
+      const handleDeleteSaved = async (acctName, charName) => {
+        const result = await api("/api/character/delete", "POST", { account: acctName, character: charName || "" });
+        if (result && result.saved) setSavedAccounts(result.saved);
+      };
+
+      const handleViewPopular = async (slot) => {
+        if (!account.trim() || !character.trim()) return;
+        setPopularSlot(slot);
+        setPopularLoading(true);
+        setPopularResult(null);
+        const result = await api("/api/character/popular-items", "POST", {
+          account: account.trim(), character: character.trim(), slot,
+        });
+        if (result && result.slot) {
+          setPopularResult(result);
+        }
+        setPopularLoading(false);
+      };
+
+      const handleKeyDown = (e) => {
+        if (e.key === "Enter") handleLookup();
+      };
+
+      const formatTimeAgo = (ts) => {
+        if (!ts) return "";
+        const diff = Math.floor(Date.now() / 1000) - ts;
+        if (diff < 60) return "just now";
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        return `${Math.floor(diff / 86400)}d ago`;
+      };
+
+      // Top skill by damage
+      const topSkill = charData ? (() => {
+        let best = null;
+        for (const sg of (charData.skillGroups || [])) {
+          for (const d of (sg.dps || [])) {
+            if (!best || d.damage > best.damage) best = d;
+          }
+        }
+        return best;
+      })() : null;
+
+      return (
+        <div>
+          {/* Lookup Form */}
+          <div className="panel" style={{ ...CARD, marginBottom: 12 }}>
+            <div style={{ ...LABEL, marginBottom: 8 }}>CHARACTER LOOKUP</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 3 }}>Account Name</div>
+                <input
+                  value={account}
+                  onChange={e => setAccount(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="account#1234"
+                  style={{ ...FIELD_INPUT }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 3 }}>Character Name</div>
+                <input
+                  value={character}
+                  onChange={e => setCharacter(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="MyCharacter"
+                  style={{ ...FIELD_INPUT }}
+                />
+              </div>
+              <button
+                onClick={handleLookup}
+                disabled={loading || !account.trim() || !character.trim()}
+                style={{ ...BTN_GOLD, opacity: (loading || !account.trim() || !character.trim()) ? 0.5 : 1, whiteSpace: "nowrap" }}
+              >
+                {loading ? "Looking up..." : "Look Up"}
+              </button>
+            </div>
+            {error && (
+              <div style={{ marginTop: 8, fontSize: 11, color: T.red, padding: "6px 10px", background: "rgba(168,50,50,0.1)", borderRadius: 4 }}>{error}</div>
+            )}
+            <div style={{ marginTop: 6, fontSize: 10, color: T.textMuted }}>
+              Uses poe.ninja builds data. Character must be on the current league's ladder.
+            </div>
+          </div>
+
+          {/* Saved Characters */}
+          {!charData && savedAccounts.length > 0 && (
+            <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden", marginBottom: 12 }}>
+              <div style={{ padding: "8px 12px", borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: 700, color: T.textSecond, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                Recent Characters
+              </div>
+              {savedAccounts.map((acct, ai) => (
+                <div key={acct.accountName}>
+                  {savedAccounts.length > 1 && (
+                    <div style={{ padding: "5px 12px 2px", fontSize: 9, color: T.textMuted, display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: ai > 0 ? `1px solid ${T.border}` : "none" }}>
+                      <span>{acct.accountName}</span>
+                      <span
+                        style={{ cursor: "pointer", fontSize: 9, color: T.textMuted, padding: "0 4px" }}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSaved(acct.accountName, ""); }}
+                        title="Remove account"
+                      >{"\u2715"}</span>
+                    </div>
+                  )}
+                  {acct.characters.map((ch, ci) => (
+                    <div
+                      key={ch.name}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
+                        cursor: "pointer", transition: "background 0.1s",
+                        background: ci % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
+                      }}
+                      onClick={() => handleSelectSaved(acct.accountName, ch.name)}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(196,164,86,0.06)"}
+                      onMouseLeave={e => e.currentTarget.style.background = ci % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)"}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: T.text }}>{ch.name}</div>
+                        <div style={{ fontSize: 10, color: T.textMuted }}>
+                          {savedAccounts.length <= 1 && <span>{acct.accountName} {"\u00B7"} </span>}
+                          Lv {ch.level} {ch.class}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 9, color: T.textMuted }}>{formatTimeAgo(ch.lastLookup)}</span>
+                        <span
+                          style={{ fontSize: 9, color: T.textMuted, cursor: "pointer", padding: "0 4px" }}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteSaved(acct.accountName, ch.name); }}
+                          title="Remove character"
+                        >{"\u2715"}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Popular Items Drill-Down */}
+          {charData && popularSlot && (
+            <PopularItemsView
+              result={popularResult}
+              loading={popularLoading}
+              onBack={() => { setPopularSlot(null); setPopularResult(null); }}
+              allEquipment={charData.equipment || []}
+            />
+          )}
+
+          {/* Character Profile */}
+          {charData && !popularSlot && (
+            <div>
+              {/* Header */}
+              <div className="panel" style={{ ...CARD, marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: T.gold }}>{charData.name}</div>
+                    <div style={{ fontSize: 12, color: T.textSecond }}>
+                      Level {charData.level} {charData.ascendancy}{charData.class !== charData.ascendancy ? ` (${charData.class})` : ""}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 10, color: T.textMuted }}>{charData.account}</div>
+                    {charData.pobCode && (
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(charData.pobCode); }}
+                        style={{ ...BTN, fontSize: 10, padding: "3px 8px", marginTop: 4, background: T.input, border: `1px solid ${T.border}`, color: T.textSecond }}
+                      >
+                        Copy POB Code
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Top Skill DPS */}
+                {topSkill && (
+                  <div style={{ marginTop: 10, padding: "8px 10px", background: T.input, borderRadius: 6, display: "flex", alignItems: "center", gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Top Skill</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{topSkill.name}</div>
+                    </div>
+                    <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                      {topSkill.damage > 0 && (
+                        <div style={{ ...MONO, fontSize: 14, fontWeight: 700, color: T.gold }}>
+                          {topSkill.damage >= 1000000 ? `${(topSkill.damage / 1000000).toFixed(1)}M` : topSkill.damage >= 1000 ? `${(topSkill.damage / 1000).toFixed(1)}k` : topSkill.damage.toFixed(0)} dmg
+                        </div>
+                      )}
+                      {topSkill.dps > 0 && topSkill.dps !== topSkill.damage && (
+                        <div style={{ ...MONO, fontSize: 10, color: T.textMuted }}>
+                          {topSkill.dps >= 1000000 ? `${(topSkill.dps / 1000000).toFixed(1)}M` : topSkill.dps >= 1000 ? `${(topSkill.dps / 1000).toFixed(1)}k` : topSkill.dps.toFixed(0)} DPS
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Equipment */}
+              <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden", marginBottom: 12 }}>
+                <div style={{ padding: "8px 12px", borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: 700, color: T.textSecond, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Equipment ({charData.equipment?.length || 0})
+                </div>
+                {(charData.equipment || []).map((eq, i) => {
+                  const isExpanded = expandedSlot === eq.slot;
+                  const isUnique = eq.rarity === "unique" || eq.rarity === "3";
+                  const displayName = eq.name || eq.typeLine;
+                  const subtitle = eq.name && eq.typeLine && eq.name !== eq.typeLine ? eq.typeLine : null;
+                  const hasMods = MOD_TYPE_ORDER.some(mt => eq[mt] && eq[mt].length > 0);
+
+                  return (
+                    <div key={eq.slot + i}>
+                      <div
+                        style={{
+                          display: "flex", alignItems: "center", gap: 10, padding: "7px 12px",
+                          cursor: "pointer",
+                          background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
+                          borderLeft: isExpanded ? `2px solid ${T.gold}` : "2px solid transparent",
+                          transition: "background 0.1s",
+                        }}
+                        onClick={() => setExpandedSlot(isExpanded ? null : eq.slot)}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(196,164,86,0.04)"}
+                        onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)"}
+                      >
+                        <div style={{ fontSize: 10, color: T.textMuted, width: 80, flexShrink: 0 }}>{eq.slotDisplay || eq.slot}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 500, color: isUnique ? "#af6025" : T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {displayName}
+                          </div>
+                          {subtitle && <div style={{ fontSize: 10, color: T.textMuted }}>{subtitle}</div>}
+                        </div>
+                        <div style={{ fontSize: 10, color: T.textMuted }}>{isExpanded ? "\u25B2" : "\u25BC"}</div>
+                      </div>
+
+                      {/* Expanded mods + View Popular button */}
+                      {isExpanded && (
+                        <div style={{ padding: "6px 12px 10px 104px", background: "rgba(0,0,0,0.15)", borderBottom: `1px solid ${T.border}` }}>
+                          {MOD_TYPE_ORDER.map(modType => {
+                            const mods = eq[modType];
+                            if (!mods || mods.length === 0) return null;
+                            const color = MOD_TYPE_COLORS[modType];
+                            const label = MOD_TYPE_LABELS[modType];
+                            return (
+                              <div key={modType}>
+                                {label && <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 4, marginBottom: 1 }}>{label}</div>}
+                                {mods.map((mod, k) => (
+                                  <div key={k} style={{ fontSize: 11, color, padding: "1px 0" }}>{mod}</div>
+                                ))}
+                              </div>
+                            );
+                          })}
+                          {eq.sockets && eq.sockets.length > 0 && (
+                            <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4 }}>Sockets: {eq.sockets.length}</div>
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleViewPopular(eq.slot); }}
+                            style={{ ...BTN, fontSize: 9, padding: "3px 10px", marginTop: 8, background: T.input, border: `1px solid ${T.borderGold}`, color: T.gold }}
+                          >
+                            View Popular Items for this Slot \u2192
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Skills */}
+              {charData.skillGroups && charData.skillGroups.length > 0 && (
+                <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden", marginBottom: 12 }}>
+                  <div style={{ padding: "8px 12px", borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: 700, color: T.textSecond, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    Skill Groups ({charData.skillGroups.length})
+                  </div>
+                  {charData.skillGroups.map((sg, i) => {
+                    const primaryGem = sg.gems && sg.gems[0];
+                    const supportGems = sg.gems ? sg.gems.slice(1) : [];
+                    const dpsInfo = sg.dps && sg.dps[0];
+                    return (
+                      <div key={i} style={{ padding: "8px 12px", borderBottom: i < charData.skillGroups.length - 1 ? `1px solid ${T.border}` : "none" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: T.gold }}>{primaryGem || "Unknown"}</div>
+                          {dpsInfo && dpsInfo.damage > 0 && (
+                            <div style={{ ...MONO, fontSize: 11, color: T.textSecond }}>
+                              {dpsInfo.damage >= 1000000 ? `${(dpsInfo.damage / 1000000).toFixed(1)}M` : dpsInfo.damage >= 1000 ? `${(dpsInfo.damage / 1000).toFixed(1)}k` : dpsInfo.damage.toFixed(0)} dmg
+                            </div>
+                          )}
+                        </div>
+                        {supportGems.length > 0 && (
+                          <div style={{ marginTop: 3, fontSize: 10, color: T.textMuted }}>
+                            {supportGems.join(", ")}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Keystones */}
+              {charData.keystones && charData.keystones.length > 0 && (
+                <div className="panel" style={{ ...CARD, marginBottom: 12 }}>
+                  <div style={{ ...LABEL, marginBottom: 6 }}>KEYSTONES</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {charData.keystones.map((ks, i) => (
+                      <span key={i} style={{ fontSize: 11, padding: "3px 8px", background: T.input, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text }}>{ks}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+
+    // -----------------------------------------------------------------------
+    // StashTab — Stash viewer with OAuth, wealth tracking, item scoring
+    // -----------------------------------------------------------------------
+    const GRADE_COLORS = { S: "#e6b422", A: "#4ade80", B: "#60a5fa", C: "#94a3b8", JUNK: "#5c4f3d" };
+
+    function StashTab({ oauthProp, progressProp, refreshingProp }) {
+      const [oauthStatus, setOauthStatus] = useState(oauthProp || { connected: false, account_name: null });
+      const [stashStatus, setStashStatus] = useState({ last_refresh: null, tab_count: 0, total_value: 0, refreshing: false });
+      const [tabs, setTabs] = useState([]);
+      const [expandedTab, setExpandedTab] = useState(null);
+      const [tabItems, setTabItems] = useState({});
+      const [wealthHistory, setWealthHistory] = useState([]);
+      const [connecting, setConnecting] = useState(false);
+
+      // Sync props from parent WS handler
+      useEffect(() => { if (oauthProp) setOauthStatus(oauthProp); }, [oauthProp]);
+      useEffect(() => { setStashStatus(s => ({ ...s, refreshing: refreshingProp || false })); }, [refreshingProp]);
+      useEffect(() => {
+        if (!progressProp && stashStatus.refreshing === false) {
+          // Refresh complete — reload data
+          api("/api/stash/status").then(r => {
+            if (r) setStashStatus({ last_refresh: r.last_refresh, tab_count: r.tab_count, total_value: r.total_value, refreshing: r.refreshing });
+          });
+          api("/api/stash/tabs").then(r => r && Array.isArray(r) && setTabs(r));
+          api("/api/stash/wealth-history").then(r => r && Array.isArray(r) && setWealthHistory(r));
+        }
+      }, [progressProp]);
+
+      // Fetch initial state
+      useEffect(() => {
+        api("/api/stash/status").then(r => {
+          if (r) {
+            setOauthStatus({ connected: r.connected, account_name: r.account_name });
+            setStashStatus({ last_refresh: r.last_refresh, tab_count: r.tab_count, total_value: r.total_value, refreshing: r.refreshing });
+          }
+        });
+        api("/api/stash/tabs").then(r => r && Array.isArray(r) && setTabs(r));
+        api("/api/stash/wealth-history").then(r => r && Array.isArray(r) && setWealthHistory(r));
+      }, []);
+
+      const handleConnect = async () => {
+        setConnecting(true);
+        const result = await api("/api/oauth/start", "POST");
+        if (result && result.connected) {
+          setOauthStatus({ connected: true, account_name: result.account_name });
+        }
+        setConnecting(false);
+      };
+
+      const handleDisconnect = async () => {
+        await api("/api/oauth/disconnect", "POST");
+        setOauthStatus({ connected: false, account_name: null });
+        setTabs([]);
+        setTabItems({});
+        setStashStatus({ last_refresh: null, tab_count: 0, total_value: 0, refreshing: false });
+      };
+
+      const handleRefresh = async () => {
+        setStashStatus(s => ({ ...s, refreshing: true }));
+        setProgress({ tab: "Starting...", done: 0, total: 0 });
+        await api("/api/stash/refresh", "POST");
+      };
+
+      const handleExpandTab = async (tabId) => {
+        if (expandedTab === tabId) { setExpandedTab(null); return; }
+        setExpandedTab(tabId);
+        if (!tabItems[tabId]) {
+          const result = await api(`/api/stash/tabs/${tabId}`);
+          if (result && result.items) {
+            setTabItems(prev => ({ ...prev, [tabId]: result.items }));
+          }
+        }
+      };
+
+      // Wealth sparkline data (divine values over time)
+      const sparklineData = wealthHistory.length >= 2
+        ? wealthHistory.map(h => h.total_divine)
+        : null;
+
+      const wealthChange = wealthHistory.length >= 2
+        ? wealthHistory[wealthHistory.length - 1].total_divine - wealthHistory[wealthHistory.length - 2].total_divine
+        : 0;
+
+      // Stash viewer still waiting on GGG OAuth approval
+      const stashComingSoon = true;
+
+      return (
+        <div style={{ paddingTop: 12 }}>
+          {/* Character Viewer */}
+          <CharacterViewer />
+
+          {/* Stash Viewer — Coming Soon teaser or full UI */}
+          {stashComingSoon ? (
+            <div className="panel" style={{ ...CARD, marginTop: 12, padding: "20px 24px", display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Stash Viewer</span>
+                  <span style={{ fontSize: 8, fontWeight: 700, color: T.amber, background: "rgba(184,134,11,0.15)", border: `1px solid rgba(184,134,11,0.3)`, borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em", textTransform: "uppercase" }}>COMING SOON</span>
+                </div>
+                <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.5 }}>
+                  Browse stash tabs, auto-grade every item, and track wealth over time. Pending GGG OAuth approval.
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <div style={{ ...CARD, background: T.input, padding: "6px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: T.gold }}>S A B</div>
+                  <div style={{ fontSize: 8, color: T.textMuted }}>Auto-grade</div>
+                </div>
+                <div style={{ ...CARD, background: T.input, padding: "6px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: T.gold }}>142d</div>
+                  <div style={{ fontSize: 8, color: T.textMuted }}>Wealth</div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+          {/* Connect Bar */}
+          <div className="panel" style={{ ...CARD, marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            {!oauthStatus.connected ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ ...LABEL, marginBottom: 4 }}>ACCOUNT CONNECTION</div>
+                  <div style={{ fontSize: 12, color: T.textSecond }}>Connect your Path of Exile account to view stash tabs and track wealth.</div>
+                </div>
+                <button
+                  onClick={handleConnect}
+                  disabled={connecting}
+                  style={{ ...BTN, background: T.gold, color: "#0d0b08", fontWeight: 700, opacity: connecting ? 0.6 : 1 }}
+                >
+                  {connecting ? "Connecting..." : "Connect Account"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%" }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: T.text, fontWeight: 600 }}>{oauthStatus.account_name}</div>
+                  <div style={{ fontSize: 10, color: T.textMuted }}>
+                    {stashStatus.last_refresh ? `Last refresh: ${stashStatus.last_refresh}` : "Not yet refreshed"}
+                  </div>
+                </div>
+                <button onClick={handleRefresh} disabled={stashStatus.refreshing} style={{ ...BTN_GOLD, opacity: stashStatus.refreshing ? 0.6 : 1 }}>
+                  {stashStatus.refreshing ? "Refreshing..." : "Refresh"}
+                </button>
+                <button onClick={handleDisconnect} style={{ ...BTN, background: "transparent", border: `1px solid ${T.border}`, color: T.textMuted, fontSize: 11 }}>
+                  Disconnect
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Progress Bar */}
+          {progressProp && (
+            <div className="panel" style={{ ...CARD, marginBottom: 12, padding: "8px 12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: 11, color: T.textSecond }}>Fetching: {progressProp.tab}</span>
+                <span style={{ fontSize: 11, color: T.textMuted, ...MONO }}>{progressProp.done}/{progressProp.total}</span>
+              </div>
+              <div style={{ height: 4, background: T.input, borderRadius: 2, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", background: T.gold, borderRadius: 2,
+                  width: progressProp.total > 0 ? `${(progressProp.done / progressProp.total) * 100}%` : "0%",
+                  transition: "width 0.3s ease",
+                }} />
+              </div>
+            </div>
+          )}
+
+          {/* Wealth Summary */}
+          {oauthStatus.connected && stashStatus.last_refresh && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
+              <div className="panel" style={{ ...CARD, textAlign: "center" }}>
+                <div style={LABEL}>TOTAL WEALTH</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: T.gold, ...MONO, marginTop: 4 }}>
+                  {stashStatus.total_value.toFixed(1)}
+                </div>
+                <div style={{ fontSize: 10, color: T.textMuted }}>divine</div>
+              </div>
+              <div className="panel" style={{ ...CARD, textAlign: "center" }}>
+                <div style={LABEL}>TABS</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: T.text, ...MONO, marginTop: 4 }}>
+                  {stashStatus.tab_count}
+                </div>
+                <div style={{ fontSize: 10, color: T.textMuted }}>stash tabs</div>
+              </div>
+              <div className="panel" style={{ ...CARD, textAlign: "center" }}>
+                <div style={LABEL}>CHANGE</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: wealthChange >= 0 ? "#4ade80" : "#ef4444", ...MONO, marginTop: 4 }}>
+                  {wealthChange >= 0 ? "+" : ""}{wealthChange.toFixed(1)}
+                </div>
+                <div style={{ fontSize: 10, color: T.textMuted }}>since last refresh</div>
+              </div>
+              <div className="panel" style={{ ...CARD, textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                <div style={LABEL}>TREND</div>
+                <div style={{ marginTop: 6 }}>
+                  {sparklineData ? (
+                    <SparklineSVG data={sparklineData.map((v, i) => i === 0 ? 0 : ((v - sparklineData[0]) / (sparklineData[0] || 1)) * 100)} width={90} height={28} color={wealthChange >= 0 ? "#4ade80" : "#ef4444"} />
+                  ) : (
+                    <div style={{ fontSize: 10, color: T.textMuted }}>Need 2+ snapshots</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab List */}
+          {tabs.length > 0 && (
+            <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden" }}>
+              {/* Header */}
+              <div style={{
+                display: "grid", gridTemplateColumns: "8px 1fr 80px 60px 80px",
+                padding: "8px 12px", gap: 8, borderBottom: `1px solid ${T.border}`,
+                fontSize: 10, fontWeight: 700, color: T.textSecond, letterSpacing: "0.08em", textTransform: "uppercase",
+              }}>
+                <div></div>
+                <div>Tab</div>
+                <div style={{ textAlign: "right" }}>Value</div>
+                <div style={{ textAlign: "right" }}>Items</div>
+                <div style={{ textAlign: "right" }}>Scored</div>
+              </div>
+
+              {/* Tab rows */}
+              <div style={{ maxHeight: 500, overflowY: "auto" }}>
+                {tabs.map((tab, i) => {
+                  const isExpanded = expandedTab === tab.id;
+                  const colourDot = tab.colour
+                    ? `rgb(${tab.colour.r || 100},${tab.colour.g || 100},${tab.colour.b || 100})`
+                    : T.textMuted;
+                  return (
+                    <React.Fragment key={tab.id}>
+                      <div
+                        style={{
+                          display: "grid", gridTemplateColumns: "8px 1fr 80px 60px 80px",
+                          padding: "8px 12px", gap: 8, alignItems: "center",
+                          background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
+                          cursor: "pointer", fontSize: 12, transition: "background 0.1s",
+                          borderLeft: isExpanded ? `2px solid ${T.gold}` : "2px solid transparent",
+                        }}
+                        onClick={() => handleExpandTab(tab.id)}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(196,164,86,0.06)"}
+                        onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)"}
+                      >
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: colourDot }} />
+                        <div style={{ color: T.text, fontWeight: 500 }}>{tab.name}</div>
+                        <div style={{ ...MONO, color: T.gold, textAlign: "right", fontWeight: 600 }}>
+                          {tab.total_divine > 0 ? `${tab.total_divine.toFixed(1)}d` : "--"}
+                        </div>
+                        <div style={{ ...MONO, color: T.textSecond, textAlign: "right" }}>{tab.item_count}</div>
+                        <div style={{ ...MONO, color: T.textSecond, textAlign: "right" }}>{tab.scored_count || 0}</div>
+                      </div>
+
+                      {/* Expanded item list */}
+                      {isExpanded && (
+                        <div style={{ background: "rgba(0,0,0,0.2)", borderBottom: `1px solid ${T.border}` }}>
+                          {!tabItems[tab.id] ? (
+                            <div style={{ padding: 16, textAlign: "center", color: T.textMuted, fontSize: 12 }}>Loading items...</div>
+                          ) : tabItems[tab.id].length === 0 ? (
+                            <div style={{ padding: 16, textAlign: "center", color: T.textMuted, fontSize: 12 }}>No scorable items in this tab</div>
+                          ) : (
+                            <div>
+                              {/* Item grid header */}
+                              <div style={{
+                                display: "grid", gridTemplateColumns: "28px 1fr 50px 70px 100px",
+                                padding: "4px 16px", gap: 8, fontSize: 9, fontWeight: 700,
+                                color: T.textMuted, letterSpacing: "0.08em", textTransform: "uppercase",
+                                borderBottom: `1px solid ${T.border}`,
+                              }}>
+                                <div></div>
+                                <div>Item</div>
+                                <div style={{ textAlign: "center" }}>Grade</div>
+                                <div style={{ textAlign: "right" }}>Score</div>
+                                <div style={{ textAlign: "right" }}>Estimate</div>
+                              </div>
+
+                              {/* Item rows */}
+                              {tabItems[tab.id].map((item, j) => (
+                                <StashItemRow key={j} item={item} index={j} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {oauthStatus.connected && tabs.length === 0 && !stashStatus.refreshing && (
+            <div className="panel" style={{ ...CARD, textAlign: "center", padding: 32 }}>
+              <div style={{ fontSize: 14, color: T.textSecond, marginBottom: 8 }}>No stash data yet</div>
+              <div style={{ fontSize: 12, color: T.textMuted }}>Click "Refresh" to fetch your stash tabs and score all items.</div>
+            </div>
+          )}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    function StashItemRow({ item, index }) {
+      const [expanded, setExpanded] = useState(false);
+      const gradeColor = GRADE_COLORS[item.grade] || T.textMuted;
+      const bg = index % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)";
+
+      return (
+        <>
+          <div
+            style={{
+              display: "grid", gridTemplateColumns: "28px 1fr 50px 70px 100px",
+              padding: "5px 16px", gap: 8, alignItems: "center",
+              background: bg, cursor: "pointer", fontSize: 12, transition: "background 0.1s",
+            }}
+            onClick={() => setExpanded(!expanded)}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(196,164,86,0.04)"}
+            onMouseLeave={e => e.currentTarget.style.background = bg}
+          >
+            <div style={{ width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {item.icon_url ? (
+                <img src={item.icon_url} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} onError={e => e.target.style.display = "none"} />
+              ) : (
+                <div style={{ width: 22, height: 22, borderRadius: 4, background: T.border }} />
+              )}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: item.rarity === "unique" ? "#af6025" : T.text, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {item.name || item.base_type}
+              </div>
+              {item.base_type && item.name !== item.base_type && (
+                <div style={{ fontSize: 10, color: T.textMuted }}>{item.base_type}</div>
+              )}
+            </div>
+            <div style={{ textAlign: "center" }}>
+              {item.grade && (
+                <span style={{
+                  display: "inline-block", padding: "1px 6px", borderRadius: 3, fontSize: 10, fontWeight: 700,
+                  background: `${gradeColor}22`, color: gradeColor, border: `1px solid ${gradeColor}44`,
+                }}>
+                  {item.grade}
+                </span>
+              )}
+            </div>
+            <div style={{ ...MONO, color: T.textSecond, textAlign: "right", fontSize: 11 }}>
+              {item.score > 0 ? `${(item.score * 100).toFixed(0)}%` : "--"}
+            </div>
+            <div style={{ ...MONO, color: T.gold, textAlign: "right", fontWeight: 600 }}>
+              {item.estimate_divine > 0 ? `${item.estimate_divine.toFixed(1)}d` : item.listed_price > 0 ? `${item.listed_price.toFixed(1)}d` : "--"}
+            </div>
+          </div>
+
+          {/* Expanded mod detail */}
+          {expanded && item.mods && item.mods.length > 0 && (
+            <div style={{ padding: "6px 16px 10px 56px", background: "rgba(0,0,0,0.15)" }}>
+              {item.top_mods && (
+                <div style={{ fontSize: 10, color: T.gold, marginBottom: 4, fontWeight: 600 }}>{item.top_mods}</div>
+              )}
+              {item.mods.map((mod, k) => (
+                <div key={k} style={{ fontSize: 11, color: T.textSecond, display: "flex", gap: 8, padding: "1px 0" }}>
+                  <span style={{ ...MONO, color: T.textMuted, width: 28, textAlign: "right", flexShrink: 0, fontSize: 10 }}>
+                    {mod.tier_label || "--"}
+                  </span>
+                  <span>{mod.text}</span>
+                  {mod.weight > 0 && (
+                    <span style={{ ...MONO, color: T.textMuted, fontSize: 10, marginLeft: "auto" }}>w{mod.weight}</span>
+                  )}
+                </div>
+              ))}
+              {(item.total_dps > 0 || item.total_defense > 0) && (
+                <div style={{ marginTop: 4, fontSize: 10, color: T.textMuted }}>
+                  {item.total_dps > 0 && <span>DPS: {item.total_dps.toFixed(0)} </span>}
+                  {item.total_defense > 0 && <span>Def: {item.total_defense}</span>}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      );
+    }
+
+
     function MarketsTab() {
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(true);
@@ -5221,6 +6383,9 @@
       const [nuxDismissed, setNuxDismissed] = useState(false);
       const [settingsLoaded, setSettingsLoaded] = useState(false);
       const [welcomeOpen, setWelcomeOpen] = useState(false);
+      const [stashOauth, setStashOauth] = useState({ connected: false, account_name: null });
+      const [stashProgress, setStashProgress] = useState(null);
+      const [stashRefreshing, setStashRefreshing] = useState(false);
       const welcomeShownRef = useRef(false);
       const logRef = useRef(null);
       const autoScrollRef = useRef(true);
@@ -5280,6 +6445,8 @@
             }
             if (msg.watchlist_results) setWatchlistResults(msg.watchlist_results);
             if (msg.watchlist_states) setQueryStates(msg.watchlist_states);
+            if (msg.oauth_status) setStashOauth(msg.oauth_status);
+            if (msg.stash_status) setStashRefreshing(msg.stash_status.refreshing || false);
             break;
           case "log":
             setLogs(prev => {
@@ -5314,6 +6481,20 @@
             break;
           case "market_signal":
             // Future: append signal to market signals feed
+            break;
+          case "oauth_status":
+            setStashOauth({ connected: msg.connected, account_name: msg.account_name });
+            break;
+          case "stash_progress":
+            setStashProgress({ tab: msg.tab, done: msg.done, total: msg.total });
+            break;
+          case "stash_complete":
+            setStashProgress(null);
+            setStashRefreshing(false);
+            break;
+          case "stash_error":
+            setStashProgress(null);
+            setStashRefreshing(false);
             break;
           case "app_restart":
             // Server is restarting — force-close the pywebview window so the old process exits
@@ -5489,11 +6670,14 @@
             <div style={{ maxWidth: 1050, margin: "0 auto", padding: "0 24px 16px" }}>
               {activeTab === "overlay" && (
                 <>
-                  <div data-nux="start-scanner"><ScannerStatusCard status={status} onStart={handleStart} onStop={handleStop} onRestart={handleRestart} /></div>
+                  <div data-nux="start-scanner"><ScannerStatusBar status={status} onStart={handleStart} onStop={handleStop} onRestart={handleRestart} /></div>
                   <div data-nux="item-lookup"><ItemLookupCard /></div>
                   <div data-nux="overlay-settings"><OverlaySettingsTab settings={settings} onUpdate={handleSettingsUpdate} overlayState={status.state} telemetryStatus={telemetryStatus} onTelemetryUpload={() => api("/api/telemetry/upload", "POST").then(r => { refreshTelemetryStatus(); return r; })} /></div>
                   <LogPanel logs={logs} logRef={logRef} onClear={() => setLogs([])} />
                 </>
+              )}
+              {activeTab === "stash" && (
+                <div data-nux="stash-tab"><StashTab oauthProp={stashOauth} progressProp={stashProgress} refreshingProp={stashRefreshing} /></div>
               )}
               {activeTab === "filter" && (
                 <div data-nux="filter-tab"><FilterTab
