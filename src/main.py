@@ -140,6 +140,10 @@ class LAMA:
         self._trade_generation = 0
         self._trade_gen_lock = threading.Lock()
 
+        # Deep query flag: base_type of item currently being deep-queried.
+        # Auto-cal skips items matching this key to avoid wasting API budget.
+        self._deep_query_item_key = None
+
         # Statistics
         self.stats = {
             "triggers": 0,
@@ -868,13 +872,20 @@ class LAMA:
 
         overlay_tier = GRADE_TIER_MAP.get(score.grade.value, "low")
 
+        # Extract per-mod tier data for calibration
+        mod_tiers = {ms.mod_group: int(ms.tier_label[1:])
+                     for ms in score.mod_scores
+                     if ms.mod_group and ms.tier_label and ms.tier_label[1:].isdigit()}
+
         # Query calibration for price estimate
         price_est = self.calibration.estimate(
             score.normalized_score, getattr(item, "item_class", "") or "",
             grade=score.grade.value,
             top_tier_count=score.top_tier_count,
             mod_count=len(score.mod_scores),
-            mod_groups=[ms.mod_group for ms in score.mod_scores if ms.mod_group])
+            mod_groups=[ms.mod_group for ms in score.mod_scores if ms.mod_group],
+            base_type=getattr(item, "base_type", ""),
+            mod_tiers=mod_tiers)
 
         # Check trade cache — deep query or auto-cal may have a real price
         cached_trade = None
@@ -1070,6 +1081,7 @@ class LAMA:
             return
 
         logger.info(f"Deep query: {item.name or item.base_type}")
+        self._deep_query_item_key = item.base_type
         self._price_rare_deep_async(item, mods, score, cx, cy)
 
     def _price_rare_deep_async(self, item, parsed_mods, score_result, cursor_x, cursor_y):
@@ -1129,6 +1141,7 @@ class LAMA:
                     text="?", tier="low",
                     cursor_x=cursor_x, cursor_y=cursor_y)
             finally:
+                self._deep_query_item_key = None
                 search_done.set()
 
         threading.Thread(target=_do_deep, daemon=True,
@@ -1161,6 +1174,9 @@ class LAMA:
                              f"(<{CALIBRATION_MIN_RESULTS} min)")
                 return
 
+            mod_tiers = {ms.mod_group: int(ms.tier_label[1:])
+                         for ms in score_result.mod_scores
+                         if ms.mod_group and ms.tier_label and ms.tier_label[1:].isdigit()}
             record = {
                 "ts": int(time.time()),
                 "league": self.league,
@@ -1180,6 +1196,8 @@ class LAMA:
                 "top_tier_count": score_result.top_tier_count,
                 "mod_count": len(score_result.mod_scores),
                 "mod_groups": [ms.mod_group for ms in score_result.mod_scores if ms.mod_group],
+                "base_type": getattr(item, "base_type", ""),
+                "mod_tiers": mod_tiers,
             }
             CALIBRATION_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
             with open(CALIBRATION_LOG_FILE, "a", encoding="utf-8") as f:
@@ -1193,7 +1211,9 @@ class LAMA:
                 grade=score_result.grade.value,
                 top_tier_count=score_result.top_tier_count,
                 mod_count=len(score_result.mod_scores),
-                mod_groups=[ms.mod_group for ms in score_result.mod_scores if ms.mod_group])
+                mod_groups=[ms.mod_group for ms in score_result.mod_scores if ms.mod_group],
+                base_type=getattr(item, "base_type", ""),
+                mod_tiers=mod_tiers)
         except Exception as e:
             logger.warning(f"Calibration log failed: {e}")
 
@@ -1244,6 +1264,13 @@ class LAMA:
         while True:
             item, parsed_mods, score_result = self._calibration_queue.get()
             display_name = item.name or item.base_type
+
+            # Skip items that have a deep query in progress — the deep query
+            # will produce the same result and log calibration itself.
+            if item.base_type and item.base_type == self._deep_query_item_key:
+                logger.debug(f"Auto-cal: skipping {display_name} (deep query in progress)")
+                continue
+
             try:
                 # Wait out any active rate limit before attempting
                 while self.trade_client._is_rate_limited():

@@ -174,6 +174,7 @@ class PriceOverlay:
         self._pulse_ms: int = 0
         self._text_pulse: bool = False
         self._is_estimate: bool = False
+        self._checking_in_flight: bool = False  # True while "Checking..." query is running
         self._ready = threading.Event()
         self._pending_updates = []
         self._lock = threading.Lock()
@@ -431,24 +432,52 @@ class PriceOverlay:
     # ─── Internal Methods ────────────────────────────
 
     @staticmethod
-    def _get_screen_size() -> Tuple[int, int]:
-        """Get screen size in physical pixels via Win32 API.
+    def _get_monitor_rect(cx: int, cy: int) -> Tuple[int, int, int, int]:
+        """Get the bounding rect (left, top, right, bottom) of the monitor
+        containing screen point (cx, cy).
 
-        Uses GetSystemMetrics which returns the same physical-pixel coordinate
-        space as GetCursorPos, avoiding DPI mismatch with tkinter's
-        winfo_screenwidth/height on HiDPI displays.
+        Uses MonitorFromPoint + GetMonitorInfo so the overlay clamps to the
+        correct monitor in multi-monitor setups instead of always snapping
+        to the primary display.
         """
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", wintypes.DWORD),
+                    ("rcMonitor", wintypes.RECT),
+                    ("rcWork", wintypes.RECT),
+                    ("dwFlags", wintypes.DWORD),
+                ]
+
+            class POINT(ctypes.Structure):
+                _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+            MONITOR_DEFAULTTONEAREST = 2
+            hmon = ctypes.windll.user32.MonitorFromPoint(
+                POINT(cx, cy), MONITOR_DEFAULTTONEAREST)
+            if hmon:
+                mi = MONITORINFO()
+                mi.cbSize = ctypes.sizeof(MONITORINFO)
+                if ctypes.windll.user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+                    r = mi.rcMonitor
+                    return (r.left, r.top, r.right, r.bottom)
+        except Exception:
+            pass
+
+        # Fallback: primary monitor via GetSystemMetrics
         try:
             import ctypes
             SM_CXSCREEN, SM_CYSCREEN = 0, 1
             w = ctypes.windll.user32.GetSystemMetrics(SM_CXSCREEN)
             h = ctypes.windll.user32.GetSystemMetrics(SM_CYSCREEN)
             if w > 0 and h > 0:
-                return w, h
+                return (0, 0, w, h)
         except Exception:
             pass
-        # Fallback (non-Windows or error)
-        return 1920, 1080
+        return (0, 0, 1920, 1080)
 
     def _load_currency_icons(self):
         """Pre-load currency icon PNGs, resized to match font size."""
@@ -1154,10 +1183,9 @@ class PriceOverlay:
         x = cursor_x + OVERLAY_OFFSET_X
         y = cursor_y + OVERLAY_OFFSET_Y
 
-        # Use Win32 screen metrics (same physical-pixel coordinate space as
-        # GetCursorPos) instead of tkinter's winfo_screenwidth which returns
-        # DPI-scaled logical pixels and causes misplacement on HiDPI displays.
-        screen_w, screen_h = self._get_screen_size()
+        # Get the bounds of the monitor the cursor is on (handles multi-
+        # monitor setups where the game may be on a secondary display).
+        mon_l, mon_t, mon_r, mon_b = self._get_monitor_rect(cursor_x, cursor_y)
         self._root.update_idletasks()
         if self._theme == THEME_POE2:
             widget_w = self._canvas.winfo_reqwidth()
@@ -1166,15 +1194,15 @@ class PriceOverlay:
             widget_w = self._frame.winfo_reqwidth()
             widget_h = self._frame.winfo_reqheight()
 
-        # Slide (don't flip) to keep overlay on-screen
-        if x + widget_w > screen_w:
-            x = screen_w - widget_w
-        if x < 0:
-            x = 0
-        if y < 0:
+        # Slide (don't flip) to keep overlay on the correct monitor
+        if x + widget_w > mon_r:
+            x = mon_r - widget_w
+        if x < mon_l:
+            x = mon_l
+        if y < mon_t:
             y = cursor_y + 30
-        if y + widget_h > screen_h:
-            y = screen_h - widget_h
+        if y + widget_h > mon_b:
+            y = mon_b - widget_h
 
         self._root.geometry(f"+{x}+{y}")
 
@@ -1204,11 +1232,17 @@ class PriceOverlay:
 
         self._visible = True
 
-        # Reset auto-hide safety timer — if no new show/reshow arrives
-        # within 3s the overlay hides itself (safety net for missed hides)
+        # Track whether we're showing a "Checking..." placeholder for an
+        # in-flight deep query so reshow can also use the extended timeout.
+        self._checking_in_flight = text.startswith("Checking")
+
+        # Reset auto-hide safety timer — if no new show/reshow arrives the
+        # overlay hides itself.  "Checking..." gets 30s (queries can take
+        # 10-15s under rate limiting); everything else uses the normal 3s.
+        timeout = 30000 if self._checking_in_flight else 3000
         if self._hide_timer:
             self._root.after_cancel(self._hide_timer)
-        self._hide_timer = self._root.after(3000, self._do_hide)
+        self._hide_timer = self._root.after(timeout, self._do_hide)
 
     def _start_pulse(self):
         """Pulse the border between colors at the configured speed."""
@@ -1327,7 +1361,7 @@ class PriceOverlay:
         x = cursor_x + OVERLAY_OFFSET_X
         y = cursor_y + OVERLAY_OFFSET_Y
 
-        screen_w, screen_h = self._get_screen_size()
+        mon_l, mon_t, mon_r, mon_b = self._get_monitor_rect(cursor_x, cursor_y)
         self._root.update_idletasks()
         if self._theme == THEME_POE2 and self._canvas:
             widget_w = self._canvas.winfo_reqwidth()
@@ -1338,14 +1372,14 @@ class PriceOverlay:
         else:
             return
 
-        if x + widget_w > screen_w:
-            x = screen_w - widget_w
-        if x < 0:
-            x = 0
-        if y < 0:
+        if x + widget_w > mon_r:
+            x = mon_r - widget_w
+        if x < mon_l:
+            x = mon_l
+        if y < mon_t:
             y = cursor_y + 30
-        if y + widget_h > screen_h:
-            y = screen_h - widget_h
+        if y + widget_h > mon_b:
+            y = mon_b - widget_h
 
         self._root.geometry(f"+{x}+{y}")
         self._root.deiconify()
@@ -1371,9 +1405,10 @@ class PriceOverlay:
         self._visible = True
 
         # Reset auto-hide safety timer (reshow refreshes the countdown)
+        timeout = 30000 if self._checking_in_flight else 3000
         if self._hide_timer:
             self._root.after_cancel(self._hide_timer)
-        self._hide_timer = self._root.after(3000, self._do_hide)
+        self._hide_timer = self._root.after(timeout, self._do_hide)
 
     def _do_hide(self):
         """Actually hide the overlay (must be on main thread)."""
