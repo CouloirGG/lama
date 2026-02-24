@@ -11,7 +11,7 @@ Coefficients stored in shard JSON alongside k-NN samples.
 
 import math
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,40 @@ SYNERGY_PAIRS: List[Tuple[str, str]] = [
     ("AttackSpeed", "CriticalStrikeChance"),
     ("CriticalStrikeMultiplier", "SpellDamage"),
     ("AreaDamage", "CriticalStrikeMultiplier"),
+    # Meta-informed synergies
+    ("CastSpeed", "CriticalStrikeChance"),       # CoC trigger combo
+    ("EnergyShield", "SpellDamage"),              # CI caster core
+    ("IncreasedLife", "ChaosResistance"),          # Life builds need chaos res most
+    ("MaximumMana", "EnergyShield"),               # MoM+EB synergy
 ]
+
+# ── Meta archetypes: common build patterns from meta analysis ──
+
+META_ARCHETYPES: Dict[str, List[str]] = {
+    "coc_spell": ["criticalstrikechance", "criticalstrikemultiplier",
+                  "spelldamage", "castspeed", "skilllevels", "gemlevels"],
+    "ci_es":     ["energyshield", "localenergyshield", "increasedenergy", "spirit"],
+    "mom_mana":  ["maximummana", "increasedmana", "manaregeneration",
+                  "manareservation"],
+}
+
+
+def compute_archetype_scores(mod_groups: list) -> Dict[str, float]:
+    """Compute archetype alignment scores from mod groups.
+
+    Uses substring matching (case-insensitive) like _WEIGHT_TABLE.
+    Returns {archetype_name: score} where score = matches / total_patterns.
+    """
+    if not mod_groups:
+        return {k: 0.0 for k in META_ARCHETYPES}
+    groups_lower = [g.lower() for g in mod_groups]
+    scores: Dict[str, float] = {}
+    for arch, patterns in META_ARCHETYPES.items():
+        matches = sum(1 for pat in patterns
+                      if any(pat in gl for gl in groups_lower))
+        scores[arch] = round(matches / len(patterns), 3)
+    return scores
+
 
 # ── Numeric normalization constants (fixed, not learned) ────
 
@@ -39,6 +72,9 @@ NUMERIC_NORMS: Dict[str, Tuple[float, float]] = {
     "dps_factor":      (1.0, 0.4),
     "defense_factor":  (1.0, 0.2),
     "somv_factor":     (1.0, 0.1),
+    "arch_coc_spell":  (0.15, 0.15),
+    "arch_ci_es":      (0.10, 0.15),
+    "arch_mom_mana":   (0.05, 0.10),
 }
 
 # Price clamp range
@@ -64,7 +100,8 @@ class LearnedWeights:
                 base_type: str, grade_num: int, top_tier_count: int,
                 mod_count: int, dps_factor: float,
                 defense_factor: float,
-                somv_factor: float = 1.0) -> Optional[float]:
+                somv_factor: float = 1.0,
+                mod_tiers: Dict[str, int] = None) -> Optional[float]:
         """Pure Python dot product prediction. Returns divine price or None."""
         model = self._models.get(item_class)
         if model is None:
@@ -72,12 +109,19 @@ class LearnedWeights:
 
         log_price = model["intercept"]
 
-        # Mod group features (binary)
+        # Mod group features: tier-weighted if model was trained with tiers
         mod_coeffs = model.get("mod_coeffs", {})
         mg_set = set(mod_groups) if mod_groups else set()
+        tier_weighted = model.get("tier_weighted", False)
+        tiers = mod_tiers or {}
         for group, coeff in mod_coeffs.items():
             if group in mg_set:
-                log_price += coeff
+                if tier_weighted:
+                    tier = tiers.get(group, 0)
+                    weight = (1.0 / tier) if tier > 0 else 0.5
+                else:
+                    weight = 1.0  # legacy binary
+                log_price += coeff * weight
 
         # Base type features (one-hot)
         base_coeffs = model.get("base_coeffs", {})
@@ -93,7 +137,7 @@ class LearnedWeights:
 
         # Numeric features (normalized)
         numeric_coeffs = model.get("numeric_coeffs", {})
-        numerics = {
+        numerics: Dict[str, Any] = {
             "grade_num": grade_num,
             "top_tier_count": top_tier_count,
             "mod_count": mod_count,
@@ -101,6 +145,10 @@ class LearnedWeights:
             "defense_factor": defense_factor,
             "somv_factor": somv_factor,
         }
+        # Add archetype scores as numeric features
+        arch_scores = compute_archetype_scores(mod_groups or [])
+        numerics.update({f"arch_{k}": v for k, v in arch_scores.items()})
+
         for feat, coeff in numeric_coeffs.items():
             val = numerics.get(feat, 0)
             center, scale = NUMERIC_NORMS.get(feat, (0.0, 1.0))
@@ -262,10 +310,12 @@ def _train_class_model(item_class: str, records: List[dict], np,
         # Target: log(price)
         y[row] = math.log(rec["p"])
 
-        # Mod group features (binary)
+        # Mod group features (tier-weighted: 1/tier, 0.5 if unknown)
+        mod_tiers = rec.get("mod_tiers_resolved", {})
         for g in rec.get("mod_groups_resolved", []):
             if g in mod_idx:
-                X[row, mod_idx[g]] = 1.0
+                tier = mod_tiers.get(g, 0)
+                X[row, mod_idx[g]] = (1.0 / tier) if tier > 0 else 0.5
 
         # Base type features (one-hot)
         bt = rec.get("base_type_resolved", "")
@@ -279,7 +329,7 @@ def _train_class_model(item_class: str, records: List[dict], np,
                 X[row, syn_offset + si] = 1.0
 
         # Numeric features (normalized)
-        raw_nums = {
+        raw_nums: Dict[str, Any] = {
             "grade_num": rec.get("g", 2),
             "top_tier_count": rec.get("t", 0),
             "mod_count": rec.get("n", 4),
@@ -287,27 +337,40 @@ def _train_class_model(item_class: str, records: List[dict], np,
             "defense_factor": rec.get("f", 1.0),
             "somv_factor": rec.get("v", 1.0),
         }
+        # Add archetype scores
+        arch_scores = compute_archetype_scores(rec.get("mod_groups_resolved", []))
+        raw_nums.update({f"arch_{k}": v for k, v in arch_scores.items()})
+
         for ki, feat in enumerate(numeric_keys):
             center, scale = NUMERIC_NORMS[feat]
             X[row, numeric_offset + ki] = (raw_nums.get(feat, center) - center) / scale
 
     # ── Ridge regression (closed form) ─────────────────────
-    # Center y for intercept, then: beta = (X^T X + alpha*I)^{-1} X^T y_centered
+    # Standardize columns so Ridge penalty applies equally across features.
+    # Without this, high-variance numeric features (somv_factor: [-5,+5])
+    # dominate low-variance mod features ([0,1]), suppressing mod coefficients.
 
     y_mean = np.mean(y)
     y_centered = y - y_mean
 
-    XtX = X.T @ X
+    col_mean = np.mean(X, axis=0)
+    col_std = np.std(X, axis=0)
+    col_std[col_std < 1e-10] = 1.0  # constant columns stay unchanged
+    X_std = (X - col_mean) / col_std
+
+    XtX = X_std.T @ X_std
     XtX += alpha * np.eye(n_features)
-    Xty = X.T @ y_centered
+    Xty = X_std.T @ y_centered
 
     try:
-        beta = np.linalg.solve(XtX, Xty)
+        beta_std = np.linalg.solve(XtX, Xty)
     except np.linalg.LinAlgError:
         logger.warning(f"Ridge regression failed for {item_class} (singular matrix)")
         return None
 
-    intercept = float(y_mean)
+    # Convert back to pre-normalized scale for predict() compatibility
+    beta = beta_std / col_std
+    intercept = float(y_mean - np.dot(col_mean, beta))
 
     # ── Cross-validation R2 ────────────────────────────────
     r2_cv = _cross_validate_r2(X, y, alpha, np, n_folds=3)
@@ -347,6 +410,7 @@ def _train_class_model(item_class: str, records: List[dict], np,
         "numeric_coeffs": numeric_coeffs,
         "n_train": n,
         "r2_cv": round(r2_cv, 4),
+        "tier_weighted": True,
     }
 
 
@@ -356,7 +420,6 @@ def _cross_validate_r2(X, y, alpha: float, np, n_folds: int = 3) -> float:
     if n < n_folds * 2:
         return 0.0
 
-    indices = np.arange(n)
     fold_size = n // n_folds
     ss_res_total = 0.0
     ss_tot_total = 0.0
@@ -380,16 +443,23 @@ def _cross_validate_r2(X, y, alpha: float, np, n_folds: int = 3) -> float:
         y_mean_train = np.mean(y_train)
         y_centered = y_train - y_mean_train
 
+        # Standardize using training stats (same as _train_class_model)
         n_feat = X_train.shape[1]
-        XtX = X_train.T @ X_train + alpha * np.eye(n_feat)
-        Xty = X_train.T @ y_centered
+        col_mean = np.mean(X_train, axis=0)
+        col_std = np.std(X_train, axis=0)
+        col_std[col_std < 1e-10] = 1.0
+        X_train_std = (X_train - col_mean) / col_std
+        X_test_std = (X_test - col_mean) / col_std
+
+        XtX = X_train_std.T @ X_train_std + alpha * np.eye(n_feat)
+        Xty = X_train_std.T @ y_centered
 
         try:
-            beta = np.linalg.solve(XtX, Xty)
+            beta_std = np.linalg.solve(XtX, Xty)
         except np.linalg.LinAlgError:
             continue
 
-        y_pred = X_test @ beta + y_mean_train
+        y_pred = X_test_std @ beta_std + y_mean_train
         ss_res_total += np.sum((y_test - y_pred) ** 2)
         ss_tot_total += np.sum((y_test - np.mean(y_test)) ** 2)
 

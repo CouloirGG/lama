@@ -11,7 +11,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from weight_learner import LearnedWeights, train_weights, SYNERGY_PAIRS
+from weight_learner import (LearnedWeights, train_weights, SYNERGY_PAIRS,
+                            META_ARCHETYPES, compute_archetype_scores,
+                            NUMERIC_NORMS)
 
 numpy = pytest.importorskip("numpy", reason="numpy required for training tests")
 
@@ -64,10 +66,15 @@ def _make_synthetic_records(n=500, seed=42):
         base = rng.choice(BASE_TYPES)
         grade = rng.choice([1, 2, 3, 4])
 
-        # Compute true log-price
+        # Assign random tiers (1-7) to each mod
+        mod_tiers = {m: rng.randint(1, 7) for m in mods}
+
+        # Compute true log-price — tiers matter!
         log_price = math.log(2.0)  # intercept
         for m in mods:
-            log_price += TRUE_EFFECTS.get(m, 0)
+            tier = mod_tiers[m]
+            # Higher-tier (lower number) mods contribute more value
+            log_price += TRUE_EFFECTS.get(m, 0) * (1.0 / tier)
         log_price += BASE_EFFECTS.get(base, 0)
         log_price += 0.2 * (grade - 2)  # grade effect
         log_price += rng.gauss(0, 0.3)  # noise
@@ -85,6 +92,7 @@ def _make_synthetic_records(n=500, seed=42):
             "v": 1.0,
             "mod_groups_resolved": mods,
             "base_type_resolved": base,
+            "mod_tiers_resolved": mod_tiers,
         })
 
     return records
@@ -273,3 +281,111 @@ class TestTrainWeights:
         s = lw.summary()
         assert "Learned weights" in s
         assert "Rings" in s
+
+
+# ── Tier-weighted feature tests ──────────────────────────
+
+class TestTierWeightedFeatures:
+
+    def test_tier_weighted_flag_set(self):
+        """Trained models should have tier_weighted=True."""
+        records = _make_synthetic_records(200)
+        lw = train_weights(records, min_class_samples=20, min_mod_frequency=5)
+        model = lw._models["Rings"]
+        assert model.get("tier_weighted") is True
+
+    def test_tier_weighted_predict_uses_tiers(self):
+        """Predictions should differ for T1 vs T7 of the same mod."""
+        records = _make_synthetic_records(500)
+        lw = train_weights(records, min_class_samples=20, min_mod_frequency=5)
+
+        # Predict with T1 CritMulti
+        p_t1 = lw.predict("Rings", ["CriticalStrikeMultiplier"],
+                          "Coral Ring", 2, 1, 4, 1.0, 1.0,
+                          mod_tiers={"CriticalStrikeMultiplier": 1})
+
+        # Predict with T7 CritMulti
+        p_t7 = lw.predict("Rings", ["CriticalStrikeMultiplier"],
+                          "Coral Ring", 2, 1, 4, 1.0, 1.0,
+                          mod_tiers={"CriticalStrikeMultiplier": 7})
+
+        assert p_t1 is not None
+        assert p_t7 is not None
+        # T1 should produce a higher estimate than T7
+        # (CritMulti has a positive coefficient; 1/1 > 1/7)
+        assert p_t1 > p_t7, (
+            f"T1 price ({p_t1:.2f}) should be > T7 price ({p_t7:.2f})"
+        )
+
+    def test_tier_weighted_backward_compatible(self):
+        """Old models without tier_weighted flag should use binary encoding."""
+        lw = LearnedWeights()
+        lw._models["TestClass"] = {
+            "intercept": 2.0,
+            "mod_coeffs": {"ModA": 1.0},
+            "base_coeffs": {},
+            "synergy_coeffs": {},
+            "numeric_coeffs": {},
+            "n_train": 100,
+            "r2_cv": 0.5,
+            # No "tier_weighted" key
+        }
+
+        # With tier data — should be ignored (binary mode)
+        p1 = lw.predict("TestClass", ["ModA"], "", 2, 1, 4, 1.0, 1.0,
+                         mod_tiers={"ModA": 1})
+        p2 = lw.predict("TestClass", ["ModA"], "", 2, 1, 4, 1.0, 1.0,
+                         mod_tiers={"ModA": 7})
+
+        assert p1 is not None
+        assert p2 is not None
+        # Without tier_weighted, both should be identical (binary 1.0)
+        assert abs(p1 - p2) < 0.01, (
+            f"Binary mode should ignore tiers: {p1:.2f} vs {p2:.2f}"
+        )
+
+    def test_tier_weighted_features_improve_accuracy(self):
+        """Tier-weighted model should have R2_cv > 0.1 on tier-aware synthetic data."""
+        records = _make_synthetic_records(500)
+        lw = train_weights(records, min_class_samples=20, min_mod_frequency=5)
+        model = lw._models["Rings"]
+
+        assert model["r2_cv"] > 0.1, (
+            f"R2_cv ({model['r2_cv']:.3f}) should be > 0.1 with tier-weighted features"
+        )
+
+
+# ── Archetype feature tests ──────────────────────────
+
+class TestArchetypeScores:
+
+    def test_compute_archetype_scores_basic(self):
+        """Known mod groups should produce expected scores."""
+        mods = ["CriticalStrikeChance", "SpellDamage", "CastSpeed"]
+        scores = compute_archetype_scores(mods)
+        # coc_spell has 6 patterns; these 3 match criticalstrikechance, spelldamage, castspeed
+        assert scores["coc_spell"] == round(3 / 6, 3)
+        # ci_es: none of energyshield/localenergyshield/increasedenergy/spirit
+        assert scores["ci_es"] == 0.0
+        # mom_mana: none match
+        assert scores["mom_mana"] == 0.0
+
+    def test_compute_archetype_scores_empty(self):
+        """Empty input should return all zeros."""
+        scores = compute_archetype_scores([])
+        for arch in META_ARCHETYPES:
+            assert scores[arch] == 0.0
+
+    def test_compute_archetype_scores_es_build(self):
+        """ES mod groups should score high on ci_es archetype."""
+        mods = ["EnergyShield", "LocalEnergyShield", "Spirit"]
+        scores = compute_archetype_scores(mods)
+        # ci_es has 4 patterns; 3 match
+        assert scores["ci_es"] == round(3 / 4, 3)
+        assert scores["coc_spell"] == 0.0
+
+    def test_archetype_in_numeric_norms(self):
+        """Archetype entries should exist in NUMERIC_NORMS."""
+        assert "arch_coc_spell" in NUMERIC_NORMS
+        assert "arch_ci_es" in NUMERIC_NORMS
+        assert "arch_mom_mana" in NUMERIC_NORMS

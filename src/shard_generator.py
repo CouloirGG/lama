@@ -5,20 +5,26 @@ Pipeline: raw harvester JSONL -> quality filters -> dedup -> compact gzipped JSO
 
 Shard format (gzipped JSON):
 {
-  "version": 4,
+  "version": 7,
   "league": "Fate of the Vaal",
   "generated_at": "2026-02-18T12:00:00Z",
   "sample_count": 5432,
   "mod_index": [["IncreasedLife", 2.0], ["FireResist", 0.3], ...],
   "base_index": ["Astral Plate", "Coral Ring", ...],
   "samples": [
-    {"s": 0.584, "g": 2, "p": 4.5, "c": "Rings", "d": 1.0, "f": 1.0, "v": 1.02, "t": 2, "n": 5, "m": [0, 1], "b": 3}
+    {"s": 0.584, "g": 2, "p": 4.5, "c": "Rings", "d": 1.0, "f": 1.0, "v": 1.02,
+     "t": 2, "n": 5, "m": [0, 1], "mt": [1, 3], "mr": [0.85, 0.42],
+     "ts": 1.333, "bt": 1, "at": 2.0, "b": 3,
+     "pd": 250.5, "ed": 120.3, "ar": 500, "ev": 0, "es": 200, "il": 82}
   ]
 }
 
 Fields: s=score, g=grade_num, p=divine_price, c=item_class, d=dps_factor, f=defense_factor,
         v=somv_factor, t=top_tier_count, n=mod_count, m=mod_group_indices (into mod_index),
-        b=base_type_index (into base_index)
+        mt=mod_tier_numbers (parallel to m), mr=mod_roll_quality (parallel to m, 0-1 or -1 unknown),
+        ts=tier_score (sum(1/tier)), bt=best_tier (min tier), at=avg_tier,
+        b=base_type_index (into base_index),
+        pd=physical_dps, ed=elemental_dps, ar=armour, ev=evasion, es=energy_shield, il=item_level
 
 Usage:
     python shard_generator.py --input harvester_output.jsonl --output shard.json.gz
@@ -32,6 +38,7 @@ import gzip
 import json
 import math
 import random
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,7 +50,7 @@ _GRADE_FROM_NUM = {v: k for k, v in _GRADE_NUM.items()}
 
 # Quality filter thresholds
 MAX_PRICE_DIVINE = 1500.0
-MIN_PRICE_DIVINE = 0.01
+MIN_PRICE_DIVINE = 0.10  # below ~6 chaos is noise — indistinguishable from expensive items by features
 OUTLIER_IQR_MULTIPLIER = 3.0  # IQR fence multiplier in log-price space
 OUTLIER_MAX_DROP_RATE = 0.20  # sanity cap — fail if outlier removal exceeds 20%
 
@@ -189,6 +196,133 @@ def dedup_records(records: List[dict]) -> Tuple[List[dict], int]:
     return deduped, dup_count
 
 
+_TOP_MODS_RE = re.compile(r"T(\d+)\s+(\w+)")
+
+# Inverted display name map: short overlay label -> list of full RePoE group names.
+# Built from mod_database._DISPLAY_NAMES entries. Multiple group names can map to the
+# same short label (e.g., "Life" <- IncreasedLife, MaximumLife), but for enrichment
+# we pick the most common canonical group name per label.
+_SHORT_TO_GROUP: Dict[str, str] = {
+    "MoveSpd": "MovementVelocity",
+    "GemLvl": "SocketedGemLevel",
+    "SkillLvl": "AddedSkillLevels",
+    "CritMulti": "CriticalStrikeMultiplier",
+    "SpellCrit": "SpellCriticalStrikeChance",
+    "CritChance": "CriticalStrikeChance",
+    "SpellDmg": "SpellDamage",
+    "PhysDmg": "PhysicalDamage",
+    "Armour": "Armour",
+    "AtkSpd": "AttackSpeed",
+    "CastSpd": "CastSpeed",
+    "FireDmg": "FireDamage",
+    "ColdDmg": "ColdDamage",
+    "LightDmg": "LightningDamage",
+    "ChaosDmg": "ChaosDamage",
+    "EleDmg": "ElementalDamage",
+    "AddPhys": "DamageToPhysical",
+    "AddFire": "DamageToFire",
+    "AddCold": "DamageToCold",
+    "AddLight": "DamageToLightning",
+    "AddChaos": "DamageToChaos",
+    "ManaRes": "ManaReservation",
+    "Recoup": "LifeRecoup",
+    "LifeOnHit": "LifeOnHit",
+    "Leech": "LifeLeech",
+    "ProjSpd": "ProjectileSpeed",
+    "AreaDmg": "AreaDamage",
+    "Life": "IncreasedLife",
+    "ESRegen": "EnergyShieldRegeneration",
+    "ES": "EnergyShield",
+    "Mana": "MaximumMana",
+    "Spirit": "Spirit",
+    "Evasion": "Evasion",
+    "Def%": "DefencePercent",
+    "AllDef": "AllDefences",
+    "AllRes": "AllResist",
+    "FireRes": "FireResist",
+    "ColdRes": "ColdResist",
+    "LightRes": "LightningResist",
+    "ChaosRes": "ChaosResist",
+    "Res": "Resistance",
+    "AllAttr": "AllAttributes",
+    "Str": "Strength",
+    "Dex": "Dexterity",
+    "Int": "Intelligence",
+    "Acc": "Accuracy",
+    "LifeRegen": "LifeRegeneration",
+    "ManaRegen": "ManaRegeneration",
+    "ESRecharge": "EnergyShieldRecharge",
+    "Regen": "Regen",
+    "Flask": "Flask",
+    "Stun": "Stun",
+    "Block": "Block",
+    "Thorns": "Thorns",
+    "Light": "LightRadius",
+    "Rarity": "ItemRarity",
+}
+
+
+def _enrich_record(rec: dict) -> None:
+    """Enrich a record by parsing top_mods into mod_groups and mod_tiers.
+
+    For records that have `top_mods` but empty `mod_groups`/`mod_tiers`,
+    parses the top_mods string (e.g., "T1 CastSpd, T4 Mana") and populates
+    mod_groups and mod_tiers from the _SHORT_TO_GROUP mapping.
+
+    Modifies rec in place. Does not overwrite existing populated fields.
+    """
+    # Don't overwrite existing mod_groups
+    existing_groups = rec.get("mod_groups", [])
+    if existing_groups:
+        # Still try to enrich mod_tiers if missing
+        existing_tiers = rec.get("mod_tiers", {})
+        if not existing_tiers:
+            top_mods = rec.get("top_mods", "")
+            if top_mods:
+                for m in _TOP_MODS_RE.finditer(top_mods):
+                    tier = int(m.group(1))
+                    short = m.group(2)
+                    group = _SHORT_TO_GROUP.get(short, "")
+                    if group and group in existing_groups:
+                        existing_tiers[group] = tier
+                if existing_tiers:
+                    rec["mod_tiers"] = existing_tiers
+        return
+
+    top_mods = rec.get("top_mods", "")
+    if not top_mods:
+        return
+
+    groups = []
+    tiers = {}
+    for m in _TOP_MODS_RE.finditer(top_mods):
+        tier = int(m.group(1))
+        short = m.group(2)
+        group = _SHORT_TO_GROUP.get(short, "")
+        if group:
+            if group not in groups:
+                groups.append(group)
+            tiers[group] = tier
+
+    if groups:
+        rec["mod_groups"] = groups
+    if tiers:
+        rec["mod_tiers"] = tiers
+
+
+def _compute_tier_aggregates(rec: dict) -> Tuple[float, int, float]:
+    """Compute (tier_score, best_tier, avg_tier) from mod_tiers or top_mods fallback."""
+    mod_tiers = rec.get("mod_tiers", {})
+    if not mod_tiers:
+        # Parse top_mods string for older records: "T1 CastSpd, T4 Mana" -> [1, 4]
+        tiers = [int(m.group(1)) for m in _TOP_MODS_RE.finditer(rec.get("top_mods", ""))]
+    else:
+        tiers = [t for t in mod_tiers.values() if t > 0]
+    if not tiers:
+        return (0.0, 0, 0.0)
+    return (round(sum(1.0 / t for t in tiers), 3), min(tiers), round(sum(tiers) / len(tiers), 2))
+
+
 def compact_record(rec: dict, mod_to_idx: dict = None, base_to_idx: dict = None) -> dict:
     """Convert a full record to compact shard format."""
     compact = {
@@ -205,14 +339,212 @@ def compact_record(rec: dict, mod_to_idx: dict = None, base_to_idx: dict = None)
     if mod_to_idx:
         groups = rec.get("mod_groups", [])
         if groups:
-            compact["m"] = sorted(set(
+            # Build sorted unique mod indices
+            mod_indices = sorted(set(
                 mod_to_idx[g] for g in groups if g in mod_to_idx
             ))
+            compact["m"] = mod_indices
+
+            # Build parallel tier array from mod_tiers dict
+            mod_tiers = rec.get("mod_tiers", {})
+            if mod_tiers:
+                idx_to_group = {v: k for k, v in mod_to_idx.items()}
+                mt = [mod_tiers.get(idx_to_group.get(idx, ""), 0) for idx in mod_indices]
+                if any(t > 0 for t in mt):
+                    compact["mt"] = mt
+
+            # Per-mod roll quality: parallel array to m[] and mt[]
+            mod_rolls = rec.get("mod_rolls", {})
+            if mod_rolls:
+                idx_to_group_local = {v: k for k, v in mod_to_idx.items()}
+                mr = [round(mod_rolls.get(idx_to_group_local.get(idx, ""), -1.0), 3)
+                      for idx in mod_indices]
+                if any(r >= 0 for r in mr):
+                    compact["mr"] = mr
+
+    # Raw combat stats
+    pdps = rec.get("pdps", 0.0)
+    edps = rec.get("edps", 0.0)
+    if pdps > 0:
+        compact["pd"] = round(pdps, 1)
+    if edps > 0:
+        compact["ed"] = round(edps, 1)
+    ar = rec.get("armour", 0)
+    ev = rec.get("evasion", 0)
+    es = rec.get("energy_shield", 0)
+    if ar > 0:
+        compact["ar"] = ar
+    if ev > 0:
+        compact["ev"] = ev
+    if es > 0:
+        compact["es"] = es
+    il = rec.get("item_level", 0)
+    if il > 0:
+        compact["il"] = il
+
+    # Tier aggregates
+    tier_score, best_tier, avg_tier = _compute_tier_aggregates(rec)
+    if tier_score > 0:
+        compact["ts"] = tier_score
+        compact["bt"] = best_tier
+        compact["at"] = avg_tier
+
     if base_to_idx:
         bt = rec.get("base_type", "")
         if bt and bt in base_to_idx:
             compact["b"] = base_to_idx[bt]
     return compact
+
+
+def _build_price_tables(records: List[dict], n_deciles: int = 10,
+                        min_group_size: int = 20) -> Dict[str, dict]:
+    """Build per-(class, grade) composite score decile price tables.
+
+    For each (class, grade_num) group with enough samples:
+    1. Learn optimal weights for (score, top_tier_count, mod_count, somv_factor)
+       via Ridge regression predicting log(price)
+    2. Sort records by composite score
+    3. Split into deciles, store boundary + median log-price
+
+    Returns: {"class|grade_num": {"weights": [...], "deciles": [...]}}
+    """
+    try:
+        import numpy as np
+    except ImportError:
+        return {}
+
+    from collections import defaultdict
+
+    groups: Dict[Tuple[str, int], List[dict]] = defaultdict(list)
+    for rec in records:
+        cls = rec.get("item_class", "")
+        gn = _GRADE_NUM.get(rec.get("grade", "C"), 1)
+        if cls and rec.get("min_divine", 0) > 0:
+            groups[(cls, gn)].append(rec)
+
+    try:
+        from weight_learner import compute_archetype_scores
+    except ImportError:
+        compute_archetype_scores = None
+
+    tables = {}
+    for (cls, gn), group in groups.items():
+        if len(group) < min_group_size:
+            continue
+
+        n = len(group)
+        n_feats = 10 if compute_archetype_scores else 7
+        X = np.zeros((n, n_feats), dtype=np.float64)
+        y = np.zeros(n, dtype=np.float64)
+        for i, r in enumerate(group):
+            ts, bt_val, at = _compute_tier_aggregates(r)
+            X[i, 0] = r.get("score", 0)
+            X[i, 1] = r.get("top_tier_count", 0)
+            X[i, 2] = r.get("mod_count", 4)
+            X[i, 3] = r.get("somv_factor", 1.0)
+            X[i, 4] = ts
+            X[i, 5] = bt_val
+            X[i, 6] = at
+            if compute_archetype_scores:
+                arch = compute_archetype_scores(r.get("mod_groups", []))
+                X[i, 7] = arch.get("coc_spell", 0.0)
+                X[i, 8] = arch.get("ci_es", 0.0)
+                X[i, 9] = arch.get("mom_mana", 0.0)
+            y[i] = math.log(r["min_divine"])
+
+        y_mean = float(np.mean(y))
+        yc = y - y_mean
+
+        alpha = 0.1
+        try:
+            beta = np.linalg.solve(X.T @ X + alpha * np.eye(n_feats), X.T @ yc)
+        except np.linalg.LinAlgError:
+            continue
+
+        weights = [round(float(b), 6) for b in beta]
+
+        # Sort by composite score
+        composites = (X @ beta).tolist()
+        pairs = sorted(zip(composites, y.tolist()))
+
+        # Build deciles
+        decile_size = n // n_deciles
+        deciles = []
+        for d in range(n_deciles):
+            start = d * decile_size
+            end = (d + 1) * decile_size if d < n_deciles - 1 else n
+            slice_lp = sorted(p[1] for p in pairs[start:end])
+            median_lp = slice_lp[len(slice_lp) // 2]
+            upper_bound = pairs[end - 1][0]
+            deciles.append([round(upper_bound, 6), round(median_lp, 6)])
+
+        key = f"{cls}|{gn}"
+        tables[key] = {
+            "y_mean": round(y_mean, 6),
+            "weights": weights,
+            "deciles": deciles,  # [[upper_composite, median_log_price], ...]
+        }
+
+    return tables
+
+
+def _prepare_gbm_records(deduped: List[dict], mod_to_idx: dict,
+                         idx_to_group: dict = None) -> List[dict]:
+    """Transform deduped records into the format expected by gbm_trainer.
+
+    Resolves mod indices to group names, computes tier aggregates and
+    archetype scores for each record.
+    """
+    try:
+        from weight_learner import compute_archetype_scores
+    except ImportError:
+        compute_archetype_scores = None
+
+    gbm_records = []
+    for rec in deduped:
+        price = rec.get("min_divine", 0)
+        if price <= 0:
+            continue
+
+        mod_groups = [g for g in rec.get("mod_groups", []) if g]
+        mod_tiers = rec.get("mod_tiers", {})
+
+        # Compute tier aggregates
+        ts, bt, at = _compute_tier_aggregates(rec)
+
+        # Compute archetype scores
+        coc_score = es_score = mana_score = 0.0
+        if compute_archetype_scores and mod_groups:
+            arch = compute_archetype_scores(mod_groups)
+            coc_score = arch.get("coc_spell", 0.0)
+            es_score = arch.get("ci_es", 0.0)
+            mana_score = arch.get("mom_mana", 0.0)
+
+        gbm_records.append({
+            "item_class": rec.get("item_class", ""),
+            "grade_num": _GRADE_NUM.get(rec.get("grade", "C"), 1),
+            "score": rec.get("score", 0),
+            "min_divine": price,
+            "top_tier_count": rec.get("top_tier_count", 0),
+            "mod_count": rec.get("mod_count", 4),
+            "dps_factor": rec.get("dps_factor", 1.0),
+            "defense_factor": rec.get("defense_factor", 1.0),
+            "somv_factor": rec.get("somv_factor", 1.0),
+            "tier_score": ts,
+            "best_tier": bt,
+            "avg_tier": at,
+            "coc_score": coc_score,
+            "es_score": es_score,
+            "mana_score": mana_score,
+            "mod_groups": mod_groups,
+            "base_type": rec.get("base_type", ""),
+            "mod_tiers": mod_tiers,
+            "mod_rolls": rec.get("mod_rolls", {}),
+            "pdps": rec.get("pdps", 0.0),
+            "edps": rec.get("edps", 0.0),
+        })
+
+    return gbm_records
 
 
 def generate_shard(records: List[dict], league: str, output_path: str):
@@ -240,6 +572,16 @@ def generate_shard(records: List[dict], league: str, output_path: str):
     # Dedup
     deduped, dup_count = dedup_records(cleaned)
     print(f"  Dedup: {len(cleaned)} -> {len(deduped)} ({dup_count} duplicates removed)")
+
+    # Feature enrichment: parse top_mods into mod_groups/mod_tiers
+    enriched_count = 0
+    for rec in deduped:
+        had_groups = bool(rec.get("mod_groups"))
+        _enrich_record(rec)
+        if not had_groups and rec.get("mod_groups"):
+            enriched_count += 1
+    if enriched_count:
+        print(f"  Enrichment: {enriched_count} records gained mod_groups from top_mods")
 
     # Build mod group index from all records
     all_mod_groups = set()
@@ -291,6 +633,7 @@ def generate_shard(records: List[dict], league: str, output_path: str):
                 "v": rec.get("somv_factor", 1.0),
                 "mod_groups_resolved": [g for g in rec.get("mod_groups", []) if g],
                 "base_type_resolved": rec.get("base_type", ""),
+                "mod_tiers_resolved": rec.get("mod_tiers", {}),
             })
         lw = train_weights(training_records)
         if lw._models:
@@ -301,13 +644,35 @@ def generate_shard(records: List[dict], league: str, output_path: str):
     except Exception as e:
         print(f"  Warning: regression training failed: {e}")
 
+    # Build price tables: per (class, grade) composite score deciles
+    price_tables = _build_price_tables(deduped)
+    if price_tables:
+        print(f"\n  Price tables: {len(price_tables)} (class, grade) groups")
+
+    # Train GBM models
+    gbm_models = None
+    try:
+        from gbm_trainer import train_gbm_models
+        gbm_records = _prepare_gbm_records(deduped, mod_to_idx)
+        gbm_models = train_gbm_models(gbm_records)
+        if gbm_models:
+            print(f"\n  GBM models: {len(gbm_models)} classes")
+            for cls, m in sorted(gbm_models.items()):
+                print(f"    {cls:20s}: n={m['n_train']:5d}, "
+                      f"R2_cv={m['r2_cv']:.3f}, "
+                      f"{len(m['feature_names'])} features")
+    except ImportError:
+        print("  Note: sklearn not available, skipping GBM training")
+    except Exception as e:
+        print(f"  Warning: GBM training failed: {e}")
+
     # Detect league from records if not specified
     if not league:
         leagues = set(r.get("league", "") for r in records if r.get("league"))
         league = leagues.pop() if len(leagues) == 1 else "unknown"
 
     shard = {
-        "version": 5,
+        "version": 7,
         "league": league,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "sample_count": len(samples),
@@ -319,6 +684,10 @@ def generate_shard(records: List[dict], league: str, output_path: str):
         shard["base_index"] = sorted_bases
     if learned_weights_dict:
         shard["learned_weights"] = learned_weights_dict
+    if price_tables:
+        shard["price_tables"] = price_tables
+    if gbm_models:
+        shard["gbm_models"] = gbm_models
 
     # Write gzipped JSON
     out = Path(output_path)
@@ -328,6 +697,12 @@ def generate_shard(records: List[dict], league: str, output_path: str):
 
     size_kb = out.stat().st_size / 1024
     print(f"  Written: {out} ({size_kb:.1f} KB, {len(samples)} samples)")
+
+    # Tier data coverage
+    with_tiers = sum(1 for s in samples if s.get("ts", 0) > 0)
+    with_mt = sum(1 for s in samples if s.get("mt"))
+    print(f"\n  Tier data: {with_tiers}/{len(samples)} samples have tier aggregates "
+          f"({with_mt} with per-mod tiers)")
 
     # Class breakdown
     by_class: Dict[str, int] = {}
@@ -410,8 +785,30 @@ def validate_shard(shard_path: str, seed: int = 42):
         idx = s.get("b")
         return base_index[idx] if (idx is not None and idx < len(base_index)) else ""
 
+    def _sample_mod_tiers(s):
+        """Reconstruct {group: tier} dict from 'mt' + 'm' arrays."""
+        mt = s.get("mt", [])
+        m = s.get("m", [])
+        if not mt or len(mt) != len(m):
+            return {}
+        return {idx_to_group[m[i]]: mt[i]
+                for i in range(len(m)) if m[i] in idx_to_group and mt[i] > 0}
+
+    def _sample_mod_rolls(s):
+        """Reconstruct {group: roll_quality} dict from 'mr' + 'm' arrays."""
+        mr = s.get("mr", [])
+        m = s.get("m", [])
+        if not mr or len(mr) != len(m):
+            return {}
+        return {idx_to_group[m[i]]: mr[i]
+                for i in range(len(m)) if m[i] in idx_to_group and mr[i] >= 0}
+
+    # Build training records for both k-NN and price tables
+    train_records = []
     for i in train_idx:
         s = samples[i]
+        mod_tiers = _sample_mod_tiers(s)
+        mod_rolls = _sample_mod_rolls(s)
         engine._insert(
             score=s["s"],
             divine=s["p"],
@@ -423,7 +820,80 @@ def validate_shard(shard_path: str, seed: int = 42):
             mod_count=s.get("n", 4),
             mod_groups=_sample_mod_groups(s),
             base_type=_sample_base_type(s),
+            mod_tiers=mod_tiers,
+            somv_factor=s.get("v", 1.0),
+            mod_rolls=mod_rolls,
+            pdps=s.get("pd", 0.0),
+            edps=s.get("ed", 0.0),
         )
+        train_records.append({
+            "item_class": s.get("c", ""),
+            "grade": _GRADE_FROM_NUM.get(s.get("g", 1), "C"),
+            "score": s["s"],
+            "min_divine": s["p"],
+            "top_tier_count": s.get("t", 0),
+            "mod_count": s.get("n", 4),
+            "somv_factor": s.get("v", 1.0),
+            "mod_tiers": mod_tiers,
+            "mod_rolls": mod_rolls,
+            "tier_score": s.get("ts", 0.0),
+            "best_tier": s.get("bt", 0),
+            "avg_tier": s.get("at", 0.0),
+            "mod_groups": _sample_mod_groups(s),
+            "pdps": s.get("pd", 0.0),
+            "edps": s.get("ed", 0.0),
+        })
+
+    # Build price tables from training split (avoids data leakage)
+    try:
+        import numpy as np
+        price_tables = _build_price_tables(train_records)
+        if price_tables:
+            engine._price_tables = price_tables
+            print(f"  Price tables: {len(price_tables)} groups (built from train split)")
+    except ImportError:
+        print("  Note: numpy not available, skipping price tables")
+
+    # Train GBM from training split (avoids data leakage)
+    try:
+        from gbm_trainer import train_gbm_models
+        from weight_learner import compute_archetype_scores as _arch_scores
+        gbm_train_records = []
+        for i, tr in zip(train_idx, train_records):
+            s = samples[i]
+            mg = tr.get("mod_groups", [])
+            arch = _arch_scores(mg) if mg else {}
+            gbm_train_records.append({
+                "item_class": tr["item_class"],
+                "grade_num": _GRADE_NUM.get(tr.get("grade", "C"), 1),
+                "score": tr["score"],
+                "min_divine": tr["min_divine"],
+                "top_tier_count": tr.get("top_tier_count", 0),
+                "mod_count": tr.get("mod_count", 4),
+                "dps_factor": s.get("d", 1.0),
+                "defense_factor": s.get("f", 1.0),
+                "somv_factor": tr.get("somv_factor", 1.0),
+                "tier_score": tr.get("tier_score", 0.0),
+                "best_tier": tr.get("best_tier", 0),
+                "avg_tier": tr.get("avg_tier", 0.0),
+                "coc_score": arch.get("coc_spell", 0.0),
+                "es_score": arch.get("ci_es", 0.0),
+                "mana_score": arch.get("mom_mana", 0.0),
+                "mod_groups": mg,
+                "base_type": _sample_base_type(s),
+                "mod_tiers": tr.get("mod_tiers", {}),
+                "mod_rolls": tr.get("mod_rolls", {}),
+                "pdps": tr.get("pdps", 0.0),
+                "edps": tr.get("edps", 0.0),
+            })
+        gbm_models = train_gbm_models(gbm_train_records)
+        if gbm_models:
+            engine._gbm_models = gbm_models
+            print(f"  GBM: {len(gbm_models)} models (built from train split)")
+    except ImportError:
+        print("  Note: sklearn not available, skipping GBM training")
+    except Exception as e:
+        print(f"  Warning: GBM training in validation failed: {e}")
 
     # Test on holdout
     within_2x = 0
@@ -445,7 +915,12 @@ def validate_shard(shard_path: str, seed: int = 42):
                               top_tier_count=s.get("t", 0),
                               mod_count=s.get("n", 4),
                               mod_groups=_sample_mod_groups(s),
-                              base_type=_sample_base_type(s))
+                              base_type=_sample_base_type(s),
+                              somv_factor=s.get("v", 1.0),
+                              mod_tiers=_sample_mod_tiers(s),
+                              mod_rolls=_sample_mod_rolls(s),
+                              pdps=s.get("pd", 0.0),
+                              edps=s.get("ed", 0.0))
         if est is None:
             continue
 
@@ -537,6 +1012,7 @@ def validate_shard(shard_path: str, seed: int = 42):
                     dps_factor=s.get("d", 1.0),
                     defense_factor=s.get("f", 1.0),
                     somv_factor=s.get("v", 1.0),
+                    mod_tiers=_sample_mod_tiers(s),
                 )
                 if est is None:
                     continue
@@ -570,6 +1046,83 @@ def validate_shard(shard_path: str, seed: int = 42):
                 print("    No regression estimates produced")
         except Exception as e:
             print(f"    Regression validation failed: {e}")
+
+    # ── GBM-only validation ──────────────────────────────
+    if engine._gbm_models:
+        print(f"\n  GBM-only validation ({len(engine._gbm_models)} models):")
+        gbm_within_2x = 0
+        gbm_within_3x = 0
+        gbm_total = 0
+        gbm_by_class: Dict[str, List[float]] = {}
+
+        try:
+            from weight_learner import compute_archetype_scores as _gbm_arch
+        except ImportError:
+            _gbm_arch = None
+
+        for i in test_idx:
+            s = samples[i]
+            actual = s["p"]
+            item_class = s.get("c", "")
+            grade_num = s.get("g", 1)
+            mod_groups = _sample_mod_groups(s)
+            mod_tiers = _sample_mod_tiers(s)
+
+            if not mod_groups:
+                continue
+
+            mt = mod_tiers or {}
+            tiers_vals = [t for t in mt.values() if t > 0]
+            ts = round(sum(1.0 / t for t in tiers_vals), 3) if tiers_vals else 0.0
+            bt = min(tiers_vals) if tiers_vals else 0
+            at = round(sum(tiers_vals) / len(tiers_vals), 2) if tiers_vals else 0.0
+
+            arch = _gbm_arch(mod_groups) if _gbm_arch and mod_groups else {}
+
+            est = engine._gbm_estimate(
+                item_class, grade_num, s["s"],
+                s.get("t", 0), s.get("n", 4),
+                s.get("d", 1.0), s.get("f", 1.0),
+                s.get("v", 1.0), ts, bt, at,
+                arch.get("coc_spell", 0.0),
+                arch.get("ci_es", 0.0),
+                arch.get("mom_mana", 0.0),
+                mod_groups=mod_groups,
+                base_type=_sample_base_type(s),
+                mod_tiers=mod_tiers,
+                mod_rolls=_sample_mod_rolls(s),
+                pdps=s.get("pd", 0.0),
+                edps=s.get("ed", 0.0))
+            if est is None:
+                continue
+
+            gbm_total += 1
+            ratio = max(est / actual, actual / est) if actual > 0 else float("inf")
+            if ratio <= 2.0:
+                gbm_within_2x += 1
+            if ratio <= 3.0:
+                gbm_within_3x += 1
+
+            if item_class not in gbm_by_class:
+                gbm_by_class[item_class] = []
+            gbm_by_class[item_class].append(ratio)
+
+        if gbm_total > 0:
+            gbm_pct_2x = gbm_within_2x / gbm_total * 100
+            gbm_pct_3x = gbm_within_3x / gbm_total * 100
+            print(f"    Within 2x: {gbm_within_2x}/{gbm_total} ({gbm_pct_2x:.1f}%)")
+            print(f"    Within 3x: {gbm_within_3x}/{gbm_total} ({gbm_pct_3x:.1f}%)")
+
+            print(f"\n  Per-class GBM accuracy (within 2x):")
+            for cls, ratios in sorted(gbm_by_class.items()):
+                n_cls = len(ratios)
+                n_2x = sum(1 for r in ratios if r <= 2.0)
+                pct = n_2x / n_cls * 100 if n_cls > 0 else 0
+                median_ratio = sorted(ratios)[len(ratios) // 2]
+                print(f"    {cls:20s}: {pct:5.1f}% ({n_cls:4d} samples, "
+                      f"median error: {median_ratio:.2f}x)")
+        else:
+            print("    No GBM estimates produced")
 
 
 # ─── CLI Entry Point ─────────────────────────────────

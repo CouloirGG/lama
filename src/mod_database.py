@@ -270,45 +270,47 @@ _WEIGHT_TABLE: List[Tuple[float, List[str]]] = [
         "spelldamage", "percentagespelldamage",
         "physicaldamage", "localphysicaldamagepercent", "localphysicaldamage",
         "localaddedphysicaldamage",
+        "castspeed",  # essential for CoC (32%+ meta), scales trigger rate
     ]),
     (2.0, [
         "attackspeed", "localattackspeed",
-        "castspeed",
         "addedfiredamage", "addedcolddamage", "addedlightningdamage",
         "addedchaosdamage", "addedelementaldamage",
         "manareservation", "manareservationefficiency",
         "liferecoup", "lifeonhit", "lifeleech",
         "projectilespeed",
         "areaofdamage", "areadamage",
+        "energyshield", "localenergyshield", "increasedenergy",  # 33% CI demand
     ]),
     (1.0, [
         "increasedlife", "maximumlife",
-        "energyshield", "localenergyshield", "increasedenergy",
         "spirit",
+        "chaosresist",  # hardest resist to cap, bypasses ES
     ]),
     (0.5, [
         "armour", "evasion",
         "localphysicaldamagereductionrating", "localevasionrating",
         "defencespercent", "alldefences",
-        "chaosresist",  # chaos res is rarer, lower cap, bypasses ES
+        "maximummana", "increasedmana",  # 25-36% MoM+EB makes mana a defense stat
+        "manaregeneration",  # MoM+EB sustain
+        "energyshieldrecharge",  # ES build sustain
     ]),
     (0.3, [
         "resistance", "fireresist", "coldresist", "lightningresist",
         "allresist", "elementalresist",
         "strength", "dexterity", "intelligence", "allattributes",
-        "maximummana", "increasedmana",
         "accuracy", "accuracyrating",
-        "regen", "liferegeneration", "manaregeneration",
-        "energyshieldrecharge",
+        "regen", "liferegeneration",
         "flask", "flaskcharge", "flaskeffect",
         "charmduration", "charmeffect",
         "stun", "blockandstun", "stunrecovery",
         "reducedattributerequirements",
+        "itemrarity",  # MF farming is a valid playstyle
     ]),
     (0.1, [
         "thorns", "thornsdamage",
         "damagetakenonblock", "reflectdamage",
-        "lightradius", "itemrarity",
+        "lightradius",
     ]),
 ]
 

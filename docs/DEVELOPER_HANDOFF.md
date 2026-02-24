@@ -1,7 +1,7 @@
 # POE2 Price Overlay — Developer Reference
 
-> **Last updated:** 2026-02-20
-> **Status:** Working prototype — frameless desktop app + calibration shards + local mod scoring + DPS/defense integration + trade API pricing + resolution-scaled overlay + 106-test regression suite
+> **Last updated:** 2026-02-23
+> **Status:** Working prototype — frameless desktop app + calibration shards (3-tier pipeline) + local mod scoring + DPS/defense integration + trade API pricing + resolution-scaled overlay + 213-test regression suite
 
 ## What This Is
 
@@ -71,10 +71,14 @@ Cursor stops over POE2 window (8 fps polling)
 | `item_parser.py` | Clipboard text → ParsedItem (name, base_type, rarity, mods, DPS, defense) |
 | `mod_parser.py` | Matches mod text to trade API stat IDs via regex |
 | `mod_database.py` | Local mod scoring engine — RePoE tier data, DPS/defense factors, S/A/B/C/JUNK grades |
-| `calibration.py` | Score-to-price calibration engine — k-NN interpolation, shard loading, learns from deep queries |
+| `calibration.py` | Score-to-price calibration engine — 3-tier pipeline (price tables → regression → k-NN), shard loading, mod tier support |
 | `calibration_harvester.py` | Standalone CLI for bulk calibration data collection from trade API |
-| `shard_generator.py` | Generates compressed calibration shard files from harvested data |
+| `shard_generator.py` | Generates compressed calibration shard files — outlier removal, price tables, tier aggregates |
+| `weight_learner.py` | Ridge regression model training/prediction — tier-weighted mod features, synergy pairs, per-class models |
+| `item_lookup.py` | Dashboard item lookup facade — paste-and-score with calibration estimate |
 | `trade_client.py` | Queries POE2 trade API for rare item pricing (includes DPS/defense equipment_filters) |
+| `trade_actions.py` | Trade action execution — whisper/invite/hideout/trade/kick via keystroke simulation or API tokens |
+| `game_commands.py` | Chat command engine — sends game commands via keystroke simulation + clipboard paste |
 | `filter_updater.py` | Loot filter economy re-tiering (NeverSink .filter + poe.ninja prices) |
 | `price_cache.py` | Fetches/caches prices from poe2scout.com (uniques, currency, gems) |
 | `overlay.py` | Transparent tkinter overlay + ConsoleOverlay fallback |
@@ -83,6 +87,14 @@ Cursor stops over POE2 window (8 fps polling)
 | `app.py` | **Desktop dashboard shell** — frameless pywebview window with WindowApi (min/max/close via Win32) |
 | `server.py` | **FastAPI backend** — overlay process mgmt, WS log streaming, settings, watchlist, bug reports, filter updates, league API |
 | `watchlist.py` | Trade API polling worker for the Watchlist tab |
+| `bug_reporter.py` | Discord webhook bug reporting (Ctrl+Shift+B hotkey) |
+| `flag_reporter.py` | One-click price inaccuracy flagging from overlay |
+| `telemetry.py` | Opt-in session telemetry — scored items, estimates vs actuals, errors |
+| `elite_harvester.py` | Targeted harvester for high-value items |
+| `diagnose.py` | Diagnostic utilities for debugging scoring/calibration issues |
+| `tray.py` | System tray icon integration |
+| `bundle_paths.py` | IS_FROZEN/APP_DIR/get_resource() path resolution for PyInstaller builds |
+| `run_tests.py` | PowerShell test runner — spawns per-module windows for visual monitoring |
 
 ### Resources (`resources/`)
 | File | Purpose |
@@ -211,6 +223,27 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 - `divine_to_chaos` and `divine_to_exalted` rates exposed for trade_client normalization
 - 15-minute refresh interval
 
+### Calibration Pipeline (`calibration.py`, `shard_generator.py`, `weight_learner.py`)
+
+**Three-tier estimation priority:** price tables → Ridge regression → k-NN
+
+1. **Price tables** (`_table_estimate`): Per-(class, grade) Ridge regression on 7 composite features (score, top_tier_count, mod_count, somv_factor, tier_score, best_tier, avg_tier). Produces decile breakpoints for fast lookup. Built during shard generation.
+
+2. **Ridge regression** (`weight_learner.py`): Per-class model with tier-weighted mod features. Each mod encoded as `1/tier` (T1=1.0, T2=0.5, T7=0.14; unknown=0.5; absent=0.0). Also includes base type dummies, synergy pair interactions, and numeric features (grade, top_tier_count, mod_count, dps/defense/somv factors). Trained during shard generation, serialized into shard.
+
+3. **k-NN** (`_interpolate`): Inverse-distance-weighted interpolation in log-price space. Distance incorporates score, grade penalty, DPS/defense factors, mod identity (Jaccard), base type match, and tier score difference.
+
+**Shard format (v5):** Compressed `.json.gz` with:
+- `samples`: compact records with score, price, grade, mod indices (`m`), mod tiers (`mt`), base type index (`b`), tier aggregates (`ts`/`bt`/`at`)
+- `mod_index`: string→int mapping for mod group names
+- `base_index`: string→int mapping for base type names
+- `price_tables`: per-(class, grade) regression weights + decile breakpoints
+- `learned_weights`: serialized Ridge regression models per class
+
+**Data flow:** Harvester (`calibration_harvester.py`) → JSONL files → `shard_generator.py` (outlier removal, compaction, model training) → `.json.gz` shard → `calibration.py` loads at startup
+
+**Key files touched per estimate:** `main.py` extracts `mod_tiers` from `score.mod_scores` → passes to `calibration.estimate()` → tries all 3 methods in priority order. Same for `pricing_engine.py` and `item_lookup.py`.
+
 ### Item Detection (`item_detection.py`)
 - Polls cursor position at 8 fps
 - Triggers Ctrl+C when cursor is still for 3 frames within 20px radius
@@ -230,7 +263,7 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 
 ## Test Suite
 
-153 pytest tests across 6 modules in `tests/`:
+213 pytest tests across 9 modules in `tests/`:
 
 | Module | Tests | Coverage |
 |--------|-------|----------|
@@ -240,6 +273,9 @@ Sections separated by `--------`. Mod annotations in parentheses: `(implicit)`, 
 | `test_trade_client.py` | 15 | Common mod patterns, stat filter building, value-dependent minimums, fractured mods, price tiers, filter classification |
 | `test_game_config.py` | 23 | GameConfig dataclass creation/defaults, POE2 factory field validation (all 44 fields) |
 | `test_pricing_engine.py` | 24 | Engine construction, pre-init safety, fixture parsing, scoring, full pipeline, calibration estimates, module override verification |
+| `test_shard_generator.py` | 28 | IQR outlier removal, mod groups/base types in shards, mod tier arrays, tier aggregates, top_mods fallback parsing |
+| `test_calibration.py` | 16 | Holdout accuracy, mod identity differentiation, base type differentiation, backward compat, regression fallback, price table integration, mod tier differentiation |
+| `test_weight_learner.py` | 16 | Serialization round-trip, unknown class/mod handling, coefficient direction, price clamping, synthetic data accuracy, tier-weighted features, backward compat |
 
 **Fixtures:** `tests/conftest.py` provides session-scoped `mod_parser` and `mod_database` (load once per run), plus `stat_ids` resolver, `make_item`/`make_mod` helpers, and `load_fixture` for reading clipboard captures from `tests/fixtures/`.
 

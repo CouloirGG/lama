@@ -872,10 +872,14 @@ class LAMA:
 
         overlay_tier = GRADE_TIER_MAP.get(score.grade.value, "low")
 
-        # Extract per-mod tier data for calibration
+        # Extract per-mod tier and roll quality data for calibration
         mod_tiers = {ms.mod_group: int(ms.tier_label[1:])
                      for ms in score.mod_scores
                      if ms.mod_group and ms.tier_label and ms.tier_label[1:].isdigit()}
+        mod_rolls = {ms.mod_group: round(ms.roll_quality, 3)
+                     for ms in score.mod_scores
+                     if ms.mod_group and hasattr(ms, 'roll_quality')
+                     and ms.roll_quality is not None}
 
         # Query calibration for price estimate
         price_est = self.calibration.estimate(
@@ -885,7 +889,11 @@ class LAMA:
             mod_count=len(score.mod_scores),
             mod_groups=[ms.mod_group for ms in score.mod_scores if ms.mod_group],
             base_type=getattr(item, "base_type", ""),
-            mod_tiers=mod_tiers)
+            mod_tiers=mod_tiers,
+            mod_rolls=mod_rolls,
+            somv_factor=getattr(score, "somv_factor", 1.0),
+            pdps=getattr(item, "physical_dps", 0.0),
+            edps=getattr(item, "elemental_dps", 0.0))
 
         # Check trade cache — deep query or auto-cal may have a real price
         cached_trade = None

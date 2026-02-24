@@ -134,14 +134,27 @@ class StashScorer:
             estimate_divine = 0.0
             if self._calibration and score:
                 try:
+                    mod_scores = getattr(score, "mod_scores", [])
+                    mod_tiers = {ms.mod_group: int(ms.tier_label[1:])
+                                 for ms in mod_scores
+                                 if ms.mod_group and ms.tier_label and ms.tier_label[1:].isdigit()}
+                    mod_rolls = {ms.mod_group: round(ms.roll_quality, 3)
+                                 for ms in mod_scores
+                                 if ms.mod_group and hasattr(ms, 'roll_quality')
+                                 and ms.roll_quality is not None}
                     est = self._calibration.estimate(
                         score.normalized_score,
                         getattr(parsed_item, "item_class", "") or "",
                         grade=score.grade.value,
                         top_tier_count=getattr(score, "top_tier_count", 0),
-                        mod_count=len(getattr(score, "mod_scores", [])) or 4,
-                        mod_groups=[ms.mod_group for ms in getattr(score, "mod_scores", []) if ms.mod_group],
+                        mod_count=len(mod_scores) or 4,
+                        mod_groups=[ms.mod_group for ms in mod_scores if ms.mod_group],
                         base_type=getattr(parsed_item, "base_type", ""),
+                        mod_tiers=mod_tiers,
+                        mod_rolls=mod_rolls,
+                        somv_factor=getattr(score, "somv_factor", 1.0),
+                        pdps=getattr(parsed_item, "physical_dps", 0.0),
+                        edps=getattr(parsed_item, "elemental_dps", 0.0),
                     )
                     if est is not None:
                         estimate_divine = round(est, 2)
