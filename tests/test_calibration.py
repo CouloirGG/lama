@@ -158,3 +158,110 @@ def test_mod_groups_backward_compatible():
     assert ratio < 5.0, (
         f"Estimates diverged too much: {est_no_mods:.1f} vs {est_with_mods:.1f}"
     )
+
+
+def test_base_type_differentiates_price():
+    """Same score/grade but different base types should get different estimates."""
+    engine = CalibrationEngine()
+
+    # Insert 20 Astral Plate at 50 divine
+    for _ in range(20):
+        engine._insert(score=0.5, divine=50.0, item_class="Body Armours",
+                       grade_num=1, base_type="Astral Plate")
+
+    # Insert 20 Simple Robe at 2 divine
+    for _ in range(20):
+        engine._insert(score=0.5, divine=2.0, item_class="Body Armours",
+                       grade_num=1, base_type="Simple Robe")
+
+    est_astral = engine.estimate(0.5, "Body Armours", grade="C",
+                                 base_type="Astral Plate")
+    est_robe = engine.estimate(0.5, "Body Armours", grade="C",
+                               base_type="Simple Robe")
+
+    assert est_astral is not None
+    assert est_robe is not None
+    assert est_astral > est_robe * 2, (
+        f"Astral estimate ({est_astral:.1f}) should be >2x Robe ({est_robe:.1f})"
+    )
+
+
+def test_base_type_backward_compatible():
+    """Samples without base_type should still produce valid estimates."""
+    engine = CalibrationEngine()
+
+    # Insert samples without base_type (legacy data)
+    for price in [1.0, 2.0, 5.0, 10.0, 20.0] * 10:
+        engine._insert(score=0.5, divine=price, item_class="Rings",
+                       grade_num=2)
+
+    # Estimate without base_type
+    est_no_bt = engine.estimate(0.5, "Rings", grade="B")
+    assert est_no_bt is not None
+
+    # Estimate with base_type (against samples without)
+    est_with_bt = engine.estimate(0.5, "Rings", grade="B",
+                                  base_type="Prismatic Ring")
+    assert est_with_bt is not None
+
+    # Both should be in a reasonable range (within 3x of each other)
+    ratio = max(est_no_bt, est_with_bt) / min(est_no_bt, est_with_bt)
+    assert ratio < 3.0, (
+        f"Estimates diverged too much: {est_no_bt:.1f} vs {est_with_bt:.1f}"
+    )
+
+
+# ── Regression integration tests ────────────────────────────
+
+def test_regression_fallback_to_knn():
+    """Without learned weights, k-NN should still work normally."""
+    engine = CalibrationEngine()
+    assert engine._learned_weights is None
+
+    # Insert enough samples for k-NN
+    for price in [1.0, 2.0, 5.0, 10.0, 20.0] * 10:
+        engine._insert(score=0.5, divine=price, item_class="Rings",
+                       grade_num=2, mod_groups=["IncreasedLife"])
+
+    est = engine.estimate(0.5, "Rings", grade="B",
+                          mod_groups=["IncreasedLife"])
+    assert est is not None, "k-NN should still produce an estimate without regression"
+
+
+def test_regression_used_when_available():
+    """When learned weights are loaded, regression should be preferred over k-NN."""
+    from weight_learner import LearnedWeights
+
+    engine = CalibrationEngine()
+
+    # Insert k-NN samples all priced at 5.0
+    for _ in range(50):
+        engine._insert(score=0.5, divine=5.0, item_class="Rings",
+                       grade_num=2, mod_groups=["IncreasedLife"])
+
+    # k-NN estimate should be ~5.0
+    est_knn = engine.estimate(0.5, "Rings", grade="B",
+                              mod_groups=["IncreasedLife"])
+    assert est_knn is not None
+
+    # Now load a regression model that predicts much higher
+    lw = LearnedWeights()
+    lw._models["Rings"] = {
+        "intercept": 3.0,  # e^3 ~ 20.0
+        "mod_coeffs": {"IncreasedLife": 0.5},
+        "base_coeffs": {},
+        "synergy_coeffs": {},
+        "numeric_coeffs": {},
+        "n_train": 100,
+        "r2_cv": 0.5,
+    }
+    engine._learned_weights = lw
+
+    # Regression should now be used (returns ~e^3.5 ~ 33)
+    est_reg = engine.estimate(0.5, "Rings", grade="B",
+                              mod_groups=["IncreasedLife"])
+    assert est_reg is not None
+    # The regression estimate should differ from the k-NN estimate
+    assert est_reg != est_knn, (
+        f"Regression ({est_reg}) should differ from k-NN ({est_knn})"
+    )

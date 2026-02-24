@@ -5,18 +5,20 @@ Pipeline: raw harvester JSONL -> quality filters -> dedup -> compact gzipped JSO
 
 Shard format (gzipped JSON):
 {
-  "version": 3,
+  "version": 4,
   "league": "Fate of the Vaal",
   "generated_at": "2026-02-18T12:00:00Z",
   "sample_count": 5432,
   "mod_index": [["IncreasedLife", 2.0], ["FireResist", 0.3], ...],
+  "base_index": ["Astral Plate", "Coral Ring", ...],
   "samples": [
-    {"s": 0.584, "g": 2, "p": 4.5, "c": "Rings", "d": 1.0, "f": 1.0, "v": 1.02, "t": 2, "n": 5, "m": [0, 1]}
+    {"s": 0.584, "g": 2, "p": 4.5, "c": "Rings", "d": 1.0, "f": 1.0, "v": 1.02, "t": 2, "n": 5, "m": [0, 1], "b": 3}
   ]
 }
 
 Fields: s=score, g=grade_num, p=divine_price, c=item_class, d=dps_factor, f=defense_factor,
-        v=somv_factor, t=top_tier_count, n=mod_count, m=mod_group_indices (into mod_index)
+        v=somv_factor, t=top_tier_count, n=mod_count, m=mod_group_indices (into mod_index),
+        b=base_type_index (into base_index)
 
 Usage:
     python shard_generator.py --input harvester_output.jsonl --output shard.json.gz
@@ -187,7 +189,7 @@ def dedup_records(records: List[dict]) -> Tuple[List[dict], int]:
     return deduped, dup_count
 
 
-def compact_record(rec: dict, mod_to_idx: dict = None) -> dict:
+def compact_record(rec: dict, mod_to_idx: dict = None, base_to_idx: dict = None) -> dict:
     """Convert a full record to compact shard format."""
     compact = {
         "s": round(rec["score"], 3),
@@ -206,6 +208,10 @@ def compact_record(rec: dict, mod_to_idx: dict = None) -> dict:
             compact["m"] = sorted(set(
                 mod_to_idx[g] for g in groups if g in mod_to_idx
             ))
+    if base_to_idx:
+        bt = rec.get("base_type", "")
+        if bt and bt in base_to_idx:
+            compact["b"] = base_to_idx[bt]
     return compact
 
 
@@ -255,8 +261,45 @@ def generate_shard(records: List[dict], league: str, output_path: str):
         except ImportError:
             mod_index = [[g, 0.3] for g in sorted_groups]
 
+    # Build base type index from all records
+    all_base_types = set()
+    for rec in deduped:
+        bt = rec.get("base_type", "")
+        if bt:
+            all_base_types.add(bt)
+
+    sorted_bases = sorted(all_base_types)
+    base_to_idx = {bt: i for i, bt in enumerate(sorted_bases)}
+
     # Compact format
-    samples = [compact_record(r, mod_to_idx) for r in deduped]
+    samples = [compact_record(r, mod_to_idx, base_to_idx) for r in deduped]
+
+    # Train learned weights from the deduped records
+    learned_weights_dict = None
+    try:
+        from weight_learner import train_weights
+        training_records = []
+        for rec in deduped:
+            training_records.append({
+                "c": rec.get("item_class", ""),
+                "g": _GRADE_NUM.get(rec.get("grade", "C"), 1),
+                "p": rec.get("min_divine", 0),
+                "t": rec.get("top_tier_count", 0),
+                "n": rec.get("mod_count", 4),
+                "d": rec.get("dps_factor", 1.0),
+                "f": rec.get("defense_factor", 1.0),
+                "v": rec.get("somv_factor", 1.0),
+                "mod_groups_resolved": [g for g in rec.get("mod_groups", []) if g],
+                "base_type_resolved": rec.get("base_type", ""),
+            })
+        lw = train_weights(training_records)
+        if lw._models:
+            learned_weights_dict = lw.to_dict()
+            print(f"\n  {lw.summary()}")
+    except ImportError:
+        print("  Note: numpy not available, skipping regression training")
+    except Exception as e:
+        print(f"  Warning: regression training failed: {e}")
 
     # Detect league from records if not specified
     if not league:
@@ -264,7 +307,7 @@ def generate_shard(records: List[dict], league: str, output_path: str):
         league = leagues.pop() if len(leagues) == 1 else "unknown"
 
     shard = {
-        "version": 3,
+        "version": 5,
         "league": league,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "sample_count": len(samples),
@@ -272,6 +315,10 @@ def generate_shard(records: List[dict], league: str, output_path: str):
     }
     if mod_index:
         shard["mod_index"] = mod_index
+    if sorted_bases:
+        shard["base_index"] = sorted_bases
+    if learned_weights_dict:
+        shard["learned_weights"] = learned_weights_dict
 
     # Write gzipped JSON
     out = Path(output_path)
@@ -353,8 +400,15 @@ def validate_shard(shard_path: str, seed: int = 42):
     if weights:
         engine.set_mod_weights(weights)
 
+    # Load base type index (v4+ shards)
+    base_index = shard.get("base_index", [])
+
     def _sample_mod_groups(s):
         return [idx_to_group[idx] for idx in s.get("m", []) if idx in idx_to_group]
+
+    def _sample_base_type(s):
+        idx = s.get("b")
+        return base_index[idx] if (idx is not None and idx < len(base_index)) else ""
 
     for i in train_idx:
         s = samples[i]
@@ -368,6 +422,7 @@ def validate_shard(shard_path: str, seed: int = 42):
             top_tier_count=s.get("t", 0),
             mod_count=s.get("n", 4),
             mod_groups=_sample_mod_groups(s),
+            base_type=_sample_base_type(s),
         )
 
     # Test on holdout
@@ -389,7 +444,8 @@ def validate_shard(shard_path: str, seed: int = 42):
                               defense_factor=s.get("f", 1.0),
                               top_tier_count=s.get("t", 0),
                               mod_count=s.get("n", 4),
-                              mod_groups=_sample_mod_groups(s))
+                              mod_groups=_sample_mod_groups(s),
+                              base_type=_sample_base_type(s))
         if est is None:
             continue
 
@@ -451,6 +507,69 @@ def validate_shard(shard_path: str, seed: int = 42):
         status = "OK" if pct >= 50 else "!!"
         print(f"    {status} {g:5s}: {pct:5.1f}% ({n:4d} samples, "
               f"median error: {median_ratio:.2f}x)")
+
+    # ── Regression validation ─────────────────────────────
+    lw_data = shard.get("learned_weights")
+    if lw_data:
+        try:
+            from weight_learner import LearnedWeights
+            lw = LearnedWeights.from_dict(lw_data)
+            print(f"\n  Regression validation ({len(lw._models)} models):")
+
+            reg_within_2x = 0
+            reg_within_3x = 0
+            reg_total = 0
+            reg_by_class: Dict[str, List[float]] = {}
+
+            for i in test_idx:
+                s = samples[i]
+                actual = s["p"]
+                item_class = s.get("c", "")
+                grade_num = s.get("g", 1)
+                mod_groups = _sample_mod_groups(s)
+                base_type = _sample_base_type(s)
+
+                est = lw.predict(
+                    item_class, mod_groups, base_type,
+                    grade_num=grade_num,
+                    top_tier_count=s.get("t", 0),
+                    mod_count=s.get("n", 4),
+                    dps_factor=s.get("d", 1.0),
+                    defense_factor=s.get("f", 1.0),
+                    somv_factor=s.get("v", 1.0),
+                )
+                if est is None:
+                    continue
+
+                reg_total += 1
+                ratio = max(est / actual, actual / est) if actual > 0 else float("inf")
+                if ratio <= 2.0:
+                    reg_within_2x += 1
+                if ratio <= 3.0:
+                    reg_within_3x += 1
+
+                if item_class not in reg_by_class:
+                    reg_by_class[item_class] = []
+                reg_by_class[item_class].append(ratio)
+
+            if reg_total > 0:
+                reg_pct_2x = reg_within_2x / reg_total * 100
+                reg_pct_3x = reg_within_3x / reg_total * 100
+                print(f"    Within 2x: {reg_within_2x}/{reg_total} ({reg_pct_2x:.1f}%)")
+                print(f"    Within 3x: {reg_within_3x}/{reg_total} ({reg_pct_3x:.1f}%)")
+
+                print(f"\n  Per-class regression accuracy (within 2x):")
+                for cls, ratios in sorted(reg_by_class.items()):
+                    n = len(ratios)
+                    n_2x = sum(1 for r in ratios if r <= 2.0)
+                    pct = n_2x / n * 100 if n > 0 else 0
+                    median_ratio = sorted(ratios)[len(ratios) // 2]
+                    print(f"    {cls:20s}: {pct:5.1f}% ({n:4d} samples, "
+                          f"median error: {median_ratio:.2f}x)")
+            else:
+                print("    No regression estimates produced")
+        except Exception as e:
+            print(f"    Regression validation failed: {e}")
 
 
 # ─── CLI Entry Point ─────────────────────────────────
