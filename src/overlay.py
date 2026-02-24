@@ -473,8 +473,49 @@ class PriceOverlay:
             except Exception as e:
                 logger.debug(f"Failed to load currency icon {key}: {e}")
 
+        # Generate procedural dismiss X icon (same size as scrap)
+        self._generate_dismiss_icon(scrap_size)
+
         if self._currency_icons:
             logger.info(f"Loaded {len(self._currency_icons)} currency icon(s)")
+
+    def _generate_dismiss_icon(self, size: int):
+        """Generate a procedural X icon for the dismiss indicator.
+
+        Draws two crossed gold strokes with a dark shadow behind them,
+        matching the gothic palette (same gold as corner diamonds).
+        """
+        if not PIL_AVAILABLE:
+            return
+        from PIL import ImageDraw
+
+        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        # Inset from edges so the X isn't touching the border
+        margin = size // 4
+        x0, y0 = margin, margin
+        x1, y1 = size - margin, size - margin
+
+        stroke_w = max(2, size // 12)
+
+        # Shadow (offset dark stroke for depth)
+        shadow = "#1a120c"
+        draw.line([(x0 + 1, y0 + 1), (x1 + 1, y1 + 1)],
+                  fill=shadow, width=stroke_w + 2)
+        draw.line([(x1 + 1, y0 + 1), (x0 + 1, y1 + 1)],
+                  fill=shadow, width=stroke_w + 2)
+
+        # Gold strokes (same as corner diamonds: _POE2_CORNER_GOLD)
+        gold = "#c4a456"
+        draw.line([(x0, y0), (x1, y1)], fill=gold, width=stroke_w)
+        draw.line([(x1, y0), (x0, y1)], fill=gold, width=stroke_w)
+
+        try:
+            photo = ImageTk.PhotoImage(img)
+            self._currency_icons["dismiss"] = photo
+        except Exception as e:
+            logger.debug(f"Failed to create dismiss icon: {e}")
 
     def _parse_currency(self, text: str):
         """Find a currency token in text and return (prefix, icon_key, suffix) or None."""
@@ -588,27 +629,19 @@ class PriceOverlay:
                 secondary_part[star_only.end():]
             secondary_part = secondary_part.strip()
 
-        # Check for JUNK/C/SCRAP — plain small tag, no ornate frame
-        is_plain = text in ("SCRAP", "\u2717", "UNID") or (
+        # SCRAP / dismiss ✗ — compact gothic-framed icon indicators
+        if text == "SCRAP":
+            self._render_mini_themed("scrap")
+            return
+        if text == "\u2717":
+            self._render_mini_themed("dismiss")
+            return
+
+        # UNID or low-grade without estimate — plain small tag
+        is_plain = text == "UNID" or (
             grade_letter in ("C", "JUNK") and not estimate)
 
         if is_plain:
-            # SCRAP with hammer icon — show icon-only tag
-            scrap_icon = self._currency_icons.get("scrap") if text == "SCRAP" else None
-            if scrap_icon:
-                icon_size = scrap_icon.width()
-                w = icon_size + pad_x * 2
-                h = icon_size + pad_y * 2
-
-                c.configure(width=w, height=h)
-                c.create_rectangle(0, 0, w, h, fill=_POE2_BG,
-                                   outline=_POE2_BORDER_NORMAL, width=1,
-                                   tags="bg")
-                c.create_image(w // 2, h // 2, image=scrap_icon,
-                               anchor="center", tags="scrap_icon")
-                self._sheen_strips = []
-                return
-
             # Simple small tag — no ornate decorations
             tw = font_sm.measure(text) + 4
             th = font_sm.metrics("linespace")
@@ -616,7 +649,6 @@ class PriceOverlay:
             h = th + pad_y * 2
 
             c.configure(width=w, height=h)
-            # Background
             c.create_rectangle(0, 0, w, h, fill=_POE2_BG,
                                outline=_POE2_BORDER_NORMAL, width=1,
                                tags="bg")
@@ -811,6 +843,86 @@ class PriceOverlay:
             cx - size, cy,
             fill=_POE2_CORNER_GOLD, outline="", tags="diamond"
         )
+
+    def _render_mini_themed(self, icon_key: str):
+        """Render a compact gothic-framed indicator (SCRAP hammer or dismiss X).
+
+        Applies a mini version of the full POE2 gothic treatment:
+        background fill, edge vignette, grunge splatters/scratches,
+        double border, corner diamonds, centered icon.  No sheen.
+        """
+        c = self._canvas
+        c.delete("all")
+        self._cv_items.clear()
+        c.configure(width=1, height=1)
+
+        icon = self._currency_icons.get(icon_key)
+        if not icon:
+            return
+
+        icon_size = icon.width()
+        pad = round(8 * self._scale)
+        w = icon_size + pad * 2
+        h = icon_size + pad * 2
+        diamond_size = max(2, round(2 * self._scale))
+        border_w = 2
+
+        c.configure(width=w, height=h)
+
+        # 1. Background fill
+        c.create_rectangle(1, 1, w - 1, h - 1, fill=_POE2_BG,
+                           outline="", tags="bg_fill")
+
+        # 2. Edge vignette (compressed 3-strip)
+        vig_w = max(2, w // 10)
+        vig_strip = max(1, vig_w // 3)
+        for i, intensity in enumerate([0.35, 0.20, 0.08]):
+            vc = self._blend_hex(_POE2_BG, _POE2_VIGNETTE, intensity)
+            x0 = 1 + vig_strip * i
+            x1 = 1 + vig_strip * (i + 1)
+            c.create_rectangle(x0, 1, x1, h - 1, fill=vc,
+                               outline="", tags="vignette")
+            rx0 = w - 1 - vig_strip * (i + 1)
+            rx1 = w - 1 - vig_strip * i
+            c.create_rectangle(rx0, 1, rx1, h - 1, fill=vc,
+                               outline="", tags="vignette")
+
+        # 3. Grunge: 2 splatters + 1 scratch (subset for compact space)
+        for xf, yf, sw, sh in _GRUNGE_SPLATTERS[:2]:
+            sx = int(xf * w)
+            sy = int(yf * h)
+            c.create_oval(sx, sy, sx + sw, sy + sh,
+                          fill=_POE2_BLOOD_DARK, outline="", tags="grunge")
+        for x1f, y1f, x2f, y2f in _GRUNGE_SCRATCHES[:1]:
+            c.create_line(int(x1f * w), int(y1f * h),
+                          int(x2f * w), int(y2f * h),
+                          fill=_POE2_BLOOD_MID, width=1, tags="grunge")
+
+        # 4. Double border: outer dark, inner accent
+        c.create_rectangle(1, 1, w - 1, h - 1,
+                           outline=_POE2_BORDER_NORMAL, width=border_w,
+                           fill="", tags="border")
+        c.create_rectangle(border_w + 1, border_w + 1,
+                           w - border_w - 1, h - border_w - 1,
+                           outline=_POE2_BORDER_ACCENT, width=1,
+                           fill="", tags="border_inner")
+
+        # 5. Corner diamonds (smaller than full overlay)
+        self._draw_corner_diamond(c, diamond_size + 1, diamond_size + 1,
+                                  diamond_size)
+        self._draw_corner_diamond(c, w - diamond_size - 1, diamond_size + 1,
+                                  diamond_size)
+        self._draw_corner_diamond(c, diamond_size + 1, h - diamond_size - 1,
+                                  diamond_size)
+        self._draw_corner_diamond(c, w - diamond_size - 1, h - diamond_size - 1,
+                                  diamond_size)
+
+        # 6. Centered icon
+        c.create_image(w // 2, h // 2, image=icon, anchor="center",
+                       tags="indicator_icon")
+
+        # No sheen for low-value indicators
+        self._sheen_strips = []
 
     @staticmethod
     def _blend_hex(c1: str, c2: str, t: float) -> str:
@@ -1011,13 +1123,17 @@ class PriceOverlay:
                 self._frame.configure(padx=border_width, pady=border_width,
                                       bg=border_color)
             # Render label content (with or without currency icon)
-            scrap_icon = self._currency_icons.get("scrap") if text == "SCRAP" else None
-            if scrap_icon:
-                # Show hammer icon instead of "SCRAP" text
+            # SCRAP → hammer icon, dismiss ✗ → X icon
+            indicator_key = (
+                "scrap" if text == "SCRAP" else
+                "dismiss" if text == "\u2717" else None)
+            indicator_icon = (self._currency_icons.get(indicator_key)
+                              if indicator_key else None)
+            if indicator_icon:
                 self._icon_label.pack_forget()
                 self._suffix_label.pack_forget()
                 self._label.pack_forget()
-                self._icon_label.configure(image=scrap_icon, bg=bg_color)
+                self._icon_label.configure(image=indicator_icon, bg=bg_color)
                 self._icon_label.pack(side="left")
             elif self._currency_icons:
                 currency = self._parse_currency(text)
