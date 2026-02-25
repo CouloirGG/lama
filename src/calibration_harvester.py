@@ -584,9 +584,11 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
             # For multi-pass: offset into results to get different items
             # Offset resets per bracket set (every 5 passes) so stagger/micro
             # passes start from offset 0, not from the global pass number.
+            # Note: trade API returns ~10 IDs per search, so offset must step
+            # by FETCH_BATCH_SIZE (10), not RESULTS_PER_QUERY (50).
             pass_within_set = (pass_num - 1) % 5
-            offset = pass_within_set * RESULTS_PER_QUERY
-            available_ids = result_ids[offset:offset + RESULTS_PER_QUERY]
+            offset = pass_within_set * FETCH_BATCH_SIZE
+            available_ids = result_ids[offset:offset + FETCH_BATCH_SIZE]
             if not available_ids:
                 # No more results at this offset
                 print(f"  {total} total results, no new results at offset {offset}")
