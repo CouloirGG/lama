@@ -1136,6 +1136,44 @@ async def get_trade_items():
 
 
 # ---------------------------------------------------------------------------
+# Meta overview endpoints (class stats, popular skills, anoints)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/meta/summary")
+async def meta_summary():
+    """Fetch class distribution / build summary from poe.ninja."""
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, builds_client.fetch_build_summary)
+    if not result:
+        return JSONResponse(status_code=502, content={"error": "Failed to fetch build summary"})
+    return result
+
+
+@app.get("/api/meta/skills")
+async def meta_popular_skills():
+    """Fetch popular skills ranked by usage."""
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, builds_client.fetch_popular_skills_list)
+    return result
+
+
+class AnointsRequest(BaseModel):
+    characterClass: str = "all"
+    skill: str
+
+
+@app.post("/api/meta/anoints")
+async def meta_anoints(req: AnointsRequest):
+    """Fetch popular anoints for a class+skill combo."""
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        None, builds_client.fetch_popular_anoints,
+        req.characterClass, req.skill
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Character lookup endpoints (poe.ninja Builds API)
 # ---------------------------------------------------------------------------
 class CharacterLookupRequest(BaseModel):

@@ -214,6 +214,7 @@ class CharacterData:
     skill_groups: list = field(default_factory=list) # List[SkillGroup]
     keystones: list = field(default_factory=list)    # List[str]
     pob_code: str = ""
+    defensive_stats: Optional[dict] = None           # poe.ninja pre-calculated defenses
 
 
 @dataclass
@@ -386,6 +387,45 @@ class BuildsClient:
             asc_name = data.get("class", "")
             base_class = ASCENDANCY_MAP.get(asc_name, asc_name)
 
+            # Defensive stats (pre-calculated by poe.ninja)
+            raw_ds = data.get("defensiveStats")
+            defensive_stats = None
+            if isinstance(raw_ds, dict):
+                _n = lambda v: v if isinstance(v, (int, float)) else 0
+                defensive_stats = {
+                    "life": _n(raw_ds.get("life")),
+                    "energyShield": _n(raw_ds.get("energyShield")),
+                    "mana": _n(raw_ds.get("mana")),
+                    "spirit": _n(raw_ds.get("spirit")),
+                    "armour": _n(raw_ds.get("armour")),
+                    "evasionRating": _n(raw_ds.get("evasionRating")),
+                    "movementSpeed": _n(raw_ds.get("movementSpeed")),
+                    "fireResistance": _n(raw_ds.get("fireResistance")),
+                    "fireResistanceOverCap": _n(raw_ds.get("fireResistanceOverCap")),
+                    "coldResistance": _n(raw_ds.get("coldResistance")),
+                    "coldResistanceOverCap": _n(raw_ds.get("coldResistanceOverCap")),
+                    "lightningResistance": _n(raw_ds.get("lightningResistance")),
+                    "lightningResistanceOverCap": _n(raw_ds.get("lightningResistanceOverCap")),
+                    "chaosResistance": _n(raw_ds.get("chaosResistance")),
+                    "chaosResistanceOverCap": _n(raw_ds.get("chaosResistanceOverCap")),
+                    "effectiveHealthPool": _n(raw_ds.get("effectiveHealthPool")),
+                    "physicalMaximumHitTaken": _n(raw_ds.get("physicalMaximumHitTaken")),
+                    "fireMaximumHitTaken": _n(raw_ds.get("fireMaximumHitTaken")),
+                    "coldMaximumHitTaken": _n(raw_ds.get("coldMaximumHitTaken")),
+                    "lightningMaximumHitTaken": _n(raw_ds.get("lightningMaximumHitTaken")),
+                    "chaosMaximumHitTaken": _n(raw_ds.get("chaosMaximumHitTaken")),
+                    "lowestMaximumHitTaken": _n(raw_ds.get("lowestMaximumHitTaken")),
+                    "blockChance": _n(raw_ds.get("blockChance")),
+                    "spellBlockChance": _n(raw_ds.get("spellBlockChance")),
+                    "spellSuppressionChance": _n(raw_ds.get("spellSuppressionChance")),
+                    "enduranceCharges": _n(raw_ds.get("enduranceCharges")),
+                    "frenzyCharges": _n(raw_ds.get("frenzyCharges")),
+                    "powerCharges": _n(raw_ds.get("powerCharges")),
+                    "strength": _n(raw_ds.get("strength")),
+                    "dexterity": _n(raw_ds.get("dexterity")),
+                    "intelligence": _n(raw_ds.get("intelligence")),
+                }
+
             return CharacterData(
                 account=data.get("account", account),
                 name=data.get("name", char_name),
@@ -396,6 +436,7 @@ class BuildsClient:
                 skill_groups=skill_groups,
                 keystones=keystones,
                 pob_code=data.get("pathOfBuildingExport", "") or "",
+                defensive_stats=defensive_stats,
             )
 
         except Exception as e:
@@ -447,7 +488,143 @@ class BuildsClient:
             ],
             "keystones": char.keystones,
             "pobCode": char.pob_code,
+            "defensiveStats": char.defensive_stats,
         }
+
+    # -------------------------------------------------------------------
+    # Meta overview — class stats + popular skills
+    # -------------------------------------------------------------------
+
+    def fetch_build_summary(self) -> Optional[dict]:
+        """Fetch league build summary (class distribution) from poe.ninja.
+
+        Returns dict with leagueName, totalCharacters, classes[].
+        """
+        cached = self._get_cached("build-summary", TTL_SEARCH)
+        if cached is not None:
+            return cached
+
+        try:
+            resp = self._session.get(f"{BASE_URL}/data/build-index-state", timeout=10)
+            if resp.status_code != 200:
+                logger.warning(f"poe.ninja build-index-state: HTTP {resp.status_code}")
+                return None
+
+            data = resp.json()
+            leagues = data.get("leagues", [])
+            if not leagues:
+                return None
+
+            league = leagues[0]
+            total = league.get("totalCount", 0)
+            classes = []
+            for stat in league.get("statistics", []):
+                name = stat.get("name", "")
+                pct = stat.get("percentage", 0)
+                is_asc = name in ASCENDANCY_MAP
+                classes.append({
+                    "name": name,
+                    "percentage": pct,
+                    "count": round((pct / 100) * total),
+                    "isAscendancy": is_asc,
+                    "baseClass": ASCENDANCY_MAP.get(name) if is_asc else None,
+                })
+
+            result = {
+                "leagueName": league.get("name", ""),
+                "totalCharacters": total,
+                "classes": classes,
+            }
+            self._set_cache("build-summary", result)
+            return result
+
+        except Exception as e:
+            logger.warning(f"fetch_build_summary failed: {e}")
+            return None
+
+    def fetch_popular_skills_list(self) -> list:
+        """Fetch popular skills for the current league.
+
+        Returns list of {name, count, percentage} sorted by count desc.
+        """
+        if not self._fetch_snapshot_info():
+            return []
+
+        cache_key = f"popular-skills-{self._snapshot_version}"
+        cached = self._get_cached(cache_key, TTL_SEARCH)
+        if cached is not None:
+            return cached
+
+        try:
+            url = (
+                f"{BASE_URL}/builds/{quote(self._snapshot_version)}/popular-skills"
+                f"?overview={quote(self._snapshot_name)}"
+            )
+            resp = self._session.get(url, timeout=10)
+            if resp.status_code != 200:
+                logger.warning(f"poe.ninja popular-skills: HTTP {resp.status_code}")
+                return []
+
+            data = resp.json()
+            skills = data.get("skills", data) if isinstance(data, dict) else data
+            if not isinstance(skills, list):
+                return []
+
+            result = sorted(
+                [
+                    {"name": s.get("name", ""), "count": s.get("count", 0), "percentage": s.get("percentage", 0)}
+                    for s in skills if s.get("name")
+                ],
+                key=lambda x: x["count"],
+                reverse=True,
+            )[:20]
+
+            self._set_cache(cache_key, result)
+            return result
+
+        except Exception as e:
+            logger.warning(f"fetch_popular_skills_list failed: {e}")
+            return []
+
+    def fetch_popular_anoints(self, char_class: str, skill: str) -> list:
+        """Fetch popular anoints for a class+skill combo.
+
+        Returns list of {name, percentage}.
+        """
+        if not self._fetch_snapshot_info():
+            return []
+
+        cache_key = f"anoints-{self._snapshot_version}-{char_class}-{skill}"
+        cached = self._get_cached(cache_key, TTL_SEARCH)
+        if cached is not None:
+            return cached
+
+        try:
+            url = (
+                f"{BASE_URL}/builds/{quote(self._snapshot_version)}/popular-anoints"
+                f"?overview={quote(self._snapshot_name)}"
+                f"&characterClass={quote(char_class)}"
+                f"&skill={quote(skill)}"
+            )
+            resp = self._session.get(url, timeout=10)
+            if resp.status_code != 200:
+                return []
+
+            data = resp.json()
+            anoints = data.get("anoints", data) if isinstance(data, dict) else data
+            if not isinstance(anoints, list):
+                return []
+
+            result = [
+                {"name": a.get("name", ""), "percentage": a.get("percentage", 0)}
+                for a in anoints if a.get("name")
+            ]
+            self._set_cache(cache_key, result)
+            return result
+
+        except Exception as e:
+            logger.warning(f"fetch_popular_anoints failed: {e}")
+            return []
 
     # -------------------------------------------------------------------
     # Popular items search (protobuf-based search + dictionary protocol)
