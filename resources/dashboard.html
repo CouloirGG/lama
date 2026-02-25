@@ -65,6 +65,35 @@
     input:focus, select:focus { outline: none; border-color: #c4a456 !important; }
     select option { background: #12100c; color: #d4c9a8; }
 
+    /* Resize handle — bottom-right corner */
+    .resize-handle {
+      position: fixed;
+      bottom: 0; right: 0;
+      width: 18px; height: 18px;
+      cursor: nwse-resize;
+      z-index: 9999;
+      opacity: 0.3;
+      transition: opacity 0.2s;
+    }
+    .resize-handle:hover { opacity: 0.7; }
+    .resize-handle::before, .resize-handle::after {
+      content: "";
+      position: absolute;
+      background: #6b5a3e;
+      border-radius: 1px;
+    }
+    .resize-handle::before {
+      width: 10px; height: 2px;
+      bottom: 4px; right: 2px;
+      transform: rotate(-45deg);
+    }
+    .resize-handle::after {
+      width: 6px; height: 2px;
+      bottom: 3px; right: 1px;
+      transform: rotate(-45deg);
+      transform-origin: bottom right;
+    }
+
     /* POE2 App Frame */
     .app-frame {
       position: relative;
@@ -641,6 +670,13 @@
 
     // Brand Footer
     // -----------------------------------------------------------------------
+    const WINDOW_SIZES = [
+      { label: "Default", w: 1100, h: 750 },
+      { label: "Large", w: 1400, h: 900 },
+      { label: "XL", w: 1700, h: 1000 },
+      { label: "Fill Screen", w: 0, h: 0 },
+    ];
+
     function BrandFooter({ leagues, selectedLeague, onLeagueChange, onBugReport, onFeedback, onFeatureRequest, onRestartApp }) {
       const [flyoutOpen, setFlyoutOpen] = useState(false);
       const [confirmRestart, setConfirmRestart] = useState(false);
@@ -669,6 +705,29 @@
           >
             {(leagues || []).map(lg => (
               <option key={lg.value} value={lg.value}>{lg.label}</option>
+            ))}
+          </select>
+          <select
+            onChange={(e) => {
+              const s = WINDOW_SIZES.find(s => s.label === e.target.value);
+              if (!s) return;
+              if (s.w === 0) {
+                window.pywebview?.api?.toggle_maximize();
+              } else {
+                window.pywebview?.api?.resize_to(s.w, s.h);
+              }
+              e.target.value = "";
+            }}
+            value=""
+            style={{
+              background: T.input, border: `1px solid ${T.border}`, borderRadius: 4,
+              color: T.textSecond, padding: "3px 8px", fontSize: 10, ...MONO,
+              appearance: "auto", cursor: "pointer", width: 90,
+            }}
+          >
+            <option value="" disabled>Window Size</option>
+            {WINDOW_SIZES.map(s => (
+              <option key={s.label} value={s.label}>{s.label}{s.w ? ` (${s.w}×${s.h})` : ""}</option>
             ))}
           </select>
           {[
@@ -1086,6 +1145,7 @@
     function BugReportModal({ open, onClose }) {
       const [title, setTitle] = useState("");
       const [desc, setDesc] = useState("");
+      const [contact, setContact] = useState("");
       const [sending, setSending] = useState(false);
       const [result, setResult] = useState(null);
 
@@ -1094,7 +1154,7 @@
       const handleSend = async () => {
         setSending(true);
         setResult(null);
-        const res = await api("/api/bug-report", "POST", { title, description: desc });
+        const res = await api("/api/bug-report", "POST", { title, description: desc, contact: contact.trim() });
         setSending(false);
         if (res.error) {
           setResult({ ok: false, msg: res.error });
@@ -1134,6 +1194,14 @@
               rows={4}
               style={{ ...FIELD_INPUT, resize: "vertical", marginBottom: 8 }}
               onKeyDown={e => { if (e.ctrlKey && e.key === "Enter") handleSend(); }}
+            />
+
+            <label style={FIELD_LABEL}>Discord handle <span style={{ fontWeight: 400, color: T.textMuted }}>(optional)</span></label>
+            <input
+              value={contact}
+              onChange={e => setContact(e.target.value)}
+              placeholder="e.g. username#1234"
+              style={{ ...FIELD_INPUT, marginBottom: 8 }}
             />
 
             <div style={{ fontSize: 10, color: T.textMuted, marginBottom: 16 }}>
@@ -5561,23 +5629,23 @@
           {/* Row 4: Upgrade priorities (weakest slots) */}
           {weakSlots.length > 0 && (
             <div>
-              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3, fontWeight: 700 }}>Upgrade Priorities</div>
+              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3, fontWeight: 700 }}>Room to Improve</div>
               {weakSlots.map((s, i) => (
                 <div key={i} style={{ fontSize: 10, color: T.textSecond, padding: "1px 0" }}>
                   <span style={{ color: getTierColor(Math.round(s.avgTier)) }}>{s.slotDisplay}</span>
                   <span style={{ color: T.textMuted }}> — {s.itemName}</span>
-                  {s.weakest && <span style={{ color: T.textMuted }}> (worst: T{s.weakest.tier_num} {s.weakest.display_name})</span>}
+                  {s.weakest && <span style={{ color: T.textMuted }}> (T{s.weakest.tier_num}/{s.weakest.tier_count} {s.weakest.display_name})</span>}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Dead mods */}
+          {/* Low-priority mods */}
           {archetype.deadMods && archetype.deadMods.length > 0 && (
             <div style={{ marginTop: 6 }}>
-              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3, fontWeight: 700 }}>Dead Mods</div>
+              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3, fontWeight: 700 }}>Low-Priority Mods</div>
               {archetype.deadMods.slice(0, 5).map((dm, i) => (
-                <div key={i} style={{ fontSize: 10, color: "#a85555", padding: "1px 0" }}>
+                <div key={i} style={{ fontSize: 10, color: "#9e8a6a", padding: "1px 0" }}>
                   <span>{dm.mod}</span>
                   <span style={{ color: T.textMuted, fontSize: 9 }}> — {dm.reason}</span>
                 </div>
@@ -5602,10 +5670,37 @@
       const [popularResult, setPopularResult] = useState(null);
       const [popularLoading, setPopularLoading] = useState(false);
 
-      // Load saved characters on mount
+      const autoLookedUp = useRef(false);
+
+      // Load saved characters on mount and auto-lookup most recent
       useEffect(() => {
         api("/api/character/saved").then(r => {
-          if (r && Array.isArray(r)) setSavedAccounts(r);
+          if (r && Array.isArray(r)) {
+            setSavedAccounts(r);
+            // Auto-lookup the most recently viewed character
+            if (!autoLookedUp.current && r.length > 0) {
+              autoLookedUp.current = true;
+              let best = null;
+              for (const acct of r) {
+                for (const ch of (acct.characters || [])) {
+                  if (!best || (ch.lastLookup || 0) > (best.lastLookup || 0)) {
+                    best = { account: acct.accountName, name: ch.name };
+                  }
+                }
+              }
+              if (best) {
+                setAccount(best.account);
+                setCharacter(best.name);
+                setLoading(true);
+                api("/api/character/lookup", "POST", { account: best.account, character: best.name }).then(result => {
+                  if (result && result.name) {
+                    setCharData(result);
+                  }
+                  setLoading(false);
+                });
+              }
+            }
+          }
         });
       }, []);
 
@@ -6572,6 +6667,39 @@
         return () => el.removeEventListener("scroll", onScroll);
       }, []);
 
+      // Auto-scale UI + persist geometry on resize
+      useEffect(() => {
+        const REFERENCE_WIDTH = 1100;
+        const applyZoom = () => {
+          const w = window.outerWidth || window.innerWidth;
+          const zoom = Math.min(1.5, Math.max(1.0, 1 + (w - REFERENCE_WIDTH) * 0.0005));
+          document.documentElement.style.zoom = zoom;
+          // Compensate app-frame height for zoom (100vh shrinks under zoom)
+          const frame = document.querySelector(".app-frame");
+          if (frame) {
+            const realH = window.outerHeight || window.innerHeight;
+            if (realH > 100 && zoom > 1) {
+              frame.style.height = (realH / zoom - 16) + "px";
+            } else {
+              frame.style.height = "";  // fall back to CSS calc(100vh - 16px)
+            }
+          }
+        };
+        applyZoom(); // apply on mount
+        let timer = null;
+        const onResize = () => {
+          applyZoom();
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            try {
+              window.pywebview?.api?.save_geometry(window.outerWidth, window.outerHeight);
+            } catch(e) {}
+          }, 500);
+        };
+        window.addEventListener("resize", onResize);
+        return () => { clearTimeout(timer); window.removeEventListener("resize", onResize); };
+      }, []);
+
       // Reveal UI after React has painted the init data
       useEffect(() => {
         if (!settingsLoaded) return;
@@ -6884,6 +7012,7 @@
             onSkip={handleWelcomeSkip}
           />
         </div>
+        <div className="resize-handle" title="Drag to resize" />
         {nuxActive && ReactDOM.createPortal(
           <NUXOverlay
             step={NUX_STEPS[nuxStep]}

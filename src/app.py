@@ -214,6 +214,87 @@ class WindowApi:
                 ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
             else:
                 ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+            # Persist maximized state after a brief delay
+            threading.Timer(0.3, self._persist_geometry).start()
+
+    def resize_to(self, width, height):
+        """Resize and center the window (called from JS size presets)."""
+        import ctypes
+        hwnd = self._get_hwnd()
+        if not hwnd:
+            return
+        w, h = max(900, int(width)), max(600, int(height))
+        # If maximized, restore first
+        if ctypes.windll.user32.IsZoomed(hwnd):
+            self._guard_until = 0
+            ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            time.sleep(0.05)
+        # Get screen work area (excludes taskbar)
+        class RECT(ctypes.Structure):
+            _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                        ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+        work = RECT()
+        ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0)  # SPI_GETWORKAREA
+        sw = work.right - work.left
+        sh = work.bottom - work.top
+        w = min(w, sw)
+        h = min(h, sh)
+        x = work.left + (sw - w) // 2
+        y = work.top + (sh - h) // 2
+        self._guard_until = 0
+        ctypes.windll.user32.MoveWindow(hwnd, x, y, w, h, True)
+        # Persist
+        self._pending_geo = (w, h, False)
+        threading.Timer(0.3, self._persist_geometry).start()
+
+    def save_geometry(self, width, height, maximized=False):
+        """Called from JS on window resize to persist geometry."""
+        self._pending_geo = (int(width), int(height), bool(maximized))
+        # Debounce: only persist after 500ms of no further calls
+        if hasattr(self, "_geo_timer") and self._geo_timer:
+            self._geo_timer.cancel()
+        self._geo_timer = threading.Timer(0.5, self._persist_geometry)
+        self._geo_timer.start()
+
+    def _persist_geometry(self):
+        """Write current window geometry to settings file."""
+        import ctypes
+        try:
+            hwnd = self._get_hwnd()
+            if not hwnd:
+                return
+            is_max = bool(ctypes.windll.user32.IsZoomed(hwnd))
+            # If maximized, don't overwrite the normal-size values
+            if is_max:
+                geo = getattr(self, "_pending_geo", None)
+                if geo:
+                    w, h = geo[0], geo[1]
+                else:
+                    w, h = WINDOW_WIDTH, WINDOW_HEIGHT
+            else:
+                # Read actual window rect
+                class RECT(ctypes.Structure):
+                    _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                                ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+                rc = RECT()
+                ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rc))
+                w = rc.right - rc.left
+                h = rc.bottom - rc.top
+            settings_path = os.path.join(
+                os.path.expanduser("~"), ".poe2-price-overlay", "dashboard_settings.json"
+            )
+            settings = {}
+            if os.path.exists(settings_path):
+                with open(settings_path) as f:
+                    settings = json.load(f)
+            if not is_max:
+                settings["window_width"] = max(900, w)
+                settings["window_height"] = max(600, h)
+            settings["window_maximized"] = is_max
+            with open(settings_path, "w") as f:
+                json.dump(settings, f, indent=2)
+        except Exception:
+            pass
 
     def close(self):
         """Hide to tray instead of quitting."""
@@ -427,6 +508,21 @@ def main():
 
     _log(f"[Startup] Server ready ({_ms()})")
 
+    # Load saved window geometry from settings
+    _win_w, _win_h, _win_max = WINDOW_WIDTH, WINDOW_HEIGHT, False
+    try:
+        _settings_path = os.path.join(
+            os.path.expanduser("~"), ".poe2-price-overlay", "dashboard_settings.json"
+        )
+        if os.path.exists(_settings_path):
+            with open(_settings_path) as _sf:
+                _saved = json.load(_sf)
+            _win_w = max(900, int(_saved.get("window_width", WINDOW_WIDTH)))
+            _win_h = max(600, int(_saved.get("window_height", WINDOW_HEIGHT)))
+            _win_max = bool(_saved.get("window_maximized", False))
+    except Exception:
+        pass
+
     # Open the native window pointing at the dashboard
     api = WindowApi()
 
@@ -482,9 +578,10 @@ def main():
     window = webview.create_window(
         WINDOW_TITLE,
         url=f"http://127.0.0.1:{PORT}/dashboard?_t={int(time.time())}",
-        width=WINDOW_WIDTH,
-        height=WINDOW_HEIGHT,
+        width=_win_w,
+        height=_win_h,
         min_size=(900, 600),
+        maximized=_win_max,
         background_color="#0d0b08",
         text_select=True,
         frameless=True,

@@ -36,13 +36,13 @@ from typing import Optional
 import platform
 
 import requests
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from builds_client import (BuildsClient, enrich_item_mods, classify_build,
-                           strip_ninja_brackets)
+                           strip_ninja_brackets, _SKIP_SLOTS)
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from item_lookup import ItemLookup
@@ -72,7 +72,10 @@ SETTINGS_FILE = SETTINGS_DIR / "dashboard_settings.json"
 POE2SCOUT_API = "https://poe2scout.com/api"
 
 # Bug report (mirrors config.py constants)
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+DISCORD_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_URL",
+    "https://discord.com/api/webhooks/1476088582786519193/_GYenGzCpnxosoP_bvKYNbELYs5-rIIsfvcFenNUxr59GAQcwwvkJzC-Jt0rvmMAMftL"
+).strip()
 LOG_FILE = SETTINGS_DIR / "overlay.log"
 DEBUG_DIR = SETTINGS_DIR / "debug"
 BUG_REPORT_LOG_LINES = 200
@@ -124,6 +127,9 @@ DEFAULT_SETTINGS = {
     "telemetry_enabled": False,
     "poesessid": "",
     "nux_completed": False,
+    "window_width": 1100,
+    "window_height": 750,
+    "window_maximized": False,
 }
 
 
@@ -872,6 +878,21 @@ async def update_settings(req: SettingsRequest):
     return settings
 
 
+@app.post("/api/window-geometry")
+async def save_window_geometry(req: Request):
+    """Persist window size/maximized state (called on resize, no broadcast)."""
+    body = await req.json()
+    settings = load_settings()
+    if "width" in body and isinstance(body["width"], (int, float)):
+        settings["window_width"] = max(900, int(body["width"]))
+    if "height" in body and isinstance(body["height"], (int, float)):
+        settings["window_height"] = max(600, int(body["height"]))
+    if "maximized" in body:
+        settings["window_maximized"] = bool(body["maximized"])
+    save_settings(settings)
+    return {"ok": True}
+
+
 @app.get("/api/leagues")
 async def get_leagues():
     """Fetch available leagues from poe2scout API."""
@@ -1148,6 +1169,8 @@ async def character_lookup(req: CharacterLookupRequest):
             mp = item_lookup._mod_parser
             mdb = item_lookup._mod_database
             for i, eq in enumerate(char_data.equipment):
+                if eq.slot in _SKIP_SLOTS:
+                    continue
                 tier_data = enrich_item_mods(eq, mp, mdb)
                 if tier_data and i < len(result.get("equipment", [])):
                     result["equipment"][i]["modTiers"] = tier_data
@@ -1314,6 +1337,8 @@ async def character_build_insights(req: BuildInsightsRequest):
             mp = item_lookup._mod_parser
             mdb = item_lookup._mod_database
             for eq in char_data.equipment:
+                if eq.slot in _SKIP_SLOTS:
+                    continue
                 tier_data = enrich_item_mods(eq, mp, mdb)
                 # Flatten all tier results across mod types
                 all_tiers = []
@@ -1322,7 +1347,12 @@ async def character_build_insights(req: BuildInsightsRequest):
                         if t is not None:
                             all_tiers.append(t)
 
-                t1_count = sum(1 for t in all_tiers if t["tier_num"] == 1)
+                # Only consider meaningful mods for avg/weakest (weight >= 0.5,
+                # tier_count <= 15 to exclude absurdly deep defence ladders)
+                meaningful = [t for t in all_tiers
+                              if t["weight"] >= 0.5 and t["tier_count"] <= 15]
+
+                t1_count = sum(1 for t in meaningful if t["tier_num"] == 1)
                 mod_count = sum(
                     len(m_list) for m_list in [
                         eq.implicit_mods, eq.explicit_mods, eq.crafted_mods,
@@ -1330,18 +1360,19 @@ async def character_build_insights(req: BuildInsightsRequest):
                     ] if m_list
                 )
                 avg_tier = 0
-                if all_tiers:
-                    avg_tier = round(sum(t["tier_num"] for t in all_tiers) / len(all_tiers), 1)
+                if meaningful:
+                    avg_tier = round(sum(t["tier_num"] for t in meaningful) / len(meaningful), 1)
 
-                # Find weakest mod (highest tier number)
+                # Find lowest-priority mod — highest tier number among meaningful mods
                 weakest = None
-                if all_tiers:
-                    worst = max(all_tiers, key=lambda t: t["tier_num"])
-                    weakest = {
-                        "display_name": worst["display_name"],
-                        "tier_num": worst["tier_num"],
-                        "tier_count": worst["tier_count"],
-                    }
+                if meaningful:
+                    worst = max(meaningful, key=lambda t: t["tier_num"])
+                    if worst["tier_num"] >= 3:
+                        weakest = {
+                            "display_name": worst["display_name"],
+                            "tier_num": worst["tier_num"],
+                            "tier_count": worst["tier_count"],
+                        }
 
                 from builds_client import SLOT_DISPLAY
                 slot_summary.append({
@@ -1351,7 +1382,7 @@ async def character_build_insights(req: BuildInsightsRequest):
                     "avgTier": avg_tier,
                     "t1Count": t1_count,
                     "modCount": mod_count,
-                    "enrichedCount": len(all_tiers),
+                    "enrichedCount": len(meaningful),
                     "weakest": weakest,
                 })
         except Exception as e:
@@ -1605,6 +1636,7 @@ async def get_market_signals():
 class BugReportRequest(BaseModel):
     title: str = ""
     description: str = ""
+    contact: str = ""
 
 
 @app.post("/api/bug-report")
@@ -1613,6 +1645,7 @@ async def submit_bug_report(req: BugReportRequest):
 
     title = req.title.strip() or f"Bug report {time.strftime('%Y-%m-%d %H:%M')}"
     description = req.description.strip()
+    contact = req.contact.strip()
 
     # Collect data (mirrors bug_reporter.py._collect_data)
     log_tail = ""
@@ -1669,6 +1702,7 @@ async def submit_bug_report(req: BugReportRequest):
             "description": description,
             "system_info": system_info,
             "session_stats": session_stats,
+            "contact": contact,
         }
         with open(BUG_REPORT_DB, "a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
@@ -1681,6 +1715,8 @@ async def submit_bug_report(req: BugReportRequest):
         message += f"\n{description}"
     message += f"\n\n**System:** {system_info}"
     message += f"\n**Session:** {session_stats}"
+    if contact:
+        message += f"\n**Contact:** {contact}"
     message += f"\n**Source:** Dashboard"
     if len(message) > 2000:
         message = message[:1997] + "..."

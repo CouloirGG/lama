@@ -46,12 +46,13 @@ ASCENDANCY_MAP = {
     "Titan": "Warrior",
     "Warbringer": "Warrior",
     "Stormweaver": "Sorceress",
-    "Invoker": "Sorceress",
+    "Chronomancer": "Sorceress",
+    "Disciple of Varashta": "Sorceress",
     "Amazon": "Huntress",
     "Ritualist": "Huntress",
     "Witchhunter": "Mercenary",
     "Gemling Legionnaire": "Mercenary",
-    "Disciple of Varashta": "Monk",
+    "Invoker": "Monk",
     "Acolyte of Chayula": "Monk",
     "Lich": "Druid",
     "Shaman": "Druid",
@@ -73,6 +74,12 @@ SLOT_DISPLAY = {
     "Ring2": "Ring 2",
     "Flask": "Flask",
 }
+
+# Slots to skip in insights/enrichment (trinkets, incursion items, etc.)
+_SKIP_SLOTS = frozenset([
+    "Trinket", "IncursionLegLeft", "IncursionLegRight",
+    "IncursionArmLeft", "IncursionArmRight",
+])
 
 # Mod type display order and colors (for dashboard rendering)
 MOD_TYPES = ["enchantMods", "implicitMods", "explicitMods", "fracturedMods",
@@ -1142,12 +1149,10 @@ _DEAD_MOD_ATTACK = [
     (re.compile(r"adds \d+ to \d+ .* Damage to Spells", re.I), "flat spell damage doesn't help attack builds"),
 ]
 _DEAD_MOD_SPELL = [
-    (re.compile(r"increased Attack Speed", re.I), "attack speed doesn't help spell builds"),
-    (re.compile(r"adds \d+ to \d+ .* Damage to Attacks", re.I), "flat attack damage doesn't help spell builds"),
+    (re.compile(r"increased Attack Speed", re.I), "attack speed doesn't scale spell damage"),
 ]
 _DEAD_MOD_UNIVERSAL = [
-    (re.compile(r"Allies in your Presence", re.I), "party/mount mod"),
-    (re.compile(r"increased Rarity of Items found", re.I), "rarity mod — wasted affix slot"),
+    (re.compile(r"Allies in your Presence", re.I), "party/mount mod — only active with allies nearby"),
 ]
 
 

@@ -293,7 +293,10 @@ LOG_FILE = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "overlay.log"
 # ─────────────────────────────────────────────
 # Bug Reporting (Discord webhook)
 # ─────────────────────────────────────────────
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+DISCORD_WEBHOOK_URL = os.environ.get(
+    "DISCORD_WEBHOOK_URL",
+    "https://discord.com/api/webhooks/1476088582786519193/_GYenGzCpnxosoP_bvKYNbELYs5-rIIsfvcFenNUxr59GAQcwwvkJzC-Jt0rvmMAMftL"
+).strip()
 DISCORD_TELEMETRY_WEBHOOK_URL = os.environ.get("DISCORD_TELEMETRY_WEBHOOK_URL", "").strip()
 
 # Market Signals — Discord integration (coming soon)
