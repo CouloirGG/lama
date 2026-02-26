@@ -45,6 +45,8 @@ from builds_client import (BuildsClient, enrich_item_mods, classify_build,
                            strip_ninja_brackets, _SKIP_SLOTS,
                            detect_current_anoint, compute_upgrade_priority,
                            compute_cost_tiers, find_lineage_upgrades,
+                           get_anoint_description, compute_build_comparison,
+                           compute_improvement_package,
                            SLOT_DISPLAY, SLOT_TO_UNIQUE_SLUG)
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
@@ -1415,6 +1417,23 @@ async def character_build_insights(req: BuildInsightsRequest):
                             "tier_count": worst["tier_count"],
                         }
 
+                # 2A: Detailed improvement info — weak mods with T1 targets
+                weak_mods = []
+                for t in sorted(meaningful, key=lambda t: -t["tier_num"]):
+                    if t["tier_num"] >= 3:
+                        current_range = t.get("tier_range", {})
+                        weak_mods.append({
+                            "name": t["display_name"],
+                            "tier": t["tier_num"],
+                            "tierCount": t["tier_count"],
+                            "currentRange": f"{current_range.get('min', '?')}-{current_range.get('max', '?')}",
+                        })
+                    if len(weak_mods) >= 3:
+                        break
+
+                # Dead mods on this slot (from archetype analysis)
+                slot_dead = [dm for dm in (archetype.dead_mods or []) if dm.get("slot") == eq.slot]
+
                 from builds_client import SLOT_DISPLAY
                 slot_summary.append({
                     "slot": eq.slot,
@@ -1425,6 +1444,8 @@ async def character_build_insights(req: BuildInsightsRequest):
                     "modCount": mod_count,
                     "enrichedCount": len(meaningful),
                     "weakest": weakest,
+                    "weakMods": weak_mods,
+                    "deadMods": [{"mod": dm["mod"], "reason": dm["reason"]} for dm in slot_dead[:2]],
                 })
         except Exception as e:
             logger.debug(f"Slot summary failed: {e}")
@@ -1556,15 +1577,147 @@ async def character_build_efficiency(req: BuildEfficiencyRequest):
         "upgradePriority": upgrade_priority,
         "anointOptimizer": {
             "current": current_anoint,
+            "currentDesc": get_anoint_description(current_anoint) if current_anoint else None,
             "isOptimal": anoint_optimal,
             "popular": [
-                {"name": a["name"], "percentage": a["percentage"]}
+                {"name": a["name"], "percentage": a["percentage"],
+                 "desc": get_anoint_description(a["name"])}
                 for a in popular_anoints[:5]
             ],
         },
         "costTiers": cost_tiers,
         "lineageGemRoi": lineage_gems[:10],
     }
+
+
+class ImprovementPackageRequest(BaseModel):
+    account: str
+    character: str
+
+
+@app.post("/api/character/improvement-package")
+async def character_improvement_package(req: ImprovementPackageRequest):
+    """Compute structured improvement package: free changes, spend money, alternatives."""
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character required"})
+    loop = asyncio.get_running_loop()
+
+    char_data = await loop.run_in_executor(
+        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+    )
+    if not char_data:
+        return JSONResponse(status_code=404, content={"error": "Character not found"})
+
+    archetype = classify_build(char_data)
+    char_class = char_data.ascendancy or char_data.char_class
+    main_skill = archetype.main_skill
+
+    # Reuse efficiency data
+    slot_summary = []
+    if item_lookup and item_lookup.ready:
+        try:
+            mp = item_lookup._mod_parser
+            mdb = item_lookup._mod_database
+            for eq in char_data.equipment:
+                if eq.slot in _SKIP_SLOTS:
+                    continue
+                tier_data = enrich_item_mods(eq, mp, mdb)
+                all_tiers = []
+                for _mk, tiers in tier_data.items():
+                    for t in tiers:
+                        if t is not None:
+                            all_tiers.append(t)
+                meaningful = [t for t in all_tiers
+                              if t["weight"] >= 0.5 and t["tier_count"] <= 15]
+                avg_tier = 0
+                if meaningful:
+                    avg_tier = round(sum(t["tier_num"] for t in meaningful) / len(meaningful), 1)
+                slot_summary.append({
+                    "slot": eq.slot,
+                    "slotDisplay": SLOT_DISPLAY.get(eq.slot, eq.slot),
+                    "itemName": eq.name or eq.type_line,
+                    "avgTier": avg_tier,
+                    "enrichedCount": len(meaningful),
+                })
+        except Exception:
+            pass
+
+    price_cache_dict = {}
+    for eq in char_data.equipment:
+        if eq.slot not in _SKIP_SLOTS and eq.slot in SLOT_TO_UNIQUE_SLUG:
+            try:
+                prices = await loop.run_in_executor(
+                    None, builds_client.fetch_unique_prices, eq.slot)
+                price_cache_dict.update(prices)
+            except Exception:
+                pass
+
+    upgrade_priority = await loop.run_in_executor(
+        None, compute_upgrade_priority, char_data, slot_summary,
+        builds_client, price_cache_dict
+    )
+    popular_anoints = await loop.run_in_executor(
+        None, builds_client.fetch_popular_anoints, char_class, main_skill
+    )
+    lineage_gems = find_lineage_upgrades(char_data.skill_groups, price_cache_dict)
+
+    package = compute_improvement_package(
+        char_data, archetype, slot_summary, popular_anoints,
+        lineage_gems, upgrade_priority
+    )
+    return package
+
+
+class BuildCompareRequest(BaseModel):
+    account: str
+    character: str
+
+
+@app.post("/api/character/build-compare")
+async def character_build_compare(req: BuildCompareRequest):
+    """Compare character build against aggregate top-build data."""
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character required"})
+    loop = asyncio.get_running_loop()
+
+    char_data = await loop.run_in_executor(
+        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+    )
+    if not char_data:
+        return JSONResponse(status_code=404, content={"error": "Character not found"})
+
+    archetype = classify_build(char_data)
+    char_class = char_data.ascendancy or char_data.char_class
+    main_skill = archetype.main_skill
+
+    # Fetch popular keystones
+    popular_keystones = await loop.run_in_executor(
+        None, builds_client.fetch_popular_keystones, char_class, main_skill
+    )
+
+    # Fetch popular anoints
+    popular_anoints = await loop.run_in_executor(
+        None, builds_client.fetch_popular_anoints, char_class, main_skill
+    )
+
+    # Fetch popular items per slot
+    popular_by_slot = {}
+    for eq in char_data.equipment:
+        if eq.slot in _SKIP_SLOTS:
+            continue
+        try:
+            items = await loop.run_in_executor(
+                None, builds_client.fetch_popular_items,
+                char_class, main_skill, eq.slot)
+            if items:
+                popular_by_slot[eq.slot] = items
+        except Exception:
+            pass
+
+    comparison = compute_build_comparison(
+        char_data, popular_keystones, popular_anoints, popular_by_slot, []
+    )
+    return comparison
 
 
 # ---------------------------------------------------------------------------

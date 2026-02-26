@@ -1567,6 +1567,66 @@ def detect_current_anoint(char: CharacterData) -> Optional[str]:
     return None
 
 
+# Notable anoint descriptions for top ~50 commonly anointed passives
+ANOINT_DESCRIPTIONS = {
+    "constitution": "+10% maximum Life",
+    "heart of the warrior": "+20 Strength, +10% maximum Life",
+    "discipline and training": "+12% maximum Life",
+    "profane chemistry": "+20% Flask Charges gained, +12% maximum Life",
+    "crystal skin": "+1% all maximum Resistances",
+    "diamond skin": "+15% all Elemental Resistances",
+    "whispers of doom": "Can apply an additional Curse",
+    "corruption": "+1 Curse limit, +10% Chaos Damage",
+    "charisma": "20% reduced Mana Reservation of Skills",
+    "champion of the cause": "10% reduced Mana Reservation of Skills",
+    "sovereignty": "12% reduced Mana Reservation of Skills",
+    "influence": "8% increased Area of Effect, 8% reduced Mana Reservation",
+    "golem's blood": "1.6% Life Regeneration, +10% maximum Life",
+    "herbalism": "+12% maximum Life, 20% increased Flask Charges gained",
+    "overcharge": "+40% increased Spell Damage per Power Charge",
+    "potency of will": "+20% Skill Effect Duration",
+    "instability": "+25% Elemental Damage, 10% chance to Shock",
+    "breath of flames": "+25% Fire Damage, +20% Burning Damage",
+    "breath of rime": "+25% Cold Damage, +15% Freeze Duration",
+    "breath of lightning": "+25% Lightning Damage, +10% Shock Effect",
+    "assassination": "+30% Critical Strike Multiplier",
+    "doom cast": "+40% Spell Critical Strike Chance",
+    "deadly precision": "+30% Critical Strike Chance for Attacks",
+    "command of steel": "Fortify effect is doubled, +20% Armour",
+    "iron reflexes": "Converts all Evasion Rating to Armour",
+    "phase acrobatics": "+30% Spell Dodge Chance",
+    "spell suppression": "+8% Spell Suppression Chance",
+    "devotion": "+6% maximum Life, +20% Armour",
+    "tireless": "+12% maximum Life, 10% reduced Cost of Skills",
+    "mind over matter": "40% of Damage taken from Mana before Life",
+    "pain attunement": "30% more Spell Damage when on Low Life",
+    "clever thief": "Leech 0.6% Attack Damage as Life and Mana",
+    "swift killer": "+3% Attack/Cast Speed per Frenzy Charge",
+    "aspect of the eagle": "+10% Accuracy, +20% Evasion Rating",
+    "fangs of the viper": "+5% Chaos Damage over Time Multiplier",
+    "graceful assault": "+20% Attack Speed while Moving",
+    "lava lash": "+30% Fire Damage with Attack Skills",
+    "snowforged": "+15% Cold Damage, +20% Fire Damage",
+    "heart of ice": "+20% Cold Damage, +4% Cold DoT Multiplier",
+    "arcane potency": "+25% Spell Critical Strike Chance, +25% Crit Multi",
+    "force shaper": "+15% Spell Damage, +10% Area of Effect",
+    "successive detonations": "+2 to max number of Mines, +10% Mine Damage",
+    "explosive impact": "+20% Area of Effect, +15% Area Damage",
+    "thick skin": "+15% maximum Life, +10% Life Recovery Rate",
+    "sanctity": "+15% Energy Shield, +12% Life Regeneration",
+    "essence surge": "+30% faster start of ES Recharge",
+    "utmost might": "+40 Strength",
+    "utmost swiftness": "+40 Dexterity",
+    "utmost intellect": "+40 Intelligence",
+}
+
+def get_anoint_description(name: str) -> Optional[str]:
+    """Get a short description for a notable passive by name."""
+    if not name:
+        return None
+    return ANOINT_DESCRIPTIONS.get(name.lower())
+
+
 def compute_upgrade_priority(char: CharacterData, slot_summary: list,
                              builds_client_inst: 'BuildsClient',
                              price_cache_dict: dict) -> list:
@@ -1750,3 +1810,179 @@ def find_lineage_upgrades(skill_groups: list,
 
     lineage_results.sort(key=lambda x: x["priceDiv"])
     return lineage_results
+
+
+def compute_improvement_package(
+    char: CharacterData,
+    archetype: 'BuildArchetype',
+    slot_summary: list,
+    popular_anoints: list,
+    lineage_gems: list,
+    upgrade_priority: list,
+) -> dict:
+    """Compute a prioritized improvement package in 3 sections.
+
+    Returns dict with:
+      free: [{action, detail, impact}]       — no-cost changes
+      spend: [{action, detail, cost, impact}] — gear upgrades
+      alternatives: [{action, detail, pros, cons}] — build variants
+    """
+    free = []
+    spend = []
+    alternatives = []
+
+    # Free: Anoint
+    current_anoint = detect_current_anoint(char)
+    if popular_anoints:
+        top_anoint = popular_anoints[0]
+        if not current_anoint:
+            free.append({
+                "action": "Add anoint",
+                "detail": f"Anoint amulet with {top_anoint['name']} ({top_anoint['percentage']}% of top builds)",
+                "impact": "Free damage/defense boost",
+            })
+        elif top_anoint["name"].lower() != (current_anoint or "").lower():
+            free.append({
+                "action": "Change anoint",
+                "detail": f"Switch from {current_anoint} to {top_anoint['name']} ({top_anoint['percentage']}% of top builds)",
+                "impact": "Better alignment with meta",
+            })
+
+    # Free: Gem links (check for missing support gems)
+    if lineage_gems:
+        for lg in lineage_gems[:2]:
+            if lg.get("priceDiv", 0) < 1:
+                free.append({
+                    "action": "Lineage gem",
+                    "detail": f"Use {lg['name']} (cheap at ~{lg.get('priceDiv', 0):.1f}d)",
+                    "impact": "Multiplicative 'More' damage",
+                })
+
+    # Spend: From upgrade priority
+    for u in (upgrade_priority or [])[:3]:
+        if u.get("topItem") and u.get("topItemPrice"):
+            spend.append({
+                "action": f"Upgrade {u['slotDisplay']}",
+                "detail": f"Replace with {u['topItem']}",
+                "cost": u["topItemPrice"],
+                "impact": f"T{u['currentTier']} → better tier (gap +{u['gap']})",
+            })
+
+    # Spend: Lineage gems (those that cost something)
+    for lg in (lineage_gems or []):
+        if lg.get("priceDiv", 0) >= 1:
+            spend.append({
+                "action": f"Buy {lg['name']}",
+                "detail": "Lineage support gem — multiplicative damage",
+                "cost": f"~{lg['priceDiv']:.1f}d",
+                "impact": "More DPS multiplier",
+            })
+            if len(spend) >= 5:
+                break
+
+    # Alternatives: Build variant ideas
+    if archetype.is_crit and not archetype.is_coc:
+        alternatives.append({
+            "action": "Consider CoC variant",
+            "detail": f"Convert to Cast on Critical Strike with {archetype.main_skill or 'primary skill'}",
+            "pros": "Higher clear speed, automated casting",
+            "cons": "Requires specific weapon, higher investment",
+        })
+    if archetype.defense_type == "life" and any(
+        k in (char.keystones or []) for k in ["Pain Attunement", "Low Life"]
+    ):
+        alternatives.append({
+            "action": "Switch to ES/Low Life",
+            "detail": "Respec to Energy Shield with Pain Attunement",
+            "pros": "30% more spell damage (PA always active), high EHP",
+            "cons": "Expensive gear, chaos vulnerability",
+        })
+    if archetype.defense_type == "life":
+        alternatives.append({
+            "action": "Add block layer",
+            "detail": "Shield + block nodes for damage mitigation",
+            "pros": "50%+ chance to avoid all damage from hits",
+            "cons": "Lose dual-wield/2H DPS, passive point investment",
+        })
+
+    return {
+        "free": free,
+        "spend": spend[:5],
+        "alternatives": alternatives[:3],
+    }
+
+
+def compute_build_comparison(
+    char: CharacterData,
+    popular_keystones: list,
+    popular_anoints: list,
+    popular_by_slot: Dict[str, List[PopularItem]],
+    slot_summary: list,
+) -> dict:
+    """Compare user's build against aggregate top-build data.
+
+    Returns dict with:
+      keystoneDiffs: [{name, yourHasIt, topPct}]
+      gearMatches: [{slot, slotDisplay, yourItem, topItem, topPct, matches}]
+      anointMatch: {yourAnoint, topAnoint, topPct, matches}
+      overallScore: 0-100 how closely user matches meta
+    """
+    user_ks = set(char.keystones or [])
+    ks_diffs = []
+    for pk in (popular_keystones or []):
+        ks_diffs.append({
+            "name": pk["name"],
+            "yourHasIt": pk["name"] in user_ks,
+            "topPct": pk.get("percentage", 0),
+        })
+
+    # Anoint comparison
+    current_anoint = detect_current_anoint(char)
+    top_anoint = (popular_anoints or [{}])[0] if popular_anoints else {}
+    anoint_match = {
+        "yourAnoint": current_anoint,
+        "topAnoint": top_anoint.get("name"),
+        "topPct": top_anoint.get("percentage", 0),
+        "matches": current_anoint and top_anoint.get("name", "").lower() == (current_anoint or "").lower(),
+    }
+
+    # Per-slot gear match
+    gear_matches = []
+    match_count = 0
+    total_slots = 0
+    for eq in char.equipment:
+        if eq.slot in _SKIP_SLOTS:
+            continue
+        items = popular_by_slot.get(eq.slot, [])
+        if not items:
+            continue
+        total_slots += 1
+        top_item = items[0]
+        user_name = (eq.name or eq.type_line or "").lower()
+        top_name = (top_item.name or "").lower()
+        matches = user_name == top_name or (top_name in user_name) or (user_name in top_name)
+        if matches:
+            match_count += 1
+        sd = SLOT_DISPLAY.get(eq.slot, eq.slot)
+        gear_matches.append({
+            "slot": eq.slot,
+            "slotDisplay": sd,
+            "yourItem": eq.name or eq.type_line,
+            "topItem": top_item.name,
+            "topPct": round(top_item.percentage, 1),
+            "matches": matches,
+        })
+
+    # Overall meta-alignment score
+    ks_score = sum(1 for kd in ks_diffs if kd["yourHasIt"] and kd["topPct"] >= 20) / max(
+        sum(1 for kd in ks_diffs if kd["topPct"] >= 20), 1)
+    gear_score = match_count / max(total_slots, 1)
+    anoint_score = 1 if anoint_match["matches"] else 0
+    overall = round((ks_score * 30 + gear_score * 50 + anoint_score * 20), 0)
+
+    return {
+        "keystoneDiffs": ks_diffs,
+        "gearMatches": gear_matches,
+        "anointMatch": anoint_match,
+        "overallScore": int(overall),
+    }

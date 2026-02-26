@@ -5127,7 +5127,7 @@
     function parsePobXml(xml) {
       const parser = new DOMParser();
       const doc = parser.parseFromString(xml, "text/xml");
-      const result = { weapon: null, offhand: null };
+      const result = { weapon: null, offhand: null, treeNodes: [], treeUrl: null };
       const items = doc.querySelectorAll("Item");
       const itemMap = {};
       items.forEach(item => { itemMap[item.getAttribute("id")] = item.textContent; });
@@ -5140,6 +5140,18 @@
       });
       if (weapon1Id && itemMap[weapon1Id]) result.weapon = parseWeaponText(itemMap[weapon1Id]);
       if (weapon2Id && itemMap[weapon2Id]) result.offhand = parseWeaponText(itemMap[weapon2Id]);
+      // Extract passive tree node IDs from active Spec
+      const specs = doc.querySelectorAll("Spec");
+      if (specs.length > 0) {
+        // Use last active spec, or first if none marked active
+        const activeSpec = Array.from(specs).find(s => s.getAttribute("treeVersion")) || specs[0];
+        const url = (activeSpec.getAttribute("treeURL") || activeSpec.getAttribute("url") || "").trim();
+        if (url) result.treeUrl = url;
+        const nodesAttr = activeSpec.getAttribute("nodes") || "";
+        if (nodesAttr) {
+          result.treeNodes = nodesAttr.split(",").map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+        }
+      }
       return result;
     }
 
@@ -5308,31 +5320,32 @@
       const lowestHit = thresholds.reduce((min, t) => t.value < min.value ? t : min, thresholds[0] || { label: "Unknown", value: 0, color: T.text });
 
       const ehpNote = (() => {
-        if (hasMoM && hasEB) return `MoM+EB: ES protects mana, 40% of damage redirected to mana pool (${fmtN(ds.mana)}).`;
-        if (hasMoM) return `MoM: 40% damage redirected to mana (${fmtN(ds.mana)}). Doesn't raise one-shot threshold proportionally.`;
-        if (hasCI) return `CI: Life set to 1 \u2014 all damage from ES (${fmtN(ds.energyShield)}). Immune to chaos.`;
-        if (ds.energyShield > ds.life * 0.5) return `Hybrid: ${fmtN(ds.life)} life + ${fmtN(ds.energyShield)} ES. Chaos/poison bypasses ES.`;
+        if (hasMoM && hasEB) return `MoM+EB: ES protects mana, 40% of damage redirected to mana pool (${fmtN(ds.mana)}). Build both ES and mana for survivability.`;
+        if (hasMoM) return `MoM: 40% damage redirected to mana (${fmtN(ds.mana)}). This doesn't raise your one-shot threshold proportionally — you still die to the same burst.`;
+        if (hasCI) return `CI: Life set to 1 — your ${fmtN(ds.energyShield)} ES is your entire health pool. Immune to chaos damage, bleed, and poison. Pain Attunement always active (30% more spell damage). Raise one-shot threshold by stacking more ES + armour/block.`;
+        if (ds.energyShield > ds.life * 0.5) return `Hybrid: ${fmtN(ds.life)} life + ${fmtN(ds.energyShield)} ES. Chaos/poison bypasses ES and hits life directly — keep chaos res capped.`;
         return null;
       })();
+      const evasionNote = ds.evasionRating > 0 && ds.evasionRating < 1000 ? `Evasion (${fmtN(ds.evasionRating)}): Negligible dodge chance (~3-5%) — not a meaningful defense layer at this level.` : null;
 
       const layers = [];
-      if (ds.armour > 0) layers.push({ label: "Armour", value: fmtN(ds.armour) });
-      if (ds.evasionRating > 100) layers.push({ label: "Evasion", value: fmtN(ds.evasionRating) });
-      if (ds.blockChance > 0) layers.push({ label: "Block", value: `${ds.blockChance}%` });
-      if (ds.spellBlockChance > 0) layers.push({ label: "Spell Block", value: `${ds.spellBlockChance}%` });
-      if (ds.spellSuppressionChance > 0) layers.push({ label: "Suppression", value: `${ds.spellSuppressionChance}%` });
+      if (ds.armour > 0) layers.push({ label: "Armour", value: fmtN(ds.armour), color: getStatColor(ds.armour, { great: 20000, good: 10000, okay: 3000 }) });
+      if (ds.evasionRating > 100) layers.push({ label: "Evasion", value: fmtN(ds.evasionRating), color: getStatColor(ds.evasionRating, { great: 20000, good: 10000, okay: 3000 }) });
+      if (ds.blockChance > 0) layers.push({ label: "Block", value: `${ds.blockChance}%`, color: getStatColor(ds.blockChance, { great: 60, good: 40, okay: 20 }) });
+      if (ds.spellBlockChance > 0) layers.push({ label: "Spell Block", value: `${ds.spellBlockChance}%`, color: getStatColor(ds.spellBlockChance, { great: 60, good: 40, okay: 20 }) });
+      if (ds.spellSuppressionChance > 0) layers.push({ label: "Suppression", value: `${ds.spellSuppressionChance}%`, color: getStatColor(ds.spellSuppressionChance, { great: 80, good: 50, okay: 30 }) });
 
       const ResBar = ({ label, val, overCap, color }) => {
-        const pct = Math.min((val / 75) * 100, 100);
         const capped = val >= 75;
+        const fillPct = Math.min((val / 75) * 100, 100);
         return (
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-            <span style={{ fontSize: 10, color: T.textMuted, width: 32 }}>{label}</span>
-            <div style={{ flex: 1, height: 6, background: T.input, borderRadius: 3, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${pct}%`, background: capped ? color : T.red, borderRadius: 3 }} />
+            <span style={{ fontSize: 10, color: color, width: 32, fontWeight: 600 }}>{label}</span>
+            <div style={{ flex: 1, height: 6, background: T.input, borderRadius: 3, overflow: "hidden", position: "relative" }}>
+              <div style={{ height: "100%", width: `${fillPct}%`, background: capped ? color : T.red, borderRadius: 3, opacity: capped ? 0.8 : 1 }} />
             </div>
-            <span style={{ ...MONO, fontSize: 10, color: capped ? T.text : T.red, width: 32, textAlign: "right" }}>{val}%</span>
-            {overCap > 0 && <span style={{ ...MONO, fontSize: 9, color: T.textMuted }}>+{overCap}</span>}
+            <span style={{ ...MONO, fontSize: 10, color: capped ? color : T.red, width: 32, textAlign: "right", fontWeight: 600 }}>{val}%</span>
+            {overCap > 0 && <span style={{ ...MONO, fontSize: 10, color: "#4a7c59", fontWeight: 600 }}>+{overCap}</span>}
           </div>
         );
       };
@@ -5342,78 +5355,104 @@
       return (
         <div className="panel" style={{ ...CARD, marginBottom: 12, padding: 0, overflow: "hidden" }}>
           <div style={{ padding: "8px 12px", borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: 700, color: T.textSecond, letterSpacing: "0.08em", textTransform: "uppercase" }}>Defenses</div>
-          <div style={{ padding: "10px 12px" }}>
-            <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
-              <div style={{ flex: 1, padding: "8px 10px", background: T.input, borderRadius: 6 }}>
-                <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Effective HP</div>
-                <div style={{ ...MONO, fontSize: 18, fontWeight: 700, color: T.gold }}>{fmtN(ds.effectiveHealthPool)}</div>
+          <div style={{ padding: "8px 12px" }}>
+            {/* 3-column grid: Life/ES/Mana | EHP+One-shot | Mitigation */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
+              {/* Col 1: Life pool */}
+              <div style={{ padding: "6px 8px", background: T.input, borderRadius: 6 }}>
+                <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 2 }}>Health Pool</div>
                 <div style={{ fontSize: 10, color: T.textMuted }}>
-                  <span style={{ color: "#c44" }}>{fmtN(ds.life)}</span> Life
-                  {ds.energyShield > 0 && <span> + <span style={{ color: "#6bf" }}>{fmtN(ds.energyShield)}</span> ES</span>}
-                  {hasMoM && <span> + <span style={{ color: "#66b" }}>{fmtN(ds.mana)}</span> Mana</span>}
+                  <div><span style={{ ...MONO, color: "#c44", fontWeight: 600 }}>{fmtN(ds.life)}</span> Life</div>
+                  {ds.energyShield > 0 && <div><span style={{ ...MONO, color: "#6bf", fontWeight: 600 }}>{fmtN(ds.energyShield)}</span> ES</div>}
+                  {hasMoM && <div><span style={{ ...MONO, color: "#66b", fontWeight: 600 }}>{fmtN(ds.mana)}</span> Mana</div>}
                 </div>
               </div>
-              <div style={{ flex: 1, padding: "8px 10px", background: T.input, borderRadius: 6 }}>
-                <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>One-Shot Threshold</div>
-                <div style={{ ...MONO, fontSize: 18, fontWeight: 700, color: lowestHit.color }}>{fmtN(ds.lowestMaximumHitTaken)}</div>
-                <div style={{ fontSize: 10, color: T.textMuted }}>weakest: {lowestHit.label}</div>
-              </div>
-            </div>
-            {ehpNote && (
-              <div style={{ padding: "6px 8px", marginBottom: 8, background: "rgba(196,164,86,0.06)", borderRadius: 4, border: `1px solid ${T.borderGold}` }}>
-                <div style={{ fontSize: 10, color: T.textSecond, lineHeight: 1.4 }}>{ehpNote}</div>
-              </div>
-            )}
-            {ds.effectiveHealthPool > ds.lowestMaximumHitTaken * 1.5 && (
-              <div style={{ padding: "6px 8px", marginBottom: 8, background: "rgba(168,50,50,0.08)", borderRadius: 4, border: "1px solid rgba(168,50,50,0.2)" }}>
-                <div style={{ fontSize: 10, color: T.red, lineHeight: 1.4 }}>
-                  EHP ({fmtN(ds.effectiveHealthPool)}) much higher than one-shot threshold ({fmtN(ds.lowestMaximumHitTaken)}). A single {lowestHit.label.toLowerCase()} hit above {fmtN(ds.lowestMaximumHitTaken)} will kill.
+              {/* Col 2: EHP + One-shot */}
+              <div style={{ padding: "6px 8px", background: T.input, borderRadius: 6 }}>
+                <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 2 }}>EHP / One-Shot</div>
+                <div style={{ ...MONO, fontSize: 14, fontWeight: 700, color: getStatColor(ds.effectiveHealthPool, { great: 25000, good: 15000, okay: 8000 }) }}>{fmtN(ds.effectiveHealthPool)}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                  <span style={{ ...MONO, fontSize: 11, fontWeight: 600, color: getStatColor(ds.lowestMaximumHitTaken, { great: 8000, good: 5000, okay: 3000 }) }}>{fmtN(ds.lowestMaximumHitTaken)}</span>
+                  <span style={{ fontSize: 9, color: T.textMuted }}>1-shot ({lowestHit.label})</span>
                 </div>
               </div>
-            )}
-            {thresholds.length > 0 && (
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Max Hit Survived</div>
-                {thresholds.map(t => (
-                  <div key={t.label} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                    <span style={{ fontSize: 10, color: t.color, width: 56 }}>{t.label}</span>
-                    <div style={{ flex: 1, height: 6, background: T.input, borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${(t.value / maxHit) * 100}%`, background: t.color, borderRadius: 3, opacity: t.value === ds.lowestMaximumHitTaken ? 1 : 0.6 }} />
-                    </div>
-                    <span style={{ ...MONO, fontSize: 10, color: T.textSecond, width: 48, textAlign: "right" }}>{fmtN(t.value)}</span>
+              {/* Col 3: Mitigation badges */}
+              <div style={{ padding: "6px 8px", background: T.input, borderRadius: 6 }}>
+                <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 2 }}>Mitigation</div>
+                {layers.length > 0 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                    {layers.map(l => (
+                      <span key={l.label} style={{ fontSize: 9, padding: "1px 4px", background: "rgba(0,0,0,0.3)", borderRadius: 3, border: `1px solid ${T.border}` }}>
+                        <span style={{ color: T.textMuted }}>{l.label} </span>
+                        <span style={{ ...MONO, fontWeight: 600, color: l.color || T.textSecond }}>{l.value}</span>
+                      </span>
+                    ))}
                   </div>
-                ))}
+                ) : <div style={{ fontSize: 9, color: T.textMuted }}>None</div>}
               </div>
-            )}
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Resistances</div>
-              <ResBar label="Fire" val={ds.fireResistance} overCap={ds.fireResistanceOverCap} color="#cc6644" />
-              <ResBar label="Cold" val={ds.coldResistance} overCap={ds.coldResistanceOverCap} color="#6688bb" />
-              <ResBar label="Ltng" val={ds.lightningResistance} overCap={ds.lightningResistanceOverCap} color="#cccc66" />
-              {hasCI ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                  <span style={{ fontSize: 10, color: T.textMuted, width: 32 }}>Chaos</span>
-                  <div style={{ flex: 1, textAlign: "center" }}><span style={{ fontSize: 10, fontWeight: 600, color: "#aa88aa" }}>IMMUNE (CI)</span></div>
-                  <span style={{ ...MONO, fontSize: 10, color: "#aa88aa", width: 32, textAlign: "right" }}>--</span>
-                </div>
-              ) : <ResBar label="Chaos" val={ds.chaosResistance} overCap={ds.chaosResistanceOverCap} color="#aa88aa" />}
             </div>
-            {layers.length > 0 && (
-              <div style={{ marginBottom: 6 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Mitigation</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {layers.map(l => (
-                    <div key={l.label} style={{ padding: "4px 8px", background: T.input, borderRadius: 4, border: `1px solid ${T.border}` }}>
-                      <div style={{ fontSize: 9, color: T.textMuted }}>{l.label}</div>
-                      <div style={{ ...MONO, fontSize: 11, fontWeight: 600, color: T.textSecond }}>{l.value}</div>
-                    </div>
-                  ))}
+            {/* Front-load danger: one-shot warning first */}
+            {ds.lowestMaximumHitTaken > 0 && ds.lowestMaximumHitTaken < 5000 && (
+              <div style={{ padding: "4px 8px", marginBottom: 6, background: "rgba(168,50,50,0.1)", borderRadius: 4, border: "1px solid rgba(168,50,50,0.25)" }}>
+                <div style={{ fontSize: 10, color: T.red, lineHeight: 1.4, fontWeight: 600 }}>
+                  A single {lowestHit.label.toLowerCase()} hit of {fmtN(ds.lowestMaximumHitTaken)}+ will kill instantly.
+                </div>
+                <div style={{ fontSize: 9, color: T.textMuted, lineHeight: 1.4 }}>
+                  EHP ({fmtN(ds.effectiveHealthPool)}) measures sustained damage, but doesn't prevent one-shots. Raise threshold with more {hasCI ? "ES" : "life"}, armour, or block.
                 </div>
               </div>
             )}
+            {ehpNote && (
+              <div style={{ padding: "4px 8px", marginBottom: 6, background: "rgba(196,164,86,0.06)", borderRadius: 4, border: `1px solid ${T.borderGold}` }}>
+                <div style={{ fontSize: 9, color: T.textSecond, lineHeight: 1.4 }}>{ehpNote}</div>
+              </div>
+            )}
+            {evasionNote && (
+              <div style={{ padding: "4px 8px", marginBottom: 6, background: "rgba(196,164,86,0.04)", borderRadius: 4, border: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: 9, color: T.textMuted, lineHeight: 1.4 }}>{evasionNote}</div>
+              </div>
+            )}
+            {/* Resists + Max hit bars side by side */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>Resistances</div>
+                <ResBar label="Fire" val={ds.fireResistance} overCap={ds.fireResistanceOverCap} color="#cc6644" />
+                <ResBar label="Cold" val={ds.coldResistance} overCap={ds.coldResistanceOverCap} color="#6688bb" />
+                <ResBar label="Ltng" val={ds.lightningResistance} overCap={ds.lightningResistanceOverCap} color="#cccc66" />
+                {hasCI ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                    <span style={{ fontSize: 10, color: "#aa88aa", width: 32, fontWeight: 600 }}>Chaos</span>
+                    <div style={{ flex: 1, textAlign: "center" }}><span style={{ fontSize: 9, fontWeight: 700, color: "#aa88aa" }}>IMMUNE</span></div>
+                  </div>
+                ) : <ResBar label="Chaos" val={ds.chaosResistance} overCap={ds.chaosResistanceOverCap} color="#aa88aa" />}
+              </div>
+              {thresholds.length > 0 && (() => {
+                const refScale = 10000;
+                return (
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>Max Hit Survived</div>
+                  {thresholds.map(t => {
+                    const barPct = Math.min((t.value / refScale) * 100, 100);
+                    const hitColor = t.value >= 7000 ? "#4a7c59" : t.value >= 4000 ? T.gold : T.red;
+                    return (
+                    <div key={t.label} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
+                      <span style={{ fontSize: 9, color: t.color, width: 40, fontWeight: 500 }}>{t.label}</span>
+                      <div style={{ flex: 1, height: 6, background: T.input, borderRadius: 3, overflow: "hidden", position: "relative" }}>
+                        <div style={{ position: "absolute", left: "40%", top: 0, bottom: 0, width: 1, background: "rgba(184,134,11,0.3)" }} />
+                        <div style={{ position: "absolute", left: "70%", top: 0, bottom: 0, width: 1, background: "rgba(74,124,89,0.3)" }} />
+                        <div style={{ height: "100%", width: `${barPct}%`, background: hitColor, borderRadius: 3, opacity: 0.8 }} />
+                      </div>
+                      <span style={{ ...MONO, fontSize: 9, color: hitColor, width: 40, textAlign: "right", fontWeight: 600 }}>{fmtN(t.value)}</span>
+                    </div>
+                    );
+                  })}
+                </div>
+                );
+              })()}
+            </div>
             {lowDefense && (
-              <div style={{ padding: "6px 8px", background: "rgba(168,50,50,0.08)", borderRadius: 4, border: "1px solid rgba(168,50,50,0.2)" }}>
-                <div style={{ fontSize: 10, color: T.red, lineHeight: 1.4 }}>Low defense investment \u2014 no strong commitment to armour, evasion, block, ES, or life. Endgame content will be very punishing.</div>
+              <div style={{ padding: "4px 8px", marginTop: 6, background: "rgba(168,50,50,0.08)", borderRadius: 4, border: "1px solid rgba(168,50,50,0.2)" }}>
+                <div style={{ fontSize: 9, color: T.red, lineHeight: 1.4 }}>Low defense investment {"\u2014"} no strong commitment to armour, evasion, block, ES, or life.</div>
               </div>
             )}
           </div>
@@ -5494,6 +5533,71 @@
       runeMods: "Rune",
     };
     const MOD_TYPE_ORDER = ["enchantMods", "implicitMods", "explicitMods", "fracturedMods", "craftedMods", "desecratedMods", "runeMods"];
+
+    // Archetype tag colors by keyword
+    const TAG_COLORS = {
+      fire:       { bg: "#cc664422", border: "#cc6644", text: "#e8956a" },
+      cold:       { bg: "#6688bb22", border: "#6688bb", text: "#8eaacc" },
+      lightning:  { bg: "#cccc6622", border: "#cccc66", text: "#dddd88" },
+      chaos:      { bg: "#aa88aa22", border: "#aa88aa", text: "#ccaacc" },
+      physical:   { bg: "#a8a09022", border: "#a8a090", text: "#c4bcac" },
+      life:       { bg: "#cc444422", border: "#cc4444", text: "#e86a6a" },
+      es:         { bg: "#6bbfff22", border: "#6bbfff", text: "#8ed0ff" },
+      crit:       { bg: "#e6b42222", border: "#e6b422", text: "#f0cc55" },
+      attack:     { bg: "#a8505022", border: "#a85050", text: "#cc7a7a" },
+      spell:      { bg: "#6bdbca22", border: "#6bdbca", text: "#8ee8da" },
+      dot:        { bg: "#b07cd822", border: "#b07cd8", text: "#c99ae6" },
+      minion:     { bg: "#8bb86822", border: "#8bb868", text: "#a8d088" },
+      totem:      { bg: "#d4a04522", border: "#d4a045", text: "#e0b868" },
+      trap:       { bg: "#cc884422", border: "#cc8844", text: "#ddaa66" },
+      mine:       { bg: "#cc884422", border: "#cc8844", text: "#ddaa66" },
+      bow:        { bg: "#4a7c5922", border: "#4a7c59", text: "#78aa88" },
+      melee:      { bg: "#a8505022", border: "#a85050", text: "#cc7a7a" },
+      aura:       { bg: "#6bbfff22", border: "#6bbfff", text: "#8ed0ff" },
+      block:      { bg: "#a8a09022", border: "#a8a090", text: "#c4bcac" },
+      evasion:    { bg: "#4a7c5922", border: "#4a7c59", text: "#78aa88" },
+      armour:     { bg: "#a8a09022", border: "#a8a090", text: "#c4bcac" },
+    };
+    function getTagColor(tag) {
+      const lower = tag.toLowerCase();
+      for (const [key, colors] of Object.entries(TAG_COLORS)) {
+        if (lower.includes(key)) return colors;
+      }
+      return { bg: "rgba(196,164,86,0.1)", border: T.borderGold, text: T.gold };
+    }
+
+    // Importance-based number coloring: green=great, gold=good, amber=warning, red=danger
+    function getStatColor(value, thresholds) {
+      if (thresholds.great !== undefined && value >= thresholds.great) return "#4a7c59";
+      if (thresholds.good !== undefined && value >= thresholds.good) return T.gold;
+      if (thresholds.okay !== undefined && value >= thresholds.okay) return T.amber;
+      return T.red;
+    }
+
+    // Meta build acronyms — ascendancy+skill → short name
+    const META_BUILDS = {
+      "chronomancer+comet":        "DoV Comet",
+      "invoker+ice nova":          "Ice Nova Invoker",
+      "stormweaver+arc":           "Arc Weaver",
+      "stormweaver+ball lightning":"BL Weaver",
+      "infernalist+detonate dead": "DD Infernal",
+      "infernalist+summon infernal hound": "Hound Infernal",
+      "acolyte of chayula+chaos bolt": "Chaos Acolyte",
+      "warbringer+earthquake":     "EQ Warbringer",
+      "titan+boneshatter":         "BS Titan",
+      "titan+tectonic slam":       "Tec Slam Titan",
+      "deadeye+lightning arrow":   "LA Deadeye",
+      "deadeye+ice shot":          "Ice Shot Deadeye",
+      "pathfinder+poison":         "Poison PF",
+      "bloodmage+reap":            "Reap Bloodmage",
+      "gemling legionnaire+boneshatter": "BS Gemling",
+      "witchhunter+splitting steel": "Steel WH",
+    };
+    function getMetaBuildTag(ascendancy, topSkillName) {
+      if (!ascendancy || !topSkillName) return null;
+      const key = `${ascendancy.toLowerCase()}+${topSkillName.toLowerCase()}`;
+      return META_BUILDS[key] || null;
+    }
 
     // -------------------------------------------------------------------
     // Stat parsing for STAT CHECK feature (ported from mobile)
@@ -5979,13 +6083,23 @@
               </div>
               {result.items.map((item, idx) => {
                 const isCurrentItem = matchesCurrentItem(item.name, result.currentItem);
+                // Auto-show upgrade reasons for top 5 non-current items
+                const isUpgradeCandidate = !isCurrentItem && idx < 5 && item.percentage >= 5;
+                const upgradeReasons = [];
+                if (isUpgradeCandidate) {
+                  if (item.percentage > 20) upgradeReasons.push(`Used by ${item.percentage.toFixed(0)}% of top builds`);
+                  if (item.rarity === "unique" && result.currentItem?.rarity !== "unique" && result.currentItem?.rarity !== "3") upgradeReasons.push("Unique with build-defining mods");
+                  if (item.rarity === "rare" && (result.currentItem?.rarity === "unique" || result.currentItem?.rarity === "3")) upgradeReasons.push("Rare with customizable resists/life");
+                }
                 return (
                   <div key={`${item.name}-${idx}`} style={{
                     display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
                     background: isCurrentItem ? "rgba(196,164,86,0.08)" : idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
-                    borderLeft: isCurrentItem ? `2px solid ${T.gold}` : "2px solid transparent",
+                    borderLeft: isCurrentItem ? `2px solid ${T.gold}` : isUpgradeCandidate ? "2px solid rgba(74,124,89,0.4)" : "2px solid transparent",
                   }}>
-                    <div style={{ fontSize: 10, color: T.textMuted, width: 22, textAlign: "right", flexShrink: 0 }}>{idx + 1}.</div>
+                    <div style={{ fontSize: 10, color: T.textMuted, width: 22, textAlign: "right", flexShrink: 0 }}>
+                      {isUpgradeCandidate && upgradeReasons.length > 0 ? <span style={{ color: "#4a7c59" }}>{"\u25B2"}</span> : `${idx + 1}.`}
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{
@@ -5995,6 +6109,11 @@
                         {isCurrentItem && <span style={{ fontSize: 8, color: T.gold, fontWeight: 700 }}>(yours)</span>}
                       </div>
                       {item.priceText && <div style={{ fontSize: 9, color: T.textMuted }}>{item.priceText}</div>}
+                      {upgradeReasons.length > 0 && (
+                        <div style={{ fontSize: 9, color: "#4a7c59", marginTop: 1 }}>
+                          {upgradeReasons.join(" · ")}
+                        </div>
+                      )}
                       <div style={{ height: 3, background: T.input, borderRadius: 2, marginTop: 3, overflow: "hidden" }}>
                         <div style={{ height: "100%", borderRadius: 2, background: isCurrentItem ? T.gold : T.textMuted, width: `${(item.percentage / maxPct) * 100}%`, transition: "width 0.3s" }} />
                       </div>
@@ -6079,18 +6198,22 @@
 
           {/* Row 1: Archetype tags */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
-            {archetype.tags.map((tag, i) => (
-              <span key={i} style={{
-                fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
-                background: "rgba(196,164,86,0.1)", border: `1px solid ${T.borderGold}`,
-                color: T.gold, letterSpacing: "0.04em",
-              }}>{tag}</span>
-            ))}
+            {archetype.tags.map((tag, i) => {
+              const tc = getTagColor(tag);
+              return (
+                <span key={i} style={{
+                  fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
+                  background: tc.bg, border: `1px solid ${tc.border}`,
+                  color: tc.text, letterSpacing: "0.04em",
+                  pointerEvents: "none", cursor: "default",
+                }}>{tag}</span>
+              );
+            })}
             {archetype.mainSkill && (
               <span style={{
                 fontSize: 10, fontWeight: 500, padding: "2px 8px", borderRadius: 10,
                 background: "rgba(255,255,255,0.03)", border: `1px solid ${T.border}`,
-                color: T.textSecond,
+                color: T.textSecond, pointerEvents: "none", cursor: "default",
               }}>{archetype.mainSkill}</span>
             )}
           </div>
@@ -6130,15 +6253,31 @@
             </div>
           )}
 
-          {/* Row 4: Upgrade priorities (weakest slots) */}
+          {/* Row 4: Room to Improve — expanded detail */}
           {weakSlots.length > 0 && (
             <div>
-              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3, fontWeight: 700 }}>Room to Improve</div>
+              <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, fontWeight: 700 }}>Room to Improve</div>
               {weakSlots.map((s, i) => (
-                <div key={i} style={{ fontSize: 10, color: T.textSecond, padding: "1px 0" }}>
-                  <span style={{ color: getTierColor(Math.round(s.avgTier)) }}>{s.slotDisplay}</span>
-                  <span style={{ color: T.textMuted }}> — {s.itemName}</span>
-                  {s.weakest && <span style={{ color: T.textMuted }}> (T{s.weakest.tier_num}/{s.weakest.tier_count} {s.weakest.display_name})</span>}
+                <div key={i} style={{ marginBottom: 6, padding: "4px 8px", background: "rgba(0,0,0,0.15)", borderRadius: 4 }}>
+                  <div style={{ fontSize: 10, marginBottom: 2 }}>
+                    <span style={{ color: getTierColor(Math.round(s.avgTier)), fontWeight: 600 }}>{s.slotDisplay}</span>
+                    <span style={{ color: T.textMuted }}> — </span>
+                    <span style={{ color: T.textSecond }}>{s.itemName}</span>
+                  </div>
+                  {/* Weak mods with tier info */}
+                  {s.weakMods && s.weakMods.length > 0 && s.weakMods.map((wm, j) => (
+                    <div key={j} style={{ fontSize: 9, color: T.textMuted, paddingLeft: 8, lineHeight: 1.5 }}>
+                      <span style={{ color: getTierColor(wm.tier) }}>T{wm.tier}/{wm.tierCount}</span>
+                      {" "}<span style={{ color: T.textSecond }}>{wm.name}</span>
+                      {wm.currentRange && <span style={{ color: T.textMuted }}> ({wm.currentRange})</span>}
+                    </div>
+                  ))}
+                  {/* Dead mods on this slot */}
+                  {s.deadMods && s.deadMods.length > 0 && s.deadMods.map((dm, j) => (
+                    <div key={"d" + j} style={{ fontSize: 9, color: T.red, paddingLeft: 8, lineHeight: 1.5, opacity: 0.8 }}>
+                      Dead: {dm.mod} <span style={{ color: T.textMuted }}>({dm.reason})</span>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
@@ -6167,6 +6306,7 @@
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(true);
       const [expanded, setExpanded] = useState(false);
+      const [selectedTier, setSelectedTier] = useState(null);
 
       useEffect(() => {
         if (!account || !character) return;
@@ -6230,22 +6370,30 @@
               {upgradePriority && upgradePriority.length > 0 && (
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, fontWeight: 700 }}>Upgrade Priority</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "80px 36px 36px 1fr 60px", gap: "2px 8px", alignItems: "center" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "80px 50px 1fr 60px", gap: "2px 8px", alignItems: "center" }}>
                     <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Slot</span>
-                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Now</span>
-                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Gap</span>
+                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Avg Tier</span>
                     <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Top Item</span>
                     <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase", textAlign: "right" }}>Price</span>
-                    {upgradePriority.map((u, i) => (
+                    {upgradePriority.map((u, i) => {
+                      const roomPct = Math.min(u.gap / 4, 1) * 100;
+                      const isUniqueTop = u.topItem && (u.topItem.includes("'s") || /^[A-Z]/.test(u.topItem));
+                      return (
                       <React.Fragment key={i}>
                         <span style={{ fontSize: 10, color: T.textSecond, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.slotDisplay}</span>
-                        <span style={{ ...MONO, fontSize: 10, color: getTierColor(Math.round(u.currentTier)), fontWeight: 600 }}>T{u.currentTier}</span>
-                        <span style={{ ...MONO, fontSize: 10, color: "#c4a456", fontWeight: 600 }}>+{u.gap}</span>
-                        <span style={{ fontSize: 10, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.topItem || "\u2014"}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ ...MONO, fontSize: 10, color: getTierColor(Math.round(u.currentTier)), fontWeight: 600 }}>T{u.currentTier}</span>
+                          <div style={{ flex: 1, height: 4, background: T.input, borderRadius: 2, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${roomPct}%`, background: T.gold, borderRadius: 2, opacity: 0.7 }} />
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 10, color: isUniqueTop ? "#af6025" : T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.topItem || "\u2014"}</span>
                         <span style={{ ...MONO, fontSize: 10, color: T.textSecond, textAlign: "right" }}>{u.topItemPrice || "\u2014"}</span>
                       </React.Fragment>
-                    ))}
+                      );
+                    })}
                   </div>
+                  <div style={{ fontSize: 8, color: T.textMuted, marginTop: 4, fontStyle: "italic" }}>Avg Tier = average across explicit mods (T1=best, T6=worst). Bar shows improvement room.</div>
                 </div>
               )}
 
@@ -6257,19 +6405,23 @@
                     <div style={{ fontSize: 10, color: T.textSecond, marginBottom: 4 }}>
                       Current: <span style={{ color: anointOptimizer.isOptimal ? "#4a7c59" : "#b8860b", fontWeight: 600 }}>{anointOptimizer.current}</span>
                       {anointOptimizer.isOptimal && <span style={{ color: "#4a7c59", fontSize: 9 }}> {"\u2713"} optimal</span>}
+                      {anointOptimizer.currentDesc && <div style={{ fontSize: 9, color: T.textMuted, marginTop: 1 }}>{anointOptimizer.currentDesc}</div>}
                     </div>
                   )}
                   {!anointOptimizer.current && (
                     <div style={{ fontSize: 10, color: "#b8860b", marginBottom: 4 }}>No anoint detected — free power available</div>
                   )}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                     {anointOptimizer.popular.map((a, i) => {
                       const isCurrent = anointOptimizer.current && a.name.toLowerCase() === anointOptimizer.current.toLowerCase();
                       return (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "1px 0" }}>
-                          <span style={{ ...MONO, fontSize: 10, color: T.textMuted, width: 28, textAlign: "right" }}>{a.percentage}%</span>
-                          <span style={{ fontSize: 10, color: isCurrent ? T.gold : T.text, fontWeight: isCurrent ? 600 : 400 }}>{a.name}</span>
-                          {isCurrent && <span style={{ fontSize: 8, color: T.gold, fontWeight: 600, padding: "1px 4px", borderRadius: 4, background: "rgba(196,164,86,0.12)", border: `1px solid ${T.borderGold}` }}>YOU</span>}
+                        <div key={i} style={{ padding: "2px 0" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ ...MONO, fontSize: 10, color: T.textMuted, width: 28, textAlign: "right" }}>{a.percentage}%</span>
+                            <span style={{ fontSize: 10, color: isCurrent ? T.gold : T.text, fontWeight: isCurrent ? 600 : 400 }}>{a.name}</span>
+                            {isCurrent && <span style={{ fontSize: 8, color: T.gold, fontWeight: 600, padding: "1px 4px", borderRadius: 4, background: "rgba(196,164,86,0.12)", border: `1px solid ${T.borderGold}` }}>YOU</span>}
+                          </div>
+                          {a.desc && <div style={{ fontSize: 9, color: T.textMuted, marginLeft: 36 }}>{a.desc}</div>}
                         </div>
                       );
                     })}
@@ -6277,24 +6429,33 @@
                 </div>
               )}
 
-              {/* Section 3: Cost of Upgrade Tiers */}
+              {/* Section 3: Cost of Upgrade Tiers — clickable */}
               {costTiers && costTiers.length > 0 && (
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6, fontWeight: 700 }}>Cost of Upgrade</div>
-                  <div style={{ display: "flex", gap: 2, marginBottom: 6, height: 24, borderRadius: 4, overflow: "hidden" }}>
-                    {costTiers.map((tier, i) => (
+                  <div style={{ display: "flex", gap: 2, marginBottom: 6, height: 28, borderRadius: 4, overflow: "hidden" }}>
+                    {costTiers.map((tier, i) => {
+                      const isSelected = selectedTier === i;
+                      const hasRecs = tier.recommendations && tier.recommendations.length > 0;
+                      return (
                       <div key={i} style={{
-                        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-                        background: tier.isBestRoi ? "rgba(196,164,86,0.2)" : `${tierBarColors[i]}33`,
-                        border: tier.isBestRoi ? `1px solid ${T.borderGold}` : "1px solid transparent",
-                        cursor: "default", position: "relative",
-                      }} title={`${tier.label}: ${tier.min}-${tier.max}d — ${tier.desc}`}>
-                        <span style={{ fontSize: 8, fontWeight: 700, color: tier.isBestRoi ? T.gold : T.textSecond, textTransform: "uppercase" }}>{tier.label}</span>
+                        flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                        background: isSelected ? `${tierBarColors[i]}55` : tier.isBestRoi ? "rgba(196,164,86,0.2)" : `${tierBarColors[i]}33`,
+                        border: isSelected ? `2px solid ${tierBarColors[i]}` : tier.isBestRoi ? `1px solid ${T.borderGold}` : "1px solid transparent",
+                        cursor: hasRecs ? "pointer" : "default", position: "relative",
+                        transition: "all 0.15s",
+                      }}
+                        onClick={() => hasRecs && setSelectedTier(isSelected ? null : i)}
+                        title={`${tier.label}: ${tier.min}-${tier.max}d — ${tier.desc}`}
+                      >
+                        <span style={{ fontSize: 8, fontWeight: 700, color: isSelected ? tierBarColors[i] : tier.isBestRoi ? T.gold : T.textSecond, textTransform: "uppercase" }}>{tier.label}</span>
+                        <span style={{ fontSize: 7, color: T.textMuted }}>{tier.min}-{tier.max}d</span>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                  {costTiers.filter(t => t.recommendations.length > 0).map((tier, i) => (
-                    <div key={i} style={{ marginBottom: 4 }}>
+                  {costTiers.filter((t, i) => t.recommendations.length > 0 && (selectedTier === null || selectedTier === i)).map((tier, i) => (
+                    <div key={tier.label} style={{ marginBottom: 4, padding: "4px 8px", background: selectedTier !== null ? "rgba(0,0,0,0.15)" : "transparent", borderRadius: 4 }}>
                       <div style={{ fontSize: 9, color: tier.isBestRoi ? T.gold : T.textMuted, fontWeight: 600, marginBottom: 2 }}>
                         {tier.label} ({tier.min}-{tier.max}d){tier.isBestRoi ? " — Best ROI" : ""}
                       </div>
@@ -6336,6 +6497,328 @@
       );
     }
 
+    // -------------------------------------------------------------------
+    // PassiveTreePanel — passive allocation summary with keystone comparison
+    // -------------------------------------------------------------------
+    function PassiveTreePanel({ pobCode, keystones, account, character }) {
+      const [treeData, setTreeData] = useState(null);
+      const [popularKs, setPopularKs] = useState([]);
+
+      useEffect(() => {
+        if (!pobCode) return;
+        const decoded = decodePobCode(pobCode);
+        if (decoded) {
+          setTreeData({ nodes: decoded.treeNodes || [], url: decoded.treeUrl });
+        }
+      }, [pobCode]);
+
+      useEffect(() => {
+        if (!account || !character) return;
+        // Fetch popular keystones for comparison
+        api("/api/character/build-insights", "POST", { account, character }).then(r => {
+          if (r?.keystoneGaps?.popular) setPopularKs(r.keystoneGaps.popular);
+        });
+      }, [account, character]);
+
+      if (!treeData || treeData.nodes.length === 0) return null;
+
+      const userKs = new Set(keystones || []);
+
+      return (
+        <div className="panel" style={{ ...CARD, marginBottom: 12, padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "8px 12px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: T.textSecond, letterSpacing: "0.08em", textTransform: "uppercase" }}>Passive Tree</span>
+            <span style={{ ...MONO, fontSize: 10, color: T.gold }}>{treeData.nodes.length} nodes</span>
+          </div>
+          <div style={{ padding: "8px 12px" }}>
+            {/* Node allocation summary */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <div style={{ flex: 1, padding: "6px 8px", background: T.input, borderRadius: 6 }}>
+                <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", fontWeight: 700 }}>Allocated</div>
+                <div style={{ ...MONO, fontSize: 14, fontWeight: 700, color: T.gold }}>{treeData.nodes.length}</div>
+                <div style={{ fontSize: 9, color: T.textMuted }}>passive points</div>
+              </div>
+              <div style={{ flex: 1, padding: "6px 8px", background: T.input, borderRadius: 6 }}>
+                <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", fontWeight: 700 }}>Keystones</div>
+                <div style={{ ...MONO, fontSize: 14, fontWeight: 700, color: T.gold }}>{(keystones || []).length}</div>
+                <div style={{ fontSize: 9, color: T.textMuted }}>active</div>
+              </div>
+              <div style={{ flex: 1, padding: "6px 8px", background: T.input, borderRadius: 6 }}>
+                <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", fontWeight: 700 }}>Meta Match</div>
+                <div style={{ ...MONO, fontSize: 14, fontWeight: 700, color: (() => {
+                  const popRequired = popularKs.filter(k => k.percentage >= 50);
+                  const matching = popRequired.filter(k => userKs.has(k.name));
+                  const pct = popRequired.length > 0 ? (matching.length / popRequired.length) * 100 : 100;
+                  return pct >= 80 ? "#4a7c59" : pct >= 50 ? T.gold : T.red;
+                })() }}>
+                  {(() => {
+                    const popRequired = popularKs.filter(k => k.percentage >= 50);
+                    const matching = popRequired.filter(k => userKs.has(k.name));
+                    return popRequired.length > 0 ? `${Math.round((matching.length / popRequired.length) * 100)}%` : "--";
+                  })()}
+                </div>
+                <div style={{ fontSize: 9, color: T.textMuted }}>core keystones</div>
+              </div>
+            </div>
+
+            {/* Keystone comparison */}
+            {popularKs.length > 0 && (
+              <div>
+                <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 3 }}>Keystone Popularity</div>
+                {popularKs.filter(k => k.percentage >= 10).map((k, i) => {
+                  const hasIt = userKs.has(k.name);
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 0" }}>
+                      <span style={{ fontSize: 10, color: hasIt ? "#4a7c59" : T.red, width: 14 }}>{hasIt ? "\u2713" : "\u2717"}</span>
+                      <span style={{ fontSize: 10, color: hasIt ? T.text : T.textSecond, flex: 1 }}>{k.name}</span>
+                      <div style={{ width: 60, height: 4, background: T.input, borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${k.percentage}%`, background: hasIt ? "#4a7c59" : T.textMuted, borderRadius: 2, opacity: 0.7 }} />
+                      </div>
+                      <span style={{ ...MONO, fontSize: 9, color: T.textMuted, width: 32, textAlign: "right" }}>{k.percentage}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Open tree link */}
+            {treeData.url && (
+              <button
+                onClick={() => window.open(treeData.url, "_blank")}
+                style={{ ...BTN, fontSize: 9, padding: "3px 10px", marginTop: 8, background: T.input, border: `1px solid ${T.borderGold}`, color: T.gold, width: "100%" }}
+              >
+                Open Passive Tree in Browser {"\u2197"}
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // -------------------------------------------------------------------
+    // ImprovementPackagePanel — 3-section improvement plan
+    // -------------------------------------------------------------------
+    function ImprovementPackagePanel({ account, character }) {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [expanded, setExpanded] = useState(false);
+
+      useEffect(() => {
+        if (!account || !character) return;
+        setLoading(true);
+        api("/api/character/improvement-package", "POST", { account, character }).then(r => {
+          if (r && !r.error) setData(r);
+          setLoading(false);
+        });
+      }, [account, character]);
+
+      if (loading) {
+        return (
+          <div className="panel" style={{ ...CARD, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+              <div style={{ width: 12, height: 12, border: `2px solid ${T.gold}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              <span style={{ fontSize: 11, color: T.textMuted }}>Building improvement plan...</span>
+            </div>
+          </div>
+        );
+      }
+      if (!data) return null;
+      const totalItems = (data.free?.length || 0) + (data.spend?.length || 0) + (data.alternatives?.length || 0);
+      if (totalItems === 0) return null;
+
+      const sectionStyle = (color) => ({
+        marginBottom: 8, padding: "6px 8px", borderRadius: 4,
+        background: `${color}08`, borderLeft: `3px solid ${color}`,
+      });
+
+      return (
+        <div className="panel" style={{ ...CARD, marginBottom: 12, padding: "10px 12px" }}>
+          <div
+            style={{ display: "flex", alignItems: "center", cursor: "pointer", gap: 8, marginBottom: expanded ? 10 : 0 }}
+            onClick={() => setExpanded(e => !e)}
+          >
+            <div style={{ ...LABEL, marginBottom: 0, flex: 1 }}>IMPROVEMENT PLAN</div>
+            {!expanded && (
+              <div style={{ display: "flex", gap: 4 }}>
+                {data.free?.length > 0 && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: "rgba(74,124,89,0.15)", color: "#4a7c59", fontWeight: 600 }}>{data.free.length} free</span>}
+                {data.spend?.length > 0 && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: "rgba(196,164,86,0.12)", color: T.gold, fontWeight: 600 }}>{data.spend.length} upgrades</span>}
+                {data.alternatives?.length > 0 && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 8, background: "rgba(155,138,110,0.12)", color: T.purple, fontWeight: 600 }}>{data.alternatives.length} variants</span>}
+              </div>
+            )}
+            <span style={{ fontSize: 10, color: T.textMuted, transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>{"\u25BC"}</span>
+          </div>
+
+          {expanded && (
+            <div>
+              {/* Free/Instant — green */}
+              {data.free && data.free.length > 0 && (
+                <div style={sectionStyle("#4a7c59")}>
+                  <div style={{ fontSize: 9, color: "#4a7c59", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Free / Instant</div>
+                  {data.free.map((item, i) => (
+                    <div key={i} style={{ padding: "2px 0" }}>
+                      <div style={{ fontSize: 10, color: T.text, fontWeight: 500 }}>{item.action}</div>
+                      <div style={{ fontSize: 9, color: T.textSecond }}>{item.detail}</div>
+                      <div style={{ fontSize: 9, color: "#4a7c59", fontStyle: "italic" }}>{item.impact}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Spend Money — gold */}
+              {data.spend && data.spend.length > 0 && (
+                <div style={sectionStyle(T.gold)}>
+                  <div style={{ fontSize: 9, color: T.gold, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Spend Currency</div>
+                  {data.spend.map((item, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "2px 0" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10, color: T.text, fontWeight: 500 }}>{item.action}</div>
+                        <div style={{ fontSize: 9, color: T.textSecond }}>{item.detail}</div>
+                      </div>
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <div style={{ ...MONO, fontSize: 10, color: T.gold }}>{item.cost}</div>
+                        <div style={{ fontSize: 8, color: T.textMuted }}>{item.impact}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Alternative Paths — purple */}
+              {data.alternatives && data.alternatives.length > 0 && (
+                <div style={sectionStyle("#9b8a6e")}>
+                  <div style={{ fontSize: 9, color: "#9b8a6e", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Alternative Paths</div>
+                  {data.alternatives.map((item, i) => (
+                    <div key={i} style={{ padding: "3px 0" }}>
+                      <div style={{ fontSize: 10, color: T.text, fontWeight: 500 }}>{item.action}</div>
+                      <div style={{ fontSize: 9, color: T.textSecond, marginBottom: 2 }}>{item.detail}</div>
+                      <div style={{ fontSize: 9 }}>
+                        <span style={{ color: "#4a7c59" }}>+ {item.pros}</span>
+                        <span style={{ color: T.textMuted }}> / </span>
+                        <span style={{ color: T.red }}>- {item.cons}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // -------------------------------------------------------------------
+    // BuildComparisonPanel — compare vs top builds (aggregate)
+    // -------------------------------------------------------------------
+    function BuildComparisonPanel({ account, character }) {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [expanded, setExpanded] = useState(false);
+
+      useEffect(() => {
+        if (!account || !character) return;
+        setLoading(true);
+        api("/api/character/build-compare", "POST", { account, character }).then(r => {
+          if (r && !r.error) setData(r);
+          setLoading(false);
+        });
+      }, [account, character]);
+
+      if (loading) {
+        return (
+          <div className="panel" style={{ ...CARD, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+              <div style={{ width: 12, height: 12, border: `2px solid ${T.gold}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              <span style={{ fontSize: 11, color: T.textMuted }}>Comparing to top builds...</span>
+            </div>
+          </div>
+        );
+      }
+      if (!data) return null;
+
+      const scoreColor = data.overallScore >= 70 ? "#4a7c59" : data.overallScore >= 40 ? T.gold : T.red;
+
+      return (
+        <div className="panel" style={{ ...CARD, marginBottom: 12, padding: "10px 12px" }}>
+          <div
+            style={{ display: "flex", alignItems: "center", cursor: "pointer", gap: 8, marginBottom: expanded ? 10 : 0 }}
+            onClick={() => setExpanded(e => !e)}
+          >
+            <div style={{ ...LABEL, marginBottom: 0, flex: 1 }}>VS TOP BUILDS</div>
+            {!expanded && (
+              <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: scoreColor }}>{data.overallScore}% match</span>
+            )}
+            <span style={{ fontSize: 10, color: T.textMuted, transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>{"\u25BC"}</span>
+          </div>
+
+          {expanded && (
+            <div>
+              {/* Score bar */}
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
+                  <span style={{ ...MONO, fontSize: 16, fontWeight: 700, color: scoreColor }}>{data.overallScore}%</span>
+                  <span style={{ fontSize: 10, color: T.textMuted }}>meta alignment</span>
+                </div>
+                <div style={{ height: 6, background: T.input, borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${data.overallScore}%`, background: scoreColor, borderRadius: 3 }} />
+                </div>
+              </div>
+
+              {/* Gear matches */}
+              {data.gearMatches && data.gearMatches.length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3, fontWeight: 700 }}>Gear vs Meta</div>
+                  {data.gearMatches.map((g, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 0", fontSize: 10 }}>
+                      <span style={{ color: g.matches ? "#4a7c59" : T.textMuted, width: 14 }}>{g.matches ? "\u2713" : "\u2717"}</span>
+                      <span style={{ color: T.textMuted, width: 70, flexShrink: 0, fontSize: 9 }}>{g.slotDisplay}</span>
+                      <span style={{ color: T.textSecond, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {g.matches ? g.yourItem : <>{g.yourItem} <span style={{ color: T.textMuted }}>{"\u2192"}</span> <span style={{ color: T.gold }}>{g.topItem}</span> <span style={{ color: T.textMuted }}>({g.topPct}%)</span></>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Keystone diffs */}
+              {data.keystoneDiffs && data.keystoneDiffs.filter(k => k.topPct >= 15).length > 0 && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3, fontWeight: 700 }}>Keystones vs Meta</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {data.keystoneDiffs.filter(k => k.topPct >= 15).map((k, i) => (
+                      <span key={i} style={{
+                        fontSize: 9, padding: "2px 6px", borderRadius: 3,
+                        background: k.yourHasIt ? "rgba(74,124,89,0.15)" : "rgba(168,50,50,0.1)",
+                        border: `1px solid ${k.yourHasIt ? "rgba(74,124,89,0.3)" : "rgba(168,50,50,0.2)"}`,
+                        color: k.yourHasIt ? "#4a7c59" : T.red,
+                      }}>
+                        {k.yourHasIt ? "\u2713" : "\u2717"} {k.name} <span style={{ color: T.textMuted }}>({k.topPct}%)</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Anoint match */}
+              {data.anointMatch && data.anointMatch.topAnoint && (
+                <div style={{ fontSize: 10, color: T.textSecond }}>
+                  <span style={{ color: T.textMuted }}>Anoint: </span>
+                  {data.anointMatch.matches ? (
+                    <span style={{ color: "#4a7c59" }}>{"\u2713"} {data.anointMatch.yourAnoint} (matches top {data.anointMatch.topPct}%)</span>
+                  ) : (
+                    <span>
+                      <span style={{ color: T.text }}>{data.anointMatch.yourAnoint || "None"}</span>
+                      <span style={{ color: T.textMuted }}> {"\u2192"} top: </span>
+                      <span style={{ color: T.gold }}>{data.anointMatch.topAnoint} ({data.anointMatch.topPct}%)</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function CharacterViewer() {
       const [account, setAccount] = useState("");
       const [character, setCharacter] = useState("");
@@ -6343,6 +6826,8 @@
       const [error, setError] = useState(null);
       const [charData, setCharData] = useState(null);
       const [expandedSlot, setExpandedSlot] = useState(null);
+      const [hoverItem, setHoverItem] = useState(null);
+      const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
       const [savedAccounts, setSavedAccounts] = useState([]);
 
       // Popular items drill-down state
@@ -6589,55 +7074,50 @@
           {/* Character Profile */}
           {charData && !popularSlot && (
             <div>
-              {/* Header */}
-              <div className="panel" style={{ ...CARD, marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: T.gold }}>{charData.name}</div>
-                    <div style={{ fontSize: 12, color: T.textSecond }}>
-                      Level {charData.level} {charData.ascendancy}{charData.class !== charData.ascendancy ? ` (${charData.class})` : ""}
+              {/* Header — compact 2-row */}
+              <div className="panel" style={{ ...CARD, marginBottom: 12, padding: "8px 12px" }}>
+                {/* Row 1: Name + level/class + meta badge | account + POB buttons */}
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: T.gold }}>{charData.name}</span>
+                      <span style={{ fontSize: 11, color: T.textSecond }}>
+                        Lv{charData.level} {charData.ascendancy}{charData.class !== charData.ascendancy ? ` (${charData.class})` : ""}
+                      </span>
+                      {(() => { const mt = getMetaBuildTag(charData.ascendancy, topSkill?.name); return mt ? (
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 3, background: "rgba(196,164,86,0.15)", border: `1px solid ${T.borderGold}`, color: T.gold }}>{mt}</span>
+                      ) : null; })()}
+                      {topSkill && topSkill.damage > 0 && (
+                        <span style={{ ...MONO, fontSize: 11, color: T.gold, fontWeight: 600 }}>
+                          {topSkill.name} {topSkill.damage >= 1000000 ? `${(topSkill.damage / 1000000).toFixed(1)}M` : topSkill.damage >= 1000 ? `${(topSkill.damage / 1000).toFixed(1)}k` : topSkill.damage.toFixed(0)}
+                          {topSkill.dps > 0 && topSkill.dps !== topSkill.damage ? ` (${topSkill.dps >= 1000000 ? `${(topSkill.dps / 1000000).toFixed(1)}M` : topSkill.dps >= 1000 ? `${(topSkill.dps / 1000).toFixed(1)}k` : topSkill.dps.toFixed(0)} DPS)` : " dmg"}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 10, color: T.textMuted }}>{charData.account}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                    <span style={{ fontSize: 9, color: T.textMuted }}>{charData.account}</span>
                     {charData.pobCode && (
-                      <div style={{ display: "flex", gap: 4, marginTop: 4, justifyContent: "flex-end" }}>
+                      <>
                         <button
                           onClick={() => { navigator.clipboard.writeText(charData.pobCode); }}
-                          style={{ ...BTN, fontSize: 10, padding: "3px 8px", background: T.input, border: `1px solid ${T.border}`, color: T.textSecond }}
-                        >
-                          Copy POB Code
-                        </button>
+                          style={{ ...BTN, fontSize: 9, padding: "2px 6px", background: T.input, border: `1px solid ${T.border}`, color: T.textMuted }}
+                        >POB</button>
                         <button
                           onClick={() => { window.open(`https://pob.cool/${charData.pobCode}`, "_blank"); }}
-                          style={{ ...BTN, fontSize: 10, padding: "3px 8px", background: T.input, border: `1px solid ${T.border}`, color: T.textSecond }}
-                        >
-                          Open in Browser
-                        </button>
-                      </div>
+                          style={{ ...BTN, fontSize: 9, padding: "2px 6px", background: T.input, border: `1px solid ${T.border}`, color: T.textMuted }}
+                        >{"\u2197"}</button>
+                      </>
                     )}
                   </div>
                 </div>
-
-                {/* Top Skill DPS */}
-                {topSkill && (
-                  <div style={{ marginTop: 10, padding: "8px 10px", background: T.input, borderRadius: 6, display: "flex", alignItems: "center", gap: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Top Skill</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{topSkill.name}</div>
-                    </div>
-                    <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                      {topSkill.damage > 0 && (
-                        <div style={{ ...MONO, fontSize: 14, fontWeight: 700, color: T.gold }}>
-                          {topSkill.damage >= 1000000 ? `${(topSkill.damage / 1000000).toFixed(1)}M` : topSkill.damage >= 1000 ? `${(topSkill.damage / 1000).toFixed(1)}k` : topSkill.damage.toFixed(0)} dmg
-                        </div>
-                      )}
-                      {topSkill.dps > 0 && topSkill.dps !== topSkill.damage && (
-                        <div style={{ ...MONO, fontSize: 10, color: T.textMuted }}>
-                          {topSkill.dps >= 1000000 ? `${(topSkill.dps / 1000000).toFixed(1)}M` : topSkill.dps >= 1000 ? `${(topSkill.dps / 1000).toFixed(1)}k` : topSkill.dps.toFixed(0)} DPS
-                        </div>
-                      )}
-                    </div>
+                {/* Row 2: Keystones */}
+                {charData.keystones && charData.keystones.length > 0 && (
+                  <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                    <span style={{ fontSize: 9, color: T.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginRight: 2 }}>KS</span>
+                    {charData.keystones.map((ks, i) => (
+                      <span key={i} style={{ fontSize: 9, padding: "1px 5px", background: T.input, border: `1px solid ${T.border}`, borderRadius: 3, color: T.textSecond }}>{ks}</span>
+                    ))}
                   </div>
                 )}
               </div>
@@ -6648,11 +7128,20 @@
               {/* Build Efficiency */}
               <BuildEfficiencyPanel account={account} character={charData.name} />
 
+              {/* Build Comparison */}
+              <BuildComparisonPanel account={account} character={charData.name} />
+
+              {/* Improvement Package */}
+              <ImprovementPackagePanel account={account} character={charData.name} />
+
               {/* Defense Breakdown */}
               <DefenseBreakdownPanel ds={charData.defensiveStats} keystones={charData.keystones || []} />
 
               {/* Weapon DPS from POB */}
               <WeaponDpsPanel pobCode={charData.pobCode} />
+
+              {/* Passive Tree */}
+              <PassiveTreePanel pobCode={charData.pobCode} keystones={charData.keystones || []} account={account} character={charData.name} />
 
               {/* Equipment */}
               <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden", marginBottom: 12 }}>
@@ -6670,29 +7159,39 @@
                     <div key={eq.slot + i}>
                       <div
                         style={{
-                          display: "flex", alignItems: "center", gap: 10, padding: "7px 12px",
+                          display: "flex", alignItems: "center", gap: 8, padding: "7px 12px",
                           cursor: "pointer",
                           background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)",
                           borderLeft: isExpanded ? `2px solid ${T.gold}` : "2px solid transparent",
                           transition: "background 0.1s",
                         }}
                         onClick={() => setExpandedSlot(isExpanded ? null : eq.slot)}
-                        onMouseEnter={e => e.currentTarget.style.background = "rgba(196,164,86,0.04)"}
-                        onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)"}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = "rgba(196,164,86,0.04)";
+                          if (!isExpanded && hasMods) {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setHoverPos({ x: rect.right + 8, y: rect.top });
+                            setHoverItem(eq);
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)";
+                          setHoverItem(null);
+                        }}
                       >
-                        <div style={{ fontSize: 10, color: T.textMuted, width: 80, flexShrink: 0 }}>{eq.slotDisplay || eq.slot}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 500, color: isUnique ? "#af6025" : T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {displayName}
+                          <div style={{ fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            <span style={{ color: T.textMuted, fontWeight: 500 }}>{eq.slotDisplay || eq.slot}:</span>{" "}
+                            <span style={{ fontWeight: 500, color: isUnique ? "#af6025" : eq.rarity === "rare" || eq.rarity === "2" ? "#ff7" : T.text }}>"{displayName}"</span>
                           </div>
-                          {subtitle && <div style={{ fontSize: 10, color: T.textMuted }}>{subtitle}</div>}
+                          {subtitle && <div style={{ fontSize: 10, color: T.textMuted, marginLeft: 4 }}>{subtitle}</div>}
                         </div>
                         <div style={{ fontSize: 10, color: T.textMuted }}>{isExpanded ? "\u25B2" : "\u25BC"}</div>
                       </div>
 
                       {/* Expanded mods + View Popular button */}
                       {isExpanded && (
-                        <div style={{ padding: "6px 12px 10px 104px", background: "rgba(0,0,0,0.15)", borderBottom: `1px solid ${T.border}` }}>
+                        <div style={{ padding: "6px 12px 10px 20px", background: "rgba(0,0,0,0.15)", borderBottom: `1px solid ${T.border}` }}>
                           {MOD_TYPE_ORDER.map(modType => {
                             const mods = eq[modType];
                             if (!mods || mods.length === 0) return null;
@@ -6723,6 +7222,49 @@
                   );
                 })}
               </div>
+
+              {/* Item hover popout */}
+              {hoverItem && !expandedSlot && (
+                <div style={{
+                  position: "fixed", left: Math.min(hoverPos.x, window.innerWidth - 280), top: Math.max(hoverPos.y, 8),
+                  width: 260, maxHeight: 400, overflowY: "auto",
+                  background: T.card, border: `1px solid ${T.borderGold}`, borderRadius: 6,
+                  padding: "8px 10px", zIndex: 999, boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+                  pointerEvents: "none",
+                }}>
+                  <div style={{
+                    fontSize: 11, fontWeight: 600, marginBottom: 4,
+                    color: (hoverItem.rarity === "unique" || hoverItem.rarity === "3") ? "#af6025" : hoverItem.rarity === "rare" || hoverItem.rarity === "2" ? "#ff7" : T.text,
+                  }}>{hoverItem.name || hoverItem.typeLine}</div>
+                  {hoverItem.typeLine && hoverItem.name !== hoverItem.typeLine && (
+                    <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 4 }}>{hoverItem.typeLine}</div>
+                  )}
+                  {MOD_TYPE_ORDER.map(modType => {
+                    const mods = hoverItem[modType];
+                    if (!mods || mods.length === 0) return null;
+                    const color = MOD_TYPE_COLORS[modType];
+                    const label = MOD_TYPE_LABELS[modType];
+                    const tierArr = hoverItem.modTiers && hoverItem.modTiers[modType];
+                    return (
+                      <div key={modType}>
+                        {label && <div style={{ fontSize: 8, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 3, marginBottom: 1 }}>{label}</div>}
+                        {mods.map((mod, k) => {
+                          const ti = tierArr && tierArr[k];
+                          return (
+                            <div key={k} style={{ fontSize: 9, color, lineHeight: 1.4, display: "flex", gap: 4 }}>
+                              {ti && <span style={{ ...MONO, fontSize: 8, color: getTierColor(ti.tier_num), fontWeight: 600 }}>T{ti.tier_num}</span>}
+                              <span>{mod}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                  {hoverItem.sockets && hoverItem.sockets.length > 0 && (
+                    <div style={{ fontSize: 9, color: T.textMuted, marginTop: 3 }}>Sockets: {hoverItem.sockets.length}</div>
+                  )}
+                </div>
+              )}
 
               {/* Skills */}
               {charData.skillGroups && charData.skillGroups.length > 0 && (
@@ -6755,17 +7297,7 @@
                 </div>
               )}
 
-              {/* Keystones */}
-              {charData.keystones && charData.keystones.length > 0 && (
-                <div className="panel" style={{ ...CARD, marginBottom: 12 }}>
-                  <div style={{ ...LABEL, marginBottom: 6 }}>KEYSTONES</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {charData.keystones.map((ks, i) => (
-                      <span key={i} style={{ fontSize: 11, padding: "3px 8px", background: T.input, border: `1px solid ${T.border}`, borderRadius: 4, color: T.text }}>{ks}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Keystones moved to header */}
             </div>
           )}
         </div>
