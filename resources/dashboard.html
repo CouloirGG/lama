@@ -6160,6 +6160,182 @@
       );
     }
 
+    // -------------------------------------------------------------------
+    // BuildEfficiencyPanel — upgrade priority, anoint, cost tiers, lineage ROI
+    // -------------------------------------------------------------------
+    function BuildEfficiencyPanel({ account, character }) {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [expanded, setExpanded] = useState(false);
+
+      useEffect(() => {
+        if (!account || !character) return;
+        setLoading(true);
+        api("/api/character/build-efficiency", "POST", { account, character }).then(r => {
+          if (r && !r.error) setData(r);
+          setLoading(false);
+        });
+      }, [account, character]);
+
+      if (loading) {
+        return (
+          <div className="panel" style={{ ...CARD, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+              <div style={{ width: 12, height: 12, border: `2px solid ${T.gold}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              <span style={{ fontSize: 11, color: T.textMuted }}>Analyzing efficiency...</span>
+            </div>
+          </div>
+        );
+      }
+      if (!data) return null;
+
+      const { upgradePriority, anointOptimizer, costTiers, lineageGemRoi } = data;
+      const upgradeCount = (upgradePriority || []).length;
+      const bestRoiTier = (costTiers || []).find(t => t.isBestRoi);
+      const anointStatus = anointOptimizer?.isOptimal ? "Optimal" : anointOptimizer?.current ? "Suboptimal" : "None";
+
+      // Summary chips for collapsed state
+      const chips = [];
+      if (upgradeCount > 0) chips.push(`${upgradeCount} upgrade slot${upgradeCount > 1 ? "s" : ""}`);
+      if (bestRoiTier && bestRoiTier.recommendations.length > 0) chips.push(`Best ROI: ${bestRoiTier.label} ${bestRoiTier.min}-${bestRoiTier.max}d`);
+      if (anointOptimizer) chips.push(`Anoint: ${anointStatus}`);
+      if (lineageGemRoi && lineageGemRoi.length > 0) chips.push(`${lineageGemRoi.length} lineage gem${lineageGemRoi.length > 1 ? "s" : ""}`);
+
+      const tierBarColors = ["#4a7c59", "#5a8a4a", "#c4a456", "#b8860b", "#8c5a3c"];
+
+      return (
+        <div className="panel" style={{ ...CARD, marginBottom: 12, padding: "10px 12px" }}>
+          <div
+            style={{ display: "flex", alignItems: "center", cursor: "pointer", gap: 8, marginBottom: expanded ? 10 : 0 }}
+            onClick={() => setExpanded(e => !e)}
+          >
+            <div style={{ ...LABEL, marginBottom: 0, flex: 1 }}>BUILD EFFICIENCY</div>
+            {!expanded && chips.length > 0 && (
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {chips.map((c, i) => (
+                  <span key={i} style={{
+                    fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 10,
+                    background: "rgba(196,164,86,0.08)", border: `1px solid ${T.borderGold}`,
+                    color: T.gold, whiteSpace: "nowrap",
+                  }}>{c}</span>
+                ))}
+              </div>
+            )}
+            <span style={{ fontSize: 10, color: T.textMuted, transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>{"\u25BC"}</span>
+          </div>
+
+          {expanded && (
+            <div>
+              {/* Section 1: Upgrade Priority */}
+              {upgradePriority && upgradePriority.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, fontWeight: 700 }}>Upgrade Priority</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "80px 36px 36px 1fr 60px", gap: "2px 8px", alignItems: "center" }}>
+                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Slot</span>
+                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Now</span>
+                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Gap</span>
+                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Top Item</span>
+                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase", textAlign: "right" }}>Price</span>
+                    {upgradePriority.map((u, i) => (
+                      <React.Fragment key={i}>
+                        <span style={{ fontSize: 10, color: T.textSecond, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.slotDisplay}</span>
+                        <span style={{ ...MONO, fontSize: 10, color: getTierColor(Math.round(u.currentTier)), fontWeight: 600 }}>T{u.currentTier}</span>
+                        <span style={{ ...MONO, fontSize: 10, color: "#c4a456", fontWeight: 600 }}>+{u.gap}</span>
+                        <span style={{ fontSize: 10, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.topItem || "\u2014"}</span>
+                        <span style={{ ...MONO, fontSize: 10, color: T.textSecond, textAlign: "right" }}>{u.topItemPrice || "\u2014"}</span>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Section 2: Anoint Optimizer */}
+              {anointOptimizer && anointOptimizer.popular && anointOptimizer.popular.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, fontWeight: 700 }}>Anoint Optimizer</div>
+                  {anointOptimizer.current && (
+                    <div style={{ fontSize: 10, color: T.textSecond, marginBottom: 4 }}>
+                      Current: <span style={{ color: anointOptimizer.isOptimal ? "#4a7c59" : "#b8860b", fontWeight: 600 }}>{anointOptimizer.current}</span>
+                      {anointOptimizer.isOptimal && <span style={{ color: "#4a7c59", fontSize: 9 }}> {"\u2713"} optimal</span>}
+                    </div>
+                  )}
+                  {!anointOptimizer.current && (
+                    <div style={{ fontSize: 10, color: "#b8860b", marginBottom: 4 }}>No anoint detected — free power available</div>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    {anointOptimizer.popular.map((a, i) => {
+                      const isCurrent = anointOptimizer.current && a.name.toLowerCase() === anointOptimizer.current.toLowerCase();
+                      return (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "1px 0" }}>
+                          <span style={{ ...MONO, fontSize: 10, color: T.textMuted, width: 28, textAlign: "right" }}>{a.percentage}%</span>
+                          <span style={{ fontSize: 10, color: isCurrent ? T.gold : T.text, fontWeight: isCurrent ? 600 : 400 }}>{a.name}</span>
+                          {isCurrent && <span style={{ fontSize: 8, color: T.gold, fontWeight: 600, padding: "1px 4px", borderRadius: 4, background: "rgba(196,164,86,0.12)", border: `1px solid ${T.borderGold}` }}>YOU</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Section 3: Cost of Upgrade Tiers */}
+              {costTiers && costTiers.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6, fontWeight: 700 }}>Cost of Upgrade</div>
+                  <div style={{ display: "flex", gap: 2, marginBottom: 6, height: 24, borderRadius: 4, overflow: "hidden" }}>
+                    {costTiers.map((tier, i) => (
+                      <div key={i} style={{
+                        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+                        background: tier.isBestRoi ? "rgba(196,164,86,0.2)" : `${tierBarColors[i]}33`,
+                        border: tier.isBestRoi ? `1px solid ${T.borderGold}` : "1px solid transparent",
+                        cursor: "default", position: "relative",
+                      }} title={`${tier.label}: ${tier.min}-${tier.max}d — ${tier.desc}`}>
+                        <span style={{ fontSize: 8, fontWeight: 700, color: tier.isBestRoi ? T.gold : T.textSecond, textTransform: "uppercase" }}>{tier.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {costTiers.filter(t => t.recommendations.length > 0).map((tier, i) => (
+                    <div key={i} style={{ marginBottom: 4 }}>
+                      <div style={{ fontSize: 9, color: tier.isBestRoi ? T.gold : T.textMuted, fontWeight: 600, marginBottom: 2 }}>
+                        {tier.label} ({tier.min}-{tier.max}d){tier.isBestRoi ? " — Best ROI" : ""}
+                      </div>
+                      {tier.recommendations.map((r, j) => (
+                        <div key={j} style={{ fontSize: 10, color: T.textSecond, padding: "1px 0", paddingLeft: 8 }}>
+                          <span style={{ color: r.type === "lineage" ? T.gold : T.text }}>{r.name}</span>
+                          <span style={{ color: T.textMuted, fontSize: 9 }}> — {r.slot}</span>
+                          {r.price && <span style={{ ...MONO, color: T.textMuted, fontSize: 9 }}> {r.price}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Section 4: Lineage Gem ROI */}
+              {lineageGemRoi && lineageGemRoi.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, fontWeight: 700 }}>Lineage Gem ROI</div>
+                  <div style={{ fontSize: 9, color: T.textMuted, marginBottom: 4 }}>Lineage support gems provide multiplicative "More" damage — best DPS per divine spent</div>
+                  {lineageGemRoi.slice(0, 6).map((g, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 0" }}>
+                      <span style={{ fontSize: 10, color: T.gold, fontWeight: 500, flex: 1 }}>{g.name}</span>
+                      <span style={{ ...MONO, fontSize: 10, color: T.textSecond }}>{g.priceText || `~${g.priceDiv}d`}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Empty state */}
+              {(!upgradePriority || upgradePriority.length === 0) && (!lineageGemRoi || lineageGemRoi.length === 0) && (!anointOptimizer?.popular || anointOptimizer.popular.length === 0) && (
+                <div style={{ fontSize: 11, color: T.textMuted, textAlign: "center", padding: "8px 0" }}>
+                  No efficiency data available — try a character on the ladder
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function CharacterViewer() {
       const [account, setAccount] = useState("");
       const [character, setCharacter] = useState("");
@@ -6468,6 +6644,9 @@
 
               {/* Build Insights */}
               <BuildInsightsPanel account={account} character={charData.name} />
+
+              {/* Build Efficiency */}
+              <BuildEfficiencyPanel account={account} character={charData.name} />
 
               {/* Defense Breakdown */}
               <DefenseBreakdownPanel ds={charData.defensiveStats} keystones={charData.keystones || []} />

@@ -42,7 +42,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from builds_client import (BuildsClient, enrich_item_mods, classify_build,
-                           strip_ninja_brackets, _SKIP_SLOTS)
+                           strip_ninja_brackets, _SKIP_SLOTS,
+                           detect_current_anoint, compute_upgrade_priority,
+                           compute_cost_tiers, find_lineage_upgrades,
+                           SLOT_DISPLAY, SLOT_TO_UNIQUE_SLUG)
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from item_lookup import ItemLookup
@@ -1442,6 +1445,125 @@ async def character_build_insights(req: BuildInsightsRequest):
             "popular": keystone_gaps,
         },
         "slotSummary": slot_summary,
+    }
+
+
+class BuildEfficiencyRequest(BaseModel):
+    account: str
+    character: str
+
+
+@app.post("/api/character/build-efficiency")
+async def character_build_efficiency(req: BuildEfficiencyRequest):
+    """Compute build efficiency analysis: upgrade priority, anoints, cost tiers, lineage ROI."""
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character required"})
+    loop = asyncio.get_running_loop()
+
+    # Look up character (cached)
+    char_data = await loop.run_in_executor(
+        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+    )
+    if not char_data:
+        return JSONResponse(status_code=404, content={"error": "Character not found"})
+
+    # Classify build
+    archetype = classify_build(char_data)
+    char_class = char_data.ascendancy or char_data.char_class
+    main_skill = archetype.main_skill
+
+    # Build slot summary (reuse build-insights logic)
+    slot_summary = []
+    if item_lookup and item_lookup.ready:
+        try:
+            mp = item_lookup._mod_parser
+            mdb = item_lookup._mod_database
+            for eq in char_data.equipment:
+                if eq.slot in _SKIP_SLOTS:
+                    continue
+                tier_data = enrich_item_mods(eq, mp, mdb)
+                all_tiers = []
+                for _mk, tiers in tier_data.items():
+                    for t in tiers:
+                        if t is not None:
+                            all_tiers.append(t)
+                meaningful = [t for t in all_tiers
+                              if t["weight"] >= 0.5 and t["tier_count"] <= 15]
+                avg_tier = 0
+                if meaningful:
+                    avg_tier = round(sum(t["tier_num"] for t in meaningful) / len(meaningful), 1)
+                slot_summary.append({
+                    "slot": eq.slot,
+                    "slotDisplay": SLOT_DISPLAY.get(eq.slot, eq.slot),
+                    "itemName": eq.name or eq.type_line,
+                    "avgTier": avg_tier,
+                    "enrichedCount": len(meaningful),
+                })
+        except Exception as e:
+            logger.debug(f"Efficiency slot summary failed: {e}")
+
+    # Build price cache dict from unique prices across slots
+    price_cache_dict = {}
+    slots_to_check = set()
+    for eq in char_data.equipment:
+        if eq.slot not in _SKIP_SLOTS and eq.slot in SLOT_TO_UNIQUE_SLUG:
+            slots_to_check.add(eq.slot)
+    for slot in slots_to_check:
+        try:
+            prices = await loop.run_in_executor(
+                None, builds_client.fetch_unique_prices, slot)
+            price_cache_dict.update(prices)
+        except Exception:
+            pass
+
+    # 1. Upgrade Priority
+    upgrade_priority = await loop.run_in_executor(
+        None, compute_upgrade_priority, char_data, slot_summary,
+        builds_client, price_cache_dict
+    )
+
+    # 2. Anoint Optimizer
+    current_anoint = detect_current_anoint(char_data)
+    popular_anoints = await loop.run_in_executor(
+        None, builds_client.fetch_popular_anoints, char_class, main_skill
+    )
+    anoint_optimal = False
+    if current_anoint and popular_anoints:
+        anoint_optimal = (popular_anoints[0]["name"].lower() == current_anoint.lower())
+
+    # 3. Lineage Gem ROI
+    lineage_gems = find_lineage_upgrades(char_data.skill_groups, price_cache_dict)
+
+    # 4. Popular items by slot for cost tiers
+    popular_by_slot = {}
+    for eq in char_data.equipment:
+        if eq.slot in _SKIP_SLOTS:
+            continue
+        try:
+            items = await loop.run_in_executor(
+                None, builds_client.fetch_popular_items,
+                char_class, main_skill, eq.slot)
+            if items:
+                popular_by_slot[eq.slot] = items
+        except Exception:
+            pass
+
+    # 5. Cost Tiers
+    cost_tiers = compute_cost_tiers(archetype, popular_by_slot,
+                                    price_cache_dict, lineage_gems)
+
+    return {
+        "upgradePriority": upgrade_priority,
+        "anointOptimizer": {
+            "current": current_anoint,
+            "isOptimal": anoint_optimal,
+            "popular": [
+                {"name": a["name"], "percentage": a["percentage"]}
+                for a in popular_anoints[:5]
+            ],
+        },
+        "costTiers": cost_tiers,
+        "lineageGemRoi": lineage_gems[:10],
     }
 
 

@@ -1513,3 +1513,240 @@ def classify_build(char: CharacterData) -> BuildArchetype:
         elements=sorted(elements),
         dead_mods=found_dead,
     )
+
+
+# ---------------------------------------------------------------------------
+# Build Efficiency — upgrade priority, anoint optimizer, cost tiers, lineage ROI
+# ---------------------------------------------------------------------------
+
+INVESTMENT_TIERS = [
+    {"label": "Starter", "min": 0, "max": 5, "desc": "Build-defining cheap uniques"},
+    {"label": "Core", "min": 5, "max": 15, "desc": "Gem levels + core unique upgrades"},
+    {"label": "Lineage", "min": 15, "max": 50, "desc": "Lineage support gems (best DPS/div)", "isBestRoi": True},
+    {"label": "Variant", "min": 50, "max": 100, "desc": "Build variant switch / premium gear"},
+    {"label": "Endgame", "min": 100, "max": 500, "desc": "Self-craft triple T1 / mirror-tier"},
+]
+
+_ALLOCATES_RE = re.compile(r"Allocates\s+(.+)", re.I)
+
+
+def _parse_price_text(text: str) -> float:
+    """Parse price text like '~2.5 div', '~150c', '< 1c' to float divine value.
+
+    Returns value in divines (assumes ~150c per divine for chaos conversion).
+    """
+    if not text:
+        return 0.0
+    text = text.strip().lstrip("~").strip()
+    if text.startswith("<"):
+        return 0.01  # "< 1c" → negligible
+    m = re.match(r"([\d.]+)\s*(div|d|c)", text, re.I)
+    if not m:
+        return 0.0
+    val = float(m.group(1))
+    unit = m.group(2).lower()
+    if unit in ("div", "d"):
+        return val
+    # chaos → divine (rough 150c/div)
+    return val / 150.0
+
+
+def detect_current_anoint(char: CharacterData) -> Optional[str]:
+    """Detect the current anoint on a character's amulet.
+
+    Scans amulet enchant_mods for 'Allocates <Notable>' pattern.
+    Returns the notable name or None.
+    """
+    for eq in char.equipment:
+        if eq.slot == "Amulet":
+            for mod in eq.enchant_mods:
+                m = _ALLOCATES_RE.search(strip_ninja_brackets(mod))
+                if m:
+                    return m.group(1).strip()
+            break
+    return None
+
+
+def compute_upgrade_priority(char: CharacterData, slot_summary: list,
+                             builds_client_inst: 'BuildsClient',
+                             price_cache_dict: dict) -> list:
+    """Rank equipment slots by improvement gap vs top builds.
+
+    Args:
+        char: Character data
+        slot_summary: Per-slot tier summary from build-insights enrichment
+        builds_client_inst: BuildsClient instance for fetching popular items
+        price_cache_dict: Dict of item_name → price_text from unique prices
+
+    Returns list of {slot, slotDisplay, currentTier, targetTier, gap,
+                     efficiency, topItem, topItemPrice} sorted by gap desc.
+    """
+    if not slot_summary:
+        return []
+
+    char_class = char.ascendancy or char.char_class
+    main_skill = ""
+    for sg in char.skill_groups:
+        for d in sg.dps:
+            if d.damage > 0:
+                main_skill = d.name
+                break
+        if main_skill:
+            break
+    if not main_skill and char.skill_groups and char.skill_groups[0].gems:
+        main_skill = char.skill_groups[0].gems[0]
+
+    results = []
+    for ss in slot_summary:
+        if ss.get("enrichedCount", 0) == 0:
+            continue
+        slot = ss["slot"]
+        current_tier = ss.get("avgTier", 0)
+        if current_tier == 0:
+            continue
+
+        # Fetch popular items for this slot to estimate target tier
+        try:
+            popular = builds_client_inst.fetch_popular_items(
+                char_class, main_skill, slot)
+        except Exception:
+            popular = []
+
+        # Estimate target tier from popular item distribution
+        # Unique items with >30% adoption suggest T1.0 target, else T1.8
+        top_item_name = ""
+        top_item_price = ""
+        target_tier = 1.8  # default
+        if popular:
+            top = popular[0]
+            top_item_name = top.name
+            if top.rarity == "unique" and top.percentage > 30:
+                target_tier = 1.0
+            # Get price from price_cache or popular item's own price_text
+            top_item_price = price_cache_dict.get(top.name, "") or top.price_text
+
+        gap = current_tier - target_tier
+        if gap <= 0:
+            continue
+
+        price_val = _parse_price_text(top_item_price)
+        efficiency = gap / price_val if price_val > 0 else gap
+
+        results.append({
+            "slot": slot,
+            "slotDisplay": SLOT_DISPLAY.get(slot, slot),
+            "currentTier": current_tier,
+            "targetTier": round(target_tier, 1),
+            "gap": round(gap, 1),
+            "efficiency": round(efficiency, 2),
+            "topItem": top_item_name,
+            "topItemPrice": top_item_price,
+        })
+
+    results.sort(key=lambda x: x["gap"], reverse=True)
+    return results[:5]
+
+
+def compute_cost_tiers(archetype: BuildArchetype,
+                       popular_by_slot: dict,
+                       price_cache_dict: dict,
+                       lineage_gems: list) -> list:
+    """Build 5-tier investment breakdown with specific recommendations.
+
+    Args:
+        archetype: Build classification
+        popular_by_slot: Dict of slot → list of PopularItem
+        price_cache_dict: Dict of item_name → price_text
+        lineage_gems: List of lineage gem dicts from find_lineage_upgrades()
+
+    Returns list of tier dicts with recommendations.
+    """
+    tiers = []
+    for tier in INVESTMENT_TIERS:
+        recs = []
+        lo, hi = tier["min"], tier["max"]
+
+        # Check popular items across slots
+        for slot, items in popular_by_slot.items():
+            for item in items[:5]:
+                price_text = price_cache_dict.get(item.name, "") or item.price_text
+                price_val = _parse_price_text(price_text)
+                if lo <= price_val <= hi and item.name:
+                    recs.append({
+                        "name": item.name,
+                        "price": price_text,
+                        "slot": SLOT_DISPLAY.get(slot, slot),
+                        "type": "gear",
+                    })
+
+        # Check lineage gems in this tier
+        for gem in lineage_gems:
+            price_val = gem.get("priceDiv", 0)
+            if lo <= price_val <= hi:
+                recs.append({
+                    "name": gem["name"],
+                    "price": gem.get("priceText", ""),
+                    "slot": "Gem",
+                    "type": "lineage",
+                })
+
+        # Deduplicate by name, take top 3
+        seen = set()
+        unique_recs = []
+        for r in recs:
+            if r["name"] not in seen:
+                seen.add(r["name"])
+                unique_recs.append(r)
+        unique_recs = unique_recs[:3]
+
+        tiers.append({
+            "label": tier["label"],
+            "min": lo,
+            "max": hi,
+            "desc": tier["desc"],
+            "isBestRoi": tier.get("isBestRoi", False),
+            "recommendations": unique_recs,
+        })
+
+    return tiers
+
+
+def find_lineage_upgrades(skill_groups: list,
+                          price_cache_dict: dict) -> list:
+    """Find lineage support gem upgrades for character's active gems.
+
+    Args:
+        skill_groups: Character's skill groups (list of SkillGroup)
+        price_cache_dict: Dict of item_name → price_text (includes lineage gems)
+
+    Returns list of {name, gem, priceText, priceDiv} sorted by price asc.
+    """
+    # Collect active gem names
+    active_gems = set()
+    for sg in skill_groups:
+        for gem in sg.gems:
+            if gem:
+                active_gems.add(gem.lower())
+
+    # Search price cache for lineage support gems
+    lineage_results = []
+    for item_name, price_text in price_cache_dict.items():
+        name_lower = item_name.lower()
+        # Lineage gems have names like "Uhtred's Augury", "Garukhan's Resolve"
+        # They're categorized as support gems with possessive names
+        if "'s " not in name_lower:
+            continue
+        # Check if it's priced (indicating it's a real tradeable item)
+        price_val = _parse_price_text(price_text)
+        if price_val <= 0:
+            continue
+
+        lineage_results.append({
+            "name": item_name,
+            "gem": "",  # We don't know which gem it supports from name alone
+            "priceText": price_text,
+            "priceDiv": round(price_val, 1),
+        })
+
+    lineage_results.sort(key=lambda x: x["priceDiv"])
+    return lineage_results
