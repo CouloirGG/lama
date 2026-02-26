@@ -87,6 +87,7 @@ _MIRROR_BRACKETS = [
 ELITE_BRACKETS = _EXALTED_BRACKETS + _DIVINE_BRACKETS + _MIRROR_BRACKETS
 
 RESULTS_PER_QUERY = 50
+FETCH_BATCH_SIZE_ELITE = 10  # Trade API returns ~10 IDs; step by this, not 50
 
 # ─── State & Output ─────────────────────────────────
 
@@ -244,12 +245,15 @@ def run_elite_harvester(league: str,
     skipped_low_price = 0
     skipped_fake = 0
     errors = 0
+    retryable = 0  # Queries that failed but were NOT marked complete (will retry)
     burst_count = 0
     t_start = time.time()
     effective_total = min(len(remaining), max_queries or len(remaining))
 
     # Compute offset for this pass (each pass samples deeper into results)
-    offset = (pass_num - 1) * RESULTS_PER_QUERY
+    # Trade API returns ~10 IDs per search, so step by FETCH_BATCH_SIZE_ELITE
+    # (not RESULTS_PER_QUERY=50, which would skip past all results on pass 2+)
+    offset = (pass_num - 1) * FETCH_BATCH_SIZE_ELITE
 
     for cat_name, item_class, cat_filter, bracket_label in remaining:
         if max_queries > 0 and queries_done >= max_queries:
@@ -313,10 +317,11 @@ def run_elite_harvester(league: str,
                 burst_count += 1
 
             if resp.status_code != 200:
-                print(f"  Search HTTP {resp.status_code}, skipping")
+                print(f"  Search HTTP {resp.status_code}, skipping (will retry next run)")
                 errors += 1
+                retryable += 1
                 queries_done += 1
-                state["completed_queries"].append(query_key)
+                # Do NOT mark as completed — transient errors should be retried
                 continue
 
             search_data = resp.json()
@@ -334,7 +339,7 @@ def run_elite_harvester(league: str,
                 continue
 
             # Offset into results for multi-pass
-            available_ids = result_ids[offset:offset + RESULTS_PER_QUERY]
+            available_ids = result_ids[offset:offset + FETCH_BATCH_SIZE_ELITE]
             if not available_ids:
                 print(f"  {total} total results, no new results at offset {offset}")
                 queries_done += 1
@@ -346,10 +351,11 @@ def run_elite_harvester(league: str,
                   f"(offset {offset})...")
 
         except Exception as e:
-            print(f"  Search error: {e}")
+            print(f"  Search error: {e} (will retry next run)")
             errors += 1
+            retryable += 1
             queries_done += 1
-            state["completed_queries"].append(query_key)
+            # Do NOT mark as completed — transient errors should be retried
             continue
 
         # Step 2: Fetch listings (batched at 10 per fetch)
@@ -375,10 +381,12 @@ def run_elite_harvester(league: str,
 
         if not listings:
             if fetch_failed:
+                print(f"  Fetch failed (will retry next run)")
+                retryable += 1
                 queries_done += 1
-                state["completed_queries"].append(query_key)
+                # Do NOT mark as completed — fetch failures are transient
                 continue
-            print(f"  Fetch returned no listings")
+            print(f"  Fetch returned no listings (0 parseable at offset {offset})")
             queries_done += 1
             state["completed_queries"].append(query_key)
             save_state(state, pass_num)
@@ -444,6 +452,8 @@ def run_elite_harvester(league: str,
     print(f"  Skipped (bad price): {skipped_low_price}")
     print(f"  Skipped (fake/price-fixer): {skipped_fake}")
     print(f"  Errors: {errors}")
+    if retryable:
+        print(f"  Retryable (not marked complete): {retryable}")
     print(f"  Time: {elapsed:.1f}s ({elapsed/60:.1f} min)")
     print(f"  Output: {output_file}")
     print(f"{'='*50}")

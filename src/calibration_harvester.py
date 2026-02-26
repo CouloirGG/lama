@@ -502,6 +502,7 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
     skipped_low_price = 0
     skipped_fake = 0
     errors = 0
+    retryable = 0  # Queries that failed but were NOT marked complete (will retry)
     burst_count = 0  # API calls in current burst
     t_start = time.time()
     effective_total = min(len(remaining), max_queries or len(remaining))
@@ -570,10 +571,11 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
                 burst_count += 1
 
             if resp.status_code != 200:
-                print(f"  Search HTTP {resp.status_code}, skipping")
+                print(f"  Search HTTP {resp.status_code}, skipping (will retry next run)")
                 errors += 1
+                retryable += 1
                 queries_done += 1
-                state["completed_queries"].append(query_key)
+                # Do NOT mark as completed — transient errors should be retried
                 continue
 
             search_data = resp.json()
@@ -610,10 +612,11 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
                   f"(offset {offset})...")
 
         except Exception as e:
-            print(f"  Search error: {e}")
+            print(f"  Search error: {e} (will retry next run)")
             errors += 1
+            retryable += 1
             queries_done += 1
-            state["completed_queries"].append(query_key)
+            # Do NOT mark as completed — transient errors should be retried
             continue
 
         # Step 2: Fetch listings (batched — API caps at 10 IDs per request)
@@ -639,10 +642,13 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
 
         if not listings:
             if fetch_failed:
+                print(f"  Fetch failed (will retry next run)")
+                errors += 1
+                retryable += 1
                 queries_done += 1
-                state["completed_queries"].append(query_key)
+                # Do NOT mark as completed — fetch failures are transient
                 continue
-            print(f"  Fetch returned no listings")
+            print(f"  Fetch returned no listings (0 parseable at offset {offset})")
             queries_done += 1
             state["completed_queries"].append(query_key)
             save_state(state, pass_num)
@@ -718,6 +724,8 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
     print(f"  Skipped (bad price): {skipped_low_price}")
     print(f"  Skipped (fake/price-fixer): {skipped_fake}")
     print(f"  Errors: {errors}")
+    if retryable:
+        print(f"  Retryable (not marked complete): {retryable}")
     print(f"  Time: {elapsed:.1f}s ({elapsed/60:.1f} min)")
     print(f"  Output: {output_file}")
     print(f"{'='*50}")
