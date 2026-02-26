@@ -43,6 +43,10 @@
       95%  { left: 0%; opacity: 0.9; }
       100% { left: 0%; opacity: 0.8; }
     }
+    @keyframes pillSheen {
+      0%   { background-position: 200% center; }
+      100% { background-position: -200% center; }
+    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; margin: 0; padding: 0; }
     body { background: radial-gradient(ellipse at center, #1a1510 0%, #0d0b08 70%); color: #d4c9a8; font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif; }
@@ -5345,7 +5349,7 @@
               <div style={{ height: "100%", width: `${fillPct}%`, background: capped ? color : T.red, borderRadius: 3, opacity: capped ? 0.8 : 1 }} />
             </div>
             <span style={{ ...MONO, fontSize: 10, color: capped ? color : T.red, width: 32, textAlign: "right", fontWeight: 600 }}>{val}%</span>
-            {overCap > 0 && <span style={{ ...MONO, fontSize: 10, color: "#4a7c59", fontWeight: 600 }}>+{overCap}</span>}
+            {overCap > 0 && <span title="Overcap protects against curses that reduce resistances" style={{ ...MONO, fontSize: 10, color: "#4a7c59", fontWeight: 600 }}>+{overCap}</span>}
           </div>
         );
       };
@@ -5371,10 +5375,12 @@
               <div style={{ padding: "6px 8px", background: T.input, borderRadius: 6 }}>
                 <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 2 }}>EHP / One-Shot</div>
                 <div style={{ ...MONO, fontSize: 14, fontWeight: 700, color: getStatColor(ds.effectiveHealthPool, { great: 25000, good: 15000, okay: 8000 }) }}>{fmtN(ds.effectiveHealthPool)}</div>
+                <div style={{ fontSize: 7, color: T.textMuted, marginBottom: 2 }}>Effective HP = life + mitigation combined</div>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
                   <span style={{ ...MONO, fontSize: 11, fontWeight: 600, color: getStatColor(ds.lowestMaximumHitTaken, { great: 8000, good: 5000, okay: 3000 }) }}>{fmtN(ds.lowestMaximumHitTaken)}</span>
                   <span style={{ fontSize: 9, color: T.textMuted }}>1-shot ({lowestHit.label})</span>
                 </div>
+                <div style={{ fontSize: 7, color: T.textMuted }}>Endgame bosses hit 6-8k</div>
               </div>
               {/* Col 3: Mitigation badges */}
               <div style={{ padding: "6px 8px", background: T.input, borderRadius: 6 }}>
@@ -5426,33 +5432,33 @@
                   </div>
                 ) : <ResBar label="Chaos" val={ds.chaosResistance} overCap={ds.chaosResistanceOverCap} color="#aa88aa" />}
               </div>
-              {thresholds.length > 0 && (() => {
-                const refScale = 10000;
-                return (
+              {thresholds.length > 0 && (
                 <div>
                   <div style={{ fontSize: 9, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>Max Hit Survived</div>
                   {thresholds.map(t => {
-                    const barPct = Math.min((t.value / refScale) * 100, 100);
                     const hitColor = t.value >= 7000 ? "#4a7c59" : t.value >= 4000 ? T.gold : T.red;
+                    const zone = t.value >= 7000 ? "Safe" : t.value >= 4000 ? "Risky" : "Danger";
+                    const zoneBg = t.value >= 7000 ? "rgba(74,124,89,0.15)" : t.value >= 4000 ? "rgba(196,164,86,0.12)" : "rgba(168,50,50,0.12)";
                     return (
-                    <div key={t.label} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
-                      <span style={{ fontSize: 9, color: t.color, width: 40, fontWeight: 500 }}>{t.label}</span>
-                      <div style={{ flex: 1, height: 6, background: T.input, borderRadius: 3, overflow: "hidden", position: "relative" }}>
-                        <div style={{ position: "absolute", left: "40%", top: 0, bottom: 0, width: 1, background: "rgba(184,134,11,0.3)" }} />
-                        <div style={{ position: "absolute", left: "70%", top: 0, bottom: 0, width: 1, background: "rgba(74,124,89,0.3)" }} />
-                        <div style={{ height: "100%", width: `${barPct}%`, background: hitColor, borderRadius: 3, opacity: 0.8 }} />
-                      </div>
-                      <span style={{ ...MONO, fontSize: 9, color: hitColor, width: 40, textAlign: "right", fontWeight: 600 }}>{fmtN(t.value)}</span>
+                    <div key={t.label} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                      <span style={{ fontSize: 9, color: t.color, width: 36, fontWeight: 500 }}>{t.label}</span>
+                      <span style={{ ...MONO, fontSize: 10, color: hitColor, width: 42, textAlign: "right", fontWeight: 600 }}>{fmtN(t.value)}</span>
+                      <span style={{ fontSize: 8, fontWeight: 600, padding: "1px 5px", borderRadius: 3, background: zoneBg, color: hitColor }}>{zone}</span>
                     </div>
                     );
                   })}
+                  <div style={{ fontSize: 7, color: T.textMuted, marginTop: 3 }}>Endgame bosses hit for 6,000-8,000. Below that = instant death risk.</div>
                 </div>
-                );
-              })()}
+              )}
             </div>
             {lowDefense && (
               <div style={{ padding: "4px 8px", marginTop: 6, background: "rgba(168,50,50,0.08)", borderRadius: 4, border: "1px solid rgba(168,50,50,0.2)" }}>
                 <div style={{ fontSize: 9, color: T.red, lineHeight: 1.4 }}>Low defense investment {"\u2014"} no strong commitment to armour, evasion, block, ES, or life.</div>
+                <div style={{ fontSize: 8, color: T.textMuted, lineHeight: 1.4, marginTop: 2 }}>
+                  {ds.armour < 2000 && `Armour (${fmtN(ds.armour)}) is low — physical hits bypass most mitigation. `}
+                  {ds.blockChance < 20 && ds.blockChance > 0 && `Block (${ds.blockChance}%) too low to be reliable. `}
+                  {!hasCI && ds.life < 2500 && `Life (${fmtN(ds.life)}) dangerously low for endgame.`}
+                </div>
               </div>
             )}
           </div>
@@ -5564,6 +5570,35 @@
         if (lower.includes(key)) return colors;
       }
       return { bg: "rgba(196,164,86,0.1)", border: T.borderGold, text: T.gold };
+    }
+
+    // Keystone-specific colors matching their thematic identity
+    const KEYSTONE_COLORS = {
+      "Chaos Inoculation":   { bg: "#6bbfff22", border: "#6bbfff", text: "#8ed0ff" },
+      "Mind Over Matter":    { bg: "#aa88aa22", border: "#aa88aa", text: "#ccaacc" },
+      "Pain Attunement":     { bg: "#cc444422", border: "#cc4444", text: "#e86a6a" },
+      "Avatar of Fire":      { bg: "#cc664422", border: "#cc6644", text: "#e8956a" },
+      "Resolute Technique":  { bg: "#a8a09022", border: "#a8a090", text: "#c4bcac" },
+      "Elemental Overload":  { bg: "#cccc6622", border: "#cccc66", text: "#dddd88" },
+      "Iron Reflexes":       { bg: "#a8a09022", border: "#a8a090", text: "#c4bcac" },
+      "Acrobatics":          { bg: "#4a7c5922", border: "#4a7c59", text: "#78aa88" },
+      "Ghost Reaver":        { bg: "#6bbfff22", border: "#6bbfff", text: "#8ed0ff" },
+      "Eldritch Battery":    { bg: "#4a9a9a22", border: "#4a9a9a", text: "#78bbbb" },
+    };
+    const KEYSTONE_EXPLANATIONS = {
+      "Chaos Inoculation":   "Immune to chaos, ES is your life pool",
+      "Mind Over Matter":    "30% of damage taken from mana before life",
+      "Pain Attunement":     "30% more spell damage while on low life",
+      "Avatar of Fire":      "All damage converted to fire, cannot deal other elements",
+      "Resolute Technique":  "Never miss, never crit — consistent hit damage",
+      "Elemental Overload":  "40% more elemental damage after crit, no crit multiplier",
+      "Iron Reflexes":       "All evasion converted to armour",
+      "Acrobatics":          "Dodge attacks, less armour/block",
+      "Ghost Reaver":        "Life leech applies to ES instead",
+      "Eldritch Battery":    "ES protects mana instead of life",
+    };
+    function getKeystoneColor(name) {
+      return KEYSTONE_COLORS[name] || { bg: T.input, border: T.border, text: T.textSecond };
     }
 
     // Importance-based number coloring: green=great, gold=good, amber=warning, red=danger
@@ -6105,7 +6140,7 @@
                         <span style={{
                           fontSize: 11, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                           color: item.rarity === "unique" ? "#af6025" : item.rarity === "rare" ? "#ff7" : T.text,
-                        }}>{item.name}</span>
+                        }}>{item.rarity === "rare" ? `Rare ${item.name}` : item.name}</span>
                         {isCurrentItem && <span style={{ fontSize: 8, color: T.gold, fontWeight: 700 }}>(yours)</span>}
                       </div>
                       {item.priceText && <div style={{ fontSize: 9, color: T.textMuted }}>{item.priceText}</div>}
@@ -6203,19 +6238,25 @@
               return (
                 <span key={i} style={{
                   fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
-                  background: tc.bg, border: `1px solid ${tc.border}`,
+                  background: `linear-gradient(90deg, ${tc.bg} 40%, ${tc.border}33 50%, ${tc.bg} 60%)`,
+                  backgroundSize: "200% 100%",
+                  animation: "pillSheen 3s ease-in-out infinite",
+                  border: `1px solid ${tc.border}`,
                   color: tc.text, letterSpacing: "0.04em",
                   pointerEvents: "none", cursor: "default",
                 }}>{tag}</span>
               );
             })}
-            {archetype.mainSkill && (
+            {archetype.mainSkill && (() => {
+              const skillColor = archetype.elements && archetype.elements[0] ? getTagColor(archetype.elements[0]) : { bg: "rgba(255,255,255,0.03)", border: T.border, text: T.textSecond };
+              return (
               <span style={{
                 fontSize: 10, fontWeight: 500, padding: "2px 8px", borderRadius: 10,
-                background: "rgba(255,255,255,0.03)", border: `1px solid ${T.border}`,
-                color: T.textSecond, pointerEvents: "none", cursor: "default",
+                background: skillColor.bg, border: `1px solid ${skillColor.border}`,
+                color: skillColor.text, pointerEvents: "none", cursor: "default",
               }}>{archetype.mainSkill}</span>
-            )}
+              );
+            })()}
           </div>
 
           {/* Row 2: Slot scorecard */}
@@ -6230,6 +6271,9 @@
                       <span style={{ fontSize: 10, color: T.textMuted, width: 70, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.slotDisplay}</span>
                       <span style={{ ...MONO, fontSize: 10, color: tc, fontWeight: 600, width: 28 }}>T{s.avgTier}</span>
                       {s.t1Count > 0 && <span style={{ fontSize: 9, color: getTierColor(1) }}>{"\u2605".repeat(Math.min(s.t1Count, 3))}</span>}
+                      <span style={{ fontSize: 8, color: T.textMuted }}>
+                        {s.enrichedCount}m{s.weakMods && s.weakMods.length > 0 ? ` · ${s.weakMods.length} weak` : ""}{s.deadMods && s.deadMods.length > 0 ? <span style={{ color: T.red }}>{` · ${s.deadMods.length} dead`}</span> : ""}
+                      </span>
                     </div>
                   );
                 })}
@@ -6264,12 +6308,13 @@
                     <span style={{ color: T.textMuted }}> — </span>
                     <span style={{ color: T.textSecond }}>{s.itemName}</span>
                   </div>
-                  {/* Weak mods with tier info */}
+                  {/* Weak mods with tier info + next tier target */}
                   {s.weakMods && s.weakMods.length > 0 && s.weakMods.map((wm, j) => (
                     <div key={j} style={{ fontSize: 9, color: T.textMuted, paddingLeft: 8, lineHeight: 1.5 }}>
                       <span style={{ color: getTierColor(wm.tier) }}>T{wm.tier}/{wm.tierCount}</span>
                       {" "}<span style={{ color: T.textSecond }}>{wm.name}</span>
                       {wm.currentRange && <span style={{ color: T.textMuted }}> ({wm.currentRange})</span>}
+                      {wm.nextTierRange && <span style={{ color: "#4a7c59" }}> {"\u2192"} T{wm.nextTier} would be {wm.nextTierRange}</span>}
                     </div>
                   ))}
                   {/* Dead mods on this slot */}
@@ -6278,6 +6323,11 @@
                       Dead: {dm.mod} <span style={{ color: T.textMuted }}>({dm.reason})</span>
                     </div>
                   ))}
+                  {(s.weakMods?.length > 0 || s.deadMods?.length > 0) && (
+                    <div style={{ fontSize: 8, color: T.textMuted, fontStyle: "italic", paddingLeft: 8, marginTop: 2 }}>
+                      Replace or craft — look for: {s.weakMods?.length > 0 ? s.weakMods.map(w => w.name.toLowerCase()).join(", ") : "better-tier rolls"}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -6329,17 +6379,41 @@
       }
       if (!data) return null;
 
-      const { upgradePriority, anointOptimizer, costTiers, lineageGemRoi } = data;
+      const { upgradePriority, anointOptimizer, costTiers, lineageGemRoi, archetype: effArch } = data;
       const upgradeCount = (upgradePriority || []).length;
       const bestRoiTier = (costTiers || []).find(t => t.isBestRoi);
       const anointStatus = anointOptimizer?.isOptimal ? "Optimal" : anointOptimizer?.current ? "Suboptimal" : "None";
 
-      // Summary chips for collapsed state
+      // Anoint context helper — explains trade-offs relative to build archetype
+      const getAnointContext = (desc) => {
+        if (!desc || !effArch) return null;
+        const d = desc.toLowerCase();
+        const def = (effArch.defenseType || "").toLowerCase();
+        const dmg = (effArch.damageType || "").toLowerCase();
+        if (d.includes("life") && def === "es") return "Less useful — your build uses ES, not life";
+        if (d.includes("energy shield") && def === "life") return "Less useful — your build uses life, not ES";
+        if (d.includes("mana") && def !== "mom") return "Niche — mana is not your primary resource";
+        if (d.includes("life") && def === "life") return "Survivability — directly increases your health pool";
+        if (d.includes("energy shield") && def === "es") return "Core defense — directly boosts your ES pool";
+        if (d.includes("spell") && dmg === "attack") return "Less impactful — your build scales attacks, not spells";
+        if (d.includes("attack") && dmg === "spell") return "Less impactful — your build scales spells, not attacks";
+        if (d.includes("crit")) return "Damage scaling — boosts your critical strike output";
+        if (d.includes("resist")) return "Survivability — helps cap resistances or provide overcap";
+        return null;
+      };
+
+      // Summary chips for collapsed state — categorized with colors
+      const EFFICIENCY_CHIP_COLORS = {
+        upgrade: { bg: "#b8860b22", border: "#b8860b", text: "#e0b868" },
+        roi:     { bg: "#4a7c5922", border: "#4a7c59", text: "#78aa88" },
+        anoint:  { bg: "#aa88aa22", border: "#aa88aa", text: "#ccaacc" },
+        lineage: { bg: "#6bbfff22", border: "#6bbfff", text: "#8ed0ff" },
+      };
       const chips = [];
-      if (upgradeCount > 0) chips.push(`${upgradeCount} upgrade slot${upgradeCount > 1 ? "s" : ""}`);
-      if (bestRoiTier && bestRoiTier.recommendations.length > 0) chips.push(`Best ROI: ${bestRoiTier.label} ${bestRoiTier.min}-${bestRoiTier.max}d`);
-      if (anointOptimizer) chips.push(`Anoint: ${anointStatus}`);
-      if (lineageGemRoi && lineageGemRoi.length > 0) chips.push(`${lineageGemRoi.length} lineage gem${lineageGemRoi.length > 1 ? "s" : ""}`);
+      if (upgradeCount > 0) chips.push({ text: `${upgradeCount} upgrade slot${upgradeCount > 1 ? "s" : ""}`, cat: "upgrade" });
+      if (bestRoiTier && bestRoiTier.recommendations.length > 0) chips.push({ text: `Best ROI: ${bestRoiTier.label} ${bestRoiTier.min}-${bestRoiTier.max}d`, cat: "roi" });
+      if (anointOptimizer) chips.push({ text: `Anoint: ${anointStatus}`, cat: "anoint" });
+      if (lineageGemRoi && lineageGemRoi.length > 0) chips.push({ text: `${lineageGemRoi.length} lineage gem${lineageGemRoi.length > 1 ? "s" : ""}`, cat: "lineage" });
 
       const tierBarColors = ["#4a7c59", "#5a8a4a", "#c4a456", "#b8860b", "#8c5a3c"];
 
@@ -6352,13 +6426,19 @@
             <div style={{ ...LABEL, marginBottom: 0, flex: 1 }}>BUILD EFFICIENCY</div>
             {!expanded && chips.length > 0 && (
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                {chips.map((c, i) => (
+                {chips.map((c, i) => {
+                  const cc = EFFICIENCY_CHIP_COLORS[c.cat] || { bg: "rgba(196,164,86,0.08)", border: T.borderGold, text: T.gold };
+                  return (
                   <span key={i} style={{
                     fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 10,
-                    background: "rgba(196,164,86,0.08)", border: `1px solid ${T.borderGold}`,
-                    color: T.gold, whiteSpace: "nowrap",
-                  }}>{c}</span>
-                ))}
+                    background: `linear-gradient(90deg, ${cc.bg} 40%, ${cc.border}33 50%, ${cc.bg} 60%)`,
+                    backgroundSize: "200% 100%",
+                    animation: "pillSheen 3s ease-in-out infinite",
+                    border: `1px solid ${cc.border}`,
+                    color: cc.text, whiteSpace: "nowrap",
+                  }}>{c.text}</span>
+                  );
+                })}
               </div>
             )}
             <span style={{ fontSize: 10, color: T.textMuted, transform: expanded ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.2s" }}>{"\u25BC"}</span>
@@ -6370,11 +6450,12 @@
               {upgradePriority && upgradePriority.length > 0 && (
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, fontWeight: 700 }}>Upgrade Priority</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "80px 50px 1fr 60px", gap: "2px 8px", alignItems: "center" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "70px 50px 1fr 50px auto", gap: "2px 6px", alignItems: "center" }}>
                     <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Slot</span>
-                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Avg Tier</span>
+                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Tier</span>
                     <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Top Item</span>
                     <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase", textAlign: "right" }}>Price</span>
+                    <span style={{ fontSize: 8, color: T.textMuted, fontWeight: 700, textTransform: "uppercase" }}>Why</span>
                     {upgradePriority.map((u, i) => {
                       const roomPct = Math.min(u.gap / 4, 1) * 100;
                       const isUniqueTop = u.topItem && (u.topItem.includes("'s") || /^[A-Z]/.test(u.topItem));
@@ -6389,6 +6470,7 @@
                         </div>
                         <span style={{ fontSize: 10, color: isUniqueTop ? "#af6025" : T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.topItem || "\u2014"}</span>
                         <span style={{ ...MONO, fontSize: 10, color: T.textSecond, textAlign: "right" }}>{u.topItemPrice || "\u2014"}</span>
+                        <span style={{ fontSize: 9, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.reason || "\u2014"}</span>
                       </React.Fragment>
                       );
                     })}
@@ -6422,6 +6504,7 @@
                             {isCurrent && <span style={{ fontSize: 8, color: T.gold, fontWeight: 600, padding: "1px 4px", borderRadius: 4, background: "rgba(196,164,86,0.12)", border: `1px solid ${T.borderGold}` }}>YOU</span>}
                           </div>
                           {a.desc && <div style={{ fontSize: 9, color: T.textMuted, marginLeft: 36 }}>{a.desc}</div>}
+                          {a.desc && (() => { const ctx = getAnointContext(a.desc); return ctx ? <div style={{ fontSize: 8, color: "#4a7c59", fontStyle: "italic", marginLeft: 36, marginTop: 1 }}>{ctx}</div> : null; })()}
                         </div>
                       );
                     })}
@@ -6436,16 +6519,15 @@
                   <div style={{ display: "flex", gap: 2, marginBottom: 6, height: 28, borderRadius: 4, overflow: "hidden" }}>
                     {costTiers.map((tier, i) => {
                       const isSelected = selectedTier === i;
-                      const hasRecs = tier.recommendations && tier.recommendations.length > 0;
                       return (
                       <div key={i} style={{
                         flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                         background: isSelected ? `${tierBarColors[i]}55` : tier.isBestRoi ? "rgba(196,164,86,0.2)" : `${tierBarColors[i]}33`,
                         border: isSelected ? `2px solid ${tierBarColors[i]}` : tier.isBestRoi ? `1px solid ${T.borderGold}` : "1px solid transparent",
-                        cursor: hasRecs ? "pointer" : "default", position: "relative",
+                        cursor: "pointer", position: "relative",
                         transition: "all 0.15s",
                       }}
-                        onClick={() => hasRecs && setSelectedTier(isSelected ? null : i)}
+                        onClick={() => setSelectedTier(isSelected ? null : i)}
                         title={`${tier.label}: ${tier.min}-${tier.max}d — ${tier.desc}`}
                       >
                         <span style={{ fontSize: 8, fontWeight: 700, color: isSelected ? tierBarColors[i] : tier.isBestRoi ? T.gold : T.textSecond, textTransform: "uppercase" }}>{tier.label}</span>
@@ -6454,6 +6536,11 @@
                       );
                     })}
                   </div>
+                  {selectedTier !== null && costTiers[selectedTier] && costTiers[selectedTier].recommendations.length === 0 && (
+                    <div style={{ fontSize: 10, color: T.textMuted, fontStyle: "italic", padding: "4px 8px", marginBottom: 4 }}>
+                      No items found in the {costTiers[selectedTier].min}-{costTiers[selectedTier].max}d range for your build
+                    </div>
+                  )}
                   {costTiers.filter((t, i) => t.recommendations.length > 0 && (selectedTier === null || selectedTier === i)).map((tier, i) => (
                     <div key={tier.label} style={{ marginBottom: 4, padding: "4px 8px", background: selectedTier !== null ? "rgba(0,0,0,0.15)" : "transparent", borderRadius: 4 }}>
                       <div style={{ fontSize: 9, color: tier.isBestRoi ? T.gold : T.textMuted, fontWeight: 600, marginBottom: 2 }}>
@@ -6779,28 +6866,31 @@
                 </div>
               )}
 
-              {/* Keystone diffs */}
+              {/* Keystone diffs — themed colors + tooltip explanations */}
               {data.keystoneDiffs && data.keystoneDiffs.filter(k => k.topPct >= 15).length > 0 && (
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ fontSize: 9, color: T.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3, fontWeight: 700 }}>Keystones vs Meta</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {data.keystoneDiffs.filter(k => k.topPct >= 15).map((k, i) => (
-                      <span key={i} style={{
+                    {data.keystoneDiffs.filter(k => k.topPct >= 15).map((k, i) => {
+                      const kc = getKeystoneColor(k.name);
+                      return (
+                      <span key={i} title={KEYSTONE_EXPLANATIONS[k.name] || k.name} style={{
                         fontSize: 9, padding: "2px 6px", borderRadius: 3,
-                        background: k.yourHasIt ? "rgba(74,124,89,0.15)" : "rgba(168,50,50,0.1)",
-                        border: `1px solid ${k.yourHasIt ? "rgba(74,124,89,0.3)" : "rgba(168,50,50,0.2)"}`,
-                        color: k.yourHasIt ? "#4a7c59" : T.red,
+                        background: k.yourHasIt ? kc.bg : "rgba(168,50,50,0.1)",
+                        border: `1px solid ${k.yourHasIt ? kc.border : "rgba(168,50,50,0.2)"}`,
+                        color: k.yourHasIt ? kc.text : T.red,
                       }}>
                         {k.yourHasIt ? "\u2713" : "\u2717"} {k.name} <span style={{ color: T.textMuted }}>({k.topPct}%)</span>
                       </span>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
               {/* Anoint match */}
               {data.anointMatch && data.anointMatch.topAnoint && (
-                <div style={{ fontSize: 10, color: T.textSecond }}>
+                <div style={{ fontSize: 10, color: T.textSecond, marginBottom: 8 }}>
                   <span style={{ color: T.textMuted }}>Anoint: </span>
                   {data.anointMatch.matches ? (
                     <span style={{ color: "#4a7c59" }}>{"\u2713"} {data.anointMatch.yourAnoint} (matches top {data.anointMatch.topPct}%)</span>
@@ -6813,6 +6903,27 @@
                   )}
                 </div>
               )}
+
+              {/* Biggest Gaps summary — shown when score < 50% */}
+              {data.overallScore < 50 && (() => {
+                const gearGaps = (data.gearMatches || []).filter(g => !g.matches).slice(0, 2);
+                const missingKs = (data.keystoneDiffs || []).filter(k => !k.yourHasIt && k.topPct >= 20).slice(0, 1);
+                return (gearGaps.length > 0 || missingKs.length > 0) ? (
+                  <div style={{ padding: "6px 8px", background: "rgba(168,50,50,0.08)", border: `1px solid rgba(168,50,50,0.15)`, borderRadius: 4 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: T.red, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>Biggest Gaps</div>
+                    {gearGaps.map((g, i) => (
+                      <div key={i} style={{ fontSize: 9, color: T.textSecond, padding: "1px 0" }}>
+                        {g.slotDisplay}: {g.yourItem} {"\u2192"} <span style={{ color: T.gold }}>{g.topItem}</span> <span style={{ color: T.textMuted }}>({g.topPct}% of top builds)</span>
+                      </div>
+                    ))}
+                    {missingKs.map((k, i) => (
+                      <div key={`ks${i}`} style={{ fontSize: 9, color: T.textSecond, padding: "1px 0" }}>
+                        Missing keystone: <span style={{ color: T.gold }}>{k.name}</span> <span style={{ color: T.textMuted }}>({k.topPct}% of top builds)</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
             </div>
           )}
         </div>
@@ -6837,6 +6948,7 @@
 
       // Build archetype from insights (for dead mod detection / upgrade suggestions)
       const [archetype, setArchetype] = useState(null);
+      const [pobCopied, setPobCopied] = useState(false);
 
       const autoLookedUp = useRef(false);
 
@@ -7075,8 +7187,8 @@
           {charData && !popularSlot && (
             <div>
               {/* Header — compact 2-row */}
-              <div className="panel" style={{ ...CARD, marginBottom: 12, padding: "8px 12px" }}>
-                {/* Row 1: Name + level/class + meta badge | account + POB buttons */}
+              <div className="panel" style={{ ...CARD, marginBottom: 12, padding: "6px 10px" }}>
+                {/* Row 1: Name + level/class + keystones (inline if ≤4) | account + POB */}
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
@@ -7093,31 +7205,32 @@
                           {topSkill.dps > 0 && topSkill.dps !== topSkill.damage ? ` (${topSkill.dps >= 1000000 ? `${(topSkill.dps / 1000000).toFixed(1)}M` : topSkill.dps >= 1000 ? `${(topSkill.dps / 1000).toFixed(1)}k` : topSkill.dps.toFixed(0)} DPS)` : " dmg"}
                         </span>
                       )}
+                      {/* Inline keystones when ≤4 */}
+                      {charData.keystones && charData.keystones.length > 0 && charData.keystones.length <= 4 && charData.keystones.map((ks, i) => {
+                        const kc = getKeystoneColor(ks);
+                        return <span key={`ks${i}`} title={KEYSTONE_EXPLANATIONS[ks] || ks} style={{ fontSize: 9, padding: "1px 5px", background: kc.bg, border: `1px solid ${kc.border}`, borderRadius: 3, color: kc.text }}>{ks}</span>;
+                      })}
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
                     <span style={{ fontSize: 9, color: T.textMuted }}>{charData.account}</span>
                     {charData.pobCode && (
-                      <>
                         <button
-                          onClick={() => { navigator.clipboard.writeText(charData.pobCode); }}
-                          style={{ ...BTN, fontSize: 9, padding: "2px 6px", background: T.input, border: `1px solid ${T.border}`, color: T.textMuted }}
-                        >POB</button>
-                        <button
-                          onClick={() => { window.open(`https://pob.cool/${charData.pobCode}`, "_blank"); }}
-                          style={{ ...BTN, fontSize: 9, padding: "2px 6px", background: T.input, border: `1px solid ${T.border}`, color: T.textMuted }}
-                        >{"\u2197"}</button>
-                      </>
+                          onClick={() => { navigator.clipboard.writeText(charData.pobCode); setPobCopied(true); setTimeout(() => setPobCopied(false), 2000); }}
+                          title="Copy POB code — paste in Path of Building"
+                          style={{ ...BTN, fontSize: 9, padding: "2px 6px", background: pobCopied ? "rgba(74,124,89,0.2)" : T.input, border: `1px solid ${pobCopied ? "#4a7c59" : T.border}`, color: pobCopied ? "#4a7c59" : T.textMuted, transition: "all 0.2s" }}
+                        >{pobCopied ? "Copied!" : "POB"}</button>
                     )}
                   </div>
                 </div>
-                {/* Row 2: Keystones */}
-                {charData.keystones && charData.keystones.length > 0 && (
-                  <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                {/* Row 2: Keystones — only when >4 (overflow row) */}
+                {charData.keystones && charData.keystones.length > 4 && (
+                  <div style={{ marginTop: 4, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
                     <span style={{ fontSize: 9, color: T.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginRight: 2 }}>KS</span>
-                    {charData.keystones.map((ks, i) => (
-                      <span key={i} style={{ fontSize: 9, padding: "1px 5px", background: T.input, border: `1px solid ${T.border}`, borderRadius: 3, color: T.textSecond }}>{ks}</span>
-                    ))}
+                    {charData.keystones.map((ks, i) => {
+                      const kc = getKeystoneColor(ks);
+                      return <span key={i} title={KEYSTONE_EXPLANATIONS[ks] || ks} style={{ fontSize: 9, padding: "1px 5px", background: kc.bg, border: `1px solid ${kc.border}`, borderRadius: 3, color: kc.text }}>{ks}</span>;
+                    })}
                   </div>
                 )}
               </div>

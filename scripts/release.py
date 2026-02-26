@@ -9,7 +9,8 @@ Usage:
     python scripts/release.py --post           # Post to Discord
     python scripts/release.py --post --no-edit # Post without editor prompt
     python scripts/release.py --write          # Write .github/RELEASE_NOTES.md
-    python scripts/release.py --post --write   # Both
+    python scripts/release.py --publish        # Upload to public lama-releases repo
+    python scripts/release.py --post --write --publish  # All three
     python scripts/release.py --dry-run        # Show what would happen
     python scripts/release.py --include-docs   # Include doc/TODO commits
 """
@@ -25,12 +26,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 GITHUB_REPO_URL = "https://github.com/CouloirGG/lama"
+PUBLIC_RELEASES_REPO = "CouloirGG/lama-releases"
 INSTALLER_FILENAME = "LAMA-Setup-{version}.exe"
 DISCORD_MESSAGE_TEMPLATE = """\
 \N{LLAMA} **LAMA v{version} — Alpha Build**
 
-**Download:** {download_url}
-**Installer:** {installer_url}
+**Download:** https://couloir.gg/tools/lama
 
 **What's new:**
 {changelog}"""
@@ -90,7 +91,9 @@ CATEGORIES = [
 ]
 
 SKIP_PATTERN = re.compile(
-    r"^(Update docs|Update TODO|Bump version)\b", re.IGNORECASE,
+    r"^(Update docs|Update TODO|Bump version|Update release notes)\b"
+    r"|harvester",
+    re.IGNORECASE,
 )
 
 
@@ -168,9 +171,6 @@ def compose_discord_message(
     version: str, categories: dict[str, list[dict]],
 ) -> str:
     """Build a plain-text Discord message (markdown) from categorised commits."""
-    download_url = f"{GITHUB_REPO_URL}/releases/tag/v{version}"
-    installer = INSTALLER_FILENAME.format(version=version)
-    installer_url = f"{GITHUB_REPO_URL}/releases/download/v{version}/{installer}"
     blocks = []
     for cat_name in ("New Features", "Bug Fixes", "Improvements", "Other"):
         items = categories.get(cat_name)
@@ -182,8 +182,7 @@ def compose_discord_message(
         blocks.append("\n".join(lines))
     changelog = "\n\n".join(blocks)
     return DISCORD_MESSAGE_TEMPLATE.format(
-        version=version, download_url=download_url,
-        installer_url=installer_url, changelog=changelog,
+        version=version, changelog=changelog,
     )
 
 
@@ -250,6 +249,57 @@ def write_release_notes(markdown: str) -> Path:
     return out
 
 
+def publish_public_release(
+    version: str, markdown: str, dry_run: bool = False,
+) -> bool:
+    """Upload installer to the public lama-releases repo.
+
+    Deletes any existing release for this version, then creates a new one
+    with both a versioned and a stable-name asset so that
+    ``/releases/latest/download/LAMA-Setup.exe`` always works.
+    """
+    installer = INSTALLER_FILENAME.format(version=version)
+    installer_path = ROOT / "dist" / installer
+
+    if not installer_path.exists():
+        print(f"  Installer not found at {installer_path}")
+        return False
+
+    tag = f"v{version}"
+
+    if dry_run:
+        print(f"  Would publish {installer} to {PUBLIC_RELEASES_REPO} as {tag}")
+        return True
+
+    # Delete existing release for this tag (ignore errors if it doesn't exist)
+    subprocess.run(
+        ["gh", "release", "delete", tag, "--repo", PUBLIC_RELEASES_REPO,
+         "--yes", "--cleanup-tag"],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+
+    # Copy installer with stable name
+    stable_path = installer_path.parent / "LAMA-Setup.exe"
+    import shutil
+    shutil.copy2(installer_path, stable_path)
+
+    result = subprocess.run(
+        ["gh", "release", "create", tag,
+         "--repo", PUBLIC_RELEASES_REPO,
+         "--title", f"LAMA {tag}",
+         "--latest",
+         "--notes", markdown,
+         str(stable_path), str(installer_path)],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(f"  gh release create failed: {result.stderr.strip()}",
+              file=sys.stderr)
+        return False
+    print(f"  Published to {PUBLIC_RELEASES_REPO}: {result.stdout.strip()}")
+    return True
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -273,6 +323,10 @@ def main():
     parser.add_argument(
         "--no-edit", action="store_true",
         help="Skip the editor prompt (compose → confirm → post)",
+    )
+    parser.add_argument(
+        "--publish", action="store_true",
+        help="Publish installer to public lama-releases repo",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -305,7 +359,7 @@ def main():
     print(markdown)
 
     # Interactive mode if no flags given
-    interactive = not (args.post or args.write)
+    interactive = not (args.post or args.write or args.publish)
 
     # --- Discord ---
     do_post = args.post
@@ -375,6 +429,20 @@ def main():
             path = write_release_notes(markdown)
             print(f"  Wrote {path.relative_to(ROOT)} "
                   "(commit this before tagging)")
+
+    # --- Public release ---
+    do_publish = args.publish
+    if interactive and not do_publish:
+        answer = input("Publish installer to public releases repo? [y/N]: "
+                       ).strip().lower()
+        do_publish = answer in ("y", "yes")
+
+    if do_publish:
+        if publish_public_release(version, markdown, dry_run=args.dry_run):
+            print("  Public release done" if not args.dry_run
+                  else "  Would publish (dry-run)")
+        else:
+            print("  Failed to publish public release", file=sys.stderr)
 
 
 if __name__ == "__main__":

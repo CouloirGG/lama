@@ -704,7 +704,7 @@ class BuildsClient:
 
                 rarity = ""
                 if key < len(color_col):
-                    rarity = self._parse_rarity(color_col[key])
+                    rarity = self._parse_rarity(color_col[key], name)
 
                 items.append(PopularItem(
                     name=name,
@@ -863,8 +863,13 @@ class BuildsClient:
             return None
 
     @staticmethod
-    def _parse_rarity(color_value: str) -> str:
-        """Parse rarity from CSS color variable name."""
+    def _parse_rarity(color_value: str, name: str = "") -> str:
+        """Parse rarity from CSS color variable name.
+
+        poe.ninja uses var(--item-rare) etc. for rares/magic/normal but
+        leaves the color EMPTY for uniques.  If color is empty and the name
+        is not a generic "Rare X" / "Magic X" pattern, treat as unique.
+        """
         lc = color_value.lower()
         if "unique" in lc:
             return "unique"
@@ -874,6 +879,9 @@ class BuildsClient:
             return "magic"
         if "normal" in lc:
             return "normal"
+        # Empty color = unique item (poe.ninja omits the CSS var for uniques)
+        if not color_value.strip() and name and not name.startswith("Rare ") and not name.startswith("Magic "):
+            return "unique"
         return ""
 
     # -------------------------------------------------------------------
@@ -1048,13 +1056,14 @@ class BuildsClient:
 
             ks_dim = None
             for dim in search["dimensions"]:
-                if dim["name"] == "keystones":
+                if dim["name"] in ("keypassives", "keystones"):
                     ks_dim = dim
                     break
             if not ks_dim:
                 return []
 
-            dict_hash = (search["dictHashes"].get("keystone") or
+            dict_hash = (search["dictHashes"].get("keypassive") or
+                         search["dictHashes"].get("keystone") or
                          search["dictHashes"].get(ks_dim.get("displayName", "")))
             if not dict_hash:
                 return []
@@ -1368,16 +1377,20 @@ def classify_build(char: CharacterData) -> BuildArchetype:
         if gems:
             main_skill = gems[0]
 
-    # Detect Cast on Crit
+    # Detect Cast on Crit — relaxed: CoC gem anywhere + main skill is spell,
+    # or CoC gem + any spell + any attack across all skill groups
     is_coc = False
-    for sg in char.skill_groups:
-        has_coc = any("Cast on Crit" in g or "Cast when Crit" in g for g in sg.gems)
-        has_attack = any(g in ATTACK_SKILLS for g in sg.gems)
-        has_spell = any(g in SPELL_SKILLS for g in sg.gems)
-        if has_coc and has_attack and has_spell:
+    all_gems = [g for sg in char.skill_groups for g in sg.gems]
+    has_coc_gem = any("Cast on Crit" in g or "Cast when Crit" in g for g in all_gems)
+    if has_coc_gem:
+        if main_skill in SPELL_SKILLS:
             is_coc = True
-            break
-    # Heuristic: spell DPS + attack gem in same group
+        else:
+            has_any_spell = any(g in SPELL_SKILLS for g in all_gems)
+            has_any_attack = any(g in ATTACK_SKILLS for g in all_gems)
+            if has_any_spell and has_any_attack:
+                is_coc = True
+    # Heuristic fallback: spell DPS + attack gem in same group
     if not is_coc and main_skill in SPELL_SKILLS:
         for sg in char.skill_groups:
             has_dps = any(d.name == main_skill for d in sg.dps)
@@ -1639,7 +1652,7 @@ def compute_upgrade_priority(char: CharacterData, slot_summary: list,
         price_cache_dict: Dict of item_name → price_text from unique prices
 
     Returns list of {slot, slotDisplay, currentTier, targetTier, gap,
-                     efficiency, topItem, topItemPrice} sorted by gap desc.
+                     efficiency, topItem, topItemPrice, reason} sorted by gap desc.
     """
     if not slot_summary:
         return []
@@ -1692,6 +1705,18 @@ def compute_upgrade_priority(char: CharacterData, slot_summary: list,
         price_val = _parse_price_text(top_item_price)
         efficiency = gap / price_val if price_val > 0 else gap
 
+        # Build reason string from slot's dead mods + worst weak mods
+        reason_parts = []
+        dead_mods = ss.get("deadMods", [])
+        weak_mods = ss.get("weakMods", [])
+        if dead_mods:
+            reason_parts.append(f"{len(dead_mods)} dead mod{'s' if len(dead_mods) > 1 else ''}")
+        if weak_mods:
+            worst = weak_mods[0]  # already sorted worst-first
+            reason_parts.append(f"T{worst.get('tier', '?')} {worst.get('name', 'mod')}")
+        if not reason_parts:
+            reason_parts.append(f"avg T{current_tier}")
+
         results.append({
             "slot": slot,
             "slotDisplay": SLOT_DISPLAY.get(slot, slot),
@@ -1701,6 +1726,7 @@ def compute_upgrade_priority(char: CharacterData, slot_summary: list,
             "efficiency": round(efficiency, 2),
             "topItem": top_item_name,
             "topItemPrice": top_item_price,
+            "reason": ", ".join(reason_parts),
         })
 
     results.sort(key=lambda x: x["gap"], reverse=True)
@@ -1881,7 +1907,10 @@ def compute_improvement_package(
                 break
 
     # Alternatives: Build variant ideas
-    if archetype.is_crit and not archetype.is_coc:
+    # Extra guard: scan all gems for CoC — never suggest CoC variant if gem is present
+    all_char_gems = [g for sg in char.skill_groups for g in sg.gems]
+    has_any_coc_gem = any("Cast on Crit" in g or "Cast when Crit" in g for g in all_char_gems)
+    if archetype.is_crit and not archetype.is_coc and not has_any_coc_gem:
         alternatives.append({
             "action": "Consider CoC variant",
             "detail": f"Convert to Cast on Critical Strike with {archetype.main_skill or 'primary skill'}",
@@ -1930,9 +1959,15 @@ def compute_build_comparison(
     user_ks = set(char.keystones or [])
     ks_diffs = []
     for pk in (popular_keystones or []):
+        has_it = pk["name"] in user_ks
+        # poe.ninja "keypassives" includes ascendancy passives — if >80% of
+        # the same class+skill combo uses it, it's almost certainly an
+        # ascendancy passive the user has by definition.
+        if not has_it and pk.get("percentage", 0) >= 80:
+            has_it = True
         ks_diffs.append({
             "name": pk["name"],
-            "yourHasIt": pk["name"] in user_ks,
+            "yourHasIt": has_it,
             "topPct": pk.get("percentage", 0),
         })
 
@@ -1946,7 +1981,13 @@ def compute_build_comparison(
         "matches": current_anoint and top_anoint.get("name", "").lower() == (current_anoint or "").lower(),
     }
 
-    # Per-slot gear match
+    # Per-slot gear match:
+    # - Rare vs rare = match (specific rare names are meaningless)
+    # - Unique vs same unique = match
+    # - User has unique, top is rare = mismatch (you're over-investing)
+    # - User has rare, top is unique = NEUTRAL (valid choice: defense,
+    #   budget, or preference — e.g. skipping Headhunter on a caster).
+    #   Don't count as mismatch, don't count toward total_slots.
     gear_matches = []
     match_count = 0
     total_slots = 0
@@ -1956,11 +1997,19 @@ def compute_build_comparison(
         items = popular_by_slot.get(eq.slot, [])
         if not items:
             continue
-        total_slots += 1
         top_item = items[0]
         user_name = (eq.name or eq.type_line or "").lower()
         top_name = (top_item.name or "").lower()
-        matches = user_name == top_name or (top_name in user_name) or (user_name in top_name)
+        user_rarity = (getattr(eq, "rarity", "rare") or "").lower()
+        top_rarity = (getattr(top_item, "rarity", "rare") or "").lower()
+        # Rare vs unique top = neutral — don't penalize, skip scoring
+        neutral = user_rarity == "rare" and top_rarity == "unique"
+        if not neutral:
+            total_slots += 1
+        if top_rarity == "unique":
+            matches = user_name == top_name or (top_name in user_name) or (user_name in top_name)
+        else:
+            matches = user_rarity == "rare" and top_rarity == "rare"
         if matches:
             match_count += 1
         sd = SLOT_DISPLAY.get(eq.slot, eq.slot)
@@ -1971,14 +2020,24 @@ def compute_build_comparison(
             "topItem": top_item.name,
             "topPct": round(top_item.percentage, 1),
             "matches": matches,
+            "yourRarity": user_rarity,
+            "topRarity": top_rarity,
         })
 
-    # Overall meta-alignment score
+    # Overall meta-alignment score — 50% keystones, 35% gear, 15% anoint
+    # Anoint weight is low because no single anoint dominates (top is often <15%)
     ks_score = sum(1 for kd in ks_diffs if kd["yourHasIt"] and kd["topPct"] >= 20) / max(
         sum(1 for kd in ks_diffs if kd["topPct"] >= 20), 1)
     gear_score = match_count / max(total_slots, 1)
-    anoint_score = 1 if anoint_match["matches"] else 0
-    overall = round((ks_score * 30 + gear_score * 50 + anoint_score * 20), 0)
+    # Anoint: if match, full credit. If not, partial credit proportional to
+    # how fragmented the meta is (if top anoint is only 10%, missing it isn't
+    # a big deal — give 50% credit. If top is 60%+, missing it is a real gap).
+    if anoint_match["matches"]:
+        anoint_score = 1
+    else:
+        top_anoint_pct = anoint_match.get("topPct", 0)
+        anoint_score = max(0, 1 - top_anoint_pct / 50)  # 0% top → 1.0, 50%+ top → 0
+    overall = round((ks_score * 50 + gear_score * 35 + anoint_score * 15), 0)
 
     return {
         "keystoneDiffs": ks_diffs,

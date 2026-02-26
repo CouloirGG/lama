@@ -1417,17 +1417,22 @@ async def character_build_insights(req: BuildInsightsRequest):
                             "tier_count": worst["tier_count"],
                         }
 
-                # 2A: Detailed improvement info — weak mods with T1 targets
+                # 2A: Detailed improvement info — weak mods with next-tier targets
                 weak_mods = []
                 for t in sorted(meaningful, key=lambda t: -t["tier_num"]):
                     if t["tier_num"] >= 3:
                         current_range = t.get("tier_range", {})
-                        weak_mods.append({
+                        next_t = t.get("next_tier")
+                        wm = {
                             "name": t["display_name"],
                             "tier": t["tier_num"],
                             "tierCount": t["tier_count"],
                             "currentRange": f"{current_range.get('min', '?')}-{current_range.get('max', '?')}",
-                        })
+                        }
+                        if next_t:
+                            wm["nextTierRange"] = f"{next_t['min']}-{next_t['max']}"
+                            wm["nextTier"] = t["tier_num"] - 1
+                        weak_mods.append(wm)
                     if len(weak_mods) >= 3:
                         break
 
@@ -1493,7 +1498,7 @@ async def character_build_efficiency(req: BuildEfficiencyRequest):
     char_class = char_data.ascendancy or char_data.char_class
     main_skill = archetype.main_skill
 
-    # Build slot summary (reuse build-insights logic)
+    # Build slot summary (reuse build-insights logic, include weakMods/deadMods for reasons)
     slot_summary = []
     if item_lookup and item_lookup.ready:
         try:
@@ -1513,12 +1518,26 @@ async def character_build_efficiency(req: BuildEfficiencyRequest):
                 avg_tier = 0
                 if meaningful:
                     avg_tier = round(sum(t["tier_num"] for t in meaningful) / len(meaningful), 1)
+                # Weak mods (T3+) for upgrade reason text
+                weak_mods = []
+                for t in sorted(meaningful, key=lambda t: -t["tier_num"]):
+                    if t["tier_num"] >= 3:
+                        weak_mods.append({
+                            "name": t["display_name"],
+                            "tier": t["tier_num"],
+                            "tierCount": t["tier_count"],
+                        })
+                    if len(weak_mods) >= 3:
+                        break
+                slot_dead = [dm for dm in (archetype.dead_mods or []) if dm.get("slot") == eq.slot]
                 slot_summary.append({
                     "slot": eq.slot,
                     "slotDisplay": SLOT_DISPLAY.get(eq.slot, eq.slot),
                     "itemName": eq.name or eq.type_line,
                     "avgTier": avg_tier,
                     "enrichedCount": len(meaningful),
+                    "weakMods": weak_mods,
+                    "deadMods": [{"mod": dm["mod"], "reason": dm["reason"]} for dm in slot_dead[:2]],
                 })
         except Exception as e:
             logger.debug(f"Efficiency slot summary failed: {e}")
@@ -1587,6 +1606,10 @@ async def character_build_efficiency(req: BuildEfficiencyRequest):
         },
         "costTiers": cost_tiers,
         "lineageGemRoi": lineage_gems[:10],
+        "archetype": {
+            "defenseType": archetype.defense_type,
+            "damageType": archetype.damage_type,
+        },
     }
 
 

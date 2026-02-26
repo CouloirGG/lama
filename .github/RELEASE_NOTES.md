@@ -1,96 +1,15 @@
-## LAMA v0.2.7
-
-### New Features
-- Add build efficiency panel and meta analysis doc
-- Add claude.bat to .gitignore
-- Add harvester progress monitor script
-- Add meta overview endpoints and defensive stats parsing
-- Add alpha manual test pass document
-- Add Fate of the Vaal harvester shards (2026-02-24, passes 1,2,6,7)
-- Add Build Insights panel with tier enrichment and archetype classification
-- Add roll quality, DPS/defense enrichment to calibration pipeline (shard v7)
-- Add gothic-themed mini frame for dismiss and scrap overlay indicators
-- Add character viewer, popular items, stash viewer scaffold, and saved characters
-- Add learned mod weights via Ridge regression for price estimation
-- Add mod-identity features to calibration k-NN
-- Add LAMA splash screen with crossfade launch sequence
-- Add overlay config export/import with native file dialogs
-- Add top-tier and mod-count features to calibration k-NN
-- Add upload feedback and logging to telemetry
-- Add 20% drop-rate guard and tests for shard outlier removal
-- Add files via upload
-- Add full QA test plan for alpha testers
-- Add composable Discord release message with editor flow
-- Add CI-friendly progress logging with percentage and ETA to harvesters
-- Add harvest summary dashboard to GitHub Actions job summary
-- Add daily calibration harvest GitHub Actions workflow
-- Add multi-pass support to elite harvester
-- Add elite harvester for high-value rare calibration data
-- Add currency test fixtures and price audit script
-- Add exalted display tier, per-category source preference, and Delirium name aliases
-- Add context-aware price inaccuracy mode to bug reporter
-- Add NUX guided tour with highlighted keywords and white marker rings
-- Add NUX guided tour for new user onboarding
-- Add release changelog generator and supporters link
-- Add git identity requirements to CLAUDE.md
-- Add skill_level_factor penalty for weapons missing +level of skills
-- Add combat filter fallback and early bail for deep search
-- Add DEV badge and version display to dashboard title bar
-- Add trade action buttons to Watchlist (whisper, invite, hideout, trade, kick)
-- Add roll-aware pricing for corrupted uniques
-
-### Bug Fixes
-- Fix harvester reliability: offset stepping, error recovery, retryable tracking
-- Fix harvest progress date mismatch and add pricing data deep dive
-- Fix window zoom scaling and size dropdown
-- Fix build insights feedback, add window sizing, bug report webhook
-- Fix harvester offset stepping past all results on passes 2-5
-- Fix deep query race condition and multi-monitor overlay positioning
-- Fix mod_count to use total parsed mods and update shard (23,548 samples)
-- Fix harvester process hang after passes complete
-- Fix STARTUPINFO crash on Linux (GitHub Actions harvester)
-- Fix stale overlay reshow on currency skip via sticky suppress flag
-- Fix overlay text-icon overlap, trade API stale-aware rate limiting, and unique pricing
-- Fix restart leaving zombie processes under pythonw
-- Fix items stuck at Checking during trade API rate limiting
-- Fix Checking... dot animation flicker with in-place text updates
-- Revert PASS back to âœ— for junk items, keep UNID for unidentified
-- Fix NUX tour not persisting completion to settings file
-- Fix 6 overlay and detection issues from tester feedback
-- Revert broken sheen/vignette gradient and fix game window detection
-- Fix trade actions, add online-only filter and status indicators
+## LAMA v0.2.8
 
 ### Improvements
-- Update release notes for v0.2.6
-- Update bundled calibration shard (3,810 -> 19,549 samples)
-- Update test to verify mod extraction for corrupted uniques
-
-### Other
-- Document harvester reliability architecture and error recovery policy
-- Scrub personal data and legacy OCR references
-- Accuracy overhaul: GBM tuning, k-NN weights, disappearance tracking, demand index
-- Tune MOD_IDENTITY_WEIGHT to 0.15 and regenerate shard (27,564 samples)
-- Strip trade API markup tags in harvester mod text
-- Suppress low-value overlay by default and add toggle
-- Tighten dashboard UI density without reducing font sizes
-- Eliminate startup pop-in with opacity gate and ready signal
-- Replace shard generator outlier removal with IQR in log-price space
-- Bump elite harvester timeout to 180 min
-- Merge pull request #3 from CouloirGG/dev
-- Remove 7 POE1-only weapon categories from harvester
-- Merge dev into main for v0.2.4 release
-- Raise calibration price caps from 300 to 1500 divine
-- Strip whitespace from Discord webhook URL env vars
-- Use cached trade results on re-hover instead of stale k-NN estimates
-- Adding new cache vs deep search price checker.
-- Temp_images for blog posting
-- Adding source lama img files
-- Normalize overlay text to price-first format and suppress stale reshow on skips
-- Feed server-side price_cache rates into Status Panel KPIs automatically
-- Cache corrupted unique pricing for flag/bug reporter context
-- Check off common mod classification in TODO.md
-- Use weight table as source of truth for mod classification in trade queries
-- Replace divine orb icon with LAMA llama across taskbar, tray, and favicon
-- Suppress ghost console windows from subprocess calls
-- Show UNID tag for unidentified rares instead of PASS
-- Auto-scale overlay to game window resolution and fix ghost pixel artifacts
+- Build Insights UX overhaul: visual polish, explanations, new panels
+  - Equipment tier inline summaries with weak/dead mod counts
+  - Upgrade Priority "Why" column with specific reasons
+  - Anoint optimizer with build-context explanations
+  - VS Top Builds biggest gaps summary and realistic meta alignment scoring
+  - Defense panels with actionable explanations and zone badges
+  - Keystone themed colors and tooltip explanations
+  - Element-colored main skill pills with shimmer VFX
+  - Compact character header with inline keystones
+  - Fixed CoC detection, meta score, and cost tier clickability
+- Public download links on couloir.gg — no more private GitHub URLs
+- Release script auto-publishes to public lama-releases repo
