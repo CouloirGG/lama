@@ -334,32 +334,135 @@ def _detect_class_ascendancy(text: str) -> Tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Maxroll Parser
+# Maxroll Planner API
+# ---------------------------------------------------------------------------
+MAXROLL_PLANNER_API = "https://planners.maxroll.gg/profiles/poe2"
+
+# Maxroll internal class codes → display names
+_MAXROLL_CLASS_MAP = {
+    "IntFour": ("Witch", "Infernalist"),
+    "IntThree": ("Witch", "Blood Mage"),
+    "StrFour": ("Warrior", "Warbringer"),
+    "StrThree": ("Warrior", "Titan"),
+    "DexFour": ("Ranger", "Pathfinder"),
+    "DexThree": ("Ranger", "Deadeye"),
+    "StrDexFour": ("Mercenary", "Gemling Legionnaire"),
+    "StrDexThree": ("Mercenary", "Witchhunter"),
+    "DexIntFour": ("Monk", "Invoker"),
+    "DexIntThree": ("Monk", "Acolyte of Chayula"),
+    "StrIntFour": ("Sorceress", "Stormweaver"),
+    "StrIntThree": ("Sorceress", "Chronomancer"),
+}
+
+# Maxroll equipment slot keys → normalized slot names
+_MAXROLL_SLOT_MAP = {
+    "Helm": "helmet",
+    "BodyArmour": "body",
+    "Gloves": "gloves",
+    "Boots": "boots",
+    "Belt": "belt",
+    "Amulet": "amulet",
+    "Ring": "ring",
+    "Ring2": "ring2",
+    "Weapon": "weapon",
+    "Weapon2": "weapon2",
+    "Offhand": "shield",
+    "Offhand2": "shield2",
+    "Flask1": "flask1",
+    "Flask2": "flask2",
+    "Charm1": "charm1",
+    "Charm2": "charm2",
+    "Charm3": "charm3",
+    "Jewel1": "jewel1",
+    "Jewel2": "jewel2",
+}
+
+# Gearing variant names → GuideStage mapping
+_VARIANT_STAGE_MAP = {
+    "campaign": GuideStage.ACT_1,
+    "leveling": GuideStage.ACT_1,
+    "early": GuideStage.INTERLUDE,
+    "early maps": GuideStage.INTERLUDE,
+    "mid": GuideStage.ENDGAME,
+    "late": GuideStage.ENDGAME,
+    "min-max": GuideStage.ENDGAME,
+    "endgame": GuideStage.ENDGAME,
+}
+
+# Skill step names → GuideStage mapping
+_STEP_STAGE_KEYWORDS = {
+    GuideStage.ACT_1: ["act 1", "step 1", "step 2", "step 3"],
+    GuideStage.ACT_2: ["act 2"],
+    GuideStage.ACT_3: ["act 3"],
+    GuideStage.ACT_4: ["act 4"],
+    GuideStage.INTERLUDE: ["interlude", "early"],
+    GuideStage.ENDGAME: ["mid", "late", "min-max", "endgame"],
+}
+
+
+def _gem_id_to_name(gem_id: str) -> str:
+    """Convert Metadata gem IDs to display names.
+
+    'Metadata/Items/Gems/SkillGemVolcano' → 'Volcano'
+    'Metadata/Items/Gems/SupportGemIgnition' → 'Ignition'
+    """
+    name = gem_id.rsplit("/", 1)[-1]
+    name = re.sub(r"^SkillGem", "", name)
+    name = re.sub(r"^SupportGem", "", name)
+    # Insert spaces before caps: "FireInfusion" → "Fire Infusion"
+    name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
+    return name
+
+
+def _base_to_display(base_path: str) -> str:
+    """Convert Metadata base paths to readable names.
+
+    'Metadata/Items/Armours/Helmets/FourHelmetInt8Endgame' → 'Int Helmet (Endgame)'
+    """
+    name = base_path.rsplit("/", 1)[-1]
+    # Clean up the Four prefix
+    name = re.sub(r"^Four", "", name)
+    # Insert spaces before caps
+    name = re.sub(r"(?<=[a-z])(?=[A-Z0-9])", " ", name)
+    return name
+
+
+def _mod_key_to_display(mod_key: str) -> str:
+    """Convert internal mod stat_ids to readable labels.
+
+    'minion_skill_gem_level_+' → '+Minion Skill Gem Level'
+    'base_maximum_life' → 'Maximum Life'
+    """
+    s = mod_key.replace("_", " ").strip()
+    s = re.sub(r"\s*\+\s*$", "", s)  # Remove trailing +
+    s = re.sub(r"\s*%\s*$", "", s)   # Remove trailing %
+    s = re.sub(r"^base ", "", s)
+    s = re.sub(r"^local ", "", s)
+    # Capitalize words
+    return " ".join(w.capitalize() for w in s.split())
+
+
+def _classify_step_stage(step_name: str) -> GuideStage:
+    """Map a Maxroll skill step name to a GuideStage."""
+    low = step_name.lower()
+    for stage, keywords in _STEP_STAGE_KEYWORDS.items():
+        for kw in keywords:
+            if kw in low:
+                return stage
+    return GuideStage.ENDGAME
+
+
+def _classify_variant_stage(variant_name: str) -> GuideStage:
+    """Map a Maxroll gearing variant name to a GuideStage."""
+    low = variant_name.strip().lower()
+    return _VARIANT_STAGE_MAP.get(low, GuideStage.ENDGAME)
+
+
+# ---------------------------------------------------------------------------
+# Maxroll Parser (uses Planner API for structured data + HTML for text)
 # ---------------------------------------------------------------------------
 class MaxrollParser:
-    """Parse Maxroll.gg POE2 build guides."""
-
-    # Maxroll uses tabbed stage sections. The exact structure may vary
-    # but typically has sections like "Leveling", "Early Endgame", "Endgame".
-
-    STAGE_KEYWORDS = {
-        GuideStage.ACT_1: ["act 1", "act i", "level 1", "start"],
-        GuideStage.ACT_2: ["act 2", "act ii", "level 13"],
-        GuideStage.ACT_3: ["act 3", "act iii", "level 25"],
-        GuideStage.ACT_4: ["act 4", "act iv", "level 37"],
-        GuideStage.INTERLUDE: ["interlude", "level 49", "cruel"],
-        GuideStage.ENDGAME: ["endgame", "end game", "end-game", "maps", "level 60"],
-    }
-
-    # Broader stage grouping keywords for when guides use fewer stages
-    BROAD_STAGE_MAP = {
-        "leveling": [GuideStage.ACT_1, GuideStage.ACT_2, GuideStage.ACT_3, GuideStage.ACT_4],
-        "early maps": [GuideStage.INTERLUDE],
-        "early endgame": [GuideStage.INTERLUDE],
-        "mid endgame": [GuideStage.ENDGAME],
-        "late endgame": [GuideStage.ENDGAME],
-        "endgame": [GuideStage.ENDGAME],
-    }
+    """Parse Maxroll.gg POE2 build guides via their Planner API."""
 
     @classmethod
     def parse(cls, html: str, url: str) -> ParsedGuide:
@@ -372,378 +475,211 @@ class MaxrollParser:
             raw_html_hash=_hash_html(html),
         )
 
-        # Title
+        # Title from HTML
         title_el = soup.find("h1")
         guide.title = _clean_text(title_el) if title_el else "Maxroll Guide"
 
-        # Class/Ascendancy detection
+        # Class/Ascendancy from HTML text
         page_text = soup.get_text(" ", strip=True)
         guide.char_class, guide.ascendancy = _detect_class_ascendancy(page_text)
-
-        # Try to detect main skill from title
         guide.main_skill = cls._detect_main_skill(guide.title, page_text)
 
-        # Parse stages
-        guide.stages = cls._parse_stages(soup, page_text)
+        # Extract planner profile ID from HTML embeds
+        profile_id = cls._extract_profile_id(soup)
+        if profile_id:
+            try:
+                planner_data = cls._fetch_planner(profile_id)
+                if planner_data:
+                    cls._parse_planner_data(guide, planner_data)
+            except Exception as e:
+                logger.warning("Maxroll planner API failed for %s: %s", profile_id, e)
 
-        # If no stages found, create a single endgame stage from the whole page
-        if not guide.stages:
-            stage = cls._parse_whole_page(soup)
-            if stage:
-                guide.stages = [stage]
+        # Extract guide notes from HTML tab content
+        cls._extract_html_notes(soup, guide)
 
         return guide
 
     @classmethod
     def _detect_main_skill(cls, title: str, page_text: str) -> str:
-        """Extract main skill name from guide title."""
-        # Maxroll titles are often like "Ice Nova Sorceress Build Guide"
-        # or "Lightning Arrow Deadeye Guide"
         title_clean = re.sub(r"\b(build|guide|poe2?|path of exile 2?)\b", "", title, flags=re.I).strip()
-        # Remove class/ascendancy names
         for name in POE2_CLASSES + POE2_ASCENDANCIES:
             title_clean = re.sub(re.escape(name), "", title_clean, flags=re.I)
-        title_clean = re.sub(r"\s+", " ", title_clean).strip(" -–—|")
+        title_clean = re.sub(r"\s+", " ", title_clean).strip(" -\u2013\u2014|")
         return title_clean if title_clean else ""
 
     @classmethod
-    def _parse_stages(cls, soup: BeautifulSoup, page_text: str) -> List[GuideStageData]:
-        """Try to find stage-based sections in the guide."""
-        stages = []
-
-        # Look for tab buttons or section headers that denote stages
-        # Maxroll often uses div.tab-content or similar
-        tab_sections = soup.find_all(["section", "div"], class_=re.compile(
-            r"tab[-_]?(content|panel|pane)|stage|section[-_]?content", re.I
-        ))
-
-        if tab_sections:
-            for section in tab_sections:
-                stage = cls._classify_and_parse_section(section)
-                if stage:
-                    stages.append(stage)
-
-        # Also look for h2/h3 headers that denote stages
-        if not stages:
-            for header in soup.find_all(["h2", "h3"]):
-                header_text = _clean_text(header).lower()
-                stage_type = cls._classify_stage_text(header_text)
-                if stage_type:
-                    # Get content between this header and the next same-level header
-                    content_els = []
-                    for sib in header.find_next_siblings():
-                        if sib.name in ["h2", "h3"]:
-                            break
-                        content_els.append(sib)
-                    if content_els:
-                        fake_div = soup.new_tag("div")
-                        for el in content_els:
-                            fake_div.append(el.__copy__() if hasattr(el, '__copy__') else el)
-                        stage = cls._parse_section_content(stage_type, fake_div)
-                        if stage:
-                            stages.append(stage)
-
-        return stages
-
-    @classmethod
-    def _classify_stage_text(cls, text: str) -> Optional[GuideStage]:
-        text_lower = text.lower()
-        for stage, keywords in cls.STAGE_KEYWORDS.items():
-            for kw in keywords:
-                if kw in text_lower:
-                    return stage
-        # Broader grouping
-        for keyword, stage_list in cls.BROAD_STAGE_MAP.items():
-            if keyword in text_lower:
-                return stage_list[-1]  # Use the last (most advanced) stage
+    def _extract_profile_id(cls, soup: BeautifulSoup) -> Optional[str]:
+        """Find the poe2-embed planner profile ID in the page."""
+        for el in soup.find_all(class_="poe2-embed"):
+            pid = el.get("data-poe2-profile")
+            if pid:
+                return pid
         return None
 
     @classmethod
-    def _classify_and_parse_section(cls, section: Tag) -> Optional[GuideStageData]:
-        # Check section text or data attributes for stage identification
-        section_text = ""
-        header = section.find(["h1", "h2", "h3", "h4"])
-        if header:
-            section_text = _clean_text(header).lower()
-        if not section_text:
-            # Check for data attributes or class names
-            section_text = " ".join([
-                section.get("data-tab", ""),
-                section.get("data-label", ""),
-                section.get("id", ""),
-                " ".join(section.get("class", [])),
-            ]).lower()
-
-        stage_type = cls._classify_stage_text(section_text)
-        if not stage_type:
+    def _fetch_planner(cls, profile_id: str) -> Optional[dict]:
+        """Fetch structured planner data from Maxroll API."""
+        resp = _SESSION.get(f"{MAXROLL_PLANNER_API}/{profile_id}", timeout=15)
+        if resp.status_code != 200:
             return None
-        return cls._parse_section_content(stage_type, section)
+        raw = resp.json()
+        data = raw.get("data", {})
+        if isinstance(data, str):
+            data = json.loads(data)
+        return data
 
     @classmethod
-    def _parse_section_content(cls, stage_type: GuideStage, section: Tag) -> GuideStageData:
-        for s, lo, hi in STAGE_RANGES:
-            if s == stage_type:
-                level_range = (lo, hi)
-                break
-        else:
-            level_range = (1, 100)
+    def _parse_planner_data(cls, guide: ParsedGuide, data: dict):
+        """Parse the Maxroll planner JSON into guide stages."""
+        planner = data.get("planner", {})
+        items_db = data.get("items", {})
 
-        gear = cls._extract_gear(section)
-        skills = cls._extract_skills(section)
-        passives = cls._extract_passives(section)
-        notes = ""
-        # Look for general notes/tips paragraphs
-        for p in section.find_all("p"):
-            txt = _clean_text(p)
-            if len(txt) > 40:
-                notes = txt[:500]
-                break
+        # Class/Ascendancy from planner (more reliable than HTML)
+        class_code = planner.get("class", "")
+        if class_code in _MAXROLL_CLASS_MAP:
+            guide.char_class, guide.ascendancy = _MAXROLL_CLASS_MAP[class_code]
 
-        return GuideStageData(
-            stage=stage_type.value,
-            level_range=level_range,
-            gear=gear,
-            skills=skills,
-            passives=passives,
-            notes=notes,
-        )
+        # Build stages from gearing variants (most reliable stage source)
+        equipment = planner.get("equipment", {})
+        variants = equipment.get("variants", [])
 
-    @classmethod
-    def _extract_gear(cls, section: Tag) -> List[GuideGearItem]:
-        """Extract gear recommendations from a section."""
-        gear = []
-        seen_slots = set()
+        # Also get skills per step
+        skills_data = planner.get("skills", {})
+        skill_steps = skills_data.get("steps", [])
 
-        # Look for gear tables
-        for table in section.find_all("table"):
-            for row in table.find_all("tr"):
-                cells = row.find_all(["td", "th"])
-                if len(cells) >= 2:
-                    slot_text = _clean_text(cells[0])
-                    item_text = _clean_text(cells[1])
-                    slot = _normalize_slot(slot_text)
-                    if slot and item_text and slot not in seen_slots:
-                        mods = []
-                        if len(cells) > 2:
-                            mods = [_clean_text(cells[2])]
-                        gear.append(GuideGearItem(
-                            slot=slot,
-                            name=item_text,
-                            is_unique=cls._looks_unique(item_text),
-                            key_mods=mods,
-                        ))
-                        seen_slots.add(slot)
-
-        # Look for gear in list items with slot labels
-        if not gear:
-            for li in section.find_all("li"):
-                text = _clean_text(li)
-                match = re.match(r"([\w\s-]+?):\s*(.+)", text)
-                if match:
-                    slot = _normalize_slot(match.group(1))
-                    if slot in ("weapon", "helmet", "body", "gloves", "boots",
-                                "belt", "ring", "ring2", "amulet", "shield",
-                                "flask", "jewel"):
-                        name = match.group(2).strip()
-                        if slot not in seen_slots:
-                            gear.append(GuideGearItem(
-                                slot=slot,
-                                name=name,
-                                is_unique=cls._looks_unique(name),
-                            ))
-                            seen_slots.add(slot)
-
-        # Look for gear in divs/spans with slot-like labels (Maxroll card-style)
-        if not gear:
-            for el in section.find_all(["div", "span"], class_=re.compile(r"item|gear|slot|equip", re.I)):
-                text = _clean_text(el)
-                if len(text) > 3 and len(text) < 200:
-                    # Try to parse "Slot: Item" pattern
-                    match = re.match(r"([\w\s-]+?):\s*(.+)", text)
-                    if match:
-                        slot = _normalize_slot(match.group(1))
-                        if slot and slot not in seen_slots:
-                            gear.append(GuideGearItem(
-                                slot=slot,
-                                name=match.group(2).strip(),
-                                is_unique=cls._looks_unique(match.group(2)),
-                            ))
-                            seen_slots.add(slot)
-
-        return gear
-
-    @classmethod
-    def _extract_skills(cls, section: Tag) -> List[GuideSkillSetup]:
-        """Extract skill gem setups from a section."""
-        skills = []
-        seen_skills = set()
-
-        # Look for skill sections - often in grouped containers
-        # Pattern: main skill name + list of support gems
-        for el in section.find_all(["div", "ul", "ol", "table"], class_=re.compile(
-            r"skill|gem|link|setup|socket", re.I
-        )):
-            items = el.find_all("li")
-            if items:
-                # First item is often the main skill
-                main = _clean_text(items[0])
-                supports = [_clean_text(i) for i in items[1:] if _clean_text(i)]
-                if main and main not in seen_skills:
-                    skills.append(GuideSkillSetup(
-                        name=main,
+        # Group skill steps by stage
+        skills_by_stage: Dict[str, List[GuideSkillSetup]] = {}
+        for step in skill_steps:
+            stage = _classify_step_stage(step.get("name", ""))
+            stage_key = stage.value
+            if stage_key not in skills_by_stage:
+                skills_by_stage[stage_key] = []
+            for sg in step.get("skills", []):
+                gems = sg.get("gems", [])
+                if not gems:
+                    continue
+                main_gem = _gem_id_to_name(gems[0].get("id", ""))
+                supports = [_gem_id_to_name(g.get("id", "")) for g in gems[1:]]
+                # Avoid duplicates within same stage
+                existing_names = {s.name for s in skills_by_stage[stage_key]}
+                if main_gem and main_gem not in existing_names:
+                    skills_by_stage[stage_key].append(GuideSkillSetup(
+                        name=main_gem,
                         supports=supports,
-                        is_main=len(skills) == 0,
+                        is_main=not skills_by_stage[stage_key],  # First is main
                     ))
-                    seen_skills.add(main)
 
-        # Fallback: look for "Skill Gems" or similar headers followed by lists
-        if not skills:
-            for header in section.find_all(["h3", "h4", "h5", "strong"]):
-                header_text = _clean_text(header).lower()
-                if any(kw in header_text for kw in ("skill", "gem", "setup", "link")):
-                    # Get next list
-                    next_list = header.find_next(["ul", "ol"])
-                    if next_list:
-                        items = next_list.find_all("li")
-                        group_name = ""
-                        supports = []
-                        for item in items:
-                            txt = _clean_text(item)
-                            if not txt:
-                                continue
-                            if not group_name:
-                                group_name = txt
-                            else:
-                                supports.append(txt)
-                        if group_name and group_name not in seen_skills:
-                            skills.append(GuideSkillSetup(
-                                name=group_name,
-                                supports=supports,
-                                is_main=len(skills) == 0,
-                            ))
-                            seen_skills.add(group_name)
+        # Build stages from gearing variants
+        stages_dict: Dict[str, GuideStageData] = {}
+        for variant in variants:
+            variant_name = variant.get("name", "")
+            stage = _classify_variant_stage(variant_name)
+            stage_key = stage.value
 
-        return skills
+            # Parse gear items for this variant
+            gear_items = []
+            for slot_key, item_id in variant.get("items", {}).items():
+                slot = _MAXROLL_SLOT_MAP.get(slot_key, slot_key.lower())
+                item = items_db.get(str(item_id), {})
+                if not item:
+                    continue
 
-    @classmethod
-    def _extract_passives(cls, section: Tag) -> GuidePassives:
-        """Extract passive/keystone recommendations."""
-        keystones = []
-        notables = []
-        notes = ""
+                rarity = item.get("rarity", "rare")
+                is_unique = rarity == "unique"
+                base = _base_to_display(item.get("base", ""))
+                name = item.get("name", "") if item.get("name", "") and item["name"] != variant_name else ""
 
-        for el in section.find_all(["div", "section", "ul", "ol"], class_=re.compile(
-            r"passive|keystone|tree|notable|ascend", re.I
-        )):
-            for li in el.find_all("li"):
-                txt = _clean_text(li)
-                if txt:
-                    # Heuristic: keystones are often capitalized multi-word names
-                    if len(txt.split()) <= 4 and txt[0].isupper():
-                        keystones.append(txt)
-                    else:
-                        notables.append(txt)
+                # Extract key mods
+                stats = item.get("stats", {})
+                explicit = stats.get("explicit", {})
+                key_mods = [_mod_key_to_display(k) for k in list(explicit.keys())[:4]]
 
-        # Fallback: look for keystone mentions in headers
-        if not keystones:
-            for header in section.find_all(["h3", "h4", "h5", "strong"]):
-                txt = _clean_text(header).lower()
-                if "keystone" in txt or "passive" in txt or "ascendancy" in txt:
-                    next_el = header.find_next(["ul", "ol", "p"])
-                    if next_el:
-                        items = next_el.find_all("li") if next_el.name in ["ul", "ol"] else [next_el]
-                        for item in items:
-                            t = _clean_text(item)
-                            if t and len(t) < 60:
-                                keystones.append(t)
-                        if next_el.name == "p":
-                            notes = _clean_text(next_el)[:300]
+                display_name = name if name else (f"Rare {base}" if not is_unique else base)
 
-        return GuidePassives(keystones=keystones, notable_priorities=notables, notes=notes)
+                gear_items.append(GuideGearItem(
+                    slot=slot,
+                    name=display_name,
+                    is_unique=is_unique,
+                    key_mods=key_mods,
+                ))
 
-    @classmethod
-    def _parse_whole_page(cls, soup: BeautifulSoup) -> Optional[GuideStageData]:
-        """Fallback: parse the whole page as a single endgame stage."""
-        body = soup.find("body") or soup
-        gear = cls._extract_gear(body)
-        skills = cls._extract_skills(body)
-        passives = cls._extract_passives(body)
+            # Get level range for stage
+            for s, lo, hi in STAGE_RANGES:
+                if s == stage:
+                    level_range = (lo, hi)
+                    break
+            else:
+                level_range = (1, 100)
 
-        if not gear and not skills and not passives.keystones:
-            return None
+            # Merge with existing stage or create new
+            if stage_key in stages_dict:
+                # Merge — later variants override gear
+                stages_dict[stage_key].gear = gear_items
+                stages_dict[stage_key].notes += f"\n{variant_name} gearing variant."
+            else:
+                stages_dict[stage_key] = GuideStageData(
+                    stage=stage_key,
+                    level_range=level_range,
+                    gear=gear_items,
+                    skills=skills_by_stage.get(stage_key, []),
+                    notes=f"{variant_name} gearing variant.",
+                )
 
-        return GuideStageData(
-            stage=GuideStage.ENDGAME.value,
-            level_range=(1, 100),
-            gear=gear,
-            skills=skills,
-            passives=passives,
-            notes="Parsed from full page (no stage sections detected)",
-        )
+        # Add skills-only stages that don't have gearing variants
+        for stage_key, skills_list in skills_by_stage.items():
+            if stage_key not in stages_dict and skills_list:
+                for s, lo, hi in STAGE_RANGES:
+                    if s.value == stage_key:
+                        level_range = (lo, hi)
+                        break
+                else:
+                    level_range = (1, 100)
+                stages_dict[stage_key] = GuideStageData(
+                    stage=stage_key,
+                    level_range=level_range,
+                    skills=skills_list,
+                )
+
+        # Sort stages by level range
+        guide.stages = sorted(stages_dict.values(), key=lambda s: s.level_range[0])
 
     @classmethod
-    def _looks_unique(cls, name: str) -> bool:
-        """Heuristic: unique items are typically proper names."""
-        if not name:
-            return False
-        # If it contains "any" or generic words, probably not unique
-        if re.search(r"\b(any|rare|magic|normal|base|with)\b", name, re.I):
-            return False
-        # If it looks like a specific named item (2+ capitalized words, no mod-like text)
-        words = name.split()
-        if len(words) >= 1 and all(w[0].isupper() for w in words if len(w) > 2):
-            return True
-        return False
+    def _extract_html_notes(cls, soup: BeautifulSoup, guide: ParsedGuide):
+        """Extract guide prose/notes from HTML tab content to enrich stages."""
+        try:
+            tab_containers = soup.find_all(class_=re.compile(r'_tabsV2'))
+            if not tab_containers:
+                return
+            # First tab container is usually Skills description
+            first_tabs = tab_containers[0]
+            container = first_tabs.find(class_=re.compile(r'_container'))
+            if not container:
+                return
+            tab_divs = container.find_all(class_=re.compile(r'^_tab_'), recursive=False)
+            # Get the visible (first) tab's text as general notes
+            for td in tab_divs:
+                text = td.get_text(" ", strip=True)[:500]
+                if text and guide.stages:
+                    # Add to the first stage's notes
+                    guide.stages[0].notes = text
+                    break
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
-# Mobalytics Parser
+# Generic HTML Parser (fallback for Mobalytics and other sites)
 # ---------------------------------------------------------------------------
-class MobalyticsParser:
-    """Parse Mobalytics POE2 build guides."""
+class GenericHTMLParser:
+    """Best-effort HTML parser for build guides without a structured API."""
 
     @classmethod
-    def parse(cls, html: str, url: str) -> ParsedGuide:
+    def parse(cls, html: str, url: str, source: str = "unknown") -> ParsedGuide:
         soup = BeautifulSoup(html, "html.parser")
         guide = ParsedGuide(
             id=str(uuid.uuid4()),
             url=url,
-            source="mobalytics",
-            imported_at=datetime.now(timezone.utc).isoformat(),
-            raw_html_hash=_hash_html(html),
-        )
-
-        title_el = soup.find("h1")
-        guide.title = _clean_text(title_el) if title_el else "Mobalytics Guide"
-
-        page_text = soup.get_text(" ", strip=True)
-        guide.char_class, guide.ascendancy = _detect_class_ascendancy(page_text)
-        guide.main_skill = MaxrollParser._detect_main_skill(guide.title, page_text)
-
-        # Mobalytics uses card-based layouts — try same extraction logic
-        guide.stages = MaxrollParser._parse_stages(soup, page_text)
-
-        if not guide.stages:
-            stage = MaxrollParser._parse_whole_page(soup)
-            if stage:
-                guide.stages = [stage]
-
-        return guide
-
-
-# ---------------------------------------------------------------------------
-# Generic Parser (fallback)
-# ---------------------------------------------------------------------------
-class GenericParser:
-    """Best-effort parser for any build guide page."""
-
-    @classmethod
-    def parse(cls, html: str, url: str) -> ParsedGuide:
-        soup = BeautifulSoup(html, "html.parser")
-        guide = ParsedGuide(
-            id=str(uuid.uuid4()),
-            url=url,
-            source="unknown",
+            source=source,
             imported_at=datetime.now(timezone.utc).isoformat(),
             raw_html_hash=_hash_html(html),
         )
@@ -755,32 +691,78 @@ class GenericParser:
         guide.char_class, guide.ascendancy = _detect_class_ascendancy(page_text)
         guide.main_skill = MaxrollParser._detect_main_skill(guide.title, page_text)
 
-        guide.stages = MaxrollParser._parse_stages(soup, page_text)
+        # Try to extract gear from tables or lists
+        body = soup.find("body") or soup
+        gear = cls._extract_gear_from_html(body)
+        skills = cls._extract_skills_from_html(body)
 
-        if not guide.stages:
-            stage = MaxrollParser._parse_whole_page(soup)
-            if stage:
-                guide.stages = [stage]
+        if gear or skills:
+            guide.stages = [GuideStageData(
+                stage=GuideStage.ENDGAME.value,
+                level_range=(1, 100),
+                gear=gear,
+                skills=skills,
+                notes="Parsed from page content (single-stage extraction).",
+            )]
 
         return guide
+
+    @classmethod
+    def _extract_gear_from_html(cls, root: Tag) -> List[GuideGearItem]:
+        gear = []
+        seen = set()
+        for table in root.find_all("table"):
+            for row in table.find_all("tr"):
+                cells = row.find_all(["td", "th"])
+                if len(cells) >= 2:
+                    slot = _normalize_slot(_clean_text(cells[0]))
+                    name = _clean_text(cells[1])
+                    if slot and name and slot not in seen:
+                        mods = [_clean_text(cells[2])] if len(cells) > 2 else []
+                        gear.append(GuideGearItem(slot=slot, name=name, key_mods=mods))
+                        seen.add(slot)
+        if not gear:
+            for li in root.find_all("li"):
+                text = _clean_text(li)
+                m = re.match(r"([\w\s-]+?):\s*(.+)", text)
+                if m:
+                    slot = _normalize_slot(m.group(1))
+                    if slot in ("weapon", "helmet", "body", "gloves", "boots", "belt",
+                                "ring", "ring2", "amulet", "shield") and slot not in seen:
+                        gear.append(GuideGearItem(slot=slot, name=m.group(2).strip()))
+                        seen.add(slot)
+        return gear
+
+    @classmethod
+    def _extract_skills_from_html(cls, root: Tag) -> List[GuideSkillSetup]:
+        skills = []
+        seen = set()
+        for header in root.find_all(["h2", "h3", "h4", "strong"]):
+            if any(kw in _clean_text(header).lower() for kw in ("skill", "gem", "setup")):
+                next_list = header.find_next(["ul", "ol"])
+                if next_list:
+                    items = [_clean_text(li) for li in next_list.find_all("li") if _clean_text(li)]
+                    if items and items[0] not in seen:
+                        skills.append(GuideSkillSetup(
+                            name=items[0], supports=items[1:], is_main=not skills,
+                        ))
+                        seen.add(items[0])
+        return skills
 
 
 # ---------------------------------------------------------------------------
 # Import entry point
 # ---------------------------------------------------------------------------
-PARSERS = {
-    "maxroll": MaxrollParser,
-    "mobalytics": MobalyticsParser,
-    "unknown": GenericParser,
-}
-
-
 def import_guide(url: str) -> ParsedGuide:
     """Fetch a guide URL, parse it, save to disk, and return the result."""
     source = detect_source(url)
-    html = fetch_html(url)
-    parser = PARSERS.get(source, GenericParser)
-    guide = parser.parse(html, url)
+
+    if source == "maxroll":
+        html = fetch_html(url)
+        guide = MaxrollParser.parse(html, url)
+    else:
+        html = fetch_html(url)
+        guide = GenericHTMLParser.parse(html, url, source=source)
 
     if not guide.stages:
         raise ValueError("Could not extract any guide content from this page. "
