@@ -123,42 +123,75 @@ lama/
 ├── requirements.txt
 ├── README.md
 ├── LICENSE
-├── src/                   # All Python source files
+├── src/                   # All Python source files (43 modules)
 │   ├── app.py             # Desktop dashboard shell (pywebview)
 │   ├── server.py          # FastAPI backend (overlay mgmt, WS, settings)
 │   ├── main.py            # Overlay engine & pricing pipeline
 │   ├── config.py          # All tunable constants
-│   ├── bundle_paths.py    # Frozen-mode path resolution
+│   ├── core/              # Game-agnostic pricing facade
+│   │   ├── game_config.py # GameConfig dataclass (44 typed fields)
+│   │   └── pricing_engine.py # PricingEngine — parse/score/price pipeline
+│   ├── games/
+│   │   └── poe2.py        # POE2 config factory (reference implementation)
 │   ├── item_detection.py  # Cursor tracking, Ctrl+C, POE2 window detection
 │   ├── item_parser.py     # Clipboard text → ParsedItem
+│   ├── clipboard_reader.py # Windows clipboard I/O via ctypes
 │   ├── mod_parser.py      # Mod text → trade API stat IDs
 │   ├── mod_database.py    # Local mod scoring (RePoE tier data)
-│   ├── calibration.py     # Score-to-price calibration engine
-│   ├── price_cache.py     # poe2scout data fetcher & local cache
+│   ├── calibration.py     # Score-to-price calibration (k-NN + GBM cascade)
+│   ├── gbm_trainer.py     # Gradient Boosting Machine model training
+│   ├── weight_learner.py  # Ridge regression mod weight learning
+│   ├── price_cache.py     # poe2scout/poe.ninja data fetcher & local cache
 │   ├── trade_client.py    # POE2 trade API client for rares
+│   ├── builds_client.py   # poe.ninja Builds API (character lookup, meta data)
+│   ├── stash_client.py    # OAuth2 stash tab API client
+│   ├── stash_scorer.py    # Stash item scoring & quick-flip detection
+│   ├── overlay.py         # Transparent overlay window (POE2 gothic theme)
 │   ├── filter_updater.py  # Loot filter economy re-tiering
-│   ├── overlay.py         # Transparent overlay window
 │   ├── watchlist.py       # Trade watchlist polling engine
+│   ├── trade_actions.py   # Trade flow (whisper, invite, hideout, trade)
+│   ├── game_commands.py   # Chat command engine via keystroke simulation
+│   ├── demand_index.py    # Item demand trend tracking
+│   ├── disappearance_tracker.py # Listing disappearance monitoring
+│   ├── calibration_harvester.py # Bulk calibration data collection
+│   ├── elite_harvester.py # High-value item harvester
+│   ├── shard_generator.py # Calibration shard generation & compaction
 │   ├── bug_reporter.py    # Discord webhook bug reporting
+│   ├── flag_reporter.py   # One-click price inaccuracy flagging
+│   ├── telemetry.py       # Opt-in session telemetry
+│   ├── oauth.py           # OAuth2 flow for stash access
+│   ├── bundle_paths.py    # Frozen-mode path resolution
+│   ├── screen_capture.py  # POE2 window detection via Win32 API
+│   ├── tray.py            # System tray icon integration
 │   └── ...
 ├── resources/             # Bundled resource files
-│   ├── dashboard.html     # Single-file React UI (frameless, 3 tabs, POE2 theme)
+│   ├── dashboard.html     # Single-file React UI (frameless, POE2 theme)
 │   ├── VERSION            # App version string
 │   ├── NewBooBoo.filter   # Loot filter template
 │   └── calibration_shard.json.gz  # Pre-built calibration data
 ├── scripts/               # Build & maintenance scripts
 │   ├── BUILD.bat          # PyInstaller exe build
 │   ├── SYNC.bat           # Multi-machine sync (git pull + pip install)
-│   └── build.spec         # PyInstaller spec file
-├── tests/
-│   ├── conftest.py        # Shared pytest fixtures
+│   ├── build.spec         # PyInstaller spec file
+│   └── installer.iss      # Inno Setup installer script
+├── tests/                 # 255 tests across 10 modules
+│   ├── conftest.py        # Shared pytest fixtures & factory helpers
 │   ├── test_item_parser.py
 │   ├── test_mod_parser.py
 │   ├── test_mod_database.py
 │   ├── test_trade_client.py
-│   └── fixtures/          # Real clipboard captures for tests
+│   ├── test_calibration.py
+│   ├── test_pricing_engine.py
+│   ├── test_game_config.py
+│   ├── test_shard_generator.py
+│   ├── test_gbm_trainer.py
+│   ├── test_weight_learner.py
+│   └── fixtures/          # 24 real clipboard captures for tests
 └── docs/                  # Developer documentation
     ├── DEVELOPER_HANDOFF.md
+    ├── GAME_ABSTRACTION.md
+    ├── PRICING_DATA_DEEP_DIVE.md
+    ├── QA_TEST_PLAN.md
     └── TODO.md
 ```
 
@@ -166,14 +199,20 @@ lama/
 
 ## Testing
 
-106 tests across 4 modules covering the full pricing pipeline:
+255 tests across 10 modules covering the full pricing pipeline:
 
 | Module | Tests | What it covers |
 |--------|-------|----------------|
-| `test_item_parser` | 21 | Clipboard parsing, combat stats, implicit separation |
-| `test_mod_parser` | 15 | Template-to-regex, mod matching, base type resolution |
-| `test_mod_database` | 55 | Grade scoring (S/A/B/C/JUNK), SOMV, DPS/defense factors |
-| `test_trade_client` | 15 | Stat filters, common mod classification, price tiers |
+| `test_mod_database` | 58 | Grade scoring (S/A/B/C/JUNK), SOMV, DPS/defense factors, skill level factor |
+| `test_shard_generator` | 42 | Outlier removal, mod groups/tiers in shards, compact records, enrichment |
+| `test_pricing_engine` | 24 | End-to-end integration, fixture parsing, scoring, module overrides |
+| `test_calibration` | 24 | Holdout accuracy, mod identity, GBM/k-NN cascade, backward compat |
+| `test_game_config` | 23 | GameConfig dataclass, POE2 factory, all 44 fields validated |
+| `test_item_parser` | 21 | Clipboard parsing, combat stats, implicit separation, sockets |
+| `test_weight_learner` | 19 | Ridge regression, tier-weighted features, archetype scores |
+| `test_mod_parser` | 18 | Template-to-regex, opposite word matching, base type resolution |
+| `test_trade_client` | 17 | Stat filters, common mod classification, price tiers |
+| `test_gbm_trainer` | 9 | GBM training, pure-Python inference, serialization |
 
 **Run all tests:**
 ```
@@ -183,7 +222,7 @@ python -m pytest tests/ -v # All tests in one terminal
 
 **Run a single module:**
 ```
-python run_tests.py --module mod_database
+python src/run_tests.py --module mod_database
 python -m pytest tests/test_mod_database.py -v
 ```
 
