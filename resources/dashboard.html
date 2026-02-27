@@ -583,6 +583,7 @@
       filter: "Separate Treasure from Trash",
       watchlist: "The Trade Board",
       markets: "The Exchange Floor",
+      guide: "Your Exile's Companion",
     };
 
     // NUX text supports highlighted keywords: use { hl: "word" } for gold-animated emphasis
@@ -1460,6 +1461,7 @@
         { id: "filter", label: "Loot Filter" },
         { id: "watchlist", label: "Watchlist" },
         { id: "markets", label: "Markets" },
+        { id: "guide", label: "Guide" },
       ];
       const rightTabs = [
         { id: "stash", label: "Character" },
@@ -7977,6 +7979,488 @@
     }
 
     // -----------------------------------------------------------------------
+    // Guide Tab — Build Guide Companion
+    // -----------------------------------------------------------------------
+    const GUIDE_STAGES = [
+      { id: "act1", label: "Act I", range: "1-12" },
+      { id: "act2", label: "Act II", range: "13-24" },
+      { id: "act3", label: "Act III", range: "25-36" },
+      { id: "act4", label: "Act IV", range: "37-48" },
+      { id: "interlude", label: "Interlude", range: "49-59" },
+      { id: "endgame", label: "Endgame", range: "60+" },
+    ];
+
+    function stageForLevel(level) {
+      if (level <= 12) return "act1";
+      if (level <= 24) return "act2";
+      if (level <= 36) return "act3";
+      if (level <= 48) return "act4";
+      if (level <= 59) return "interlude";
+      return "endgame";
+    }
+
+    const STATUS_COLORS = {
+      match: T.green,
+      partial: T.amber,
+      missing: T.red,
+      upgrade_needed: T.amber,
+      wrong_supports: T.amber,
+    };
+
+    const STATUS_LABELS = {
+      match: "Match",
+      partial: "Partial",
+      missing: "Missing",
+      upgrade_needed: "Upgrade",
+      wrong_supports: "Wrong Supports",
+    };
+
+    const BUILDING_RIGHT_STYLE = {
+      "on track": { color: T.green, bg: "rgba(74,124,89,0.15)", border: "rgba(74,124,89,0.3)" },
+      "minor divergence": { color: T.amber, bg: "rgba(184,134,11,0.15)", border: "rgba(184,134,11,0.3)" },
+      "off path": { color: T.red, bg: "rgba(168,50,50,0.15)", border: "rgba(168,50,50,0.3)" },
+    };
+
+    function GuideTab() {
+      const [guides, setGuides] = useState([]);
+      const [selectedGuide, setSelectedGuide] = useState(null);
+      const [guideData, setGuideData] = useState(null);
+      const [comparison, setComparison] = useState(null);
+      const [activeStage, setActiveStage] = useState("endgame");
+      const [importUrl, setImportUrl] = useState("");
+      const [importing, setImporting] = useState(false);
+      const [importError, setImportError] = useState("");
+      const [comparing, setComparing] = useState(false);
+      const [stagePrices, setStagePrices] = useState([]);
+
+      // Load saved guides on mount
+      useEffect(() => { loadGuides(); }, []);
+
+      // Load full guide data when selection changes
+      useEffect(() => {
+        if (selectedGuide) loadGuideData(selectedGuide);
+        else { setGuideData(null); setComparison(null); }
+      }, [selectedGuide]);
+
+      // Load stage prices when stage or guide changes
+      useEffect(() => {
+        if (guideData && activeStage) loadStagePrices();
+      }, [activeStage, guideData]);
+
+      async function loadGuides() {
+        const data = await api("/api/guide/list");
+        if (!data.error) {
+          setGuides(data);
+          if (data.length && !selectedGuide) setSelectedGuide(data[0].id);
+        }
+      }
+
+      async function loadGuideData(id) {
+        const data = await api(`/api/guide/${id}`);
+        if (!data.error) {
+          setGuideData(data);
+          // Set active stage based on available stages
+          if (data.stages && data.stages.length) {
+            const stageIds = data.stages.map(s => s.stage);
+            if (!stageIds.includes(activeStage)) setActiveStage(stageIds[0]);
+          }
+        }
+      }
+
+      async function loadStagePrices() {
+        if (!selectedGuide) return;
+        const data = await api(`/api/guide/${selectedGuide}/stage-prices`, "POST", { stage: activeStage });
+        if (!data.error) setStagePrices(Array.isArray(data) ? data : []);
+      }
+
+      async function handleImport() {
+        if (!importUrl.trim()) return;
+        setImporting(true);
+        setImportError("");
+        const data = await api("/api/guide/import", "POST", { url: importUrl.trim() });
+        setImporting(false);
+        if (data.error) {
+          setImportError(data.error);
+        } else {
+          setImportUrl("");
+          await loadGuides();
+          setSelectedGuide(data.id);
+        }
+      }
+
+      async function handleDelete(id) {
+        await api(`/api/guide/${id}`, "DELETE");
+        if (selectedGuide === id) { setSelectedGuide(null); setGuideData(null); setComparison(null); }
+        loadGuides();
+      }
+
+      async function handleCompare(charData) {
+        if (!selectedGuide || !charData) return;
+        setComparing(true);
+        const data = await api(`/api/guide/${selectedGuide}/compare`, "POST", { character: charData });
+        setComparing(false);
+        if (!data.error) {
+          setComparison(data);
+          setActiveStage(data.current_stage || activeStage);
+        }
+      }
+
+      // Try to get character data from saved characters
+      async function autoCompare() {
+        const saved = await api("/api/character/saved");
+        if (saved.error || !saved.length) return;
+        const first = saved[0];
+        if (!first.accounts || !first.accounts.length) return;
+        const acct = first.accounts[0];
+        if (!acct.characters || !acct.characters.length) return;
+        const char = acct.characters[0];
+        setComparing(true);
+        const data = await api(`/api/guide/${selectedGuide}/compare`, "POST", {
+          account: first.accounts[0].account,
+          character_name: char.name,
+        });
+        setComparing(false);
+        if (!data.error) {
+          setComparison(data);
+          setActiveStage(data.current_stage || activeStage);
+        }
+      }
+
+      // Get the current stage data from the guide
+      const currentStageData = guideData?.stages?.find(s => s.stage === activeStage);
+      const availableStages = guideData?.stages?.map(s => s.stage) || [];
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, paddingTop: 12 }}>
+          {/* Import Bar */}
+          <div style={{ ...CARD, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              type="text"
+              value={importUrl}
+              onChange={e => setImportUrl(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleImport()}
+              placeholder="Paste build guide URL (Maxroll.gg, Mobalytics, etc.)"
+              style={{ ...FIELD_INPUT, flex: 1, minWidth: 200 }}
+            />
+            <button
+              onClick={handleImport}
+              disabled={importing || !importUrl.trim()}
+              style={{ ...BTN_GOLD, opacity: importing || !importUrl.trim() ? 0.5 : 1, whiteSpace: "nowrap" }}
+            >
+              {importing ? "Importing..." : "Import Guide"}
+            </button>
+            {importError && (
+              <div style={{ width: "100%", color: T.red, fontSize: 11, marginTop: 4 }}>{importError}</div>
+            )}
+          </div>
+
+          {/* Guide Selector */}
+          {guides.length > 0 && (
+            <div style={{ ...CARD, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ ...LABEL, marginBottom: 0 }}>Saved Guides</span>
+              <select
+                value={selectedGuide || ""}
+                onChange={e => setSelectedGuide(e.target.value)}
+                style={{ ...FIELD_INPUT, flex: 1, maxWidth: 400 }}
+              >
+                {guides.map(g => (
+                  <option key={g.id} value={g.id}>
+                    {g.title} ({g.ascendancy || g.char_class || g.source})
+                  </option>
+                ))}
+              </select>
+              {selectedGuide && (
+                <button
+                  onClick={() => handleDelete(selectedGuide)}
+                  style={{ ...BTN, background: "rgba(168,50,50,0.15)", border: `1px solid rgba(168,50,50,0.3)`, color: T.red, fontSize: 11 }}
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* No guide loaded */}
+          {!guideData && !guides.length && (
+            <div style={{ ...CARD, textAlign: "center", padding: 40 }}>
+              <div style={{ fontSize: 14, color: T.textSecond, marginBottom: 8 }}>No guides imported yet</div>
+              <div style={{ fontSize: 11, color: T.textMuted }}>
+                Paste a build guide URL above to get started. Supports Maxroll.gg, Mobalytics, and other guide sites.
+              </div>
+            </div>
+          )}
+
+          {/* Guide Content */}
+          {guideData && (
+            <>
+              {/* Guide Header */}
+              <div style={{ ...CARD, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.gold }}>{guideData.title}</div>
+                  <div style={{ fontSize: 11, color: T.textSecond, marginTop: 2 }}>
+                    {[guideData.ascendancy, guideData.char_class, guideData.main_skill].filter(Boolean).join(" \u2022 ")}
+                    {guideData.source !== "unknown" && <span style={{ marginLeft: 8, fontSize: 10, color: T.textMuted }}>via {guideData.source}</span>}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={autoCompare} disabled={comparing} style={{ ...BTN_GOLD, fontSize: 11, opacity: comparing ? 0.5 : 1 }}>
+                    {comparing ? "Comparing..." : "Compare Character"}
+                  </button>
+                  <a href={guideData.url} target="_blank" rel="noopener noreferrer" style={{ ...BTN, background: T.input, border: `1px solid ${T.border}`, color: T.textSecond, fontSize: 11, textDecoration: "none", display: "flex", alignItems: "center" }}>
+                    Open Guide
+                  </a>
+                </div>
+              </div>
+
+              {/* Building Right Badge */}
+              {comparison && (() => {
+                const br = comparison.building_right || "on track";
+                const brKey = br.includes("mismatch") ? "off path" : (BUILDING_RIGHT_STYLE[br] ? br : "on track");
+                const sty = BUILDING_RIGHT_STYLE[brKey];
+                return (
+                  <div style={{ ...CARD, display: "flex", alignItems: "center", gap: 12, background: sty.bg, borderColor: sty.border }}>
+                    <div style={{ width: 48, height: 48, borderRadius: "50%", background: sty.bg, border: `2px solid ${sty.color}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, color: sty.color, flexShrink: 0 }}>
+                      {Math.round(comparison.overall_score)}%
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: sty.color, textTransform: "capitalize" }}>{br}</div>
+                      <div style={{ fontSize: 11, color: T.textSecond, marginTop: 2 }}>
+                        Level {comparison.player_level} \u2022 {GUIDE_STAGES.find(s => s.id === comparison.current_stage)?.label || comparison.current_stage}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Stage Navigation */}
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {GUIDE_STAGES.map(stage => {
+                  const available = availableStages.includes(stage.id);
+                  const active = activeStage === stage.id;
+                  const isCurrent = comparison && comparison.current_stage === stage.id;
+                  return (
+                    <button
+                      key={stage.id}
+                      onClick={() => available && setActiveStage(stage.id)}
+                      style={{
+                        ...BTN,
+                        background: active ? "rgba(196,164,86,0.2)" : available ? T.input : "rgba(12,10,8,0.5)",
+                        border: `1px solid ${active ? T.gold : isCurrent ? T.green : available ? T.border : "rgba(58,49,40,0.3)"}`,
+                        color: active ? T.gold : available ? T.textSecond : T.textMuted,
+                        fontSize: 11,
+                        opacity: available ? 1 : 0.4,
+                        cursor: available ? "pointer" : "default",
+                        position: "relative",
+                      }}
+                    >
+                      {stage.label}
+                      <span style={{ fontSize: 9, display: "block", color: T.textMuted, marginTop: 1 }}>{stage.range}</span>
+                      {isCurrent && <span style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, borderRadius: "50%", background: T.green }} />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Stage Content */}
+              {currentStageData ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {/* Gear Section */}
+                  {currentStageData.gear && currentStageData.gear.length > 0 && (
+                    <div style={CARD}>
+                      <div style={{ ...LABEL, marginBottom: 8 }}>GEAR</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 8 }}>
+                        {currentStageData.gear.map((item, i) => {
+                          const cmp = comparison?.gear_matches?.find(g => g.slot === item.slot);
+                          const statusColor = cmp ? (STATUS_COLORS[cmp.status] || T.textMuted) : T.textMuted;
+                          const priceEntry = stagePrices.find(p => p.slot === item.slot);
+                          return (
+                            <div key={i} style={{
+                              background: T.input,
+                              border: `1px solid ${cmp ? statusColor : T.border}`,
+                              borderRadius: 6,
+                              padding: 10,
+                              borderLeftWidth: 3,
+                            }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                                <div>
+                                  <span style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", fontWeight: 600 }}>{item.slot}</span>
+                                  {cmp && (
+                                    <span style={{ fontSize: 9, marginLeft: 6, padding: "1px 5px", borderRadius: 3, background: `${statusColor}22`, color: statusColor, fontWeight: 600 }}>
+                                      {STATUS_LABELS[cmp.status]}
+                                    </span>
+                                  )}
+                                </div>
+                                {(priceEntry?.price_display || cmp?.price_display) && (
+                                  <span style={{ fontSize: 11, color: T.gold, fontWeight: 600, ...MONO }}>
+                                    {priceEntry?.price_display || cmp?.price_display}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: item.is_unique ? "#af6025" : T.text, marginBottom: 2 }}>
+                                {item.name}
+                              </div>
+                              {item.key_mods && item.key_mods.length > 0 && (
+                                <div style={{ fontSize: 10, color: T.textSecond, marginTop: 2 }}>
+                                  {item.key_mods.join(" \u2022 ")}
+                                </div>
+                              )}
+                              {cmp && cmp.current_item && cmp.status !== "match" && (
+                                <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4, fontStyle: "italic" }}>
+                                  You have: {cmp.current_item}
+                                </div>
+                              )}
+                              {cmp && cmp.explanation && cmp.status !== "match" && (
+                                <div style={{ fontSize: 10, color: statusColor, marginTop: 2 }}>
+                                  {cmp.explanation}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Skills Section */}
+                  {currentStageData.skills && currentStageData.skills.length > 0 && (
+                    <div style={CARD}>
+                      <div style={{ ...LABEL, marginBottom: 8 }}>SKILLS</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 8 }}>
+                        {currentStageData.skills.map((skill, i) => {
+                          const cmp = comparison?.skill_matches?.find(s => s.skill_name === skill.name);
+                          const statusColor = cmp ? (STATUS_COLORS[cmp.status] || T.textMuted) : T.textMuted;
+                          return (
+                            <div key={i} style={{
+                              background: T.input,
+                              border: `1px solid ${cmp ? statusColor : T.border}`,
+                              borderRadius: 6,
+                              padding: 10,
+                              borderLeftWidth: 3,
+                            }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: skill.is_main ? T.gold : T.text }}>
+                                  {skill.name}
+                                  {skill.is_main && <span style={{ fontSize: 9, marginLeft: 5, color: T.gold, fontWeight: 700 }}>MAIN</span>}
+                                </span>
+                                {cmp && (
+                                  <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, background: `${statusColor}22`, color: statusColor, fontWeight: 600 }}>
+                                    {STATUS_LABELS[cmp.status]}
+                                  </span>
+                                )}
+                              </div>
+                              {skill.supports && skill.supports.length > 0 && (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                                  {skill.supports.map((sup, j) => {
+                                    const isMissing = cmp?.missing_supports?.includes(sup);
+                                    return (
+                                      <span key={j} style={{
+                                        fontSize: 10, padding: "2px 6px", borderRadius: 3,
+                                        background: isMissing ? "rgba(168,50,50,0.15)" : "rgba(255,255,255,0.05)",
+                                        border: `1px solid ${isMissing ? "rgba(168,50,50,0.3)" : "rgba(255,255,255,0.08)"}`,
+                                        color: isMissing ? T.red : T.textSecond,
+                                      }}>
+                                        {sup}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {skill.notes && (
+                                <div style={{ fontSize: 10, color: T.textMuted, marginTop: 4, fontStyle: "italic" }}>{skill.notes}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Passives Section */}
+                  {currentStageData.passives && (currentStageData.passives.keystones?.length > 0 || currentStageData.passives.notable_priorities?.length > 0) && (
+                    <div style={CARD}>
+                      <div style={{ ...LABEL, marginBottom: 8 }}>PASSIVES</div>
+                      {currentStageData.passives.keystones?.length > 0 && (
+                        <div style={{ marginBottom: 8 }}>
+                          <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 600, marginBottom: 4 }}>Keystones</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                            {currentStageData.passives.keystones.map((ks, i) => {
+                              const matched = comparison?.passive_matches?.keystones_matched?.map(k => k.toLowerCase()).includes(ks.toLowerCase());
+                              const missing = comparison?.passive_matches?.keystones_missing?.map(k => k.toLowerCase()).includes(ks.toLowerCase());
+                              const color = matched ? T.green : missing ? T.red : T.textSecond;
+                              return (
+                                <span key={i} style={{
+                                  fontSize: 11, padding: "3px 8px", borderRadius: 4,
+                                  background: `${color}22`, border: `1px solid ${color}44`, color,
+                                  fontWeight: 600,
+                                }}>
+                                  {ks}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {currentStageData.passives.notable_priorities?.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 600, marginBottom: 4 }}>Notable Priorities</div>
+                          <div style={{ fontSize: 11, color: T.textSecond, lineHeight: 1.5 }}>
+                            {currentStageData.passives.notable_priorities.map((n, i) => (
+                              <span key={i}>{i > 0 ? " \u2192 " : ""}{n}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {currentStageData.passives.notes && (
+                        <div style={{ fontSize: 10, color: T.textMuted, marginTop: 6, fontStyle: "italic" }}>{currentStageData.passives.notes}</div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Next Upgrades */}
+                  {comparison && comparison.next_upgrades && comparison.next_upgrades.length > 0 && (
+                    <div style={{ ...CARD, borderColor: T.amber }}>
+                      <div style={{ ...LABEL, marginBottom: 8, color: T.amber }}>NEXT UPGRADES</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {comparison.next_upgrades.map((up, i) => (
+                          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 8px", background: T.input, borderRadius: 4, border: `1px solid ${T.border}` }}>
+                            <div>
+                              <span style={{ fontSize: 10, color: T.textMuted, textTransform: "uppercase", marginRight: 6 }}>{up.slot}</span>
+                              <span style={{ fontSize: 12, color: up.guide_item_is_unique ? "#af6025" : T.text, fontWeight: 600 }}>{up.guide_item_name}</span>
+                              {up.explanation && <span style={{ fontSize: 10, color: T.textSecond, marginLeft: 8 }}>{up.explanation}</span>}
+                            </div>
+                            {up.price_display && (
+                              <span style={{ fontSize: 11, color: T.gold, fontWeight: 600, ...MONO }}>{up.price_display}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Stage Notes */}
+                  {(currentStageData.notes || comparison?.stage_notes) && (
+                    <div style={CARD}>
+                      <div style={{ ...LABEL, marginBottom: 6 }}>GUIDE NOTES</div>
+                      <div style={{ fontSize: 11, color: T.textSecond, lineHeight: 1.6 }}>
+                        {currentStageData.notes || comparison?.stage_notes}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ ...CARD, textAlign: "center", padding: 24 }}>
+                  <div style={{ fontSize: 12, color: T.textMuted }}>
+                    No data for this stage. Select a stage that has guide content.
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
     // Main App
     // -----------------------------------------------------------------------
     function Dashboard() {
@@ -8345,6 +8829,9 @@
               )}
               {activeTab === "markets" && (
                 <div data-nux="markets-tab"><MarketsTab /></div>
+              )}
+              {activeTab === "guide" && (
+                <GuideTab />
               )}
             </div>
           </div>

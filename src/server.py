@@ -48,6 +48,7 @@ from builds_client import (BuildsClient, enrich_item_mods, classify_build,
                            get_anoint_description, compute_build_comparison,
                            compute_improvement_package,
                            SLOT_DISPLAY, SLOT_TO_UNIQUE_SLUG)
+import guide_scraper
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from item_lookup import ItemLookup
@@ -1741,6 +1742,110 @@ async def character_build_compare(req: BuildCompareRequest):
         char_data, popular_keystones, popular_anoints, popular_by_slot, []
     )
     return comparison
+
+
+# ---------------------------------------------------------------------------
+# Guide Companion endpoints
+# ---------------------------------------------------------------------------
+class GuideImportRequest(BaseModel):
+    url: str
+
+
+class GuideCompareRequest(BaseModel):
+    character: Optional[dict] = None
+    account: Optional[str] = None
+    character_name: Optional[str] = None
+    level: Optional[int] = None
+
+
+class GuideStagePricesRequest(BaseModel):
+    stage: str
+
+
+@app.post("/api/guide/import")
+async def guide_import(req: GuideImportRequest):
+    """Fetch a build guide URL, parse it, save, and return summary."""
+    url = req.url.strip()
+    if not url:
+        return JSONResponse(status_code=400, content={"error": "URL required"})
+    loop = asyncio.get_running_loop()
+    try:
+        guide = await loop.run_in_executor(None, guide_scraper.import_guide, url)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={"error": str(e)})
+    except Exception as e:
+        logger.error("Guide import failed: %s", e)
+        return JSONResponse(status_code=500, content={"error": f"Failed to import guide: {e}"})
+    return {
+        "id": guide.id,
+        "title": guide.title,
+        "source": guide.source,
+        "char_class": guide.char_class,
+        "ascendancy": guide.ascendancy,
+        "main_skill": guide.main_skill,
+        "stages": len(guide.stages),
+        "stage_list": [s.stage for s in guide.stages],
+    }
+
+
+@app.get("/api/guide/list")
+async def guide_list():
+    """Return all saved guides."""
+    return guide_scraper.list_guides()
+
+
+@app.get("/api/guide/{guide_id}")
+async def guide_get(guide_id: str):
+    """Return full parsed guide data."""
+    guide = guide_scraper.load_guide(guide_id)
+    if not guide:
+        return JSONResponse(status_code=404, content={"error": "Guide not found"})
+    return guide_scraper._guide_to_dict(guide)
+
+
+@app.delete("/api/guide/{guide_id}")
+async def guide_delete(guide_id: str):
+    """Delete a saved guide."""
+    ok = guide_scraper.delete_guide(guide_id)
+    if not ok:
+        return JSONResponse(status_code=404, content={"error": "Guide not found"})
+    return {"ok": True}
+
+
+@app.post("/api/guide/{guide_id}/compare")
+async def guide_compare(guide_id: str, req: GuideCompareRequest):
+    """Compare a character against a guide."""
+    guide = guide_scraper.load_guide(guide_id)
+    if not guide:
+        return JSONResponse(status_code=404, content={"error": "Guide not found"})
+
+    char_dict = req.character
+    # If no inline character, look up via account/name
+    if not char_dict and req.account and req.character_name:
+        loop = asyncio.get_running_loop()
+        char_data = await loop.run_in_executor(
+            None, builds_client.lookup_character, req.account.strip(), req.character_name.strip()
+        )
+        if not char_data:
+            return JSONResponse(status_code=404, content={"error": "Character not found"})
+        char_dict = builds_client.serialize_character(char_data)
+
+    if not char_dict:
+        return JSONResponse(status_code=400, content={"error": "Provide character data or account+character_name"})
+
+    if req.level:
+        char_dict["level"] = req.level
+
+    return guide_scraper.compare_character_to_guide(char_dict, guide, price_cache)
+
+
+@app.post("/api/guide/{guide_id}/stage-prices")
+async def guide_stage_prices(guide_id: str, req: GuideStagePricesRequest):
+    """Get price estimates for all gear in a guide stage."""
+    guide = guide_scraper.load_guide(guide_id)
+    if not guide:
+        return JSONResponse(status_code=404, content={"error": "Guide not found"})
+    return guide_scraper.get_stage_prices(guide, req.stage, price_cache)
 
 
 # ---------------------------------------------------------------------------

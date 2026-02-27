@@ -27,5 +27,8 @@ python-dotenv>=1.0.0
 # Process name (shows "LAMA" in Task Manager instead of pythonw.exe)
 setproctitle>=1.3
 
+# HTML parsing (guide scraper)
+beautifulsoup4>=4.12.0
+
 # Testing
 pytest>=7.0
