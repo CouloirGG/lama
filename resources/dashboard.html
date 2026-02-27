@@ -6932,12 +6932,11 @@
       );
     }
 
-    function CharacterViewer() {
+    function CharacterViewer({ charData, setCharData }) {
       const [account, setAccount] = useState("");
       const [character, setCharacter] = useState("");
       const [loading, setLoading] = useState(false);
       const [error, setError] = useState(null);
-      const [charData, setCharData] = useState(null);
       const [expandedSlot, setExpandedSlot] = useState(null);
       const [hoverItem, setHoverItem] = useState(null);
       const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
@@ -7425,7 +7424,7 @@
     // -----------------------------------------------------------------------
     const GRADE_COLORS = { S: "#e6b422", A: "#4ade80", B: "#60a5fa", C: "#94a3b8", JUNK: "#5c4f3d" };
 
-    function StashTab({ oauthProp, progressProp, refreshingProp }) {
+    function StashTab({ oauthProp, progressProp, refreshingProp, charData, setCharData }) {
       const [oauthStatus, setOauthStatus] = useState(oauthProp || { connected: false, account_name: null });
       const [stashStatus, setStashStatus] = useState({ last_refresh: null, tab_count: 0, total_value: 0, refreshing: false });
       const [tabs, setTabs] = useState([]);
@@ -7512,7 +7511,7 @@
           <MetaOverview />
 
           {/* Character Viewer */}
-          <CharacterViewer />
+          <CharacterViewer charData={charData} setCharData={setCharData} />
 
           {/* Stash Viewer — Coming Soon teaser or full UI */}
           {stashComingSoon ? (
@@ -8021,7 +8020,7 @@
       "off path": { color: T.red, bg: "rgba(168,50,50,0.15)", border: "rgba(168,50,50,0.3)" },
     };
 
-    function GuideTab() {
+    function GuideTab({ charData }) {
       const [guides, setGuides] = useState([]);
       const [selectedGuide, setSelectedGuide] = useState(null);
       const [guideData, setGuideData] = useState(null);
@@ -8046,6 +8045,22 @@
       useEffect(() => {
         if (guideData && activeStage) loadStagePrices();
       }, [activeStage, guideData]);
+
+      // Auto-compare whenever character data or guide changes
+      useEffect(() => {
+        if (!charData || !selectedGuide) { setComparison(null); return; }
+        let cancelled = false;
+        setComparing(true);
+        api(`/api/guide/${selectedGuide}/compare`, "POST", { character: charData }).then(data => {
+          if (cancelled) return;
+          setComparing(false);
+          if (!data.error) {
+            setComparison(data);
+            setActiveStage(data.current_stage || activeStage);
+          }
+        });
+        return () => { cancelled = true; };
+      }, [charData, selectedGuide]);
 
       async function loadGuides() {
         const data = await api("/api/guide/list");
@@ -8092,38 +8107,6 @@
         await api(`/api/guide/${id}`, "DELETE");
         if (selectedGuide === id) { setSelectedGuide(null); setGuideData(null); setComparison(null); }
         loadGuides();
-      }
-
-      async function handleCompare(charData) {
-        if (!selectedGuide || !charData) return;
-        setComparing(true);
-        const data = await api(`/api/guide/${selectedGuide}/compare`, "POST", { character: charData });
-        setComparing(false);
-        if (!data.error) {
-          setComparison(data);
-          setActiveStage(data.current_stage || activeStage);
-        }
-      }
-
-      // Try to get character data from saved characters
-      async function autoCompare() {
-        const saved = await api("/api/character/saved");
-        if (saved.error || !saved.length) return;
-        const first = saved[0];
-        if (!first.accounts || !first.accounts.length) return;
-        const acct = first.accounts[0];
-        if (!acct.characters || !acct.characters.length) return;
-        const char = acct.characters[0];
-        setComparing(true);
-        const data = await api(`/api/guide/${selectedGuide}/compare`, "POST", {
-          account: first.accounts[0].account,
-          character_name: char.name,
-        });
-        setComparing(false);
-        if (!data.error) {
-          setComparison(data);
-          setActiveStage(data.current_stage || activeStage);
-        }
       }
 
       // Get the current stage data from the guide
@@ -8202,15 +8185,35 @@
                     {guideData.source !== "unknown" && <span style={{ marginLeft: 8, fontSize: 10, color: T.textMuted }}>via {guideData.source}</span>}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={autoCompare} disabled={comparing} style={{ ...BTN_GOLD, fontSize: 11, opacity: comparing ? 0.5 : 1 }}>
-                    {comparing ? "Comparing..." : "Compare Character"}
-                  </button>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  {charData ? (
+                    <span style={{ fontSize: 11, color: comparing ? T.amber : T.green, display: "flex", alignItems: "center", gap: 4 }}>
+                      {comparing ? "\u21BB" : "\u2713"} {charData.name || "Character"}
+                      {comparing && <span style={{ color: T.textMuted }}> comparing...</span>}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, color: T.textMuted, fontStyle: "italic" }}>
+                      Load a character in the Character tab to compare
+                    </span>
+                  )}
                   <a href={guideData.url} target="_blank" rel="noopener noreferrer" style={{ ...BTN, background: T.input, border: `1px solid ${T.border}`, color: T.textSecond, fontSize: 11, textDecoration: "none", display: "flex", alignItems: "center" }}>
                     Open Guide
                   </a>
                 </div>
               </div>
+
+              {/* No Character Banner */}
+              {!charData && (
+                <div style={{ ...CARD, display: "flex", alignItems: "center", gap: 12, background: "rgba(184,134,11,0.08)", borderColor: "rgba(184,134,11,0.25)" }}>
+                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(184,134,11,0.12)", border: `2px solid ${T.amber}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, color: T.amber }}>?</div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: T.amber }}>No character loaded</div>
+                    <div style={{ fontSize: 11, color: T.textSecond, marginTop: 2 }}>
+                      Go to the <strong style={{ color: T.gold }}>Character</strong> tab and look up your character to see how your build compares to this guide.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Building Right Badge */}
               {comparison && (() => {
@@ -8484,6 +8487,7 @@
       const [stashOauth, setStashOauth] = useState({ connected: false, account_name: null });
       const [stashProgress, setStashProgress] = useState(null);
       const [stashRefreshing, setStashRefreshing] = useState(false);
+      const [charData, setCharData] = useState(null);
       const welcomeShownRef = useRef(false);
       const logRef = useRef(null);
       const autoScrollRef = useRef(true);
@@ -8808,7 +8812,7 @@
                 </>
               )}
               {activeTab === "stash" && (
-                <div data-nux="stash-tab"><StashTab oauthProp={stashOauth} progressProp={stashProgress} refreshingProp={stashRefreshing} /></div>
+                <div data-nux="stash-tab"><StashTab oauthProp={stashOauth} progressProp={stashProgress} refreshingProp={stashRefreshing} charData={charData} setCharData={setCharData} /></div>
               )}
               {activeTab === "filter" && (
                 <div data-nux="filter-tab"><FilterTab
@@ -8831,7 +8835,7 @@
                 <div data-nux="markets-tab"><MarketsTab /></div>
               )}
               {activeTab === "guide" && (
-                <GuideTab />
+                <GuideTab charData={charData} />
               )}
             </div>
           </div>
