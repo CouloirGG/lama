@@ -4814,6 +4814,7 @@
           };
 
           const allRawMarkers = [];
+          let rangeMin = Infinity, rangeMax = -Infinity;
 
           selectedCurrencies.forEach((currName, idx) => {
             const color = CHART_COLORS[idx % CHART_COLORS.length];
@@ -4903,6 +4904,15 @@
                   chartData = chartData.map(d => ({ time: d.time, value: ((d.value / firstVal) - 1) * 100 }));
                 }
               }
+              // Track original time bounds before padding
+              rangeMin = Math.min(rangeMin, chartData[0].time);
+              rangeMax = Math.max(rangeMax, chartData[chartData.length - 1].time);
+              // Pad with extra points at both ends so line extends past visible edges
+              if (chartData.length >= 2) {
+                const dt = chartData[1].time - chartData[0].time;
+                chartData.unshift({ time: chartData[0].time - dt, value: chartData[0].value });
+                chartData.push({ time: chartData[chartData.length - 1].time + dt, value: chartData[chartData.length - 1].value });
+              }
               series.setData(chartData);
               // Collect peak/lull data for icon overlays
               const cur = currencies?.find(c => c.name === currName);
@@ -4915,7 +4925,14 @@
           });
 
           markerDataRef.current = allRawMarkers;
-          if (chartRef.current) chartRef.current.timeScale().fitContent();
+          if (chartRef.current) {
+            if (rangeMin < Infinity && rangeMax > -Infinity) {
+              // Show only the original data range — padding points extend off-screen
+              chartRef.current.timeScale().setVisibleRange({ from: rangeMin, to: rangeMax });
+            } else {
+              chartRef.current.timeScale().fitContent();
+            }
+          }
           // Compute overlay positions after chart renders
           requestAnimationFrame(() => computeOverlayPositions());
         } catch(e) {
@@ -4927,7 +4944,7 @@
       const denomLabel = isMulti ? "% change" : (DENOMINATOR_OPTIONS.find(d => d.key === denominator)?.label || "Chaos");
 
       return (
-        <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden", marginBottom: 12 }}>
+        <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden", marginBottom: 0 }}>
           {/* Row 1: SHOW currency pills + Top 5 */}
           <div style={{ padding: "10px 14px 4px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <span style={{ fontSize: 9, fontWeight: 700, color: T.textMuted, letterSpacing: "0.1em", marginRight: 2 }}>SHOW</span>
@@ -7954,14 +7971,13 @@
             />
           </div>
 
+          {/* Chart + Exchange Rate Table side by side */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "stretch" }}>
           {/* Featured Chart */}
-          <div data-nux-hl="price-trends"><FeaturedChart history={history} currencies={currencies} rates={rates} oldestHistoryTs={data?.oldest_history_ts || 0} /></div>
-
-          {/* Market Signals */}
-          <MarketSignals />
+          <div data-nux-hl="price-trends" style={{ flex: "0 0 50%", minWidth: 0 }}><FeaturedChart history={history} currencies={currencies} rates={rates} oldestHistoryTs={data?.oldest_history_ts || 0} /></div>
 
           {/* Exchange Rate Table */}
-          <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden" }}>
+          <div className="panel" style={{ ...CARD, padding: 0, overflow: "hidden", flex: 1, minWidth: 0 }}>
             {/* Category filter pills */}
             <div style={{ padding: "10px 14px 6px", display: "flex", gap: 4, flexWrap: "wrap", borderBottom: `1px solid ${T.border}` }}>
               {MARKET_CATEGORIES.map(cat => {
@@ -8000,7 +8016,7 @@
               <div style={{ ...LABEL, fontSize: 8, textAlign: "right" }}>Vol</div>
             </div>
             {/* Table rows */}
-            <div style={{ maxHeight: 400, overflowY: "auto" }}>
+            <div style={{ maxHeight: 260, overflowY: "auto" }}>
               {filtered.map((cur, i) => (
                 <CurrencyRow key={cur.name} currency={cur} rates={rates} index={i} />
               ))}
@@ -8016,6 +8032,10 @@
               )}
             </div>
           </div>
+          </div>{/* end chart + table flex row */}
+
+          {/* Market Signals */}
+          <MarketSignals />
 
           {/* Footer */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, padding: "0 4px" }}>
