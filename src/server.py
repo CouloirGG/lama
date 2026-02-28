@@ -2784,10 +2784,15 @@ async def websocket_endpoint(ws: WebSocket):
             "refreshing": stash_data.get("refreshing", False),
         }
         await ws.send_json(init_msg)
-        # Keep alive
+        # Keep alive — handle client messages
         while True:
             data = await ws.receive_text()
-            # Future: handle client-sent commands
+            try:
+                msg = json.loads(data)
+                if msg.get("type") == "ping":
+                    await ws.send_json({"type": "pong"})
+            except (json.JSONDecodeError, TypeError):
+                pass
     except WebSocketDisconnect:
         ws_manager.disconnect(ws)
 
