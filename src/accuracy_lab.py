@@ -223,6 +223,11 @@ def prepare_gbm_records(records: List[dict],
             out["total_defense"] = rec.get("total_defense", 0) or (
                 rec.get("armour", 0) + rec.get("evasion", 0)
                 + rec.get("energy_shield", 0))
+            out["quality"] = rec.get("quality", 0)
+            out["sockets"] = rec.get("sockets", 0)
+            out["corrupted"] = 1 if rec.get("corrupted", False) else 0
+            out["open_prefixes"] = rec.get("open_prefixes", 0)
+            out["open_suffixes"] = rec.get("open_suffixes", 0)
 
         if include_listing_age:
             listing_ts = rec.get("listing_ts", "")
@@ -275,6 +280,11 @@ def gbm_predict(model: dict, rec: dict,
         features["energy_shield"] = rec.get("energy_shield", 0)
         features["total_dps"] = rec.get("total_dps", 0.0)
         features["total_defense"] = rec.get("total_defense", 0)
+        features["quality"] = rec.get("quality", 0)
+        features["sockets"] = rec.get("sockets", 0)
+        features["corrupted"] = rec.get("corrupted", 0)
+        features["open_prefixes"] = rec.get("open_prefixes", 0)
+        features["open_suffixes"] = rec.get("open_suffixes", 0)
 
     # Mod features
     mt = rec.get("mod_tiers", {})
@@ -496,6 +506,60 @@ def experiment_interactions(train: List[dict], test: List[dict]) -> dict:
     return metrics
 
 
+def experiment_enriched(train: List[dict], test: List[dict]) -> dict:
+    """Experiment: All new enrichment features (quality, sockets, corruption, open affixes)."""
+    from gbm_trainer import train_gbm_models
+
+    train_recs = prepare_gbm_records(train, include_new_features=True)
+    test_recs = prepare_gbm_records(test, include_new_features=True)
+
+    models = train_gbm_models(train_recs)
+
+    predictions = []
+    for rec in test_recs:
+        item_class = rec["item_class"]
+        model = models.get(item_class)
+        if model and rec.get("mod_groups"):
+            est = gbm_predict(model, rec, use_new_features=True)
+        else:
+            est = None
+        predictions.append((est, rec["min_divine"]))
+
+    metrics = compute_metrics(predictions, test_recs)
+    print_metrics("Experiment: Enriched (all new features via standard GBM)", metrics)
+    return metrics
+
+
+def experiment_open_affixes(train: List[dict], test: List[dict]) -> dict:
+    """Experiment: Test open affix impact in isolation."""
+    train_recs = prepare_gbm_records(train, include_new_features=True)
+    test_recs = prepare_gbm_records(test, include_new_features=True)
+
+    # Zero out all new features except open_prefixes/open_suffixes
+    for recs in [train_recs, test_recs]:
+        for rec in recs:
+            rec["quality"] = 0
+            rec["sockets"] = 0
+            rec["corrupted"] = 0
+
+    models = _train_gbm_extended(train_recs)
+
+    predictions = []
+    for rec in test_recs:
+        item_class = rec["item_class"]
+        model = models.get(item_class)
+        if model and rec.get("mod_groups"):
+            est = gbm_predict(model, rec, use_new_features=True)
+        else:
+            est = None
+        predictions.append((est, rec["min_divine"]))
+
+    metrics = compute_metrics(predictions, test_recs)
+    print_metrics("Experiment: Open affixes only (quality/sockets/corrupt zeroed)",
+                  metrics)
+    return metrics
+
+
 def experiment_best_combo(train: List[dict], test: List[dict]) -> dict:
     """Best combination: all improvements together."""
     train_recs = prepare_gbm_records(train, include_new_features=True,
@@ -628,6 +692,8 @@ def _train_gbm_extended(records: List[dict],
             # New features
             "item_level", "armour", "evasion", "energy_shield",
             "total_dps", "total_defense",
+            "quality", "sockets", "corrupted",
+            "open_prefixes", "open_suffixes",
         ]
         if extra_numeric:
             numeric_names.extend(extra_numeric)
@@ -788,6 +854,8 @@ def _train_unified_gbm(records: List[dict],
         "pdps", "edps", "demand_score",
         "item_level", "armour", "evasion", "energy_shield",
         "total_dps", "total_defense",
+        "quality", "sockets", "corrupted",
+        "open_prefixes", "open_suffixes",
     ]
     if extra_numeric:
         numeric_names.extend(extra_numeric)
@@ -878,6 +946,8 @@ def _train_unified_gbm(records: List[dict],
 EXPERIMENTS = {
     "baseline": experiment_baseline,
     "new_features": experiment_new_features,
+    "enriched": experiment_enriched,
+    "open_affixes": experiment_open_affixes,
     "listing_age": experiment_listing_age,
     "unified": experiment_unified,
     "hyperparams": experiment_hyperparams,

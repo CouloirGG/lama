@@ -57,10 +57,16 @@ _GRADE_NUM = {"S": 4, "A": 3, "B": 2, "C": 1, "JUNK": 0}
 #  [20] edps               float   elemental DPS
 #  [21] sale_confidence    float   disappearance-based confidence (3.0=sold, 1.0=unknown, 0.3=stale)
 #  [22] mod_stats_tuple    Tuple[Tuple[str, float], ...]  sorted (stat_id, value) pairs
+#  [23] quality            int     item quality (0-20)
+#  [24] sockets            int     socket count
+#  [25] corrupted          int     1=corrupted, 0=not
+#  [26] open_prefixes      int     3 - prefix_count
+#  [27] open_suffixes      int     3 - suffix_count
 Sample = Tuple[float, float, int, float, float, int, int, int, bool,
                Tuple[str, ...], str, float, int, Tuple[Tuple[str, int], ...],
                float, float, float, float, Tuple[Tuple[str, float], ...],
-               float, float, float, Tuple[Tuple[str, float], ...]]
+               float, float, float, Tuple[Tuple[str, float], ...],
+               int, int, int, int, int]
 
 
 class CalibrationEngine:
@@ -76,14 +82,17 @@ class CalibrationEngine:
     DPS_WEIGHT = 0.25          # DPS factor difference — captures roll quality for weapons
     DEFENSE_WEIGHT = 0.25      # defense factor difference — captures roll quality for armor
     MOD_IDENTITY_WEIGHT = 1.2  # weighted Jaccard distance — THE key price signal (boosted)
-    MOD_TIER_WEIGHT = 0.25     # per-shared-mod tier mismatch penalty (boosted: strong signal)
+    MOD_TIER_WEIGHT = 0.25     # per-shared-mod tier mismatch penalty
     BASE_TYPE_WEIGHT = 0.20    # binary: same base=0, different=0.20
     TIER_SCORE_WEIGHT = 0.15   # tier quality (sum(1/tier)) aggregate difference
     ARCHETYPE_WEIGHT = 0.15    # per-archetype score difference
     SOMV_WEIGHT = 0.25         # average roll quality — reduced, somv ~1.0 for most data
-    ROLL_QUALITY_WEIGHT = 0.20 # per-mod roll quality — reduced, only ~4% coverage
+    ROLL_QUALITY_WEIGHT = 0.20 # per-mod roll quality difference
     DPS_TYPE_WEIGHT = 0.08     # phys vs elemental DPS — reduced, <1% coverage
     DEMAND_WEIGHT = 0.15       # meta demand score difference
+    QUALITY_WEIGHT = 0.10      # quality % difference / 20
+    SOCKET_WEIGHT = 0.15       # binary penalty for different socket counts
+    OPEN_AFFIX_WEIGHT = 0.10   # prefix/suffix slot difference
 
     # Group-prior blending: when k-NN neighbors are distant, blend toward
     # group median to prevent wild extrapolation
@@ -245,7 +254,12 @@ class CalibrationEngine:
                                  mod_rolls=mod_rolls,
                                  pdps=rec_pdps, edps=rec_edps,
                                  sale_confidence=rec_sc,
-                                 mod_stats=rec_mod_stats)
+                                 mod_stats=rec_mod_stats,
+                                 quality=rec.get("quality", 0),
+                                 sockets=rec.get("sockets", 0),
+                                 corrupted=1 if rec.get("corrupted", False) else 0,
+                                 open_prefixes=rec.get("open_prefixes", 0),
+                                 open_suffixes=rec.get("open_suffixes", 0))
                     count += 1
         except Exception as e:
             logger.warning(f"Calibration: load error: {e}")
@@ -362,7 +376,12 @@ class CalibrationEngine:
                              mod_rolls=mod_rolls_dict,
                              pdps=pdps, edps=edps,
                              sale_confidence=sale_confidence,
-                             mod_stats=mod_stats_dict)
+                             mod_stats=mod_stats_dict,
+                             quality=s.get("q", 0),
+                             sockets=s.get("sk", 0),
+                             corrupted=s.get("cr", 0),
+                             open_prefixes=s.get("op", 0),
+                             open_suffixes=s.get("os", 0))
                 count += 1
 
             # Load learned weights (v5+ shards)
@@ -493,7 +512,10 @@ class CalibrationEngine:
                    mod_groups: list = None, base_type: str = "",
                    mod_tiers: dict = None, somv_factor: float = 1.0,
                    mod_rolls: dict = None, pdps: float = 0.0,
-                   edps: float = 0.0, mod_stats: dict = None):
+                   edps: float = 0.0, mod_stats: dict = None,
+                   quality: int = 0, sockets: int = 0,
+                   corrupted: int = 0, open_prefixes: int = 0,
+                   open_suffixes: int = 0):
         """Live-add a calibration point (called after each deep query)."""
         if divine <= 0:
             return
@@ -506,7 +528,10 @@ class CalibrationEngine:
                      mod_groups=mod_groups, base_type=base_type,
                      mod_tiers=mod_tiers, somv_factor=somv_factor,
                      mod_rolls=mod_rolls, pdps=pdps, edps=edps,
-                     mod_stats=mod_stats)
+                     mod_stats=mod_stats,
+                     quality=quality, sockets=sockets,
+                     corrupted=corrupted, open_prefixes=open_prefixes,
+                     open_suffixes=open_suffixes)
 
     def _table_estimate(self, item_class: str, grade_num: int,
                         score: float, top_tier_count: int,
@@ -623,7 +648,11 @@ class CalibrationEngine:
                       mod_stats: dict = None,
                       item_level: int = 0,
                       armour: int = 0, evasion: int = 0,
-                      energy_shield: int = 0) -> Optional[float]:
+                      energy_shield: int = 0,
+                      quality: int = 0, sockets: int = 0,
+                      corrupted: int = 0,
+                      open_prefixes: int = 0,
+                      open_suffixes: int = 0) -> Optional[float]:
         """GBM estimate via pure-Python tree traversal. No sklearn at runtime.
 
         Returns estimated divine value, or None if no model available.
@@ -660,6 +689,11 @@ class CalibrationEngine:
             "energy_shield": energy_shield,
             "total_dps": pdps + edps,
             "total_defense": armour + evasion + energy_shield,
+            "quality": quality,
+            "sockets": sockets,
+            "corrupted": corrupted,
+            "open_prefixes": open_prefixes,
+            "open_suffixes": open_suffixes,
         }
 
         # Mod features: roll-quality-weighted tier encoding
@@ -755,7 +789,12 @@ class CalibrationEngine:
                  item_level: int = 0,
                  armour: int = 0,
                  evasion: int = 0,
-                 energy_shield: int = 0) -> Optional[float]:
+                 energy_shield: int = 0,
+                 quality: int = 0,
+                 sockets: int = 0,
+                 corrupted: int = 0,
+                 open_prefixes: int = 0,
+                 open_suffixes: int = 0) -> Optional[float]:
         """Return estimated divine value, or None if insufficient data.
 
         Priority: GBM > class k-NN > global k-NN > grade median.
@@ -811,7 +850,11 @@ class CalibrationEngine:
                 mod_stats=mod_stats,
                 item_level=item_level,
                 armour=armour, evasion=evasion,
-                energy_shield=energy_shield)
+                energy_shield=energy_shield,
+                quality=quality, sockets=sockets,
+                corrupted=corrupted,
+                open_prefixes=open_prefixes,
+                open_suffixes=open_suffixes)
             if gbm_est is not None:
                 self.last_confidence = 0.8
                 return gbm_est
@@ -833,7 +876,11 @@ class CalibrationEngine:
                 mod_rolls=mod_rolls,
                 pdps=pdps, edps=edps,
                 demand_score=query_demand,
-                mod_stats_tuple=ms_tuple)
+                mod_stats_tuple=ms_tuple,
+                quality=quality, sockets=sockets,
+                corrupted=corrupted,
+                open_prefixes=open_prefixes,
+                open_suffixes=open_suffixes)
             self.last_confidence = confidence
             return result
 
@@ -853,7 +900,11 @@ class CalibrationEngine:
                 mod_rolls=mod_rolls,
                 pdps=pdps, edps=edps,
                 demand_score=query_demand,
-                mod_stats_tuple=ms_tuple)
+                mod_stats_tuple=ms_tuple,
+                quality=quality, sockets=sockets,
+                corrupted=corrupted,
+                open_prefixes=open_prefixes,
+                open_suffixes=open_suffixes)
             self.last_confidence = confidence * 0.7  # global pool is less specific
             return result
 
@@ -876,7 +927,10 @@ class CalibrationEngine:
                 mod_tiers: dict = None, somv_factor: float = 1.0,
                 mod_rolls: dict = None, pdps: float = 0.0,
                 edps: float = 0.0, sale_confidence: float = 1.0,
-                mod_stats: dict = None):
+                mod_stats: dict = None,
+                quality: int = 0, sockets: int = 0,
+                corrupted: int = 0, open_prefixes: int = 0,
+                open_suffixes: int = 0):
         """Insert a sample into class-specific and global lists (sorted)."""
         mg_tuple = tuple(sorted(set(mod_groups))) if mod_groups else ()
         # Compute tier aggregates
@@ -901,7 +955,9 @@ class CalibrationEngine:
                          arch.get("ci_es", 0.0),
                          arch.get("mom_mana", 0.0),
                          somv_factor, mr_tuple, pdps, edps, sale_confidence,
-                         ms_tuple)
+                         ms_tuple,
+                         int(quality), int(sockets), int(corrupted),
+                         int(open_prefixes), int(open_suffixes))
         self._group_medians_dirty = True
         self._modset_lookup_dirty = True
         insort(self._global, entry)
@@ -1099,7 +1155,12 @@ class CalibrationEngine:
                      pdps: float = 0.0,
                      edps: float = 0.0,
                      demand_score: float = 0.0,
-                     mod_stats_tuple: tuple = None) -> Tuple[float, float]:
+                     mod_stats_tuple: tuple = None,
+                     quality: int = 0,
+                     sockets: int = 0,
+                     corrupted: int = 0,
+                     open_prefixes: int = 0,
+                     open_suffixes: int = 0) -> Tuple[float, float]:
         """k-NN inverse-distance-weighted interpolation in log-price space.
 
         Distance includes mod composition (Jaccard), per-mod tier matching,
@@ -1206,9 +1267,33 @@ class CalibrationEngine:
                     item_class, list(s_mods))
                 demand_d = abs(demand_score - s_demand) * self.DEMAND_WEIGHT
 
+            # Quality distance: only when both sides have data
+            quality_d = 0.0
+            if quality > 0 and len(s) > 23 and s[23] > 0:
+                quality_d = abs(quality - s[23]) / 20.0 * self.QUALITY_WEIGHT
+
+            # Socket distance: only when both sides have data
+            socket_d = 0.0
+            if sockets > 0 and len(s) > 24 and s[24] > 0:
+                if sockets != s[24]:
+                    socket_d = self.SOCKET_WEIGHT
+
+            # Open affix distance: only when both sides have enrichment
+            # (open_prefixes/open_suffixes = 0 for legacy data = "unknown")
+            affix_d = 0.0
+            if len(s) > 27:
+                s_op = s[26]
+                s_os = s[27]
+                # Only apply when both have affix data (any non-zero affix field)
+                q_has = (open_prefixes > 0 or open_suffixes > 0)
+                s_has = (s_op > 0 or s_os > 0)
+                if q_has and s_has:
+                    affix_d = (abs(open_prefixes - s_op) + abs(open_suffixes - s_os)
+                               ) / 6.0 * self.OPEN_AFFIX_WEIGHT
+
             return (score_d + grade_d + ttc_d + mc_d + dps_d + def_d + mod_d
                     + bt_d + ts_d + tier_d + arch_d + somv_d + rq_d
-                    + dps_type_d + demand_d)
+                    + dps_type_d + demand_d + quality_d + socket_d + affix_d)
 
         by_dist = sorted(candidates, key=_dist)
         neighbors = by_dist[:k]

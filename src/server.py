@@ -2759,6 +2759,7 @@ async def websocket_endpoint(ws: WebSocket):
         client_host = ws.client.host if ws.client else ""
         is_local = client_host in ("127.0.0.1", "::1", "localhost")
         if not is_local and pin != settings_raw["companion_pin"]:
+            await ws.accept()
             await ws.close(code=4001, reason="Invalid PIN")
             return
 

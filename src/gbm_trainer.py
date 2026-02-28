@@ -46,6 +46,7 @@ def train_gbm_models(records: List[dict],
         dps_factor, defense_factor, somv_factor, tier_score, best_tier,
         avg_tier, coc_score, es_score, mana_score,
         item_level, armour, evasion, energy_shield, total_dps, total_defense,
+        quality, sockets, corrupted, open_prefixes, open_suffixes,
         mod_groups (list of str), base_type (str), mod_tiers (dict)
     """
     try:
@@ -158,6 +159,8 @@ def _train_class_gbm(item_class: str, records: List[dict], np,
         "pdps", "edps", "demand_score",
         "item_level", "armour", "evasion", "energy_shield",
         "total_dps", "total_defense",
+        "quality", "sockets", "corrupted",
+        "open_prefixes", "open_suffixes",
     ]
     mod_feature_names = [f"mod:{g}" for g in valid_mods]
     base_feature_names = [f"base:{bt}" for bt in valid_bases]
@@ -207,6 +210,11 @@ def _train_class_gbm(item_class: str, records: List[dict], np,
         X[row, 19] = rec.get("energy_shield", 0)
         X[row, 20] = rec.get("total_dps", 0.0)
         X[row, 21] = rec.get("total_defense", 0)
+        X[row, 22] = rec.get("quality", 0)
+        X[row, 23] = rec.get("sockets", 0)
+        X[row, 24] = rec.get("corrupted", 0)
+        X[row, 25] = rec.get("open_prefixes", 0)
+        X[row, 26] = rec.get("open_suffixes", 0)
 
         # Mod features: roll-quality-weighted tier encoding
         mod_tiers = rec.get("mod_tiers", {})

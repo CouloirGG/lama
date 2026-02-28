@@ -5,7 +5,7 @@ Pipeline: raw harvester JSONL -> quality filters -> dedup -> compact gzipped JSO
 
 Shard format (gzipped JSON):
 {
-  "version": 8,
+  "version": 9,
   "league": "Fate of the Vaal",
   "generated_at": "2026-02-18T12:00:00Z",
   "sample_count": 5432,
@@ -27,7 +27,9 @@ Fields: s=score, g=grade_num, p=divine_price, c=item_class, d=dps_factor, f=defe
         ms=stat_indices (into stat_index), mv=stat_values (parallel to ms),
         ts=tier_score (sum(1/tier)), bt=best_tier (min tier), at=avg_tier,
         b=base_type_index (into base_index),
-        pd=physical_dps, ed=elemental_dps, ar=armour, ev=evasion, es=energy_shield, il=item_level
+        pd=physical_dps, ed=elemental_dps, ar=armour, ev=evasion, es=energy_shield, il=item_level,
+        q=quality, sk=sockets, cr=corrupted, op=open_prefixes, os=open_suffixes,
+        pc=prefix_count, sfc=suffix_count
 
 Usage:
     python shard_generator.py --input harvester_output.jsonl --output shard.json.gz
@@ -418,6 +420,28 @@ def compact_record(rec: dict, mod_to_idx: dict = None, base_to_idx: dict = None,
                 compact["ms"] = [stat_to_idx[sid] for sid in sorted_sids]
                 compact["mv"] = [round(rec_stats[sid], 1) for sid in sorted_sids]
 
+    # New enrichment fields (v9+)
+    q = rec.get("quality", 0)
+    if q > 0:
+        compact["q"] = q
+    sk = rec.get("sockets", 0)
+    if sk > 0:
+        compact["sk"] = sk
+    if rec.get("corrupted", False):
+        compact["cr"] = 1
+    op = rec.get("open_prefixes", 0)
+    if op > 0:
+        compact["op"] = op
+    os_val = rec.get("open_suffixes", 0)
+    if os_val > 0:
+        compact["os"] = os_val
+    pc = rec.get("prefix_count", 0)
+    if pc > 0:
+        compact["pc"] = pc
+    sfc = rec.get("suffix_count", 0)
+    if sfc > 0:
+        compact["sfc"] = sfc
+
     return compact
 
 
@@ -578,6 +602,11 @@ def _prepare_gbm_records(deduped: List[dict], mod_to_idx: dict,
             "total_defense": rec.get("total_defense", 0) or (
                 rec.get("armour", 0) + rec.get("evasion", 0)
                 + rec.get("energy_shield", 0)),
+            "quality": rec.get("quality", 0),
+            "sockets": rec.get("sockets", 0),
+            "corrupted": 1 if rec.get("corrupted", False) else 0,
+            "open_prefixes": rec.get("open_prefixes", 0),
+            "open_suffixes": rec.get("open_suffixes", 0),
         })
 
     return gbm_records
@@ -718,7 +747,7 @@ def generate_shard(records: List[dict], league: str, output_path: str):
         league = leagues.pop() if len(leagues) == 1 else "unknown"
 
     shard = {
-        "version": 8,
+        "version": 9,
         "league": league,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "sample_count": len(samples),
@@ -894,6 +923,11 @@ def validate_shard(shard_path: str, seed: int = 42):
             edps=s.get("ed", 0.0),
             sale_confidence=s.get("sc", 1.0),
             mod_stats=mod_stats,
+            quality=s.get("q", 0),
+            sockets=s.get("sk", 0),
+            corrupted=s.get("cr", 0),
+            open_prefixes=s.get("op", 0),
+            open_suffixes=s.get("os", 0),
         )
         train_records.append({
             "item_class": s.get("c", ""),
@@ -966,6 +1000,11 @@ def validate_shard(shard_path: str, seed: int = 42):
                 "energy_shield": _es,
                 "total_dps": _pdps + _edps,
                 "total_defense": _ar + _ev + _es,
+                "quality": s.get("q", 0),
+                "sockets": s.get("sk", 0),
+                "corrupted": s.get("cr", 0),
+                "open_prefixes": s.get("op", 0),
+                "open_suffixes": s.get("os", 0),
             })
         gbm_models = train_gbm_models(gbm_train_records)
         if gbm_models:
@@ -1006,7 +1045,12 @@ def validate_shard(shard_path: str, seed: int = 42):
                               item_level=s.get("il", 0),
                               armour=s.get("ar", 0),
                               evasion=s.get("ev", 0),
-                              energy_shield=s.get("es", 0))
+                              energy_shield=s.get("es", 0),
+                              quality=s.get("q", 0),
+                              sockets=s.get("sk", 0),
+                              corrupted=s.get("cr", 0),
+                              open_prefixes=s.get("op", 0),
+                              open_suffixes=s.get("os", 0))
         if est is None:
             continue
 
@@ -1183,7 +1227,12 @@ def validate_shard(shard_path: str, seed: int = 42):
                 item_level=s.get("il", 0),
                 armour=s.get("ar", 0),
                 evasion=s.get("ev", 0),
-                energy_shield=s.get("es", 0))
+                energy_shield=s.get("es", 0),
+                quality=s.get("q", 0),
+                sockets=s.get("sk", 0),
+                corrupted=s.get("cr", 0),
+                open_prefixes=s.get("op", 0),
+                open_suffixes=s.get("os", 0))
             if est is None:
                 continue
 

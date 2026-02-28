@@ -752,3 +752,113 @@ def test_pdps_edps_dps_type_distance():
     assert est_phys > est_ele, (
         f"Physical DPS ({est_phys:.1f}) should be > elemental ({est_ele:.1f})"
     )
+
+
+# ── New enrichment feature tests ──────────────────────
+
+def test_quality_affects_knn_distance():
+    """High-quality items should estimate differently from low-quality ones."""
+    engine = CalibrationEngine()
+    engine.set_mod_weights({"IncreasedLife": 1.0})
+
+    mods = ["IncreasedLife"]
+
+    # Insert high-quality items at 50 divine
+    for _ in range(20):
+        engine._insert(score=0.5, divine=50.0, item_class="Body Armours",
+                       grade_num=3, mod_groups=mods, quality=20)
+
+    # Insert low-quality items at 5 divine
+    for _ in range(20):
+        engine._insert(score=0.5, divine=5.0, item_class="Body Armours",
+                       grade_num=3, mod_groups=mods, quality=0)
+
+    est_high = engine.estimate(0.5, "Body Armours", grade="A",
+                               mod_groups=mods, quality=20)
+    est_low = engine.estimate(0.5, "Body Armours", grade="A",
+                              mod_groups=mods, quality=0)
+
+    assert est_high is not None
+    assert est_low is not None
+    assert est_high > est_low, (
+        f"High quality ({est_high:.1f}) should be > low quality ({est_low:.1f})"
+    )
+
+
+def test_open_affixes_affect_knn_distance():
+    """Items with open affixes should estimate differently from full items."""
+    engine = CalibrationEngine()
+    engine.set_mod_weights({"IncreasedLife": 1.0, "FireResist": 0.3})
+
+    mods = ["IncreasedLife", "FireResist"]
+
+    # Insert full items (no open affixes) at 50 divine
+    for _ in range(20):
+        engine._insert(score=0.5, divine=50.0, item_class="Rings",
+                       grade_num=3, mod_groups=mods,
+                       open_prefixes=0, open_suffixes=0)
+
+    # Insert items with open affixes at 5 divine
+    for _ in range(20):
+        engine._insert(score=0.5, divine=5.0, item_class="Rings",
+                       grade_num=3, mod_groups=mods,
+                       open_prefixes=2, open_suffixes=2)
+
+    est_full = engine.estimate(0.5, "Rings", grade="A",
+                               mod_groups=mods,
+                               open_prefixes=0, open_suffixes=0)
+    est_open = engine.estimate(0.5, "Rings", grade="A",
+                               mod_groups=mods,
+                               open_prefixes=2, open_suffixes=2)
+
+    assert est_full is not None
+    assert est_open is not None
+    assert est_full > est_open, (
+        f"Full item ({est_full:.1f}) should be > open affixes ({est_open:.1f})"
+    )
+
+
+def test_new_fields_backward_compatible():
+    """Samples without new fields should still produce valid estimates."""
+    engine = CalibrationEngine()
+
+    # Insert samples without new fields (legacy data)
+    for price in [1.0, 2.0, 5.0, 10.0, 20.0] * 10:
+        engine._insert(score=0.5, divine=price, item_class="Rings",
+                       grade_num=2)
+
+    # Estimate without new fields
+    est_legacy = engine.estimate(0.5, "Rings", grade="B")
+    assert est_legacy is not None
+
+    # Estimate with new fields against legacy samples
+    est_new = engine.estimate(0.5, "Rings", grade="B",
+                              quality=15, sockets=2, corrupted=0,
+                              open_prefixes=1, open_suffixes=0)
+    assert est_new is not None
+
+    # Both should be in a reasonable range
+    ratio = max(est_legacy, est_new) / min(est_legacy, est_new)
+    assert ratio < 5.0, (
+        f"Estimates diverged too much: {est_legacy:.1f} vs {est_new:.1f}"
+    )
+
+
+def test_sample_tuple_has_new_fields():
+    """Verify the Sample tuple includes new fields at positions [23]-[27]."""
+    engine = CalibrationEngine()
+
+    engine._insert(score=0.5, divine=10.0, item_class="Rings",
+                   grade_num=2, quality=15, sockets=3, corrupted=1,
+                   open_prefixes=1, open_suffixes=2)
+
+    assert len(engine._global) == 1
+    sample = engine._global[0]
+
+    # Check new field positions
+    assert len(sample) >= 28, f"Sample has {len(sample)} fields, expected >= 28"
+    assert sample[23] == 15, f"quality should be 15, got {sample[23]}"
+    assert sample[24] == 3, f"sockets should be 3, got {sample[24]}"
+    assert sample[25] == 1, f"corrupted should be 1, got {sample[25]}"
+    assert sample[26] == 1, f"open_prefixes should be 1, got {sample[26]}"
+    assert sample[27] == 2, f"open_suffixes should be 2, got {sample[27]}"

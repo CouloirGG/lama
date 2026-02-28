@@ -231,6 +231,55 @@ def listing_to_parsed_item(listing: dict, item_class: str) -> Optional[ParsedIte
         item.energy_shield = int(es)
         item.total_defense = item.armour + item.evasion + item.energy_shield
 
+    # Parse authoritative tier data from extended.mods
+    api_mod_tiers = {}   # {stat_hash: tier_number}
+    api_mod_rolls = {}   # {stat_hash: (min, max)}
+    prefix_count = 0
+    suffix_count = 0
+    ext_mods = extended.get("mods", {}) if extended else {}
+    for mod_cat in ("explicit", "implicit", "fractured", "crafted"):
+        for mod_entry in ext_mods.get(mod_cat, []):
+            tier_str = mod_entry.get("tier", "")
+            tier_num = 0
+            if tier_str and len(tier_str) > 1 and tier_str[1:].isdigit():
+                tier_num = int(tier_str[1:])
+                if mod_cat == "explicit":
+                    if tier_str[0] == "P":
+                        prefix_count += 1
+                    elif tier_str[0] == "S":
+                        suffix_count += 1
+            for mag in (mod_entry.get("magnitudes") or []):
+                stat_hash = mag.get("hash", "")
+                if stat_hash and tier_num > 0:
+                    api_mod_tiers[stat_hash] = tier_num
+                mag_min = mag.get("min")
+                mag_max = mag.get("max")
+                if stat_hash and mag_min is not None and mag_max is not None:
+                    try:
+                        api_mod_rolls[stat_hash] = (float(mag_min), float(mag_max))
+                    except (ValueError, TypeError):
+                        pass
+    item._api_mod_tiers = api_mod_tiers
+    item._api_mod_rolls = api_mod_rolls
+    item._api_prefix_count = prefix_count
+    item._api_suffix_count = suffix_count
+
+    # Extract quality from item properties
+    for prop in item_data.get("properties", []):
+        if prop.get("name") == "Quality":
+            vals = prop.get("values", [])
+            if vals and vals[0]:
+                try:
+                    item.quality = int(
+                        str(vals[0][0]).replace("+", "").replace("%", ""))
+                except (ValueError, IndexError):
+                    pass
+            break
+
+    # Extract sockets and corruption
+    item.sockets = len(item_data.get("sockets", []))
+    item.corrupted = bool(item_data.get("corrupted", False))
+
     # Collect all mod lines as (mod_type, text) tuples.
     # Strip trade API markup tags ([Evasion], [Id|Display], etc.)
     # so mod_parser regex templates can match the clean text.
@@ -389,6 +438,44 @@ def write_calibration_record(score_result, price_divine: float,
         record["evasion"] = getattr(parsed_item, 'evasion', 0)
         record["energy_shield"] = getattr(parsed_item, 'energy_shield', 0)
         record["item_level"] = getattr(parsed_item, 'item_level', 0)
+
+        # New enrichment fields from trade API
+        record["quality"] = getattr(parsed_item, 'quality', 0)
+        record["sockets"] = getattr(parsed_item, 'sockets', 0)
+        record["corrupted"] = getattr(parsed_item, 'corrupted', False)
+        pc = getattr(parsed_item, '_api_prefix_count', 0)
+        sc_count = getattr(parsed_item, '_api_suffix_count', 0)
+        record["prefix_count"] = pc
+        record["suffix_count"] = sc_count
+        record["open_prefixes"] = max(0, 3 - pc)
+        record["open_suffixes"] = max(0, 3 - sc_count)
+
+        # Overlay authoritative API tiers onto inferred mod_tiers/mod_rolls
+        api_tiers = getattr(parsed_item, '_api_mod_tiers', {})
+        api_rolls = getattr(parsed_item, '_api_mod_rolls', {})
+        if api_tiers:
+            record["tier_source"] = "api"
+            # Build stat_id -> mod_group mapping via score_result.mod_scores
+            stat_to_group = {}
+            for ms in score_result.mod_scores:
+                if ms.stat_id and ms.mod_group:
+                    stat_to_group[ms.stat_id] = ms.mod_group
+            # Overlay API tiers (authoritative replaces inferred)
+            for stat_hash, tier_num in api_tiers.items():
+                group = stat_to_group.get(stat_hash)
+                if group:
+                    record["mod_tiers"][group] = tier_num
+            # Overlay API rolls (compute roll quality from range)
+            for stat_hash, (roll_min, roll_max) in api_rolls.items():
+                group = stat_to_group.get(stat_hash)
+                if group and roll_max > roll_min:
+                    actual = record.get("mod_values", {}).get(group)
+                    if actual is not None:
+                        rq = (actual - roll_min) / (roll_max - roll_min)
+                        record["mod_rolls"][group] = round(
+                            max(0.0, min(1.0, rq)), 3)
+        else:
+            record["tier_source"] = "inferred"
 
     # Store raw stat_ids + values from ModParser (100% mod coverage)
     if parsed_mods:
