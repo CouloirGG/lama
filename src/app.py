@@ -57,10 +57,11 @@ def _companion_enabled() -> bool:
 def start_server():
     """Run the FastAPI server in a background thread."""
     import uvicorn
-    host = "0.0.0.0" if _companion_enabled() else "127.0.0.1"
+    # Always bind to 0.0.0.0 so companion mode can be toggled at runtime
+    # without a server restart.  PIN auth protects against unauthorised access.
     uvicorn.run(
         "server:app",
-        host=host,
+        host="0.0.0.0",
         port=PORT,
         log_level="info",
     )
@@ -465,7 +466,7 @@ def _set_icon_and_show(get_hwnd, show_fn, api_ref=None, _ms=None):
         ready = api_ref._ready_event.wait(timeout=5.0)
         _log(f"[Startup] {'Dashboard ready' if ready else 'Ready timeout (5s)'}")
 
-    # Now reveal the window — user only ever sees the LAMA icon
+    # Reveal the window (no-op when window is already visible)
     show_fn()
     if _ms:
         _log(f"[Startup] Window shown ({_ms()})")
@@ -588,8 +589,10 @@ def main():
     threading.Thread(target=_tooltip_updater, args=(tray,), daemon=True).start()
 
     # -------------------------------------------------------------------------
-    # Start hidden so the Python icon never flashes in the taskbar.
-    # The icon thread sets IPropertyStore, then reveals the window.
+    # WebView2 refuses to initialise its render surface in a hidden window,
+    # so we create the window visible.  The dashboard's own splash screen
+    # covers the UI until data arrives, keeping the experience smooth.
+    # A background thread still sets the taskbar icon via IPropertyStore.
     window = webview.create_window(
         WINDOW_TITLE,
         url=f"http://127.0.0.1:{PORT}/dashboard?_t={int(time.time())}",
@@ -602,12 +605,11 @@ def main():
         frameless=True,
         easy_drag=False,
         js_api=api,
-        hidden=True,
     )
 
-    # Set the taskbar icon, then show the window
+    # Set the taskbar icon in the background (no longer needs to show/hide)
     threading.Thread(
-        target=_set_icon_and_show, args=(api._get_hwnd, api.show, api, _ms), daemon=True
+        target=_set_icon_and_show, args=(api._get_hwnd, lambda: None, api, _ms), daemon=True
     ).start()
 
     # This blocks until the window is destroyed (force_close / quit)

@@ -2788,11 +2788,10 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    _host = "0.0.0.0" if load_settings().get("companion_enabled") else "127.0.0.1"
-    logger.info(f"Binding to {_host}:{PORT}")
+    logger.info(f"Binding to 0.0.0.0:{PORT}")
     uvicorn.run(
         "server:app",
-        host=_host,
+        host="0.0.0.0",
         port=PORT,
         log_level="info",
     )

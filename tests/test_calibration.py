@@ -489,17 +489,19 @@ def test_archetype_distance_prefers_same_archetype():
 # ── GBM cascade tests ──────────────────────────────────
 
 def test_gbm_takes_priority_over_knn():
-    """GBM should fire first when available, overriding k-NN."""
+    """GBM should fire when available, overriding k-NN (for items without modset match)."""
     engine = CalibrationEngine()
 
-    # Insert k-NN samples all priced at 5.0
-    for _ in range(50):
+    # Insert k-NN samples all priced at 5.0, each with a unique mod set
+    # so no modset lookup can match (fewer than 3 samples per set).
+    for i in range(50):
         engine._insert(score=0.5, divine=5.0, item_class="Rings",
-                       grade_num=2, mod_groups=["IncreasedLife"])
+                       grade_num=2,
+                       mod_groups=["IncreasedLife", f"UniqueModA{i}"])
 
-    # k-NN estimate without GBM
+    # k-NN estimate without GBM (query mod set won't match any modset entry)
     est_knn = engine.estimate(0.5, "Rings", grade="B",
-                              mod_groups=["IncreasedLife"])
+                              mod_groups=["IncreasedLife", "UniqueQuery"])
     assert est_knn is not None
 
     # Load a GBM model that predicts differently (exp(3.0) ~ 20)
@@ -518,7 +520,7 @@ def test_gbm_takes_priority_over_knn():
 
     # With GBM, estimate should come from GBM (~ exp(3.0) = 20.09)
     est_gbm = engine.estimate(0.5, "Rings", grade="B",
-                              mod_groups=["IncreasedLife"])
+                              mod_groups=["IncreasedLife", "UniqueQuery"])
     assert est_gbm is not None
     # GBM predicts exp(3.0) ~ 20, k-NN predicts ~5, so they should differ
     assert abs(est_gbm - est_knn) > 1.0, (
