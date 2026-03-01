@@ -24,7 +24,7 @@ echo %date% %time% > "%LOCKFILE%"
 REM Run one harvest cycle with accuracy check
 echo [%date% %time%] Starting harvest cycle >> "%LOGFILE%"
 cd /d "%SRCDIR%"
-"%PYTHON%" harvest_scheduler.py --once --passes 15 >> "%LOGFILE%" 2>&1
+"%PYTHON%" -u harvest_scheduler.py --once --passes 15 >> "%LOGFILE%" 2>&1
 echo [%date% %time%] Harvest cycle complete (exit code: %ERRORLEVEL%) >> "%LOGFILE%"
 
 REM Remove lock file

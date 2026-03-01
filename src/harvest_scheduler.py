@@ -70,6 +70,34 @@ def find_next_pass() -> int:
     return 1
 
 
+def check_rate_limit() -> int:
+    """Check if trade API has an active rate limit penalty.
+
+    Makes a lightweight request to the trade API and reads the
+    X-Rate-Limit-Ip-State header. Returns penalty seconds remaining,
+    or 0 if no penalty.
+    """
+    import requests
+    try:
+        resp = requests.get(
+            "https://www.pathofexile.com/api/trade2/data/leagues",
+            timeout=10,
+            headers={"User-Agent": "LAMA-HarvestScheduler/1.0"},
+        )
+        state_raw = resp.headers.get("X-Rate-Limit-Ip-State", "")
+        if state_raw:
+            for part in state_raw.split(","):
+                try:
+                    _hits, _window, penalty_rem = part.strip().split(":")
+                    if int(penalty_rem) > 0:
+                        return int(penalty_rem)
+                except (ValueError, AttributeError):
+                    pass
+    except Exception:
+        pass
+    return 0
+
+
 def run_harvest(passes: int, start_pass: int = 1) -> bool:
     """Run the calibration harvester. Returns True on success."""
     end_pass = start_pass + passes - 1
@@ -285,6 +313,19 @@ def main():
             print(f"  CYCLE {cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
             print(f"  Passes {next_start}-{next_start + args.passes - 1}")
             print(f"{'#'*60}")
+
+            # Pre-check rate limit before starting harvester
+            penalty = check_rate_limit()
+            if penalty > 120:
+                print(f"\n  API rate limit active: {penalty}s remaining. "
+                      f"Skipping this cycle.")
+                if args.once:
+                    print("  (Run again after the penalty expires.)")
+                    break
+                print(f"  Will retry in {args.cooldown}s...")
+                time.sleep(args.cooldown)
+                cycle -= 1  # Don't count skipped cycle
+                continue
 
             records_before = count_records()
 
