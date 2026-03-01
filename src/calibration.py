@@ -1267,27 +1267,23 @@ class CalibrationEngine:
                     item_class, list(s_mods))
                 demand_d = abs(demand_score - s_demand) * self.DEMAND_WEIGHT
 
-            # Quality distance: only when both sides have data
+            # Quality distance
             quality_d = 0.0
-            if quality > 0 and len(s) > 23 and s[23] > 0:
+            if len(s) > 23 and (quality > 0 or s[23] > 0):
                 quality_d = abs(quality - s[23]) / 20.0 * self.QUALITY_WEIGHT
 
-            # Socket distance: only when both sides have data
+            # Socket distance
             socket_d = 0.0
-            if sockets > 0 and len(s) > 24 and s[24] > 0:
+            if len(s) > 24 and (sockets > 0 or s[24] > 0):
                 if sockets != s[24]:
                     socket_d = self.SOCKET_WEIGHT
 
-            # Open affix distance: only when both sides have enrichment
-            # (open_prefixes/open_suffixes = 0 for legacy data = "unknown")
+            # Open affix distance
             affix_d = 0.0
             if len(s) > 27:
                 s_op = s[26]
                 s_os = s[27]
-                # Only apply when both have affix data (any non-zero affix field)
-                q_has = (open_prefixes > 0 or open_suffixes > 0)
-                s_has = (s_op > 0 or s_os > 0)
-                if q_has and s_has:
+                if open_prefixes > 0 or s_op > 0 or open_suffixes > 0 or s_os > 0:
                     affix_d = (abs(open_prefixes - s_op) + abs(open_suffixes - s_os)
                                ) / 6.0 * self.OPEN_AFFIX_WEIGHT
 
