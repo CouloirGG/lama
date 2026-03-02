@@ -616,6 +616,13 @@ def experiment_full_pipeline(train: List[dict], test: List[dict]) -> dict:
     predictions = []
     estimator_hits = {"modset": 0, "gbm": 0, "knn_class": 0,
                       "knn_global": 0, "median": 0, "none": 0}
+    tier_hits = {}
+    tier_accuracy = {"HIGH": {"total": 0, "within_2x": 0},
+                     "MEDIUM": {"total": 0, "within_2x": 0},
+                     "LOW": {"total": 0, "within_2x": 0},
+                     "NONE": {"total": 0, "within_2x": 0}}
+    # Diagnostic: raw signal distributions for threshold tuning
+    diag_records = []  # [(confidence, range_ratio, within_2x), ...]
 
     for rec in test:
         price = rec.get("min_divine", 0)
@@ -662,6 +669,21 @@ def experiment_full_pipeline(train: List[dict], test: List[dict]) -> dict:
         else:
             estimator_hits["median"] += 1
 
+        # Track confidence tier distribution
+        tier = engine.last_confidence_tier or "NONE"
+        tier_hits[tier] = tier_hits.get(tier, 0) + 1
+        # Track per-tier accuracy and collect raw signals
+        if est is not None:
+            ratio = max(est, 0.01) / max(price, 0.01)
+            within_2x = 0.5 <= ratio <= 2.0
+            tier_accuracy[tier]["total"] += 1
+            if within_2x:
+                tier_accuracy[tier]["within_2x"] += 1
+            low = engine.last_estimate_low
+            high = engine.last_estimate_high
+            rr = high / low if low > 0 else 999.0
+            diag_records.append((conf, rr, within_2x, low, high, price))
+
         predictions.append((est, price))
 
     metrics = compute_metrics(predictions, test)
@@ -673,6 +695,82 @@ def experiment_full_pipeline(train: List[dict], test: List[dict]) -> dict:
     for name, count in sorted(estimator_hits.items(), key=lambda x: -x[1]):
         pct = count / total * 100 if total > 0 else 0
         print(f"    {name:15s}: {count:5d} ({pct:5.1f}%)")
+
+    # Print confidence tier distribution + per-tier accuracy
+    print(f"\n  Confidence tier distribution:")
+    for tier_name in ["HIGH", "MEDIUM", "LOW", "NONE"]:
+        count = tier_hits.get(tier_name, 0)
+        pct = count / total * 100 if total > 0 else 0
+        ta = tier_accuracy.get(tier_name, {"total": 0, "within_2x": 0})
+        acc = ta["within_2x"] / ta["total"] * 100 if ta["total"] > 0 else 0
+        print(f"    {tier_name:8s}: {count:5d} ({pct:5.1f}%)  "
+              f"within-2x: {ta['within_2x']}/{ta['total']} ({acc:.1f}%)")
+
+    # Diagnostic: accuracy by confidence bucket and range-ratio bucket
+    if diag_records:
+        print(f"\n  --- Threshold Tuning Diagnostic ---")
+        print(f"  Accuracy by CONFIDENCE bucket:")
+        conf_buckets = [(0.0, 0.15), (0.15, 0.25), (0.25, 0.35),
+                        (0.35, 0.50), (0.50, 0.70), (0.70, 1.01)]
+        for lo, hi in conf_buckets:
+            bucket = [r for r in diag_records if lo <= r[0] < hi]
+            if not bucket:
+                continue
+            n = len(bucket)
+            w2x = sum(1 for _, _, w, *_ in bucket if w)
+            pct = w2x / n * 100
+            print(f"    conf [{lo:.2f}, {hi:.2f}): {n:5d} items, "
+                  f"within-2x: {w2x}/{n} ({pct:.1f}%)")
+
+        print(f"\n  Accuracy by RANGE RATIO bucket:")
+        rr_buckets = [(1.0, 1.5), (1.5, 2.0), (2.0, 3.0), (3.0, 5.0),
+                      (5.0, 10.0), (10.0, 50.0), (50.0, 1000.0)]
+        for lo, hi in rr_buckets:
+            bucket = [r for r in diag_records if lo <= r[1] < hi]
+            if not bucket:
+                continue
+            n = len(bucket)
+            w2x = sum(1 for _, _, w, *_ in bucket if w)
+            pct = w2x / n * 100
+            print(f"    ratio [{lo:.1f}, {hi:.1f}): {n:5d} items, "
+                  f"within-2x: {w2x}/{n} ({pct:.1f}%)")
+
+        print(f"\n  Accuracy by CONFIDENCE x RANGE RATIO (best combos):")
+        combo_buckets = [
+            ("tight+confident", lambda c, r: c >= 0.35 and r < 3.0),
+            ("tight+any",       lambda c, r: r < 3.0),
+            ("mid+confident",   lambda c, r: c >= 0.25 and r < 5.0),
+            ("mid+any",         lambda c, r: r < 5.0),
+            ("wide+confident",  lambda c, r: c >= 0.25 and r >= 5.0),
+            ("wide+low_conf",   lambda c, r: c < 0.25 and r >= 5.0),
+        ]
+        for label, fn in combo_buckets:
+            bucket = [r for r in diag_records if fn(r[0], r[1])]
+            if not bucket:
+                continue
+            n = len(bucket)
+            w2x = sum(1 for _, _, w, *_ in bucket if w)
+            pct = w2x / n * 100
+            print(f"    {label:20s}: {n:5d} items ({n*100/len(diag_records):.1f}%), "
+                  f"within-2x: {w2x}/{n} ({pct:.1f}%)")
+
+        # Range calibration: does the actual price fall inside [low, high]?
+        print(f"\n  Range calibration (actual price within displayed 25-75th range?):")
+        for tier_name, ratio_lo, ratio_hi in [
+            ("HIGH",   1.0,  5.0),
+            ("MEDIUM", 5.0, 50.0),
+            ("LOW",   50.0, 1e6),
+        ]:
+            bucket = [r for r in diag_records
+                      if ratio_lo <= r[1] < ratio_hi and r[3] > 0]
+            if not bucket:
+                continue
+            n = len(bucket)
+            in_range = sum(1 for _, _, _, lo, hi, actual in bucket
+                          if lo <= actual <= hi)
+            pct = in_range / n * 100
+            print(f"    {tier_name:8s}: {in_range}/{n} ({pct:.1f}%) "
+                  f"actual price within [p25, p75]")
 
     return metrics
 
@@ -1058,6 +1156,189 @@ def _train_unified_gbm(records: List[dict],
     }
 
 
+# ── Core-mod pricing experiments ──────────────────────────
+
+def _build_engine(train: List[dict]):
+    """Build a CalibrationEngine loaded with training data + GBM models."""
+    from calibration import CalibrationEngine
+    from shard_generator import _GRADE_NUM as _GN
+
+    engine = CalibrationEngine()
+    for rec in train:
+        price = rec.get("min_divine", 0)
+        if price <= 0:
+            continue
+        mod_groups = [g for g in rec.get("mod_groups", []) if g]
+        engine._insert(
+            score=float(rec.get("score", 0)),
+            divine=float(price),
+            item_class=rec.get("item_class", ""),
+            grade_num=_GN.get(rec.get("grade", "C"), 1),
+            dps_factor=rec.get("dps_factor", 1.0),
+            defense_factor=rec.get("defense_factor", 1.0),
+            top_tier_count=rec.get("top_tier_count", 0),
+            mod_count=rec.get("mod_count", 4),
+            ts=rec.get("ts", 0),
+            is_user=True,
+            mod_groups=mod_groups,
+            base_type=rec.get("base_type", ""),
+            mod_tiers=rec.get("mod_tiers", {}),
+            somv_factor=rec.get("somv_factor", 1.0),
+            mod_rolls=rec.get("mod_rolls", {}),
+            pdps=rec.get("pdps", 0.0),
+            edps=rec.get("edps", 0.0),
+            sale_confidence=rec.get("sale_confidence", 1.0),
+            mod_stats=rec.get("mod_stats", {}),
+            quality=rec.get("quality", 0),
+            sockets=rec.get("sockets", 0),
+            corrupted=1 if rec.get("corrupted", False) else 0,
+            open_prefixes=rec.get("open_prefixes", 0),
+            open_suffixes=rec.get("open_suffixes", 0),
+        )
+
+    try:
+        from gbm_trainer import train_gbm_models
+        gbm_recs = prepare_gbm_records(train)
+        models = train_gbm_models(gbm_recs)
+        engine._gbm_models = models
+        print(f"  Loaded {len(models)} GBM models into engine")
+    except Exception as e:
+        print(f"  GBM training skipped: {e}")
+
+    engine._auto_populate_mod_weights()
+    # Force modset + core-mod lookup build (normally lazy on first estimate())
+    engine._build_modset_lookup()
+    return engine
+
+
+def experiment_mod_values(train: List[dict], test: List[dict]) -> dict:
+    """Diagnostic: print learned mod market values per class.
+
+    Validates that Spirit/CritMulti are high-value and FireRes/Rarity are low.
+    """
+    engine = _build_engine(train)
+
+    print(f"\n{'=' * 60}")
+    print(f"  Mod Market Values Diagnostic")
+    print(f"{'=' * 60}")
+    print(f"  Classes with learned values: {len(engine._mod_market_values)}")
+    print(f"  Classes with core mods: {len(engine._core_mods)}")
+
+    for item_class in sorted(engine._mod_market_values.keys()):
+        values = engine._mod_market_values[item_class]
+        cores = engine._core_mods.get(item_class, frozenset())
+        n_samples = len(engine._by_class.get(item_class, []))
+        sorted_vals = sorted(values.items(), key=lambda x: -x[1])
+
+        print(f"\n  {item_class} ({n_samples} samples, {len(cores)} core mods):")
+        # Top 5 price-driving mods
+        top5 = sorted_vals[:5]
+        if top5:
+            print(f"    TOP (price-driving):")
+            for mod, uplift in top5:
+                marker = " [CORE]" if mod in cores else ""
+                print(f"      {mod:30s}: {uplift:+.3f} ({math.exp(uplift):.2f}x){marker}")
+        # Bottom 5 (filler/cheap indicator)
+        bot5 = sorted_vals[-5:]
+        if bot5 and bot5[-1][1] < 0:
+            print(f"    BOTTOM (filler/cheap):")
+            for mod, uplift in bot5:
+                print(f"      {mod:30s}: {uplift:+.3f} ({math.exp(uplift):.2f}x)")
+
+    # Core-mod lookup stats
+    total_keys = len(engine._core_modset_lookup)
+    total_entries = sum(len(v) for v in engine._core_modset_lookup.values())
+    viable_keys = sum(1 for v in engine._core_modset_lookup.values() if len(v) >= 5)
+    print(f"\n  Core-mod lookup: {total_keys} keys, {total_entries} entries, "
+          f"{viable_keys} viable (>=5 samples)")
+
+    return {"pct_2x": 0, "total": 0, "median_error": 0}
+
+
+def experiment_core_modset(train: List[dict], test: List[dict]) -> dict:
+    """Full pipeline with core-mod matching. Reports per-estimator accuracy."""
+    engine = _build_engine(train)
+
+    predictions = []
+    estimator_hits = defaultdict(int)
+    estimator_predictions = defaultdict(list)  # estimator -> [(est, actual)]
+
+    for rec in test:
+        price = rec.get("min_divine", 0)
+        if price <= 0:
+            predictions.append((None, price))
+            continue
+
+        mod_groups = [g for g in rec.get("mod_groups", []) if g]
+
+        est = engine.estimate(
+            score=rec.get("score", 0),
+            item_class=rec.get("item_class", ""),
+            grade=rec.get("grade", "C"),
+            dps_factor=rec.get("dps_factor", 1.0),
+            defense_factor=rec.get("defense_factor", 1.0),
+            top_tier_count=rec.get("top_tier_count", 0),
+            mod_count=rec.get("mod_count", 4),
+            mod_groups=mod_groups,
+            base_type=rec.get("base_type", ""),
+            somv_factor=rec.get("somv_factor", 1.0),
+            mod_tiers=rec.get("mod_tiers", {}),
+            mod_rolls=rec.get("mod_rolls", {}),
+            pdps=rec.get("pdps", 0.0),
+            edps=rec.get("edps", 0.0),
+            mod_stats=rec.get("mod_stats", {}),
+            quality=rec.get("quality", 0),
+            sockets=rec.get("sockets", 0),
+            corrupted=1 if rec.get("corrupted", False) else 0,
+            open_prefixes=rec.get("open_prefixes", 0),
+            open_suffixes=rec.get("open_suffixes", 0),
+        )
+
+        # Classify which estimator fired using match type + confidence
+        conf = engine.last_confidence
+        match_type = engine._last_modset_match_type
+        if est is None:
+            estimator = "none"
+        elif match_type in ("exact_grade", "exact", "n_minus_1", "core_mod"):
+            estimator = f"modset:{match_type}"
+        elif conf >= 0.6:
+            estimator = "gbm"
+        elif conf >= 0.3:
+            estimator = "knn_class"
+        elif conf >= 0.1:
+            estimator = "knn_global"
+        else:
+            estimator = "median"
+
+        estimator_hits[estimator] += 1
+        if est is not None and price > 0:
+            estimator_predictions[estimator].append((est, price))
+        predictions.append((est, price))
+
+    metrics = compute_metrics(predictions, test)
+    print_metrics("Core-Mod Pipeline (modset > k-NN > GBM > median)", metrics)
+
+    # Print estimator hit rates with per-estimator accuracy
+    total = sum(estimator_hits.values())
+    print(f"\n  Estimator breakdown:")
+    print(f"  {'Estimator':25s} {'Hits':>6s} {'%':>6s} {'W2x':>6s} {'Med':>6s}")
+    print(f"  {'-'*25} {'-'*6} {'-'*6} {'-'*6} {'-'*6}")
+    for name in sorted(estimator_hits.keys(),
+                        key=lambda x: -estimator_hits[x]):
+        count = estimator_hits[name]
+        pct = count / total * 100 if total > 0 else 0
+        preds = estimator_predictions.get(name, [])
+        if preds:
+            ratios = [max(e / a, a / e) for e, a in preds if e and a > 0]
+            w2x = sum(1 for r in ratios if r <= 2.0) / len(ratios) * 100 if ratios else 0
+            med = sorted(ratios)[len(ratios) // 2] if ratios else 0
+            print(f"  {name:25s} {count:6d} {pct:5.1f}% {w2x:5.1f}% {med:5.2f}x")
+        else:
+            print(f"  {name:25s} {count:6d} {pct:5.1f}%    -      -")
+
+    return metrics
+
+
 # ── Main ─────────────────────────────────────────────────
 
 EXPERIMENTS = {
@@ -1071,6 +1352,8 @@ EXPERIMENTS = {
     "interactions": experiment_interactions,
     "best": experiment_best_combo,
     "full_pipeline": experiment_full_pipeline,
+    "mod_values": experiment_mod_values,
+    "core_modset": experiment_core_modset,
 }
 
 

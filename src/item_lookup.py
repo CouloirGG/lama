@@ -123,9 +123,14 @@ class ItemLookup:
                             d2c = getattr(server.price_cache, 'divine_to_chaos', 0)
                     except Exception:
                         pass
+                    engine = self._calibration
                     estimate = {
                         "divine_value": round(price_divine, 2),
                         "chaos_value": round(price_divine * d2c, 0) if d2c > 0 else None,
+                        "estimate_low": round(engine.last_estimate_low, 2),
+                        "estimate_high": round(engine.last_estimate_high, 2),
+                        "confidence_tier": engine.last_confidence_tier,
+                        "value_tier": engine.last_value_tier,
                     }
             except Exception as e:
                 logger.debug(f"Calibration estimate failed: {e}")

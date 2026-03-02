@@ -37,6 +37,7 @@ CACHE_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "cache"
 ACCURACY_LOG = CACHE_DIR / "accuracy_tracking.jsonl"
 HARVESTER_SCRIPT = SRC_DIR / "calibration_harvester.py"
 ACCURACY_SCRIPT = SRC_DIR / "accuracy_lab.py"
+DISAPPEARANCE_SCRIPT = SRC_DIR / "disappearance_tracker.py"
 
 
 def count_records() -> int:
@@ -190,6 +191,41 @@ def run_accuracy_check() -> dict | None:
         return None
 
 
+def run_disappearance_check() -> bool:
+    """Run the disappearance tracker to tag sold vs stale listings. Returns True on success."""
+    print(f"\n{'='*60}")
+    print(f"  DISAPPEARANCE CHECK")
+    print(f"{'='*60}")
+
+    cmd = [
+        sys.executable, str(DISAPPEARANCE_SCRIPT),
+        "--recheck", "--min-age", "4h",
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd, cwd=str(SRC_DIR),
+            capture_output=True, text=True,
+            timeout=1800,  # 30 min timeout
+        )
+        output = result.stdout
+        if output:
+            print(output)
+        if result.stderr:
+            for line in result.stderr.strip().split("\n"):
+                if line.strip():
+                    print(f"  [stderr] {line}")
+        return result.returncode == 0
+    except subprocess.TimeoutExpired:
+        print("  WARNING: Disappearance check timed out (30min)")
+        return False
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
+        print(f"  ERROR: Disappearance check failed: {e}")
+        return False
+
+
 def log_accuracy(metrics: dict, cycle: int):
     """Append accuracy results to the tracking log."""
     entry = {
@@ -257,6 +293,8 @@ def main():
                         help="Seconds between cycles (default: 60)")
     parser.add_argument("--no-accuracy", action="store_true",
                         help="Skip accuracy checks (harvest only)")
+    parser.add_argument("--no-disappearance", action="store_true",
+                        help="Skip disappearance checks")
     parser.add_argument("--once", action="store_true",
                         help="Run one cycle then exit")
     parser.add_argument("--accuracy-only", action="store_true",
@@ -290,6 +328,7 @@ def main():
     print(f"  Starting from pass: {start_pass}")
     print(f"  Cooldown: {args.cooldown}s between cycles")
     print(f"  Accuracy checks: {'OFF' if args.no_accuracy else 'after each cycle'}")
+    print(f"  Disappearance checks: {'OFF' if args.no_disappearance else 'after each cycle'}")
     print(f"  Mode: {'single cycle' if args.once else 'continuous'}")
     if args.max_cycles:
         print(f"  Max cycles: {args.max_cycles}")
@@ -338,6 +377,10 @@ def main():
 
             # Advance pass counter for next cycle
             next_start += args.passes
+
+            # Run disappearance check to tag sold vs stale listings
+            if not args.no_disappearance:
+                run_disappearance_check()
 
             if not args.no_accuracy:
                 metrics = run_accuracy_check()

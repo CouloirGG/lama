@@ -94,6 +94,9 @@ class CalibrationEngine:
     SOCKET_WEIGHT = 0.15       # binary penalty for different socket counts
     OPEN_AFFIX_WEIGHT = 0.10   # prefix/suffix slot difference
 
+    # Core-mod pricing threshold: mods with log-price uplift above this are "core"
+    CORE_MOD_THRESHOLD = 0.3  # ~1.35x price increase = core mod
+
     # Group-prior blending: when k-NN neighbors are distant, blend toward
     # group median to prevent wild extrapolation.
     # Diagnostic showed grade median (34.3%) beats k-NN (32.8%) for distant
@@ -126,11 +129,23 @@ class CalibrationEngine:
         self._gbm_models: Dict[str, dict] = {}
         # Last estimate confidence (0.0-1.0, higher = better)
         self.last_confidence: float = 0.0
+        # Price range: 25th/75th percentile from neighbors
+        self.last_estimate_low: float = 0.0
+        self.last_estimate_high: float = 0.0
+        # Confidence tier: "HIGH", "MEDIUM", "LOW"
+        self.last_confidence_tier: str = ""
+        # Value tier: "HIGH", "MID", "LOW" (from core-mod market values)
+        self.last_value_tier: str = ""
         # Demand index: per-(item_class, mod_group) demand scores
         self._demand_index = None  # Optional[DemandIndex]
         # Mod-set lookup: (item_class, frozenset(mod_groups)) -> [log_price, ...]
         self._modset_lookup: Dict[Tuple[str, frozenset], List[float]] = {}
         self._modset_lookup_dirty: bool = True
+        # Core-mod pricing: learned mod market values and core mod sets
+        self._mod_market_values: Dict[str, Dict[str, float]] = {}  # class -> {mod_group: uplift}
+        self._core_mods: Dict[str, frozenset] = {}  # class -> frozenset of core mod groups
+        self._core_modset_lookup: Dict[Tuple[str, frozenset], List[Tuple[float, float, float]]] = {}
+        self._last_modset_match_type: str = ""  # track which tier matched
 
     @property
     def _k(self) -> int:
@@ -150,6 +165,26 @@ class CalibrationEngine:
         if pool_size < 10:
             return 3
         return min(15, max(3, int(math.sqrt(pool_size))))
+
+    @staticmethod
+    def _weighted_percentile(wt_pairs: list, quantile: float) -> float:
+        """Return the log-price at a weighted quantile from sorted (log_price, weight) pairs.
+
+        wt_pairs must be sorted by log_price ascending.
+        quantile is 0.0-1.0 (e.g. 0.25 for 25th percentile).
+        """
+        if not wt_pairs:
+            return 0.0
+        total_weight = sum(w for _, w in wt_pairs)
+        if total_weight <= 0:
+            return wt_pairs[0][0]
+        target = total_weight * quantile
+        cumulative = 0.0
+        for lp, w in wt_pairs:
+            cumulative += w
+            if cumulative >= target:
+                return lp
+        return wt_pairs[-1][0]
 
     def set_mod_weights(self, weights: Dict[str, float]):
         """Set mod importance weights for weighted Jaccard distance."""
@@ -775,6 +810,40 @@ class CalibrationEngine:
         else:
             return round(est, 2)
 
+    def _assign_confidence_tier(self):
+        """Assign HIGH/MEDIUM/LOW confidence tier based on neighbor price range.
+
+        Range ratio (75th/25th percentile) is the only reliable accuracy signal.
+        Confidence score clusters too narrowly to discriminate.
+        Thresholds tuned from accuracy_lab diagnostic:
+          ratio < 5x  → 38% within-2x (25% of items)
+          ratio < 50x → 33% within-2x (66% of items)
+          ratio >= 50x → 27% within-2x (9% of items)
+        """
+        low = self.last_estimate_low
+        high = self.last_estimate_high
+        ratio = high / low if low > 0 else 999.0
+        if ratio < 5.0:
+            self.last_confidence_tier = "HIGH"
+        elif ratio < 50.0:
+            self.last_confidence_tier = "MEDIUM"
+        else:
+            self.last_confidence_tier = "LOW"
+
+    def _compute_value_tier(self, item_class: str, mod_groups: list):
+        """Assign HIGH/MID/LOW value tier from learned core-mod market values."""
+        market_vals = self._mod_market_values.get(item_class)
+        if not market_vals or not mod_groups:
+            self.last_value_tier = "LOW"
+            return
+        total_uplift = sum(market_vals.get(g, 0.0) for g in mod_groups)
+        if total_uplift > 1.5:
+            self.last_value_tier = "HIGH"
+        elif total_uplift > 0.3:
+            self.last_value_tier = "MID"
+        else:
+            self.last_value_tier = "LOW"
+
     def estimate(self, score: float, item_class: str,
                  grade: str = "", dps_factor: float = 1.0,
                  defense_factor: float = 1.0,
@@ -799,12 +868,18 @@ class CalibrationEngine:
                  open_suffixes: int = 0) -> Optional[float]:
         """Return estimated divine value, or None if insufficient data.
 
-        Priority: GBM > class k-NN > global k-NN > grade median.
+        Priority: modset (exact→n-1→core-mod) > class k-NN > GBM > global k-NN > grade median.
 
         Also stores the last confidence value in self.last_confidence
         (0.0-1.0 scale, higher = more confident estimate).
         """
         grade_num = _GRADE_NUM.get(grade, 1)
+
+        # Reset range/tier fields for this estimate
+        self.last_estimate_low = 0.0
+        self.last_estimate_high = 0.0
+        self.last_confidence_tier = ""
+        self.last_value_tier = ""
 
         # Compute tier aggregates from mod_tiers
         mt = mod_tiers or {}
@@ -849,16 +924,39 @@ class CalibrationEngine:
             open_prefixes=open_prefixes,
             open_suffixes=open_suffixes)
 
-        # 1. Try exact mod-set lookup (best for common combinations)
+        # Modset match-type -> confidence mapping
+        _MODSET_CONFIDENCE = {
+            "exact_grade": 0.75, "exact": 0.73,
+            "n_minus_1": 0.70, "core_mod": 0.65,
+        }
+
+        # 1. Try mod-set lookup (exact → n-1 → core-mod)
         if mod_groups:
             modset_est = self._modset_estimate(
                 item_class, frozenset(mod_groups), grade_num, tier_score,
                 somv_factor=somv_factor)
             if modset_est is not None:
-                self.last_confidence = 0.75
+                self.last_confidence = _MODSET_CONFIDENCE.get(
+                    self._last_modset_match_type, 0.70)
+                self._assign_confidence_tier()
+                self._compute_value_tier(item_class, mod_groups)
                 return modset_est
 
-        # 2. Try GBM estimate (handles items without modset match)
+        # 2. Class k-NN (with value-weighted distance) — before GBM since
+        #    learned mod weights give k-NN better mod-identity awareness
+        class_samples = self._by_class.get(item_class)
+        if class_samples and len(class_samples) >= self.MIN_CLASS_SAMPLES:
+            result, confidence = self._interpolate(
+                score, class_samples, grade_num,
+                dps_factor, defense_factor,
+                top_tier_count, mod_count,
+                item_class, **_knn_kwargs)
+            self.last_confidence = confidence
+            self._assign_confidence_tier()
+            self._compute_value_tier(item_class, mod_groups)
+            return result
+
+        # 3. GBM fallback (for classes with trained models but few class samples)
         if mod_groups and self._gbm_models:
             gbm_est = self._gbm_estimate(
                 item_class, grade_num, score,
@@ -879,20 +977,14 @@ class CalibrationEngine:
                 open_suffixes=open_suffixes)
             if gbm_est is not None:
                 self.last_confidence = 0.6
+                # GBM doesn't produce range — use point estimate as range
+                self.last_estimate_low = gbm_est * 0.5
+                self.last_estimate_high = gbm_est * 2.0
+                self._assign_confidence_tier()
+                self._compute_value_tier(item_class, mod_groups)
                 return gbm_est
 
-        # 3. Fall back to k-NN (class-specific)
-        class_samples = self._by_class.get(item_class)
-        if class_samples and len(class_samples) >= self.MIN_CLASS_SAMPLES:
-            result, confidence = self._interpolate(
-                score, class_samples, grade_num,
-                dps_factor, defense_factor,
-                top_tier_count, mod_count,
-                item_class, **_knn_kwargs)
-            self.last_confidence = confidence
-            return result
-
-        # 4. Fall back to k-NN (global)
+        # 4. Global k-NN
         if len(self._global) >= self.MIN_GLOBAL_SAMPLES:
             result, confidence = self._interpolate(
                 score, self._global, grade_num,
@@ -900,10 +992,14 @@ class CalibrationEngine:
                 top_tier_count, mod_count,
                 item_class, **_knn_kwargs)
             self.last_confidence = confidence * 0.7  # global pool is less specific
+            self._assign_confidence_tier()
+            self._compute_value_tier(item_class, mod_groups)
             return result
 
         # 5. Last resort: class+grade median
         self.last_confidence = 0.1  # very low confidence
+        self._assign_confidence_tier()
+        self._compute_value_tier(item_class, mod_groups)
         return self._grade_median_estimate(item_class, grade_num)
 
     def sample_count(self, item_class: str = "") -> int:
@@ -1021,6 +1117,111 @@ class CalibrationEngine:
                     self._modset_grade_lookup[gkey] = []
                 self._modset_grade_lookup[gkey].append(entry)
         self._modset_lookup_dirty = False
+        # Learn mod values and build core-mod lookup after modset lookup
+        self._learn_mod_market_values()
+
+    def _learn_mod_market_values(self):
+        """Learn per-mod market value uplift from data.
+
+        For each (item_class, mod_group), computes:
+            median(log_price WITH mod) - median(log_price WITHOUT mod)
+        Positive = price-driving mod, negative = cheap-item indicator.
+        """
+        self._mod_market_values.clear()
+        MIN_SIDE = 5   # min samples on each side (with/without)
+        MIN_CLASS = 30  # min samples in class
+
+        for item_class, samples in self._by_class.items():
+            if len(samples) < MIN_CLASS:
+                continue
+
+            # Collect all mod groups and log-prices in this class
+            all_lps = []
+            mod_to_lps = {}  # mod_group -> [log_prices of items WITH this mod]
+            all_mods = set()
+
+            for s in samples:
+                lp = math.log(s[1])
+                all_lps.append(lp)
+                for g in s[9]:
+                    all_mods.add(g)
+                    if g not in mod_to_lps:
+                        mod_to_lps[g] = []
+                    mod_to_lps[g].append(lp)
+
+            if not all_mods:
+                continue
+
+            all_lps.sort()
+            n_total = len(all_lps)
+            class_values = {}
+
+            for mod, with_lps in mod_to_lps.items():
+                n_with = len(with_lps)
+                n_without = n_total - n_with
+                if n_with < MIN_SIDE or n_without < MIN_SIDE:
+                    continue
+
+                with_lps_sorted = sorted(with_lps)
+                median_with = with_lps_sorted[n_with // 2]
+
+                # Compute median of items WITHOUT this mod
+                without_lps = [math.log(s[1]) for s in samples
+                               if mod not in s[9]]
+                without_lps.sort()
+                if len(without_lps) < MIN_SIDE:
+                    continue
+                median_without = without_lps[len(without_lps) // 2]
+                class_values[mod] = round(median_with - median_without, 4)
+
+            if class_values:
+                self._mod_market_values[item_class] = class_values
+
+        self._classify_core_mods()
+
+    def _classify_core_mods(self):
+        """Classify mods as core (price-driving) or filler per item class.
+
+        Core mod = market_value uplift > CORE_MOD_THRESHOLD.
+        """
+        self._core_mods.clear()
+        for item_class, values in self._mod_market_values.items():
+            cores = frozenset(
+                mod for mod, uplift in values.items()
+                if uplift > self.CORE_MOD_THRESHOLD
+            )
+            if cores:
+                self._core_mods[item_class] = cores
+
+        # Build core-mod lookup table
+        self._build_core_modset_lookup()
+
+    def _build_core_modset_lookup(self):
+        """Build core-mod lookup: (item_class, frozenset(core_mods+synergy)) -> entries.
+
+        Uses _extract_core_key() to include synergy pair tokens, so build
+        and query keys are consistent.
+        """
+        self._core_modset_lookup.clear()
+        for item_class, samples in self._by_class.items():
+            class_cores = self._core_mods.get(item_class)
+            if not class_cores:
+                continue
+            for s in samples:
+                mg = frozenset(s[9]) if s[9] else frozenset()
+                if not mg:
+                    continue
+                core_key = self._extract_core_key(item_class, mg)
+                if not core_key:
+                    continue
+                lp = math.log(s[1])
+                ts = s[11]
+                somv = s[17]
+                entry = (lp, ts, somv)
+                key = (item_class, core_key)
+                if key not in self._core_modset_lookup:
+                    self._core_modset_lookup[key] = []
+                self._core_modset_lookup[key].append(entry)
 
     _MODSET_MIN_SAMPLES = 3  # need at least this many to trust the lookup
 
@@ -1062,12 +1263,41 @@ class CalibrationEngine:
         if lps[-1] - lps[0] > max_log_spread:
             return None
         est = math.exp(lps[len(lps) // 2])
-        if est >= 10:
-            return round(est, 0)
-        elif est >= 1:
-            return round(est, 1)
-        else:
-            return round(est, 2)
+        # Compute 25th/75th percentile range
+        n = len(lps)
+        low = math.exp(lps[max(0, n // 4)])
+        high = math.exp(lps[min(n - 1, (3 * n) // 4)])
+        def _rnd(v):
+            if v >= 10:
+                return round(v, 0)
+            elif v >= 1:
+                return round(v, 1)
+            else:
+                return round(v, 2)
+        return (_rnd(est), _rnd(low), _rnd(high))
+
+    def _extract_core_key(self, item_class: str,
+                          mod_groups: frozenset) -> Optional[frozenset]:
+        """Extract core-mod key for an item, with synergy pair tokens.
+
+        Returns frozenset of core mod names + "SYN:ModA|ModB" tokens for
+        synergy pairs where both mods are present. Returns None if no
+        core mods match.
+        """
+        class_cores = self._core_mods.get(item_class)
+        if not class_cores:
+            return None
+        item_cores = mod_groups & class_cores
+        if not item_cores:
+            return None
+
+        # Add synergy tokens when both mods of a known pair are present
+        from weight_learner import SYNERGY_PAIRS
+        tokens = set(item_cores)
+        for a, b in SYNERGY_PAIRS:
+            if a in mod_groups and b in mod_groups:
+                tokens.add(f"SYN:{a}|{b}")
+        return frozenset(tokens)
 
     def _modset_estimate(self, item_class: str, mod_groups: frozenset,
                          grade_num: int = 1, tier_score: float = None,
@@ -1076,9 +1306,10 @@ class CalibrationEngine:
         """Lookup estimate: median price of items with same or similar mod set.
 
         Priority:
-        1. Grade-stratified exact match (≥3 samples)
+        1. Grade-stratified exact match (≥2 samples)
         2. Unstratified exact match (≥3 samples)
         3. Fuzzy match: n-1 mod overlap (≥4 mods, ≥3 samples)
+        4. Core-mod match: items sharing the same core (price-driving) mods (≥5 samples)
         Returns None if not enough data.
 
         When tier_score is provided, filters entries by tier proximity so
@@ -1090,6 +1321,8 @@ class CalibrationEngine:
         if self._modset_lookup_dirty:
             self._build_modset_lookup()
 
+        self._last_modset_match_type = ""
+
         # 1. Grade-stratified exact match (relaxed: 2 samples enough since
         #    grade filtering already narrows the pool)
         gkey = (item_class, mod_groups, grade_num)
@@ -1099,7 +1332,11 @@ class CalibrationEngine:
                                          somv_factor=somv_factor,
                                          min_samples=2)
             if result is not None:
-                return result
+                est, low, high = result
+                self.last_estimate_low = low
+                self.last_estimate_high = high
+                self._last_modset_match_type = "exact_grade"
+                return est
 
         # 2. Unstratified exact match
         key = (item_class, mod_groups)
@@ -1108,7 +1345,11 @@ class CalibrationEngine:
             result = self._modset_median(entries, tier_score=tier_score,
                                          somv_factor=somv_factor)
             if result is not None:
-                return result
+                est, low, high = result
+                self.last_estimate_low = low
+                self.last_estimate_high = high
+                self._last_modset_match_type = "exact"
+                return est
 
         # 3. Fuzzy match: try removing one mod at a time (n-1 overlap)
         if len(mod_groups) >= 4:
@@ -1127,13 +1368,42 @@ class CalibrationEngine:
                 result = self._modset_median(best_entries, tier_score=tier_score,
                                              somv_factor=somv_factor)
                 if result is not None:
-                    return result
+                    est, low, high = result
+                    self.last_estimate_low = low
+                    self.last_estimate_high = high
+                    self._last_modset_match_type = "n_minus_1"
+                    return est
+
+        # 4. Core-mod match: match on price-driving mods only (filler stripped)
+        class_cores = self._core_mods.get(item_class)
+        if class_cores:
+            core_key = self._extract_core_key(item_class, mod_groups)
+            if core_key:
+                # Try synergy-enhanced key first, then plain core key
+                core_entries = self._core_modset_lookup.get(
+                    (item_class, core_key))
+                if core_entries and len(core_entries) >= 5:
+                    result = self._modset_median(
+                        core_entries, tier_score=tier_score,
+                        somv_factor=somv_factor,
+                        min_samples=5, max_log_spread=1.8)
+                    if result is not None:
+                        est, low, high = result
+                        self.last_estimate_low = low
+                        self.last_estimate_high = high
+                        self._last_modset_match_type = "core_mod"
+                        return est
 
         return None
 
-    def _weighted_jaccard_distance(self, set_a: frozenset, set_b: frozenset) -> float:
+    def _weighted_jaccard_distance(self, set_a: frozenset, set_b: frozenset,
+                                    item_class: str = "") -> float:
         """Weighted Jaccard distance in [0.0, MOD_IDENTITY_WEIGHT].
         Returns 0.0 when either set is empty (neutral for legacy data).
+
+        When learned mod market values are available for the item class,
+        uses abs(market_value) as weight so price-driving mods contribute
+        more to the distance metric.
         """
         if not set_a or not set_b:
             return 0.0
@@ -1141,8 +1411,19 @@ class CalibrationEngine:
         intersection = set_a & set_b
         if not union:
             return 0.0
-        w_union = sum(self._mod_weights.get(g, 0.3) for g in union)
-        w_inter = sum(self._mod_weights.get(g, 0.3) for g in intersection)
+        # Use learned market values when available, fall back to static weights
+        market_vals = self._mod_market_values.get(item_class) if item_class else None
+        if market_vals:
+            def _weight(g):
+                mv = market_vals.get(g)
+                if mv is not None:
+                    return max(abs(mv), 0.1)  # floor at 0.1 so filler mods aren't zero
+                return self._mod_weights.get(g, 0.3)
+        else:
+            def _weight(g):
+                return self._mod_weights.get(g, 0.3)
+        w_union = sum(_weight(g) for g in union)
+        w_inter = sum(_weight(g) for g in intersection)
         if w_union == 0:
             return 0.0
         return (1.0 - w_inter / w_union) * self.MOD_IDENTITY_WEIGHT
@@ -1250,7 +1531,7 @@ class CalibrationEngine:
             if mod_stats_tuple and s_stats:
                 mod_d = self._stat_distance(mod_stats_tuple, s_stats)
             else:
-                mod_d = self._weighted_jaccard_distance(mod_groups, s_mods)
+                mod_d = self._weighted_jaccard_distance(mod_groups, s_mods, item_class)
             bt_d = 0.0
             if base_type and s[10] and base_type != s[10]:
                 bt_d = self.BASE_TYPE_WEIGHT
@@ -1403,6 +1684,12 @@ class CalibrationEngine:
             if cumulative >= target:
                 avg_log = lp
                 break
+
+        # Compute 25th/75th percentile range from neighbors
+        log_low = self._weighted_percentile(wt_pairs, 0.25)
+        log_high = self._weighted_percentile(wt_pairs, 0.75)
+        self.last_estimate_low = math.exp(log_low)
+        self.last_estimate_high = math.exp(log_high)
 
         # Group-prior blending: when neighbors are distant, blend toward
         # group median to prevent wild extrapolation

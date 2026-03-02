@@ -900,12 +900,19 @@ class LAMA:
             evasion=getattr(item, "evasion", 0) or 0,
             energy_shield=getattr(item, "energy_shield", 0) or 0)
 
+        # Read confidence-tier data from calibration engine
+        est_low = self.calibration.last_estimate_low
+        est_high = self.calibration.last_estimate_high
+        confidence_tier = self.calibration.last_confidence_tier
+        value_tier = self.calibration.last_value_tier
+
         # Check trade cache — deep query or auto-cal may have a real price
         cached_trade = None
         if hasattr(self, 'trade_client') and self.trade_client:
             cached_trade = self.trade_client.lookup_cached(item, parsed_mods)
         if cached_trade and cached_trade.min_price > 0:
             price_est = cached_trade.min_price
+            confidence_tier = "HIGH"  # real trade data = high confidence
             logger.info(f"Using cached trade result: {cached_trade.display}")
 
         d2c = self.price_cache.divine_to_chaos
@@ -913,6 +920,10 @@ class LAMA:
         ds = self._display_settings
         text = score.format_overlay_text(
             price_estimate=price_est,
+            estimate_low=est_low,
+            estimate_high=est_high,
+            confidence_tier=confidence_tier,
+            value_tier=value_tier,
             divine_to_chaos=d2c,
             divine_to_exalted=d2e,
             show_grade=ds.get("overlay_show_grade", True),
@@ -922,19 +933,27 @@ class LAMA:
             show_dps=ds.get("overlay_show_dps", True),
         )
 
-        # If we have a price estimate, use price-based tier instead of grade-based.
-        # Only override for B+ grades — C/JUNK calibration estimates are unreliable
-        # and would show misleading colors (e.g. orange "C") with few samples.
+        # Overlay color tier: use confidence tier + price/value to pick color
         if price_est is not None and score.grade.value not in ("C", "JUNK"):
-            chaos_val = price_est * d2c
-            if chaos_val >= 25:
-                overlay_tier = "high"
-            elif chaos_val >= 5:
-                overlay_tier = "good"
-            elif chaos_val >= 1:
-                overlay_tier = "decent"
+            if confidence_tier in ("HIGH", "MEDIUM"):
+                # Use existing chaos-based tier (same as before)
+                chaos_val = price_est * d2c
+                if chaos_val >= 25:
+                    overlay_tier = "high"
+                elif chaos_val >= 5:
+                    overlay_tier = "good"
+                elif chaos_val >= 1:
+                    overlay_tier = "decent"
+                else:
+                    overlay_tier = "low"
             else:
-                overlay_tier = "low"
+                # LOW confidence: color by value tier
+                if value_tier == "HIGH":
+                    overlay_tier = "good"
+                elif value_tier == "MID":
+                    overlay_tier = "decent"
+                else:
+                    overlay_tier = "low"
 
         # Scrap override: JUNK/C items with quality/sockets → bronze "SCRAP"
         if text == "SCRAP":

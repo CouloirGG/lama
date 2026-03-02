@@ -173,7 +173,66 @@ class ItemScore:
     quality: int = 0
     sockets: int = 0
 
+    def _format_price_point(self, price: float,
+                            divine_to_chaos: float,
+                            divine_to_exalted: float) -> str:
+        """Format a single price value with appropriate currency."""
+        if price >= 10:
+            return f"~{price:.0f}d"
+        elif price >= 1.0:
+            return f"~{price:.1f}d"
+        elif divine_to_exalted > 0:
+            ex = price * divine_to_exalted
+            if ex >= 10:
+                return f"~{ex:.0f}ex"
+            elif ex >= 1:
+                return f"~{ex:.1f}ex"
+            elif divine_to_chaos > 0:
+                chaos = price * divine_to_chaos
+                return f"~{chaos:.0f}c"
+            else:
+                return f"~{price:.2f}d"
+        elif divine_to_chaos > 0:
+            chaos = price * divine_to_chaos
+            return f"~{chaos:.0f}c"
+        else:
+            return f"~{price:.2f}d"
+
+    def _format_price_range(self, low: float, high: float,
+                            divine_to_chaos: float,
+                            divine_to_exalted: float) -> str:
+        """Format a price range (25th-75th percentile) with appropriate currency."""
+        mid = (low + high) / 2
+        if mid >= 1.0:
+            if low >= 10 and high >= 10:
+                return f"~{low:.0f}-{high:.0f}d"
+            elif low >= 1:
+                return f"~{low:.1f}-{high:.1f}d"
+            else:
+                return f"~{low:.2f}-{high:.1f}d"
+        elif divine_to_exalted > 0:
+            ex_low = low * divine_to_exalted
+            ex_high = high * divine_to_exalted
+            if ex_low >= 1:
+                return f"~{ex_low:.0f}-{ex_high:.0f}ex"
+            elif divine_to_chaos > 0:
+                c_low = low * divine_to_chaos
+                c_high = high * divine_to_chaos
+                return f"~{c_low:.0f}-{c_high:.0f}c"
+            else:
+                return f"~{low:.2f}-{high:.2f}d"
+        elif divine_to_chaos > 0:
+            c_low = low * divine_to_chaos
+            c_high = high * divine_to_chaos
+            return f"~{c_low:.0f}-{c_high:.0f}c"
+        else:
+            return f"~{low:.2f}-{high:.2f}d"
+
     def format_overlay_text(self, price_estimate: float = None,
+                            estimate_low: float = None,
+                            estimate_high: float = None,
+                            confidence_tier: str = "",
+                            value_tier: str = "",
                             divine_to_chaos: float = 0,
                             divine_to_exalted: float = 0,
                             show_grade: bool = True,
@@ -181,12 +240,11 @@ class ItemScore:
                             show_stars: bool = True,
                             show_mods: bool = True,
                             show_dps: bool = True) -> str:
-        """Format for overlay display.
+        """Format for overlay display with confidence-tiered pricing.
 
-        JUNK:  '✗'
-        C:     'C'
-        B/A/S without price:  'A 67% ★3: T1 SpellCrit, T1 CritChance, T1 ES'
-        B/A/S with price:     'A ~130d ★3: T1 SpellCrit, T1 CritChance, T1 ES'
+        HIGH confidence:   'A ~130d ★3: T1 SpellCrit, T1 CritChance'
+        MEDIUM confidence: 'A ~40-200d ★3: T1 SpellCrit, T1 CritChance'
+        LOW confidence:    'A $$ ★3: T1 SpellCrit, T1 CritChance'
 
         Display flags control which parts are included.
         """
@@ -201,29 +259,24 @@ class ItemScore:
         if show_grade:
             parts.append(self.grade.value)
 
-        # Price or score tag
+        # Price or score tag — tiered by confidence
         if show_price:
             if price_estimate is not None and price_estimate > 0:
-                if price_estimate >= 10:
-                    parts.append(f"~{price_estimate:.0f}d")
-                elif price_estimate >= 1.0:
-                    parts.append(f"~{price_estimate:.1f}d")
-                elif divine_to_exalted > 0:
-                    ex = price_estimate * divine_to_exalted
-                    if ex >= 10:
-                        parts.append(f"~{ex:.0f}ex")
-                    elif ex >= 1:
-                        parts.append(f"~{ex:.1f}ex")
-                    elif divine_to_chaos > 0:
-                        chaos = price_estimate * divine_to_chaos
-                        parts.append(f"~{chaos:.0f}c")
-                    else:
-                        parts.append(f"~{price_estimate:.2f}d")
-                elif divine_to_chaos > 0:
-                    chaos = price_estimate * divine_to_chaos
-                    parts.append(f"~{chaos:.0f}c")
+                if confidence_tier == "MEDIUM" and estimate_low and estimate_high:
+                    # Show price range instead of point estimate
+                    parts.append(self._format_price_range(
+                        estimate_low, estimate_high,
+                        divine_to_chaos, divine_to_exalted))
+                elif confidence_tier == "LOW":
+                    # Show value tier label
+                    if value_tier == "HIGH":
+                        parts.append("$$")
+                    elif value_tier == "MID":
+                        parts.append("$")
                 else:
-                    parts.append(f"~{price_estimate:.2f}d")
+                    # HIGH confidence (or unset): point estimate as-is
+                    parts.append(self._format_price_point(
+                        price_estimate, divine_to_chaos, divine_to_exalted))
             else:
                 pct = int(self.normalized_score * 100)
                 parts.append(f"{pct}%")
