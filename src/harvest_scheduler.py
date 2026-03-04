@@ -219,6 +219,7 @@ def run_disappearance_check() -> bool:
     cmd = [
         sys.executable, str(DISAPPEARANCE_SCRIPT),
         "--recheck", "--min-age", "4h",
+        "--max-ids", "500",
     ]
 
     try:

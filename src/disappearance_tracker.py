@@ -226,8 +226,84 @@ def batch_check_listings(listing_ids: List[str],
     return results
 
 
+def _load_tracker_state() -> dict:
+    """Load cumulative tracker state from disk."""
+    if TRACKER_STATE_FILE.exists():
+        try:
+            with open(TRACKER_STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"runs": 0, "total_checked": 0, "total_sold": 0, "total_stale": 0}
+
+
+def _save_tracker_state(state: dict):
+    """Save cumulative tracker state to disk."""
+    TRACKER_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(TRACKER_STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)
+
+
+def _write_back_to_file(src_path: str, file_records: List[dict],
+                         statuses: Dict[str, bool]) -> int:
+    """Write sale_confidence back to a single source file.
+
+    Returns the number of records updated.
+    """
+    try:
+        with open(src_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except Exception as e:
+        print(f"  Error reading {src_path}: {e}")
+        return 0
+
+    # Build a set of listing IDs we need to update in this file
+    lid_confidence = {}
+    for rec in file_records:
+        lid = rec.get("listing_id", "")
+        if not lid:
+            continue
+        status = statuses.get(lid)
+        if status is False:
+            lid_confidence[lid] = CONFIDENCE_SOLD
+        elif status is True:
+            lid_confidence[lid] = CONFIDENCE_STALE
+        # None (unknown) -> skip, don't write confidence
+
+    if not lid_confidence:
+        return 0
+
+    # Rewrite the file, injecting sale_confidence into matching records
+    updated_count = 0
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            new_lines.append(line)
+            continue
+        try:
+            rec = json.loads(stripped)
+            lid = rec.get("listing_id", "")
+            if lid in lid_confidence:
+                rec["sale_confidence"] = lid_confidence[lid]
+                updated_count += 1
+            new_lines.append(json.dumps(rec) + "\n")
+        except json.JSONDecodeError:
+            new_lines.append(line)
+
+    try:
+        with open(src_path, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        print(f"  Error writing {src_path}: {e}")
+        return 0
+
+    return updated_count
+
+
 def recheck_records(input_paths: List[str], min_age_sec: int,
-                    dry_run: bool = False, league: str = DEFAULT_LEAGUE):
+                    dry_run: bool = False, league: str = DEFAULT_LEAGUE,
+                    max_ids: int = 0):
     """Main recheck flow: load records, check listings, write back confidence."""
     import requests
 
@@ -248,6 +324,17 @@ def recheck_records(input_paths: List[str], min_age_sec: int,
         lid_to_records[lid].append(rec)
 
     unique_ids = list(lid_to_records.keys())
+
+    # Batch limiting: cap IDs checked per run
+    if max_ids > 0 and len(unique_ids) > max_ids:
+        deferred = len(unique_ids) - max_ids
+        print(f"Batch limit: checking {max_ids} of {len(unique_ids)} IDs "
+              f"({deferred} deferred to future runs)")
+        unique_ids = unique_ids[:max_ids]
+        # Filter records to only those with IDs we're actually checking
+        checked_set = set(unique_ids)
+        records = [r for r in records if r["listing_id"] in checked_set]
+
     n_batches = (len(unique_ids) + FETCH_BATCH_SIZE - 1) // FETCH_BATCH_SIZE
     print(f"Unique listing IDs: {len(unique_ids)}")
     print(f"API calls needed: ~{n_batches + 1} (1 search + {n_batches} fetches)")
@@ -295,55 +382,20 @@ def recheck_records(input_paths: List[str], min_age_sec: int,
 
     updated_count = 0
     for src_path, file_records in by_file.items():
-        # Read all lines from the file
-        try:
-            with open(src_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-        except Exception as e:
-            print(f"  Error reading {src_path}: {e}")
-            continue
-
-        # Build a set of listing IDs we need to update in this file
-        lid_confidence = {}
-        for rec in file_records:
-            lid = rec.get("listing_id", "")
-            if not lid:
-                continue
-            status = statuses.get(lid)
-            if status is False:
-                lid_confidence[lid] = CONFIDENCE_SOLD
-            elif status is True:
-                lid_confidence[lid] = CONFIDENCE_STALE
-            # None (unknown) -> skip, don't write confidence
-
-        if not lid_confidence:
-            continue
-
-        # Rewrite the file, injecting sale_confidence into matching records
-        new_lines = []
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
-                new_lines.append(line)
-                continue
-            try:
-                rec = json.loads(stripped)
-                lid = rec.get("listing_id", "")
-                if lid in lid_confidence:
-                    rec["sale_confidence"] = lid_confidence[lid]
-                    updated_count += 1
-                new_lines.append(json.dumps(rec) + "\n")
-            except json.JSONDecodeError:
-                new_lines.append(line)
-
-        # Write back
-        try:
-            with open(src_path, "w", encoding="utf-8") as f:
-                f.writelines(new_lines)
-        except Exception as e:
-            print(f"  Error writing {src_path}: {e}")
+        updated_count += _write_back_to_file(src_path, file_records, statuses)
 
     print(f"\nUpdated {updated_count} records with sale_confidence")
+
+    # Update cumulative tracker state
+    state = _load_tracker_state()
+    state["runs"] += 1
+    state["total_checked"] += len(unique_ids)
+    state["total_sold"] += sold
+    state["total_stale"] += still_listed
+    state["last_run"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    _save_tracker_state(state)
+    print(f"Tracker state saved ({state['total_checked']} cumulative IDs checked)")
+
     session.close()
 
 
@@ -405,6 +457,8 @@ def main():
                         help="Check listing IDs and write sale_confidence")
     parser.add_argument("--min-age", default="4h",
                         help="Minimum record age before checking (e.g. '4h', '24h')")
+    parser.add_argument("--max-ids", type=int, default=500,
+                        help="Max listing IDs to check per run (default: 500)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would be checked without API calls")
     parser.add_argument("--stats", action="store_true",
@@ -425,7 +479,8 @@ def main():
     if args.recheck:
         min_age = _parse_duration(args.min_age)
         print(f"Min age: {min_age/3600:.1f}h")
-        recheck_records(args.input, min_age, dry_run=args.dry_run)
+        recheck_records(args.input, min_age, dry_run=args.dry_run,
+                        max_ids=args.max_ids)
         return
 
     parser.print_help()
