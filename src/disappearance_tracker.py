@@ -325,6 +325,13 @@ def recheck_records(input_paths: List[str], min_age_sec: int,
 
     unique_ids = list(lid_to_records.keys())
 
+    # Sort by newest first — items that sell tend to sell quickly,
+    # so recently-listed items have the best signal for detecting sales.
+    def _newest_ts(lid):
+        recs = lid_to_records[lid]
+        return max(r.get("ts", 0) for r in recs)
+    unique_ids.sort(key=_newest_ts, reverse=True)
+
     # Batch limiting: cap IDs checked per run
     if max_ids > 0 and len(unique_ids) > max_ids:
         deferred = len(unique_ids) - max_ids

@@ -261,7 +261,7 @@ class HarvestMonitor:
         cmd = [
             sys.executable, "-u",
             str(SRC_DIR / "harvest_scheduler.py"),
-            "--once", "--passes", "15",
+            "--once", "--passes", "15", "--no-disappearance",
         ]
         try:
             self.process = subprocess.Popen(
