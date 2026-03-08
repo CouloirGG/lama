@@ -294,6 +294,13 @@ class LAMA:
             name="FlagReportHotkey",
         ).start()
 
+        # 2f. Star clear hotkey listener (Ctrl+Shift+X)
+        threading.Thread(
+            target=self._star_clear_hotkey_loop,
+            daemon=True,
+            name="StarClearHotkey",
+        ).start()
+
         # 2d. Auto-calibration queue processor
         if self.mod_database.loaded:
             threading.Thread(
@@ -984,6 +991,15 @@ class LAMA:
                                     estimate=cached_trade.estimate if cached_trade else False,
                                     price_divine=cached_trade.min_price if cached_trade else (price_est or 0))
 
+        # Place persistent star indicator for valuable items
+        if price_est and score.grade.value in ("S", "A"):
+            if confidence_tier in ("HIGH", "MEDIUM"):
+                chaos_val = price_est * d2c
+                if chaos_val >= 25:
+                    self.overlay.place_star(cursor_x, cursor_y, "gold")
+                elif chaos_val >= 5:
+                    self.overlay.place_star(cursor_x, cursor_y, "silver")
+
         # Cache for flag reporter
         mod_details = None
         if hasattr(score, "mod_scores") and score.mod_scores:
@@ -1051,6 +1067,39 @@ class LAMA:
                 self.bug_reporter.report()
             elif not pressed:
                 was_pressed = False
+
+    def _star_clear_hotkey_loop(self):
+        """Poll for Ctrl+Shift+X to clear all star indicators."""
+        import ctypes
+        VK_SHIFT, VK_CONTROL, VK_X = 0x10, 0x11, 0x58
+        _gaks = ctypes.windll.user32.GetAsyncKeyState
+        was_pressed = False
+        focus_lost_since = None
+
+        while True:
+            time.sleep(0.05)  # 20 Hz
+
+            # Hotkey: Ctrl+Shift+X
+            pressed = bool(_gaks(VK_CONTROL) & 0x8000
+                           and _gaks(VK_SHIFT) & 0x8000
+                           and _gaks(VK_X) & 0x8000)
+            if pressed and not was_pressed:
+                was_pressed = True
+                logger.info("Star clear: Ctrl+Shift+X pressed")
+                self.overlay.clear_stars()
+            elif not pressed:
+                was_pressed = False
+
+            # Auto-clear: if POE2 loses focus for >30 seconds, clear stars
+            if self.item_detector.game_window.is_poe2_foreground():
+                focus_lost_since = None
+            else:
+                if focus_lost_since is None:
+                    focus_lost_since = time.time()
+                elif time.time() - focus_lost_since > 30:
+                    logger.info("Star clear: POE2 lost focus for 30s")
+                    self.overlay.clear_stars()
+                    focus_lost_since = None  # Reset so we don't spam
 
     def _cache_for_flag(self, *, item_name=None, base_type=None, rarity=None,
                          item_class=None, grade=None, price_divine=None,

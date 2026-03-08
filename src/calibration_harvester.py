@@ -496,7 +496,7 @@ def write_calibration_record(score_result, price_divine: float,
                 listed_dt = datetime.fromisoformat(
                     listing_indexed.replace("Z", "+00:00"))
                 age_days = (datetime.now(timezone.utc) - listed_dt).total_seconds() / 86400
-                if age_days > 14:
+                if age_days > 7:
                     return
             except (ValueError, TypeError):
                 pass

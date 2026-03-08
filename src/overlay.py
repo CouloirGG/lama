@@ -202,6 +202,8 @@ class PriceOverlay:
         self._sheen_active: bool = False
         self._sheen_bg: str = _POE2_BG           # background color for blending
         self._sheen_profile: list = [0.05, 0.12, 0.22, 0.35, 0.22, 0.12, 0.05]
+        # Persistent star indicator layer
+        self._star_layer: Optional[StarIndicatorLayer] = None
 
     def initialize(self):
         """
@@ -246,6 +248,11 @@ class PriceOverlay:
         # Start hidden
         self._root.withdraw()
         self._visible = False
+
+        # Initialize persistent star indicator layer
+        if TK_AVAILABLE:
+            self._star_layer = StarIndicatorLayer(self._root, self._scale)
+            self._star_layer.initialize()
 
         # Process pending updates periodically
         self._root.after(30, self._process_pending)
@@ -409,6 +416,16 @@ class PriceOverlay:
         """Hide the price overlay. Thread-safe."""
         with self._lock:
             self._pending_updates.append(("hide",))
+
+    def place_star(self, cursor_x: int, cursor_y: int, tier: str = "gold"):
+        """Place a persistent star indicator at cursor position. Thread-safe."""
+        with self._lock:
+            self._pending_updates.append(("star", cursor_x, cursor_y, tier))
+
+    def clear_stars(self):
+        """Remove all persistent star indicators. Thread-safe."""
+        with self._lock:
+            self._pending_updates.append(("clear_stars",))
 
     def run(self):
         """
@@ -975,6 +992,18 @@ class PriceOverlay:
             self._pending_updates.clear()
 
         if updates:
+            # Process star updates immediately (all of them, not deduplicated)
+            star_updates = [u for u in updates if u[0] in ("star", "clear_stars")]
+            for update in star_updates:
+                try:
+                    if update[0] == "star" and self._star_layer:
+                        _, cx, cy, tier = update
+                        self._star_layer.add_star(cx, cy, tier)
+                    elif update[0] == "clear_stars" and self._star_layer:
+                        self._star_layer.clear_all()
+                except Exception as e:
+                    logger.error(f"Star update error: {e}")
+
             # Find the last show/reshow/update_text and last hide in the batch
             last_show = None
             last_reshow = None
@@ -1491,6 +1520,166 @@ class PriceOverlay:
             logger.warning(f"Click-through not available: {e}")
 
 
+class StarIndicatorLayer:
+    """Persistent star markers pinned at item positions on a full-screen
+    transparent canvas.  Stars accumulate as the player hovers items and
+    persist until explicitly cleared (hotkey or auto-clear).
+
+    Runs on the same tkinter root as PriceOverlay — no extra threads.
+    """
+
+    _GRID_SNAP = 50       # px — dedup grid (matches POE2 inventory slot size)
+    _MAX_STARS = 200       # safety cap before auto-clearing oldest
+    _STAR_CHAR = "\u2605"  # ★
+
+    # Star tier colors (POE2 gothic palette)
+    _COLORS = {
+        "gold":   _POE2_CORNER_GOLD,    # #c4a456
+        "silver": "#8a8a9a",
+    }
+    _GLOW_COLORS = {
+        "gold":   "#3d3018",
+        "silver": "#2a2a30",
+    }
+
+    def __init__(self, root: tk.Tk, scale: float = 1.0):
+        self._root = root
+        self._scale = scale
+        self._stars: dict = {}   # (grid_x, grid_y) -> canvas item IDs
+        self._window: Optional[tk.Toplevel] = None
+        self._canvas: Optional[tk.Canvas] = None
+        self._font: Optional[tkfont.Font] = None
+        self._transparent = "#010101"
+
+    def initialize(self, game_rect: tuple = None):
+        """Create the full-screen transparent star canvas.
+        game_rect: (left, top, right, bottom) of game window, or full screen.
+        """
+        if not self._root:
+            return
+
+        self._window = tk.Toplevel(self._root)
+        self._window.overrideredirect(True)
+        self._window.attributes("-topmost", True)
+        self._window.attributes("-alpha", 0.90)
+        self._window.configure(bg=self._transparent)
+        try:
+            self._window.attributes("-transparentcolor", self._transparent)
+        except tk.TclError:
+            pass
+
+        # Cover the full primary monitor (stars use absolute screen coords)
+        if game_rect:
+            x, y, r, b = game_rect
+            w, h = r - x, b - y
+        else:
+            w = self._root.winfo_screenwidth()
+            h = self._root.winfo_screenheight()
+            x, y = 0, 0
+        self._window.geometry(f"{w}x{h}+{x}+{y}")
+
+        self._canvas = tk.Canvas(
+            self._window, width=w, height=h,
+            bg=self._transparent, highlightthickness=0,
+        )
+        self._canvas.pack()
+
+        font_size = max(10, round(14 * self._scale))
+        for family in _POE2_FONT_CHAIN:
+            try:
+                self._font = tkfont.Font(family=family, size=font_size, weight="bold")
+                break
+            except tk.TclError:
+                continue
+        if not self._font:
+            self._font = tkfont.Font(size=font_size, weight="bold")
+
+        # Make click-through
+        self._window.update_idletasks()
+        self._apply_click_through()
+
+        logger.info("StarIndicatorLayer initialized")
+
+    def _apply_click_through(self):
+        """Apply Win32 click-through flags to the star window."""
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            child_hwnd = self._window.winfo_id()
+            hwnd = user32.GetParent(child_hwnd) or child_hwnd
+
+            GWL_EXSTYLE = -20
+            WS_EX_LAYERED = 0x00080000
+            WS_EX_TOPMOST = 0x00000008
+            WS_EX_TOOLWINDOW = 0x00000080
+            WS_EX_NOACTIVATE = 0x08000000
+
+            style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            style |= WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_NOZORDER = 0x0004
+            SWP_FRAMECHANGED = 0x0020
+            user32.SetWindowPos(
+                hwnd, 0, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+            )
+        except Exception as e:
+            logger.warning(f"Star layer click-through failed: {e}")
+
+    def add_star(self, screen_x: int, screen_y: int, tier: str = "gold"):
+        """Place a star at absolute screen position. Deduplicates by grid cell."""
+        if not self._canvas:
+            return
+
+        grid_key = (screen_x // self._GRID_SNAP, screen_y // self._GRID_SNAP)
+        if grid_key in self._stars:
+            return  # already starred
+
+        # Auto-clear if too many stars accumulated
+        if len(self._stars) >= self._MAX_STARS:
+            self.clear_all()
+
+        # Convert screen coords to canvas-local coords
+        win_x = self._window.winfo_rootx()
+        win_y = self._window.winfo_rooty()
+        cx = screen_x - win_x
+        cy = screen_y - win_y
+
+        color = self._COLORS.get(tier, self._COLORS["silver"])
+        glow_color = self._GLOW_COLORS.get(tier, self._GLOW_COLORS["silver"])
+
+        # Draw glow circle behind star
+        glow_r = round(10 * self._scale)
+        glow_id = self._canvas.create_oval(
+            cx - glow_r, cy - glow_r, cx + glow_r, cy + glow_r,
+            fill=glow_color, outline="", stipple="gray50",
+        )
+
+        # Draw star character
+        star_id = self._canvas.create_text(
+            cx, cy, text=self._STAR_CHAR, fill=color,
+            font=self._font, anchor="center",
+        )
+
+        self._stars[grid_key] = (glow_id, star_id)
+
+    def clear_all(self):
+        """Remove all persistent stars."""
+        if not self._canvas:
+            return
+        for glow_id, star_id in self._stars.values():
+            self._canvas.delete(glow_id)
+            self._canvas.delete(star_id)
+        self._stars.clear()
+
+    @property
+    def star_count(self) -> int:
+        return len(self._stars)
+
+
 class ConsoleOverlay:
     """
     Fallback overlay that prints to console.
@@ -1519,6 +1708,12 @@ class ConsoleOverlay:
         pass
 
     def hide(self):
+        pass
+
+    def place_star(self, cursor_x: int, cursor_y: int, tier: str = "gold"):
+        pass
+
+    def clear_stars(self):
         pass
 
     def run(self):
