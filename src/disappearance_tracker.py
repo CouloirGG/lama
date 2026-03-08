@@ -41,7 +41,7 @@ CONFIDENCE_STALE = 0.3      # Still listed after 24h+ -> likely overpriced
 FETCH_BATCH_SIZE = 10       # Trade API caps fetches at 10 IDs
 BURST_SIZE = 4              # API calls before pausing
 BURST_PAUSE = 8.0           # Seconds between bursts
-MIN_AGE_DEFAULT = 4 * 3600  # 4 hours minimum before checking
+MIN_AGE_DEFAULT = 1 * 3600  # 1 hour minimum before checking
 
 # State file
 TRACKER_STATE_FILE = CACHE_DIR / "disappearance_state.json"
@@ -462,10 +462,10 @@ def main():
                         help="Input JSONL file(s) from harvester (supports globs)")
     parser.add_argument("--recheck", action="store_true",
                         help="Check listing IDs and write sale_confidence")
-    parser.add_argument("--min-age", default="4h",
-                        help="Minimum record age before checking (e.g. '4h', '24h')")
-    parser.add_argument("--max-ids", type=int, default=500,
-                        help="Max listing IDs to check per run (default: 500)")
+    parser.add_argument("--min-age", default="1h",
+                        help="Minimum record age before checking (e.g. '1h', '4h', '24h')")
+    parser.add_argument("--max-ids", type=int, default=5000,
+                        help="Max listing IDs to check per run (default: 5000)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would be checked without API calls")
     parser.add_argument("--stats", action="store_true",

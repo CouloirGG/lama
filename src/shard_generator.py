@@ -92,6 +92,8 @@ def load_raw_records(input_paths: List[str]) -> List[dict]:
 
 def quality_filter(records: List[dict]) -> Tuple[List[dict], dict]:
     """Apply quality filters, return (filtered_records, stats)."""
+    from datetime import datetime, timezone
+
     stats = {
         "input": len(records),
         "no_score": 0,
@@ -99,6 +101,7 @@ def quality_filter(records: List[dict]) -> Tuple[List[dict], dict]:
         "price_too_high": 0,
         "price_too_low": 0,
         "estimate": 0,
+        "listing_too_old": 0,
         "passed": 0,
     }
     filtered = []
@@ -122,6 +125,20 @@ def quality_filter(records: List[dict]) -> Tuple[List[dict], dict]:
         if rec.get("estimate", False):
             stats["estimate"] += 1
             continue
+
+        # Skip listings older than 7 days at harvest time
+        listing_ts_str = rec.get("listing_ts", "")
+        harvest_ts = rec.get("ts", 0)
+        if listing_ts_str and harvest_ts:
+            try:
+                listed_dt = datetime.fromisoformat(
+                    listing_ts_str.replace("Z", "+00:00"))
+                listing_age = harvest_ts - listed_dt.timestamp()
+                if listing_age > 7 * 86400:
+                    stats["listing_too_old"] += 1
+                    continue
+            except (ValueError, TypeError):
+                pass
 
         filtered.append(rec)
         stats["passed"] += 1
@@ -180,17 +197,35 @@ def remove_outliers(records: List[dict]) -> Tuple[List[dict], int]:
 
 
 def dedup_records(records: List[dict]) -> Tuple[List[dict], int]:
-    """Remove duplicate (score, price, item_class, grade, mod_groups) entries.
+    """Remove duplicate records. Two dedup strategies:
 
-    Includes mod composition in the dedup key so that items with identical
-    score/price but completely different mods (e.g., crit ring vs resist ring)
-    are preserved as distinct training samples.
+    1. listing_id dedup: same listing harvested multiple times — keep most recent.
+    2. Content dedup: identical (score, price, item_class, grade, mod_groups).
     """
-    seen = set()
-    deduped = []
     dup_count = 0
 
-    for rec in records:
+    # Pass 1: listing_id dedup — keep most recent harvest per listing
+    best_by_lid = {}  # listing_id -> (ts, index)
+    for i, rec in enumerate(records):
+        lid = rec.get("listing_id", "")
+        if lid:
+            ts = rec.get("ts", 0)
+            if lid not in best_by_lid or ts > best_by_lid[lid][0]:
+                best_by_lid[lid] = (ts, i)
+
+    lid_keep = set(idx for _, idx in best_by_lid.values())
+    lid_filtered = []
+    for i, rec in enumerate(records):
+        lid = rec.get("listing_id", "")
+        if lid and i not in lid_keep:
+            dup_count += 1
+            continue
+        lid_filtered.append(rec)
+
+    # Pass 2: content dedup for records without listing_id
+    seen = set()
+    deduped = []
+    for rec in lid_filtered:
         key = (
             round(rec["score"], 3),
             round(rec["min_divine"], 2),

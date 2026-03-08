@@ -47,10 +47,12 @@ def load_and_prepare(input_globs: List[str]) -> List[dict]:
     print(f"  Raw records: {len(records)}")
 
     filtered, qstats = quality_filter(records)
+    old_listings = qstats.get('listing_too_old', 0)
     print(f"  After quality filter: {len(filtered)} "
           f"(dropped: {qstats['no_score']} no_score, {qstats['no_price']} no_price, "
           f"{qstats['price_too_high']} price_cap, {qstats['price_too_low']} too_low, "
-          f"{qstats['estimate']} estimates)")
+          f"{qstats['estimate']} estimates"
+          f"{f', {old_listings} listing>7d' if old_listings else ''})")
 
     cleaned, outlier_count = remove_outliers(filtered)
     print(f"  After outlier removal: {len(cleaned)} ({outlier_count} outliers)")

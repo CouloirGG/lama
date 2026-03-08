@@ -490,6 +490,16 @@ def write_calibration_record(score_result, price_divine: float,
         listing_indexed = listing.get("listing", {}).get("indexed", "")
         if listing_indexed:
             record["listing_ts"] = listing_indexed
+            # Skip items listed for more than 7 days — likely mispriced
+            try:
+                from datetime import datetime, timezone
+                listed_dt = datetime.fromisoformat(
+                    listing_indexed.replace("Z", "+00:00"))
+                age_days = (datetime.now(timezone.utc) - listed_dt).total_seconds() / 86400
+                if age_days > 14:
+                    return
+            except (ValueError, TypeError):
+                pass
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "a", encoding="utf-8") as f:

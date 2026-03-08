@@ -216,6 +216,8 @@ class CalibrationEngine:
         - Skips records where min_divine <= 0
         - Skips records with price > _MAX_PRICE_DIVINE (price-fixers)
         - Skips estimates
+        - Skips listings older than 7 days at harvest time (likely mispriced)
+        - Deduplicates by listing_id (keeps most recent harvest)
         - Deduplicates identical (score, price, item_class) entries
         """
         if not log_file.exists():
@@ -225,7 +227,10 @@ class CalibrationEngine:
         count = 0
         skipped = 0
         seen = set()  # dedup key: (score_rounded, price_rounded, item_class)
+        seen_listing_ids = {}  # listing_id -> harvest ts (keep most recent)
         try:
+            # First pass: find most recent harvest per listing_id
+            records = []
             with open(log_file, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
@@ -235,69 +240,100 @@ class CalibrationEngine:
                         rec = json.loads(line)
                     except json.JSONDecodeError:
                         continue
+                    records.append(rec)
 
-                    score = rec.get("score")
-                    divine = rec.get("min_divine")
-                    item_class = rec.get("item_class", "")
-                    grade = rec.get("grade", "")
+                    lid = rec.get("listing_id", "")
+                    if lid:
+                        ts = rec.get("ts", 0)
+                        if lid not in seen_listing_ids or ts > seen_listing_ids[lid]:
+                            seen_listing_ids[lid] = ts
 
-                    if score is None or divine is None:
-                        continue
-                    if divine <= 0:
-                        continue
-                    if rec.get("estimate", False):
+            for rec in records:
+                score = rec.get("score")
+                divine = rec.get("min_divine")
+                item_class = rec.get("item_class", "")
+                grade = rec.get("grade", "")
+
+                if score is None or divine is None:
+                    continue
+                if divine <= 0:
+                    continue
+                if rec.get("estimate", False):
+                    skipped += 1
+                    continue
+
+                # Sanity filter: extreme prices are price-fixers
+                if divine > self._MAX_PRICE_DIVINE:
+                    skipped += 1
+                    continue
+
+                # Skip listings older than 7 days at harvest time
+                listing_ts_str = rec.get("listing_ts", "")
+                harvest_ts = rec.get("ts", 0)
+                if listing_ts_str and harvest_ts:
+                    try:
+                        from datetime import datetime, timezone
+                        listed_dt = datetime.fromisoformat(
+                            listing_ts_str.replace("Z", "+00:00"))
+                        listing_age = harvest_ts - listed_dt.timestamp()
+                        if listing_age > 7 * 86400:
+                            skipped += 1
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+
+                # Dedup by listing_id: keep only most recent harvest
+                lid = rec.get("listing_id", "")
+                if lid:
+                    rec_ts = rec.get("ts", 0)
+                    if rec_ts < seen_listing_ids.get(lid, 0):
                         skipped += 1
                         continue
 
-                    # Sanity filter: extreme prices are price-fixers
-                    if divine > self._MAX_PRICE_DIVINE:
-                        skipped += 1
-                        continue
+                # Dedup: same item scanned multiple times
+                # Include mod composition so distinct items with same score/price are kept
+                dedup_key = (round(score, 3), round(divine, 2), item_class, grade,
+                             tuple(sorted(rec.get("mod_groups", []))))
+                if dedup_key in seen:
+                    skipped += 1
+                    continue
+                seen.add(dedup_key)
 
-                    # Dedup: same item scanned multiple times
-                    # Include mod composition so distinct items with same score/price are kept
-                    dedup_key = (round(score, 3), round(divine, 2), item_class, grade,
-                                 tuple(sorted(rec.get("mod_groups", []))))
-                    if dedup_key in seen:
-                        skipped += 1
-                        continue
-                    seen.add(dedup_key)
-
-                    grade_num = _GRADE_NUM.get(grade, 1)
-                    ts = rec.get("ts", 0)
-                    dps_factor = rec.get("dps_factor", 1.0)
-                    defense_factor = rec.get("defense_factor", 1.0)
-                    top_tier_count = rec.get("top_tier_count", 0)
-                    mod_count = rec.get("mod_count", 4)
-                    mod_groups = rec.get("mod_groups", [])
-                    base_type = rec.get("base_type", "")
-                    mod_tiers = rec.get("mod_tiers", {})
-                    mod_rolls = rec.get("mod_rolls", {})
-                    rec_somv = rec.get("somv_factor", 1.0)
-                    rec_pdps = rec.get("pdps", 0.0)
-                    rec_edps = rec.get("edps", 0.0)
-                    rec_sc = rec.get("sale_confidence", 1.0)
-                    rec_mod_stats = rec.get("mod_stats", {})
-                    self._insert(float(score), float(divine),
-                                 item_class, grade_num,
-                                 dps_factor, defense_factor,
-                                 top_tier_count=top_tier_count,
-                                 mod_count=mod_count,
-                                 ts=ts, is_user=True,
-                                 mod_groups=mod_groups,
-                                 base_type=base_type,
-                                 mod_tiers=mod_tiers,
-                                 somv_factor=rec_somv,
-                                 mod_rolls=mod_rolls,
-                                 pdps=rec_pdps, edps=rec_edps,
-                                 sale_confidence=rec_sc,
-                                 mod_stats=rec_mod_stats,
-                                 quality=rec.get("quality", 0),
-                                 sockets=rec.get("sockets", 0),
-                                 corrupted=1 if rec.get("corrupted", False) else 0,
-                                 open_prefixes=rec.get("open_prefixes", 0),
-                                 open_suffixes=rec.get("open_suffixes", 0))
-                    count += 1
+                grade_num = _GRADE_NUM.get(grade, 1)
+                ts = rec.get("ts", 0)
+                dps_factor = rec.get("dps_factor", 1.0)
+                defense_factor = rec.get("defense_factor", 1.0)
+                top_tier_count = rec.get("top_tier_count", 0)
+                mod_count = rec.get("mod_count", 4)
+                mod_groups = rec.get("mod_groups", [])
+                base_type = rec.get("base_type", "")
+                mod_tiers = rec.get("mod_tiers", {})
+                mod_rolls = rec.get("mod_rolls", {})
+                rec_somv = rec.get("somv_factor", 1.0)
+                rec_pdps = rec.get("pdps", 0.0)
+                rec_edps = rec.get("edps", 0.0)
+                rec_sc = rec.get("sale_confidence", 1.0)
+                rec_mod_stats = rec.get("mod_stats", {})
+                self._insert(float(score), float(divine),
+                             item_class, grade_num,
+                             dps_factor, defense_factor,
+                             top_tier_count=top_tier_count,
+                             mod_count=mod_count,
+                             ts=ts, is_user=True,
+                             mod_groups=mod_groups,
+                             base_type=base_type,
+                             mod_tiers=mod_tiers,
+                             somv_factor=rec_somv,
+                             mod_rolls=mod_rolls,
+                             pdps=rec_pdps, edps=rec_edps,
+                             sale_confidence=rec_sc,
+                             mod_stats=rec_mod_stats,
+                             quality=rec.get("quality", 0),
+                             sockets=rec.get("sockets", 0),
+                             corrupted=1 if rec.get("corrupted", False) else 0,
+                             open_prefixes=rec.get("open_prefixes", 0),
+                             open_suffixes=rec.get("open_suffixes", 0))
+                count += 1
         except Exception as e:
             logger.warning(f"Calibration: load error: {e}")
 
