@@ -22,8 +22,10 @@ Usage:
 import argparse
 import json
 import logging
+import os
 import re
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -291,11 +293,22 @@ def _write_back_to_file(src_path: str, file_records: List[dict],
         except json.JSONDecodeError:
             new_lines.append(line)
 
+    # Atomic write: write to temp file in same directory, then rename.
+    # This prevents data loss if the process crashes mid-write.
+    src_dir = os.path.dirname(src_path) or "."
     try:
-        with open(src_path, "w", encoding="utf-8") as f:
+        fd, tmp_path = tempfile.mkstemp(dir=src_dir, suffix=".tmp",
+                                        prefix=".disappearance_")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.writelines(new_lines)
+        os.replace(tmp_path, src_path)
     except Exception as e:
         print(f"  Error writing {src_path}: {e}")
+        # Clean up temp file if rename failed
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
         return 0
 
     return updated_count

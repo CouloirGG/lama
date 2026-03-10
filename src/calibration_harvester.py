@@ -324,7 +324,7 @@ def load_state(pass_num: int = 1) -> dict:
         except Exception:
             pass
     return {"completed_queries": [], "total_samples": 0,
-            "query_plan_seed": "", "dead_combos": []}
+            "query_plan_seed": "", "dead_combos_ts": {}}
 
 
 def save_state(state: dict, pass_num: int = 1):
@@ -544,13 +544,28 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
         if state.get("query_plan_seed") != seed:
             # New day or new pass — reset state
             state = {"completed_queries": [], "total_samples": 0,
-                     "query_plan_seed": seed, "dead_combos": []}
+                     "query_plan_seed": seed, "dead_combos_ts": {}}
             save_state(state, pass_num)
 
     plan = build_query_plan(categories, seed, brackets)
 
     completed = set(state["completed_queries"])
-    dead_combos = set(state.get("dead_combos", []))
+    # Dead combos have a TTL — expire entries older than 3 days
+    dead_map = state.get("dead_combos_ts", {})
+    if not dead_map and state.get("dead_combos"):
+        # Migrate legacy list format: treat all as fresh
+        dead_map = {k: time.time() for k in state.get("dead_combos", [])}
+        state["dead_combos_ts"] = dead_map
+    now = time.time()
+    dead_ttl = 3 * 86400  # 3 days
+    expired = [k for k, ts in dead_map.items() if now - ts > dead_ttl]
+    if expired:
+        for k in expired:
+            del dead_map[k]
+        state["dead_combos_ts"] = dead_map
+        print(f"  Expired {len(expired)} dead combos (>3 days old)")
+        save_state(state, pass_num)
+    dead_combos = set(dead_map.keys())
     remaining = [(cn, ic, cf, bl) for cn, ic, cf, bl in plan
                  if make_query_key(cn, bl) not in completed
                  and make_query_key(cn, bl) not in dead_combos]
@@ -679,6 +694,7 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
                 retryable += 1
                 queries_done += 1
                 # Do NOT mark as completed — transient errors should be retried
+                save_state(state, pass_num)
                 continue
 
             search_data = resp.json()
@@ -690,8 +706,7 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
                 print(f"  0 results (marking dead)")
                 queries_done += 1
                 state["completed_queries"].append(query_key)
-                if query_key not in state.get("dead_combos", []):
-                    state.setdefault("dead_combos", []).append(query_key)
+                state.setdefault("dead_combos_ts", {})[query_key] = time.time()
                 save_state(state, pass_num)
                 continue
 
@@ -735,9 +750,9 @@ def run_harvester(league: str, categories: Dict[str, Tuple[str, str]],
                     time.sleep(BURST_PAUSE)
                     burst_count = 0
                 trade_client._rate_limit()
+                burst_count += 1
 
                 batch_listings = trade_client._do_fetch(query_id, batch_ids)
-                burst_count += 1
                 if batch_listings:
                     listings.extend(batch_listings)
             except Exception as e:
@@ -926,9 +941,16 @@ def main():
             try:
                 with open(sf_path, "r", encoding="utf-8") as f:
                     st = json.load(f)
+                n = 0
+                # Clear legacy list format
                 if st.get("dead_combos"):
-                    n = len(st["dead_combos"])
-                    st["dead_combos"] = []
+                    n += len(st["dead_combos"])
+                    del st["dead_combos"]
+                # Clear new timestamped format
+                if st.get("dead_combos_ts"):
+                    n += len(st["dead_combos_ts"])
+                    st["dead_combos_ts"] = {}
+                if n:
                     with open(sf_path, "w", encoding="utf-8") as f:
                         json.dump(st, f, indent=2)
                     cleared += n
