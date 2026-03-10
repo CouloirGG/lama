@@ -122,16 +122,10 @@ DEFAULT_SETTINGS = {
     "watchlist_poll_interval": 300,
     "watchlist_online_only": True,
     "start_with_windows": False,
-    "overlay_show_grade": True,
-    "overlay_show_price": True,
-    "overlay_show_stars": True,
-    "overlay_show_mods": False,
-    "overlay_show_dps": True,
+    "overlay_mode": "stars_only",
     "overlay_show_low_value": False,
-    "overlay_display_preset": "standard",
     "overlay_tier_styles": {},
     "overlay_theme": "poe2",
-    "overlay_pulse_style": "sheen",
     "telemetry_enabled": False,
     "poesessid": "",
     "nux_completed": False,
@@ -241,6 +235,13 @@ def get_lan_ip() -> str:
         return "127.0.0.1"
 
 
+_LEGACY_OVERLAY_KEYS = {
+    "overlay_show_grade", "overlay_show_price", "overlay_show_stars",
+    "overlay_show_mods", "overlay_show_dps", "overlay_display_preset",
+    "overlay_pulse_style",
+}
+
+
 def load_settings() -> dict:
     """Load settings from disk, merging with defaults."""
     settings = dict(DEFAULT_SETTINGS)
@@ -249,6 +250,19 @@ def load_settings() -> dict:
             with open(SETTINGS_FILE) as f:
                 saved = json.load(f)
             settings.update(saved)
+            # Migrate legacy per-toggle overlay keys → overlay_mode
+            if any(k in saved for k in _LEGACY_OVERLAY_KEYS) and "overlay_mode" not in saved:
+                if saved.get("overlay_show_mods"):
+                    settings["overlay_mode"] = "detailed"
+                elif saved.get("overlay_show_grade", True) and saved.get("overlay_show_dps", True):
+                    settings["overlay_mode"] = "standard"
+                elif saved.get("overlay_show_price", True):
+                    settings["overlay_mode"] = "minimal"
+                else:
+                    settings["overlay_mode"] = "stars_only"
+            # Remove legacy keys so they don't pollute the settings
+            for k in _LEGACY_OVERLAY_KEYS:
+                settings.pop(k, None)
         except Exception as e:
             logger.warning(f"Failed to load settings: {e}")
     return settings
@@ -783,16 +797,10 @@ class SettingsRequest(BaseModel):
     watchlist_poll_interval: Optional[int] = None
     watchlist_online_only: Optional[bool] = None
     start_with_windows: Optional[bool] = None
-    overlay_show_grade: Optional[bool] = None
-    overlay_show_price: Optional[bool] = None
-    overlay_show_stars: Optional[bool] = None
-    overlay_show_mods: Optional[bool] = None
-    overlay_show_dps: Optional[bool] = None
+    overlay_mode: Optional[str] = None
     overlay_show_low_value: Optional[bool] = None
-    overlay_display_preset: Optional[str] = None
     overlay_tier_styles: Optional[dict] = None
     overlay_theme: Optional[str] = None
-    overlay_pulse_style: Optional[str] = None
     telemetry_enabled: Optional[bool] = None
     poesessid: Optional[str] = None
     nux_completed: Optional[bool] = None

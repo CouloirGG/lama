@@ -96,6 +96,11 @@ class LAMA:
         self._last_flaggable = None
         self._last_flaggable_lock = threading.Lock()
 
+        # Pipeline dedup: skip re-processing the same item within a short window
+        self._last_pipeline_item: str = ""
+        self._last_pipeline_time: float = 0
+        self._PIPELINE_DEDUP_TTL: float = 2.0  # seconds
+
         # Auto-calibration queue: A/S graded items get trade API lookups in background
         self._calibration_queue = queue.Queue()
 
@@ -129,7 +134,12 @@ class LAMA:
             theme = self._display_settings.get("overlay_theme", "poe2")
             pulse_style = self._display_settings.get("overlay_pulse_style", "sheen")
             self.overlay = PriceOverlay(theme=theme, pulse_style=pulse_style,
-                                        scale_factor=scale)
+                                        scale_factor=scale, game_rect=rect)
+
+        # Set overlay mode (stars_only suppresses popup overlays)
+        if hasattr(self.overlay, 'set_overlay_mode'):
+            self.overlay.set_overlay_mode(
+                self._display_settings.get("overlay_mode", "stars_only"))
 
         # Apply custom tier styles to overlay (if any)
         if hasattr(self.overlay, 'load_custom_styles'):
@@ -177,17 +187,21 @@ class LAMA:
         self.item_detector.set_hide_callback(self.overlay.hide)
         self.item_detector.set_reshow_callback(self._on_reshow)
 
+    # Overlay mode → format_overlay_text flags
+    _MODE_FLAGS = {
+        "stars_only": {"show_grade": False, "show_price": False, "show_stars": False, "show_mods": False, "show_dps": False},
+        "minimal":    {"show_grade": False, "show_price": True,  "show_stars": False, "show_mods": False, "show_dps": False},
+        "standard":   {"show_grade": True,  "show_price": True,  "show_stars": True,  "show_mods": False, "show_dps": True},
+        "detailed":   {"show_grade": True,  "show_price": True,  "show_stars": True,  "show_mods": True,  "show_dps": True},
+    }
+
     @staticmethod
     def _load_display_settings() -> dict:
         """Load overlay display flags from dashboard settings file."""
         import json
         settings_file = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "dashboard_settings.json"
         defaults = {
-            "overlay_show_grade": True,
-            "overlay_show_price": True,
-            "overlay_show_stars": True,
-            "overlay_show_mods": False,
-            "overlay_show_dps": True,
+            "overlay_mode": "stars_only",
             "overlay_show_low_value": False,
             "overlay_tier_styles": {},
             "overlay_theme": "poe2",
@@ -201,6 +215,16 @@ class LAMA:
                 for key in defaults:
                     if key in saved:
                         defaults[key] = saved[key]
+                # Migrate legacy per-toggle settings → overlay_mode
+                if "overlay_mode" not in saved:
+                    if saved.get("overlay_show_mods"):
+                        defaults["overlay_mode"] = "detailed"
+                    elif saved.get("overlay_show_grade", True) and saved.get("overlay_show_dps", True):
+                        defaults["overlay_mode"] = "standard"
+                    elif saved.get("overlay_show_price", True):
+                        defaults["overlay_mode"] = "minimal"
+                    else:
+                        defaults["overlay_mode"] = "stars_only"
         except Exception:
             pass
         return defaults
@@ -366,6 +390,16 @@ class LAMA:
                 logger.info(f"Parse failed: {item_text.split(chr(10))[0]}")
                 return
 
+            # Pipeline dedup: skip if same item was just processed
+            # Prevents duplicate processing from clipboard read races
+            item_ident = f"{item.name}|{item.base_type}|{item.rarity}"
+            now = time.time()
+            if (item_ident == self._last_pipeline_item
+                    and (now - self._last_pipeline_time) < self._PIPELINE_DEDUP_TTL):
+                return
+            self._last_pipeline_item = item_ident
+            self._last_pipeline_time = now
+
             logger.info(
                 f"Item: {item.name} ({item.rarity})"
                 + (f" base={item.base_type}" if item.base_type else "")
@@ -400,6 +434,17 @@ class LAMA:
                     cursor_y=cursor_y,
                     price_divine=result.get("divine_value", 0),
                 )
+                # Star for valuable currency
+                if chaos_val >= 5:
+                    star_key = item.name or item.base_type or ""
+                    if chaos_val >= 500:
+                        self.overlay.place_star(cursor_x, cursor_y, "gold3", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                    elif chaos_val >= 100:
+                        self.overlay.place_star(cursor_x, cursor_y, "gold2", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                    elif chaos_val >= 25:
+                        self.overlay.place_star(cursor_x, cursor_y, "gold1", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                    else:
+                        self.overlay.place_star(cursor_x, cursor_y, "silver1", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
                 self._cache_for_flag(
                     item_name=item.name, rarity=item.rarity,
                     tier=result["tier"], display_text=static_text,
@@ -558,6 +603,20 @@ class LAMA:
                 cursor_y=cursor_y,
                 price_divine=result.get("divine_value", 0),
             )
+            # Star for valuable static-priced items (uniques, gems, etc.)
+            divine_val = result.get("divine_value", 0)
+            d2c = self.price_cache.divine_to_chaos or 1
+            chaos_val = divine_val * d2c
+            if chaos_val >= 5:
+                star_key = matched_name or item.base_type or ""
+                if chaos_val >= 500:
+                    self.overlay.place_star(cursor_x, cursor_y, "gold3", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                elif chaos_val >= 100:
+                    self.overlay.place_star(cursor_x, cursor_y, "gold2", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                elif chaos_val >= 25:
+                    self.overlay.place_star(cursor_x, cursor_y, "gold1", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                else:
+                    self.overlay.place_star(cursor_x, cursor_y, "silver1", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
             self._cache_for_flag(
                 item_name=matched_name, base_type=item.base_type,
                 rarity=item.rarity,
@@ -925,6 +984,8 @@ class LAMA:
         d2c = self.price_cache.divine_to_chaos
         d2e = self.price_cache.divine_to_exalted
         ds = self._display_settings
+        mode = ds.get("overlay_mode", "stars_only")
+        flags = self._MODE_FLAGS.get(mode, self._MODE_FLAGS["stars_only"])
         text = score.format_overlay_text(
             price_estimate=price_est,
             estimate_low=est_low,
@@ -933,17 +994,16 @@ class LAMA:
             value_tier=value_tier,
             divine_to_chaos=d2c,
             divine_to_exalted=d2e,
-            show_grade=ds.get("overlay_show_grade", True),
-            show_price=ds.get("overlay_show_price", True),
-            show_stars=ds.get("overlay_show_stars", True),
-            show_mods=ds.get("overlay_show_mods", True),
-            show_dps=ds.get("overlay_show_dps", True),
+            show_grade=flags["show_grade"],
+            show_price=flags["show_price"],
+            show_stars=flags["show_stars"],
+            show_mods=flags["show_mods"],
+            show_dps=flags["show_dps"],
         )
 
         # Overlay color tier: use confidence tier + price/value to pick color
         if price_est is not None and score.grade.value not in ("C", "JUNK"):
             if confidence_tier in ("HIGH", "MEDIUM"):
-                # Use existing chaos-based tier (same as before)
                 chaos_val = price_est * d2c
                 if chaos_val >= 25:
                     overlay_tier = "high"
@@ -979,26 +1039,32 @@ class LAMA:
                      f"(score={score.normalized_score:.3f}{log_extra}) "
                      f"{score.top_mods_summary}")
 
-        # Borderless mode: when all display toggles are off, text is just "★"
-        is_borderless = (text == "\u2605")
-        # Suppress ✗ overlay for JUNK/C when low-value display is off
-        if text == "\u2717" and not ds.get("overlay_show_low_value", False):
-            pass  # suppress overlay, fall through to logging/caching
-        else:
-            self.overlay.show_price(text=text, tier=overlay_tier,
-                                    cursor_x=cursor_x, cursor_y=cursor_y,
-                                    borderless=is_borderless,
-                                    estimate=cached_trade.estimate if cached_trade else False,
-                                    price_divine=cached_trade.min_price if cached_trade else (price_est or 0))
+        # Show popup overlay (unless stars_only mode)
+        if mode != "stars_only":
+            is_borderless = (text == "\u2605")
+            if text == "\u2717" and not ds.get("overlay_show_low_value", False):
+                pass  # suppress junk overlay
+            else:
+                self.overlay.show_price(text=text, tier=overlay_tier,
+                                        cursor_x=cursor_x, cursor_y=cursor_y,
+                                        borderless=is_borderless,
+                                        estimate=cached_trade.estimate if cached_trade else False,
+                                        price_divine=cached_trade.min_price if cached_trade else (price_est or 0))
 
-        # Place persistent star indicator for valuable items
-        if price_est and score.grade.value in ("S", "A"):
-            if confidence_tier in ("HIGH", "MEDIUM"):
-                chaos_val = price_est * d2c
-                if chaos_val >= 25:
-                    self.overlay.place_star(cursor_x, cursor_y, "gold")
-                elif chaos_val >= 5:
-                    self.overlay.place_star(cursor_x, cursor_y, "silver")
+        # Place persistent star indicator for valued items (all modes)
+        # Stars based purely on chaos value — even grade C items get stars if valuable
+        # Dedup by item name so multi-slot items get exactly one star
+        if price_est:
+            star_key = display_name or item.base_type or ""
+            chaos_val = price_est * d2c
+            if chaos_val >= 500:
+                self.overlay.place_star(cursor_x, cursor_y, "gold3", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+            elif chaos_val >= 100:
+                self.overlay.place_star(cursor_x, cursor_y, "gold2", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+            elif chaos_val >= 25:
+                self.overlay.place_star(cursor_x, cursor_y, "gold1", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+            elif chaos_val >= 5:
+                self.overlay.place_star(cursor_x, cursor_y, "silver1", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
 
         # Cache for flag reporter
         mod_details = None
@@ -1430,6 +1496,8 @@ class LAMA:
     # Items that should always show ✗ (too cheap to bother pricing)
     def _show_dismiss(self, item, cursor_x, cursor_y):
         """Show dismiss (✗) or scrap hammer if the item has quality/sockets."""
+        if self._display_settings.get("overlay_mode", "stars_only") == "stars_only":
+            return  # no popup overlays in stars-only mode
         has_scrap = (
             getattr(item, "quality", 0) > 0 or
             getattr(item, "sockets", 0) > 0

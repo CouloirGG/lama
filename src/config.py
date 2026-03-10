@@ -106,8 +106,8 @@ OVERLAY_REFERENCE_HEIGHT = 1080  # Baseline resolution for overlay scaling
 # Overlay theme: "poe2" (gothic, default) or "classic" (original)
 OVERLAY_THEME = "poe2"
 
-# Overlay pulse style: "sheen" (default), "border", "both", or "none"
-OVERLAY_PULSE_STYLE = "sheen"
+# Overlay mode: "stars_only" (default), "minimal", "standard", "detailed"
+OVERLAY_MODE = "stars_only"
 
 # Price tier colors
 PRICE_COLOR_HIGH = "#ff6b35"       # Orange - very valuable (>= 50 Exalted)

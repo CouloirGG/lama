@@ -40,7 +40,6 @@ from config import (
     OVERLAY_FONT_SIZE,
     OVERLAY_PADDING,
     OVERLAY_THEME,
-    OVERLAY_PULSE_STYLE,
     OVERLAY_REFERENCE_HEIGHT,
     PRICE_COLOR_HIGH,
     PRICE_COLOR_GOOD,
@@ -156,10 +155,11 @@ class PriceOverlay:
         "marginal": 25, "vendor": 0,
     }
 
-    def __init__(self, theme: str = OVERLAY_THEME, pulse_style: str = OVERLAY_PULSE_STYLE,
-                 scale_factor: float = 1.0):
+    def __init__(self, theme: str = OVERLAY_THEME, pulse_style: str = "sheen",
+                 scale_factor: float = 1.0, game_rect: tuple = None):
         self._theme = theme if theme in (THEME_CLASSIC, THEME_POE2) else THEME_POE2
         self._pulse_style = pulse_style if pulse_style in ("border", "sheen", "both", "none") else "sheen"
+        self._game_rect = game_rect  # (left, top, right, bottom) of game window
         # Resolution scale factor (1.0 = 1080p baseline)
         self._scale = max(0.6, min(1.5, scale_factor))
         self._font_size = max(9, round(OVERLAY_FONT_SIZE * self._scale))
@@ -204,6 +204,8 @@ class PriceOverlay:
         self._sheen_profile: list = [0.05, 0.12, 0.22, 0.35, 0.22, 0.12, 0.05]
         # Persistent star indicator layer
         self._star_layer: Optional[StarIndicatorLayer] = None
+        # Overlay mode: "stars_only" suppresses all popup overlays
+        self._overlay_mode: str = "standard"
 
     def initialize(self):
         """
@@ -251,7 +253,7 @@ class PriceOverlay:
 
         # Initialize persistent star indicator layer
         if TK_AVAILABLE:
-            self._star_layer = StarIndicatorLayer(self._root, self._scale)
+            self._star_layer = StarIndicatorLayer(self._root, self._scale, game_rect=self._game_rect)
             self._star_layer.initialize()
 
         # Process pending updates periodically
@@ -370,12 +372,17 @@ class PriceOverlay:
         if self._custom_text_colors or self._custom_bg_colors or self._custom_border_colors:
             logger.info(f"Loaded custom overlay styles for {len(overlay_tier_styles)} tier(s)")
 
+    def set_overlay_mode(self, mode: str):
+        """Set overlay display mode. 'stars_only' suppresses all popups."""
+        self._overlay_mode = mode
+
     def show_price(self, text: str, tier: str, cursor_x: int, cursor_y: int,
                    estimate: bool = False, price_divine: float = 0,
                    borderless: bool = False):
         """
         Show a price tag near the cursor position.
         Thread-safe - can be called from any thread.
+        Suppressed entirely in stars_only mode.
 
         Args:
             text: Price text (e.g., "~8 Exalted")
@@ -386,6 +393,8 @@ class PriceOverlay:
             price_divine: Price in divine orbs (drives border effects)
             borderless: If True, render without border/background (floating icon)
         """
+        if self._overlay_mode == "stars_only":
+            return
         with self._lock:
             self._pending_updates.append(
                 ("show", text, tier, cursor_x, cursor_y, estimate, price_divine,
@@ -393,22 +402,19 @@ class PriceOverlay:
 
     def reshow(self, cursor_x: int, cursor_y: int):
         """Reposition and re-display the overlay without re-rendering.
-
-        Used when the user re-hovers the same item — avoids the cost of
-        re-running the full pricing pipeline and prevents "Checking..."
-        flashes that replace an already-displayed result.
-        Thread-safe.
+        Suppressed in stars_only mode.  Thread-safe.
         """
+        if self._overlay_mode == "stars_only":
+            return
         with self._lock:
             self._pending_updates.append(("reshow", cursor_x, cursor_y))
 
     def update_text(self, text: str):
         """Update the displayed text in-place without re-rendering.
-
-        Used for dot animations (Checking. → Checking.. → Checking...)
-        to avoid full canvas redraws that cause visual flicker.
-        Thread-safe.
+        Suppressed in stars_only mode.  Thread-safe.
         """
+        if self._overlay_mode == "stars_only":
+            return
         with self._lock:
             self._pending_updates.append(("update_text", text))
 
@@ -417,10 +423,11 @@ class PriceOverlay:
         with self._lock:
             self._pending_updates.append(("hide",))
 
-    def place_star(self, cursor_x: int, cursor_y: int, tier: str = "gold"):
+    def place_star(self, cursor_x: int, cursor_y: int, tier: str = "gold",
+                   item_key: str = "", item_class: str = ""):
         """Place a persistent star indicator at cursor position. Thread-safe."""
         with self._lock:
-            self._pending_updates.append(("star", cursor_x, cursor_y, tier))
+            self._pending_updates.append(("star", cursor_x, cursor_y, tier, item_key, item_class))
 
     def clear_stars(self):
         """Remove all persistent star indicators. Thread-safe."""
@@ -997,8 +1004,9 @@ class PriceOverlay:
             for update in star_updates:
                 try:
                     if update[0] == "star" and self._star_layer:
-                        _, cx, cy, tier = update
-                        self._star_layer.add_star(cx, cy, tier)
+                        _, cx, cy, tier, item_key, item_class = update
+                        self._star_layer.add_star(cx, cy, tier, item_key=item_key,
+                                                   item_class=item_class)
                     elif update[0] == "clear_stars" and self._star_layer:
                         self._star_layer.clear_all()
                 except Exception as e:
@@ -1528,28 +1536,59 @@ class StarIndicatorLayer:
     Runs on the same tkinter root as PriceOverlay — no extra threads.
     """
 
-    _GRID_SNAP = 50       # px — dedup grid (matches POE2 inventory slot size)
     _MAX_STARS = 200       # safety cap before auto-clearing oldest
     _STAR_CHAR = "\u2605"  # ★
+    _SHEEN_INTERVAL = 500  # ms between sheen animation frames (~2fps)
+    _SHEEN_STEPS = 12      # frames per full sheen cycle (~6 seconds)
+    _CELL_PX = 52.75       # POE2 inventory cell size at 1080p reference
+    # Inventory grid origin as fraction of game window (at 1920x1080 reference)
+    _INV_ORIGIN_X_FRAC = 1267 / 1920   # ~66% from left
+    _INV_ORIGIN_Y_FRAC = 589 / 1080    # ~54.5% from top
 
-    # Star tier colors (POE2 gothic palette)
-    _COLORS = {
-        "gold":   _POE2_CORNER_GOLD,    # #c4a456
-        "silver": "#8a8a9a",
-    }
-    _GLOW_COLORS = {
-        "gold":   "#3d3018",
-        "silver": "#2a2a30",
+    # Item class → (width, height) in inventory grid cells
+    _ITEM_SLOTS = {
+        "Amulets": (1, 1), "Rings": (1, 1), "Jewels": (1, 1),
+        "Charms": (1, 1), "Stackable Currency": (1, 1),
+        "Belts": (1, 2), "Life Flasks": (1, 2), "Mana Flasks": (1, 2),
+        "Quivers": (1, 2),
+        "Helmets": (2, 2), "Gloves": (2, 2), "Boots": (2, 2),
+        "Foci": (2, 2), "Shields": (2, 2),
+        "Wands": (1, 3), "Sceptres": (1, 3), "Daggers": (1, 3),
+        "One Hand Swords": (1, 3), "One Hand Maces": (1, 3),
+        "One Hand Axes": (1, 3), "Claws": (1, 3),
+        "Body Armours": (2, 3),
+        "Staves": (2, 4), "Two Hand Swords": (2, 4),
+        "Two Hand Maces": (2, 4), "Two Hand Axes": (2, 4),
+        "Bows": (2, 4), "Crossbows": (2, 4),
+        "Waystones": (1, 1), "Tablets": (1, 1),
     }
 
-    def __init__(self, root: tk.Tk, scale: float = 1.0):
+    # Star visual tiers: (count, color_hex, sheen_peak_hex, sheen_enabled)
+    # Gold base → orange → hot red as value increases
+    _STAR_TIERS = {
+        "silver1": (1, "#8a8a9a", "#b0b0b8", False),    # muted silver, no sheen
+        "gold1":   (1, "#c4a456", "#e8d088", True),      # warm gold
+        "gold2":   (2, "#e8943a", "#ffc070", True),      # orange-gold
+        "gold3":   (3, "#ff6a4a", "#ffcc88", True),      # hot red with bright peak
+    }
+
+    def __init__(self, root: tk.Tk, scale: float = 1.0, game_rect: tuple = None):
         self._root = root
         self._scale = scale
-        self._stars: dict = {}   # (grid_x, grid_y) -> canvas item IDs
+        self._game_rect = game_rect  # (left, top, right, bottom) of game window
+        # Keyed by item_key (str) -> entry dict with canvas ids & animation data
+        self._stars: dict = {}
+        self._star_list: list = []   # ordered list for sheen animation
         self._window: Optional[tk.Toplevel] = None
         self._canvas: Optional[tk.Canvas] = None
         self._font: Optional[tkfont.Font] = None
         self._transparent = "#010101"
+        # Computed inventory grid params (set in initialize)
+        self._grid_origin_x = 0
+        self._grid_origin_y = 0
+        self._grid_cell = 53
+        self._sheen_phase = 0       # current animation frame
+        self._sheen_after_id = None
 
     def initialize(self, game_rect: tuple = None):
         """Create the full-screen transparent star canvas.
@@ -1561,21 +1600,19 @@ class StarIndicatorLayer:
         self._window = tk.Toplevel(self._root)
         self._window.overrideredirect(True)
         self._window.attributes("-topmost", True)
-        self._window.attributes("-alpha", 0.90)
+        self._window.attributes("-alpha", 0.92)
         self._window.configure(bg=self._transparent)
         try:
             self._window.attributes("-transparentcolor", self._transparent)
         except tk.TclError:
             pass
 
-        # Cover the full primary monitor (stars use absolute screen coords)
-        if game_rect:
-            x, y, r, b = game_rect
-            w, h = r - x, b - y
-        else:
-            w = self._root.winfo_screenwidth()
-            h = self._root.winfo_screenheight()
-            x, y = 0, 0
+        # Position over the primary monitor. Stars use absolute screen coords
+        # converted to canvas coords by subtracting the window origin.
+        w = self._root.winfo_screenwidth()
+        h = self._root.winfo_screenheight()
+        x, y = 0, 0
+        self._win_origin = (x, y)
         self._window.geometry(f"{w}x{h}+{x}+{y}")
 
         self._canvas = tk.Canvas(
@@ -1584,7 +1621,7 @@ class StarIndicatorLayer:
         )
         self._canvas.pack()
 
-        font_size = max(10, round(14 * self._scale))
+        font_size = max(8, round(11 * self._scale))
         for family in _POE2_FONT_CHAIN:
             try:
                 self._font = tkfont.Font(family=family, size=font_size, weight="bold")
@@ -1594,9 +1631,21 @@ class StarIndicatorLayer:
         if not self._font:
             self._font = tkfont.Font(size=font_size, weight="bold")
 
+        # Compute inventory grid cell size from game window
+        gr = game_rect or self._game_rect
+        if gr:
+            game_h = gr[3] - gr[1]
+            self._grid_cell = self._CELL_PX * (game_h / 1080)
+            logger.info(f"Star grid: cell={self._grid_cell:.1f}px (game_h={game_h})")
+        else:
+            self._grid_cell = self._CELL_PX
+
         # Make click-through
         self._window.update_idletasks()
         self._apply_click_through()
+
+        # Start sheen animation loop
+        self._sheen_tick()
 
         logger.info("StarIndicatorLayer initialized")
 
@@ -1629,51 +1678,118 @@ class StarIndicatorLayer:
         except Exception as e:
             logger.warning(f"Star layer click-through failed: {e}")
 
-    def add_star(self, screen_x: int, screen_y: int, tier: str = "gold"):
-        """Place a star at absolute screen position. Deduplicates by grid cell."""
+    @staticmethod
+    def _lerp_color(hex_a: str, hex_b: str, t: float) -> str:
+        """Linearly interpolate between two hex colors. t=0 returns a, t=1 returns b."""
+        ra, ga, ba = int(hex_a[1:3], 16), int(hex_a[3:5], 16), int(hex_a[5:7], 16)
+        rb, gb, bb = int(hex_b[1:3], 16), int(hex_b[3:5], 16), int(hex_b[5:7], 16)
+        r = int(ra + (rb - ra) * t)
+        g = int(ga + (gb - ga) * t)
+        b = int(ba + (bb - ba) * t)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _sheen_tick(self):
+        """Animate sheen: smoothly cycle star colors between base and peak."""
         if not self._canvas:
             return
 
-        grid_key = (screen_x // self._GRID_SNAP, screen_y // self._GRID_SNAP)
-        if grid_key in self._stars:
-            return  # already starred
+        # Only do work if there are animated stars
+        if self._star_list:
+            self._sheen_phase = (self._sheen_phase + 1) % self._SHEEN_STEPS
+            import math
+            t = (math.sin(self._sheen_phase / self._SHEEN_STEPS * math.pi * 2 - math.pi / 2) + 1) / 2
+
+            for entry in self._star_list:
+                if not entry.get("sheen"):
+                    continue
+                color = self._lerp_color(entry["base_color"], entry["peak_color"], t)
+                try:
+                    self._canvas.itemconfig(entry["star_id"], fill=color)
+                except tk.TclError:
+                    pass
+
+        self._sheen_after_id = self._root.after(self._SHEEN_INTERVAL, self._sheen_tick)
+
+    def add_star(self, screen_x: int, screen_y: int, tier: str = "gold1",
+                 item_key: str = "", item_class: str = ""):
+        """Place star at the bottom-right of the item.
+
+        Uses item_class to determine item slot dimensions and offset the star
+        from the cursor position (assumed to be near item center) to the
+        bottom-right corner of the item.
+        Deduplicates by item_key (item name) so each unique item gets one star.
+        tier: "silver1", "gold1", "gold2", "gold3" — controls count, color, sheen.
+        """
+        if not self._canvas:
+            return
+
+        # Dedup by item identity — skip if this item already has a star
+        if item_key and item_key in self._stars:
+            return
 
         # Auto-clear if too many stars accumulated
         if len(self._stars) >= self._MAX_STARS:
             self.clear_all()
 
-        # Convert screen coords to canvas-local coords
+        count, color, peak_color, sheen = self._STAR_TIERS.get(
+            tier, self._STAR_TIERS["silver1"])
+        star_text = self._STAR_CHAR * count
+
+        # Offset from cursor (near item center) to bottom-right corner.
+        # Item occupies (w, h) grid cells; cursor is roughly centered on item.
+        w, h = self._ITEM_SLOTS.get(item_class, (1, 1))
+        cell = self._grid_cell
+        # Shift by half the item's pixel dimensions, minus a margin so the
+        # star sits just inside the icon corner rather than outside it.
+        margin = round(6 * self._scale)
+        offset_x = round(w * cell / 2) - margin
+        offset_y = round(h * cell / 2) - margin
+
         win_x = self._window.winfo_rootx()
         win_y = self._window.winfo_rooty()
-        cx = screen_x - win_x
-        cy = screen_y - win_y
+        cx = screen_x + offset_x - win_x
+        cy = screen_y + offset_y - win_y
 
-        color = self._COLORS.get(tier, self._COLORS["silver"])
-        glow_color = self._GLOW_COLORS.get(tier, self._GLOW_COLORS["silver"])
+        canvas_ids = []
 
-        # Draw glow circle behind star
-        glow_r = round(10 * self._scale)
-        glow_id = self._canvas.create_oval(
-            cx - glow_r, cy - glow_r, cx + glow_r, cy + glow_r,
-            fill=glow_color, outline="", stipple="gray50",
+        # Drop shadow (2px offset for readability on any background)
+        shadow_off = round(2 * self._scale)
+        shadow_id = self._canvas.create_text(
+            cx + shadow_off, cy + shadow_off, text=star_text,
+            fill="#000000", font=self._font, anchor="center",
         )
+        canvas_ids.append(shadow_id)
 
-        # Draw star character
+        # Star characters
         star_id = self._canvas.create_text(
-            cx, cy, text=self._STAR_CHAR, fill=color,
+            cx, cy, text=star_text, fill=color,
             font=self._font, anchor="center",
         )
+        canvas_ids.append(star_id)
 
-        self._stars[grid_key] = (glow_id, star_id)
+        entry = {
+            "ids": canvas_ids,
+            "star_id": star_id,
+            "tier": tier,
+            "x": screen_x,
+            "y": screen_y,
+            "base_color": color,
+            "peak_color": peak_color,
+            "sheen": sheen,
+        }
+        dedup_key = item_key or f"_pos_{screen_x}_{screen_y}"
+        self._stars[dedup_key] = entry
+        self._star_list.append(entry)
 
     def clear_all(self):
         """Remove all persistent stars."""
         if not self._canvas:
             return
-        for glow_id, star_id in self._stars.values():
-            self._canvas.delete(glow_id)
-            self._canvas.delete(star_id)
+        for entry in self._star_list:
+            for item_id in entry["ids"]:
+                self._canvas.delete(item_id)
         self._stars.clear()
+        self._star_list.clear()
 
     @property
     def star_count(self) -> int:
@@ -1710,7 +1826,11 @@ class ConsoleOverlay:
     def hide(self):
         pass
 
-    def place_star(self, cursor_x: int, cursor_y: int, tier: str = "gold"):
+    def set_overlay_mode(self, mode: str):
+        pass
+
+    def place_star(self, cursor_x: int, cursor_y: int, tier: str = "gold1",
+                   item_key: str = "", item_class: str = ""):
         pass
 
     def clear_stars(self):

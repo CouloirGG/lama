@@ -45,6 +45,11 @@
       95%  { left: 0%; opacity: 0.9; }
       100% { left: 0%; opacity: 0.8; }
     }
+    @keyframes starSheen {
+      0%   { filter: brightness(1.0) drop-shadow(0 0 1px currentColor); }
+      50%  { filter: brightness(1.4) drop-shadow(0 0 3px currentColor); }
+      100% { filter: brightness(1.0) drop-shadow(0 0 1px currentColor); }
+    }
     @keyframes pillSheen {
       0%   { background-position: 200% center; }
       100% { background-position: -200% center; }
@@ -330,9 +335,7 @@
     };
 
     const OVERLAY_EXPORT_KEYS = [
-      "overlay_theme", "overlay_pulse_style", "font_size", "overlay_duration",
-      "overlay_display_preset", "overlay_show_grade", "overlay_show_price",
-      "overlay_show_stars", "overlay_show_mods", "overlay_show_dps",
+      "overlay_mode", "overlay_theme", "font_size", "overlay_duration",
       "overlay_show_low_value", "overlay_tier_styles",
     ];
 
@@ -1518,24 +1521,34 @@
     const PRICE_COLOR_DECENT = "#4ecdc4";
     const PRICE_COLOR_LOW = "#95a5a6";
 
-    // Overlay display presets — maps preset id to toggle states
-    const OVERLAY_PRESETS = [
-      { id: "minimal",  label: "Minimal",  desc: "Price only",      toggles: { overlay_show_grade: false, overlay_show_price: true,  overlay_show_stars: false, overlay_show_mods: false, overlay_show_dps: false } },
-      { id: "quick",    label: "Quick",    desc: "Grade + price",   toggles: { overlay_show_grade: true,  overlay_show_price: true,  overlay_show_stars: false, overlay_show_mods: false, overlay_show_dps: false } },
-      { id: "standard", label: "Standard", desc: "Default",         toggles: { overlay_show_grade: true,  overlay_show_price: true,  overlay_show_stars: true,  overlay_show_mods: false, overlay_show_dps: true  } },
-      { id: "expert",   label: "Expert",   desc: "Full mod detail", toggles: { overlay_show_grade: true,  overlay_show_price: true,  overlay_show_stars: true,  overlay_show_mods: true,  overlay_show_dps: true  } },
+    // Overlay display modes — replaces legacy presets + individual toggles
+    const OVERLAY_MODES = [
+      { id: "stars_only", label: "Stars Only", desc: "Persistent stars, no popup" },
+      { id: "minimal",    label: "Minimal",    desc: "Stars + price popup" },
+      { id: "standard",   label: "Standard",   desc: "Stars + grade/price/dps" },
+      { id: "detailed",   label: "Detailed",   desc: "Stars + full mod text" },
     ];
 
-    // Detect which preset matches current toggle states (or "custom")
-    function detectOverlayPreset(settings) {
-      for (const preset of OVERLAY_PRESETS) {
-        const match = Object.entries(preset.toggles).every(
-          ([key, val]) => (settings[key] !== false) === val
-        );
-        if (match) return preset.id;
-      }
-      return "custom";
-    }
+    // Mode → show flags (mirrors main.py _MODE_FLAGS)
+    const MODE_FLAGS = {
+      stars_only: { grade: false, price: false, stars: false, mods: false, dps: false },
+      minimal:    { grade: false, price: true,  stars: false, mods: false, dps: false },
+      standard:   { grade: true,  price: true,  stars: true,  mods: false, dps: true  },
+      detailed:   { grade: true,  price: true,  stars: true,  mods: true,  dps: true  },
+    };
+
+    // Star visual tiers: maps sample tierId → { count, color, glow, sheenSpeed }
+    // Gold base → orange → hot red-white as value increases
+    const STAR_TIERS = {
+      mirror:     { count: 3, color: "#ff6a4a", glow: "#5a181066", sheenSpeed: "1.2s" },
+      jackpot:    { count: 3, color: "#ff6a4a", glow: "#5a181044", sheenSpeed: "1.5s" },
+      big_hit:    { count: 3, color: "#ff6a4a", glow: "#5a181033", sheenSpeed: "1.8s" },
+      great_find: { count: 2, color: "#e8943a", glow: "#5a301833", sheenSpeed: "2.2s" },
+      good_find:  { count: 2, color: "#e8943a", glow: "#5a301822", sheenSpeed: "2.5s" },
+      worth_sell: { count: 1, color: "#c4a456", glow: "#4a3a1a22", sheenSpeed: "3.0s" },
+      marginal:   { count: 1, color: "#8a8a9a", glow: null,        sheenSpeed: null   },
+      vendor:     { count: 0, color: null,       glow: null,        sheenSpeed: null   },
+    };
 
     // -----------------------------------------------------------------------
     // OverlayPreview — visual mock of in-game tooltip
@@ -1594,28 +1607,26 @@
         borderWidth: 0, animation: "none", textAnim: false, isJunk: true },
     ];
 
-    // Build overlay text for a sample item based on current toggle settings
+    // Build overlay text for a sample item based on overlay mode
     function buildSampleText(sample, settings, theme) {
+      const mode = settings.overlay_mode || "stars_only";
+      if (mode === "stars_only") return "";  // no popup text
       if (sample.isJunk) {
         if (settings.overlay_show_low_value === false) return "";
         return "\u2717";
       }
-      const showGrade = settings.overlay_show_grade !== false;
-      const showPrice = settings.overlay_show_price !== false;
-      const showStars = settings.overlay_show_stars !== false;
-      const showMods  = settings.overlay_show_mods !== false;
-      const showDps   = settings.overlay_show_dps !== false;
+      const flags = MODE_FLAGS[mode] || MODE_FLAGS.stars_only;
       const isPoe2 = theme === "poe2";
       const parts = [];
-      if (showGrade) parts.push(sample.grade);
-      if (showPrice && sample.price) parts.push(sample.price);
+      if (flags.grade) parts.push(sample.grade);
+      if (flags.price && sample.price) parts.push(sample.price);
       const starStr = sample.stars > 0 ? "\u2605".repeat(sample.stars) : "";
-      const dpsStr = (showDps && sample.dps) ? sample.dps : "";
+      const dpsStr = (flags.dps && sample.dps) ? sample.dps : "";
       if (dpsStr) parts.push(dpsStr);
       // POE2 theme: stars shown as pips, not inline text
-      else if (showStars && starStr && !isPoe2) parts.push(starStr);
+      else if (flags.stars && starStr && !isPoe2) parts.push(starStr);
       let text = parts.join(" ");
-      if (showMods && sample.mods) {
+      if (flags.mods && sample.mods) {
         text = text ? text + ": " + sample.mods : sample.mods;
       }
       return text || "\u2605";
@@ -1827,6 +1838,24 @@
                     <path d="M1 1L1 13L4.5 9.5L7.5 15L9.5 14L6.5 8L11 7.5L1 1Z" fill="#ffffffcc" stroke="#00000088" strokeWidth="0.5"/>
                   </svg>
                 </div>
+                {/* Star indicator at bottom-right of highlighted item (stars_only mode) */}
+                {(() => {
+                  if ((settings.overlay_mode || "stars_only") !== "stars_only") return null;
+                  const st = STAR_TIERS[sample.tierId];
+                  if (!st || st.count === 0) return null;
+                  return (
+                    <div style={{
+                      position: "absolute",
+                      left: (tooltip.col + tooltip.slotW) * (CELL + GAP) - GAP - 2,
+                      top: (tooltip.row + tooltip.slotH) * (CELL + GAP) - GAP - 2,
+                      transform: "translate(-100%, -100%)",
+                      fontSize: 9, lineHeight: 1, color: st.color,
+                      textShadow: `1px 1px 1px #000${st.glow ? `, 0 0 4px ${st.glow}` : ""}`,
+                      animation: st.sheenSpeed ? `starSheen ${st.sheenSpeed} ease-in-out infinite` : "none",
+                      pointerEvents: "none", zIndex: 4, letterSpacing: -1,
+                    }}>{"\u2605".repeat(st.count)}</div>
+                  );
+                })()}
               </div>
             </div>
 
@@ -1849,7 +1878,7 @@
                 <div style={{ height: 1, background: "#333", margin: "4px 0 2px" }} />
                 <div style={{ fontSize: 7, color: "#444", ...MONO }}>Item Level: {tooltip.ilvl}</div>
               </div>
-              {/* LAMA overlay tag */}
+              {/* LAMA overlay tag (hidden in stars_only — star shown on item cell instead) */}
               {(() => {
                 if (!text) return null;
                 const isPoe2 = settings.overlay_theme === "poe2";
@@ -1928,7 +1957,7 @@
                           );
                         })()}
                         {/* Star pips — small gold diamonds on bottom rule line */}
-                        {settings.overlay_show_stars !== false && sample.stars > 0 && (
+                        {(MODE_FLAGS[settings.overlay_mode || "stars_only"] || {}).stars && sample.stars > 0 && (
                           <div style={{ position: "absolute", bottom: 1, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 3, pointerEvents: "none" }}>
                             {Array.from({ length: sample.stars }, (_, i) => (
                               <svg key={i} width="5" height="5" viewBox="0 0 5 5" style={{ display: "block" }}>
@@ -2041,11 +2070,31 @@
                     </div>
                   );
                 })}
-                {/* Overlay price bars — reuse OverlaySampleChip for 1:1 match */}
+                {/* Overlay price bars or star indicators depending on mode */}
                 {PREVIEW_GRID_ITEMS.filter(item => item.tierId).map(item => {
                   const sample = OVERLAY_SAMPLES.find(s => s.tierId === item.tierId);
                   if (!sample) return null;
+                  const mode = settings.overlay_mode || "stars_only";
                   const cellW = item.w * (CELL + GAP) - GAP;
+                  const cellH = item.h * (CELL + GAP) - GAP;
+                  // Stars-only: show tiered stars at bottom-right of item cell
+                  if (mode === "stars_only") {
+                    const st = STAR_TIERS[sample.tierId];
+                    if (!st || st.count === 0) return null;
+                    return (
+                      <div key={`star-${item.tierId}`} style={{
+                        position: "absolute",
+                        left: item.col * (CELL + GAP) + cellW - 2,
+                        top: item.row * (CELL + GAP) + cellH - 2,
+                        zIndex: 3, transform: "translate(-100%, -100%)",
+                        fontSize: 10, lineHeight: 1, color: st.color,
+                        textShadow: `1px 1px 1px #000${st.glow ? `, 0 0 4px ${st.glow}` : ""}`,
+                        animation: st.sheenSpeed ? `starSheen ${st.sheenSpeed} ease-in-out infinite` : "none",
+                        pointerEvents: "none", letterSpacing: -1,
+                      }}>{"\u2605".repeat(st.count)}</div>
+                    );
+                  }
+                  // Other modes: show overlay price bar
                   const cx = item.col * (CELL + GAP) + cellW / 2;
                   const by = (item.row + item.h) * (CELL + GAP) - GAP - 3;
                   return (
@@ -2162,7 +2211,7 @@
                 );
               })()}
               {/* Star pips — small gold diamonds on bottom rule line */}
-              {settings.overlay_show_stars !== false && sample.stars > 0 && (
+              {(MODE_FLAGS[settings.overlay_mode || "stars_only"] || {}).stars && sample.stars > 0 && (
                 <div style={{ position: "absolute", bottom: -2, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 2, pointerEvents: "none" }}>
                   {Array.from({ length: sample.stars }, (_, i) => (
                     <svg key={i} width="4" height="4" viewBox="0 0 4 4" style={{ display: "block" }}>
@@ -2283,7 +2332,7 @@
         }
         setImportPending(null);
       };
-      const showStars = settings.overlay_show_stars !== false;
+      const showStars = (MODE_FLAGS[settings.overlay_mode || "stars_only"] || {}).stars;
       const fontSize = settings.font_size || 14;
       const fs = Math.max(9, Math.round(fontSize * 0.7));
       // Representative samples for collapsed view
@@ -2303,7 +2352,7 @@
           </div>
 
           {!expanded ? (
-            /* Collapsed: compact row of representative chips */
+            /* Collapsed: compact row of representative chips (or star legend in stars_only) */
             <div
               onClick={() => setExpanded(true)}
               style={{
@@ -2311,9 +2360,22 @@
                 padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
               }}
             >
-              {collapsedSamples.map(sample => (
-                <OverlaySampleChip key={sample.tierId} sample={sample} settings={settings} compact={true} />
-              ))}
+              {(settings.overlay_mode || "stars_only") === "stars_only" ? (
+                <React.Fragment>
+                  <span style={{ color: "#ff6a4a", fontSize: 12, animation: "starSheen 1.5s ease-in-out infinite", letterSpacing: -1 }}>{"\u2605\u2605\u2605"}</span>
+                  <span style={{ fontSize: 9, color: T.textSecond }}>500c+</span>
+                  <span style={{ color: "#e8943a", fontSize: 12, animation: "starSheen 2.2s ease-in-out infinite", letterSpacing: -1 }}>{"\u2605\u2605"}</span>
+                  <span style={{ fontSize: 9, color: T.textSecond }}>100c+</span>
+                  <span style={{ color: "#c4a456", fontSize: 12, animation: "starSheen 3.0s ease-in-out infinite" }}>{"\u2605"}</span>
+                  <span style={{ fontSize: 9, color: T.textSecond }}>25c+</span>
+                  <span style={{ color: "#8a8a9a", fontSize: 12 }}>{"\u2605"}</span>
+                  <span style={{ fontSize: 9, color: T.textSecond }}>5c+</span>
+                </React.Fragment>
+              ) : (
+                collapsedSamples.map(sample => (
+                  <OverlaySampleChip key={sample.tierId} sample={sample} settings={settings} compact={true} />
+                ))
+              )}
               <span style={{ fontSize: 9, color: T.textMuted, marginLeft: "auto" }}>Click to expand</span>
             </div>
           ) : (
@@ -2322,33 +2384,50 @@
               background: T.input, border: `1px solid ${T.border}`, borderRadius: 6,
               padding: 14, display: "flex", flexDirection: "column", gap: 10,
             }}>
-              {/* Tier selector chips — click to change the mockup */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {OVERLAY_SAMPLES.map(sample => (
-                  <div
-                    key={sample.tierId}
-                    onClick={() => setSelectedTierId(sample.tierId)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 6,
-                      padding: "3px 8px", borderRadius: 3, cursor: "pointer",
-                      background: sample.tierId === selectedTierId ? T.border + "44" : "transparent",
-                      border: `1px solid ${sample.tierId === selectedTierId ? T.border : "transparent"}`,
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    <OverlaySampleChip sample={sample} settings={settings} compact={true} />
-                    <span style={{ fontSize: 9, color: sample.tierId === selectedTierId ? T.textSecond : T.textMuted, fontWeight: sample.tierId === selectedTierId ? 600 : 400 }}>{sample.label}</span>
-                  </div>
-                ))}
-              </div>
-              {/* Stars legend */}
-              {showStars && (
-                <div style={{ fontSize: 9, color: T.textMuted, borderTop: `1px solid ${T.border}33`, paddingTop: 8 }}>
-                  {"\u2605"} = top-tier mod rolls (T1{"\u2013"}T2)
+              {(settings.overlay_mode || "stars_only") === "stars_only" ? (
+                /* Stars-only legend */
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, flexWrap: "wrap" }}>
+                  <span style={{ color: "#ff6a4a", fontSize: 13, animation: "starSheen 1.5s ease-in-out infinite", letterSpacing: -1 }}>{"\u2605\u2605\u2605"}</span>
+                  <span style={{ color: T.textSecond, fontSize: 9 }}>500c+</span>
+                  <span style={{ color: "#e8943a", fontSize: 13, animation: "starSheen 2.2s ease-in-out infinite", letterSpacing: -1 }}>{"\u2605\u2605"}</span>
+                  <span style={{ color: T.textSecond, fontSize: 9 }}>100c+</span>
+                  <span style={{ color: "#c4a456", fontSize: 13, animation: "starSheen 3.0s ease-in-out infinite" }}>{"\u2605"}</span>
+                  <span style={{ color: T.textSecond, fontSize: 9 }}>25c+</span>
+                  <span style={{ color: "#8a8a9a", fontSize: 13 }}>{"\u2605"}</span>
+                  <span style={{ color: T.textSecond, fontSize: 9 }}>5c+</span>
+                  <span style={{ color: T.textMuted, fontSize: 8, marginLeft: "auto" }}>Ctrl+Shift+X to clear</span>
                 </div>
+              ) : (
+                <React.Fragment>
+                  {/* Tier selector chips — click to change the mockup */}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {OVERLAY_SAMPLES.map(sample => (
+                      <div
+                        key={sample.tierId}
+                        onClick={() => setSelectedTierId(sample.tierId)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 6,
+                          padding: "3px 8px", borderRadius: 3, cursor: "pointer",
+                          background: sample.tierId === selectedTierId ? T.border + "44" : "transparent",
+                          border: `1px solid ${sample.tierId === selectedTierId ? T.border : "transparent"}`,
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        <OverlaySampleChip sample={sample} settings={settings} compact={true} />
+                        <span style={{ fontSize: 9, color: sample.tierId === selectedTierId ? T.textSecond : T.textMuted, fontWeight: sample.tierId === selectedTierId ? 600 : 400 }}>{sample.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Stars legend */}
+                  {showStars && (
+                    <div style={{ fontSize: 9, color: T.textMuted, borderTop: `1px solid ${T.border}33`, paddingTop: 8 }}>
+                      {"\u2605"} = top-tier mod rolls (T1{"\u2013"}T2)
+                    </div>
+                  )}
+                </React.Fragment>
               )}
-              {/* Tier color editor */}
-              <div style={{ borderTop: `1px solid ${T.border}33`, paddingTop: 10 }}>
+              {/* Tier color editor (hidden in stars_only mode — no popup to customize) */}
+              {(settings.overlay_mode || "stars_only") !== "stars_only" && <div style={{ borderTop: `1px solid ${T.border}33`, paddingTop: 10 }}>
                 <div style={{
                   display: "grid", gridTemplateColumns: "40px 1fr 24px 24px 24px 28px",
                   gap: 8, alignItems: "center", marginBottom: 4,
@@ -2432,7 +2511,7 @@
                     </div>
                   </div>
                 )}
-              </div>
+              </div>}
               {/* Detection settings — moved from main grid */}
               <div style={{ borderTop: `1px solid ${T.border}33`, paddingTop: 10, marginTop: 4 }}>
                 <div style={{ ...LABEL, marginBottom: 8, fontSize: 9 }}>Detection</div>
@@ -2743,96 +2822,37 @@
                   })}
                 </div>
               </div>
-              {/* Pulse Style selector */}
+              {/* Overlay Mode selector */}
               <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.border}33` }}>
-                <div style={{ ...LABEL, marginBottom: 4, fontSize: 9 }}>Pulse Style</div>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {[
-                    { id: "sheen", label: "Sheen", desc: "Light sweep", poe2Only: true },
-                    { id: "border", label: "Border", desc: "Color cycle" },
-                    { id: "both", label: "Both", desc: "Sheen + border", poe2Only: true },
-                    { id: "none", label: "None", desc: "No animation" },
-                  ].map(p => {
-                    const curStyle = settings.overlay_pulse_style || "sheen";
-                    const active = curStyle === p.id;
-                    const isClassic = (settings.overlay_theme || "poe2") === "classic";
-                    const disabled = isClassic && p.poe2Only;
+                <div style={{ ...LABEL, marginBottom: 4, fontSize: 9 }}>Overlay Mode</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {OVERLAY_MODES.map(m => {
+                    const active = (settings.overlay_mode || "stars_only") === m.id;
                     return (
-                      <button key={p.id}
-                        disabled={disabled}
-                        onClick={() => !disabled && onUpdate({ overlay_pulse_style: p.id })}
-                        title={disabled ? "Sheen requires POE2 Gothic theme" : ""}
+                      <button key={m.id}
+                        onClick={() => onUpdate({ overlay_mode: m.id })}
                         style={{
                           ...BTN, flex: 1,
-                          background: active ? T.gold : T.input,
-                          color: active ? "#0d0b08" : T.textSecond,
-                          border: `1px solid ${active ? T.gold : T.border}`,
-                          padding: "4px 4px",
-                          opacity: disabled ? 0.4 : 1,
-                          cursor: disabled ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        <div style={{ fontWeight: 600, fontSize: 10 }}>{p.label}</div>
-                        <div style={{ fontSize: 7, opacity: 0.7, marginTop: 1 }}>{p.desc}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-                {(settings.overlay_theme || "poe2") === "classic" && (
-                  <div style={{ fontSize: 8, color: T.textSecond, marginTop: 4, opacity: 0.7 }}>
-                    Sheen effect requires POE2 Gothic theme
-                  </div>
-                )}
-              </div>
-              {/* Display Preset selector */}
-              <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.border}33` }}>
-                <div style={{ ...LABEL, marginBottom: 4, fontSize: 9 }}>Display Preset</div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {OVERLAY_PRESETS.map(p => {
-                    const activePreset = detectOverlayPreset(settings);
-                    const active = activePreset === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => onUpdate({ ...p.toggles, overlay_display_preset: p.id })}
-                        style={{
-                          ...BTN,
-                          flex: 1,
                           background: active ? T.gold : T.input,
                           color: active ? "#0d0b08" : T.textSecond,
                           border: `1px solid ${active ? T.gold : T.border}`,
                           padding: "6px 8px",
                         }}
                       >
-                        <div style={{ fontWeight: 600, fontSize: 11 }}>{p.label}</div>
-                        <div style={{ fontSize: 8, opacity: 0.7, marginTop: 1 }}>{p.desc}</div>
+                        <div style={{ fontWeight: 600, fontSize: 11 }}>{m.label}</div>
+                        <div style={{ fontSize: 8, opacity: 0.7, marginTop: 1 }}>{m.desc}</div>
                       </button>
                     );
                   })}
                 </div>
-                {detectOverlayPreset(settings) === "custom" && (
-                  <div style={{ fontSize: 9, color: T.amber, marginTop: 4 }}>Custom (toggles don't match any preset)</div>
-                )}
               </div>
-              {/* Individual toggle overrides */}
-              <div style={{ marginTop: 10 }}>
-                <div style={{ ...LABEL, marginBottom: 6, fontSize: 9 }}>Toggle Overrides</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px 12px" }}>
-                  {[
-                    ["Grade", "overlay_show_grade", "grade"],
-                    ["Price", "overlay_show_price", "price"],
-                    ["Stars", "overlay_show_stars"],
-                    ["Top Mods", "overlay_show_mods"],
-                    ["DPS/Defense", "overlay_show_dps", "dps"],
-                    ["Low Value", "overlay_show_low_value", "low-value"],
-                  ].map(([label, field, nuxHl]) => (
-                    <div key={field} data-nux-hl={nuxHl || undefined} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <Toggle value={settings[field] !== false} onChange={(v) => onUpdate({ [field]: v, ...(field !== "overlay_show_low_value" && { overlay_display_preset: "custom" }) })} size="small" />
-                      <span style={{ fontSize: 11, color: T.textSecond }}>{label}</span>
-                    </div>
-                  ))}
+              {/* Low value toggle */}
+              {(settings.overlay_mode || "stars_only") !== "stars_only" && (
+                <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                  <Toggle value={settings.overlay_show_low_value === true} onChange={(v) => onUpdate({ overlay_show_low_value: v })} size="small" />
+                  <span style={{ fontSize: 11, color: T.textSecond }}>Show Low Value Items</span>
                 </div>
-              </div>
+              )}
             </div>
             <div className="panel" style={{ ...CARD, padding: 8 }}>
               <div style={{ ...LABEL, marginBottom: 6 }}>Preview</div>
@@ -9039,7 +9059,7 @@
     // -----------------------------------------------------------------------
     function Dashboard() {
       const [status, setStatus] = useState({ state: "stopped", uptime: 0, stats: { uptime_min: 0, triggers: 0, prices_shown: 0, success_rate: 0, cache_items: 0, last_refresh: "never", divine_to_chaos: 0, divine_to_exalted: 0, mirror_to_divine: 0, calibration_samples: 0 } });
-      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, start_with_windows: false, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {}, filter_gear_classes: {}, filter_color_preset: "default", overlay_show_grade: true, overlay_show_price: true, overlay_show_stars: true, overlay_show_mods: false, overlay_show_dps: true, overlay_show_low_value: false, overlay_display_preset: "standard", overlay_tier_styles: {} });
+      const [settings, setSettings] = useState({ league: "Fate of the Vaal", no_filter_update: false, auto_start: true, start_with_windows: false, font_size: 14, scan_fps: 8, detection_cooldown: 1.0, overlay_duration: 2.0, cursor_still_radius: 20, cursor_still_frames: 3, filter_strictness: "normal", filter_tier_styles: {}, filter_section_visibility: {}, filter_gear_classes: {}, filter_color_preset: "default", overlay_mode: "stars_only", overlay_show_low_value: false, overlay_tier_styles: {} });
       const [leagues, setLeagues] = useState([{ value: "Fate of the Vaal", label: "Fate of the Vaal" }]);
       const [logs, setLogs] = useState([]);
       const [autoStartDone, setAutoStartDone] = useState(false);
