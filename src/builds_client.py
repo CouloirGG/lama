@@ -288,8 +288,23 @@ class BuildsClient:
             logger.warning(f"poe.ninja snapshot fetch failed: {e}")
             return False
 
+    def _get_profile_version(self) -> Optional[str]:
+        """Extract numeric profile version from snapshot version.
+
+        Snapshot version format: '0335-20260311-00092' → profile version '335'.
+        """
+        if not self._snapshot_version:
+            return None
+        try:
+            return str(int(self._snapshot_version.split("-")[0]))
+        except (ValueError, IndexError):
+            return None
+
     def lookup_character(self, account: str, character: str) -> Optional[CharacterData]:
         """Look up a character by account + name.
+
+        Tries the builds/ladder API first, then falls back to the profile API
+        which works for any public character (not just ladder-ranked ones).
 
         Returns CharacterData or None on failure.
         """
@@ -307,30 +322,75 @@ class BuildsClient:
         if cached:
             return cached
 
+        # 1. Try builds/ladder API (only has ladder-ranked characters)
+        result = self._lookup_builds_api(normalized_account, character)
+        if result:
+            self._set_cache(cache_key, result)
+            return result
+
+        # 2. Fall back to profile API (works for any public character)
+        result = self._lookup_profile_api(normalized_account, character)
+        if result:
+            self._set_cache(cache_key, result)
+            return result
+
+        return None
+
+    def _lookup_builds_api(self, account: str, character: str) -> Optional[CharacterData]:
+        """Look up character via poe.ninja builds/ladder API."""
         try:
             url = (
                 f"{BASE_URL}/builds/{self._snapshot_version}/character"
-                f"?account={normalized_account}"
+                f"?account={account}"
                 f"&name={character}"
                 f"&overview={self._snapshot_name}"
             )
             resp = self._session.get(url, timeout=15)
 
             if resp.status_code == 404:
-                logger.info(f"Character not found: {account}/{character}")
+                logger.info(f"Character not on ladder: {account}/{character}")
                 return None
             if resp.status_code != 200:
-                logger.warning(f"poe.ninja character: HTTP {resp.status_code}")
+                logger.warning(f"poe.ninja builds API: HTTP {resp.status_code}")
                 return None
 
             data = resp.json()
-            result = self._parse_character(data, normalized_account, character)
-            if result:
-                self._set_cache(cache_key, result)
-            return result
+            return self._parse_character(data, account, character)
 
         except Exception as e:
-            logger.warning(f"Character lookup failed: {e}")
+            logger.warning(f"Builds API lookup failed: {e}")
+            return None
+
+    def _lookup_profile_api(self, account: str, character: str) -> Optional[CharacterData]:
+        """Look up character via poe.ninja profile API (works for any public character)."""
+        profile_ver = self._get_profile_version()
+        if not profile_ver:
+            return None
+
+        try:
+            url = (
+                f"{BASE_URL}/profile/characters"
+                f"/{account}/{character}/model/{profile_ver}"
+            )
+            resp = self._session.get(url, timeout=15)
+
+            if resp.status_code == 404:
+                logger.info(f"Character not found via profile API: {account}/{character}")
+                return None
+            if resp.status_code != 200:
+                logger.warning(f"poe.ninja profile API: HTTP {resp.status_code}")
+                return None
+
+            data = resp.json()
+            if not data.get("hasData"):
+                logger.info(f"Profile API returned no data: {account}/{character}")
+                return None
+
+            char_model = data.get("charModel", {})
+            return self._parse_character(char_model, account, character)
+
+        except Exception as e:
+            logger.warning(f"Profile API lookup failed: {e}")
             return None
 
     def _parse_character(self, data: dict, account: str, char_name: str) -> Optional[CharacterData]:

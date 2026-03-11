@@ -548,6 +548,30 @@ trade_actions: Optional[TradeActions] = None
 # Character viewer
 builds_client = BuildsClient()
 
+
+def _lookup_character_with_fallback(account: str, character: str):
+    """Look up a character via poe.ninja (ladder + profile APIs).
+
+    BuildsClient.lookup_character now tries the builds/ladder API first,
+    then falls back to the profile API for non-ladder public characters.
+    If both fail and the user is OAuth-connected, try GGG's API directly.
+    """
+    result = builds_client.lookup_character(account, character)
+    if result:
+        return result
+
+    # Last resort: GGG OAuth API (only works for the authenticated user's own characters)
+    if character_client and oauth_manager and oauth_manager.connected:
+        logger.info(f"poe.ninja miss for {account}/{character}, trying GGG OAuth API")
+        result = character_client.get_character(character)
+        if result:
+            if not result.account:
+                result.account = account
+            return result
+
+    return None
+
+
 # Stash viewer
 oauth_manager: Optional[OAuthManager] = None
 stash_client: Optional[StashClient] = None
@@ -1268,10 +1292,10 @@ async def character_lookup(req: CharacterLookupRequest):
         return JSONResponse(status_code=400, content={"error": "Account and character name required"})
     loop = asyncio.get_running_loop()
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found. Make sure the account and character names are correct, and the character is on the current league's ladder."})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Make sure the account and character names are correct. Non-ladder characters require OAuth login."})
 
     # Auto-save to recent characters
     _save_recent_character(
@@ -1397,10 +1421,10 @@ async def character_popular_items(req: PopularItemsRequest):
 
     # Look up character first (cached)
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     # Fetch popular items for the slot
     result = await loop.run_in_executor(
@@ -1423,10 +1447,10 @@ async def character_build_insights(req: BuildInsightsRequest):
 
     # Look up character (cached)
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     # Classify build
     archetype = classify_build(char_data)
@@ -1563,10 +1587,10 @@ async def character_build_efficiency(req: BuildEfficiencyRequest):
 
     # Look up character (cached)
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     # Classify build
     archetype = classify_build(char_data)
@@ -1701,10 +1725,10 @@ async def character_improvement_package(req: ImprovementPackageRequest):
     loop = asyncio.get_running_loop()
 
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     archetype = classify_build(char_data)
     char_class = char_data.ascendancy or char_data.char_class
@@ -1779,10 +1803,10 @@ async def character_build_compare(req: BuildCompareRequest):
     loop = asyncio.get_running_loop()
 
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     archetype = classify_build(char_data)
     char_class = char_data.ascendancy or char_data.char_class
@@ -1898,10 +1922,10 @@ async def guide_compare(guide_id: str, req: GuideCompareRequest):
     if not char_dict and req.account and req.character_name:
         loop = asyncio.get_running_loop()
         char_data = await loop.run_in_executor(
-            None, builds_client.lookup_character, req.account.strip(), req.character_name.strip()
+            None, _lookup_character_with_fallback, req.account.strip(), req.character_name.strip()
         )
         if not char_data:
-            return JSONResponse(status_code=404, content={"error": "Character not found"})
+            return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
         char_dict = builds_client.serialize_character(char_data)
 
     if not char_dict:
@@ -1996,7 +2020,7 @@ async def oauth_character_lookup(req: OAuthCharLookupRequest):
         None, character_client.get_character, req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     result = builds_client.serialize_character(char_data)
     result["source"] = "ggg"
@@ -2044,7 +2068,7 @@ async def oauth_price_gear(req: PriceGearRequest):
         None, character_client.get_character_raw, req.character.strip()
     )
     if not raw:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     # Extract equipment items from raw GGG response
     char_data = raw.get("character", raw) if isinstance(raw, dict) else raw
