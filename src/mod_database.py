@@ -395,28 +395,38 @@ def _get_weight_for_group(group: str) -> Optional[float]:
     return None
 
 
-# Patterns for common/filler mods — reuses the same list from trade_client.py
-# Imported at class level to avoid circular dependency.
-_COMMON_MOD_PATTERNS: Optional[tuple] = None
-
-
-def _get_common_patterns() -> tuple:
-    """Lazy-import _COMMON_MOD_PATTERNS from TradeClient."""
-    global _COMMON_MOD_PATTERNS
-    if _COMMON_MOD_PATTERNS is None:
-        try:
-            from trade_client import TradeClient
-            _COMMON_MOD_PATTERNS = TradeClient._COMMON_MOD_PATTERNS
-        except ImportError:
-            _COMMON_MOD_PATTERNS = ()
-    return _COMMON_MOD_PATTERNS
+# Patterns for common/filler mods
+_COMMON_MOD_PATTERNS = (
+    "maximum mana", "maximum energy shield",
+    "mana regeneration", "life regeneration", "energy shield recharge",
+    "to armour", "to evasion", "to energy shield",
+    "increased armour", "increased evasion", "increased energy shield",
+    "increased armour and evasion", "increased armour and energy shield",
+    "increased evasion and energy shield",
+    "to fire resistance", "to cold resistance", "to lightning resistance",
+    "to chaos resistance",
+    "to strength", "to dexterity", "to intelligence", "to all attributes",
+    "flask charges", "flask effect", "flask duration",
+    "reduced flask", "increased flask",
+    "thorns damage", "damage taken on block",
+    "to accuracy", "accuracy rating",
+    "leeches", "leech",
+    "damage to attacks", "damage to spells",
+    "freeze duration", "chill effect", "ignite duration",
+    "shock effect", "poison duration", "bleed duration",
+    "curse effect", "ailment",
+    "item rarity", "rarity of items", "light radius", "stun ", "knockback",
+    "mana on kill", "life on kill", "mana cost",
+    "reduced attribute requirements",
+    "reduced projectile range",
+    "effect of socketed",
+)
 
 
 def _is_common_mod(raw_text: str) -> bool:
     """Check if a mod's raw text matches common/filler patterns."""
-    patterns = _get_common_patterns()
     text_lower = raw_text.lower()
-    return any(pat in text_lower for pat in patterns)
+    return any(pat in text_lower for pat in _COMMON_MOD_PATTERNS)
 
 
 # ─── DPS & Defense Factors ────────────────────────────

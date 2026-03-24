@@ -25,9 +25,10 @@ from config import (
     CACHE_DIR,
     DEFAULT_LEAGUE,
     POE2SCOUT_BASE_URL,
-    RATE_HISTORY_FILE,
-    RATE_HISTORY_BACKUP,
 )
+
+# Rate history (exchange rate time series for filter tiering)
+RATE_HISTORY_FILE = CACHE_DIR / "rate_history.jsonl"
 
 logger = logging.getLogger(__name__)
 
@@ -375,27 +376,12 @@ class PriceCache:
             with open(RATE_HISTORY_FILE, "w") as f:
                 f.write("\n".join(existing) + "\n")
 
-            # Backup to OneDrive
-            try:
-                RATE_HISTORY_BACKUP.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(RATE_HISTORY_FILE, RATE_HISTORY_BACKUP)
-            except Exception as be:
-                logger.debug(f"Rate history backup failed: {be}")
-
         except Exception as e:
             logger.debug(f"Rate history tracking failed: {e}")
 
     def _load_rate_history(self) -> list:
         """Load rate history entries from disk. Restores from OneDrive backup if primary missing."""
         history = []
-        # Restore from backup if primary is missing
-        if not RATE_HISTORY_FILE.exists() and RATE_HISTORY_BACKUP.exists():
-            try:
-                RATE_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(RATE_HISTORY_BACKUP, RATE_HISTORY_FILE)
-                logger.info("Restored rate history from OneDrive backup")
-            except Exception as e:
-                logger.debug(f"Rate history restore failed: {e}")
         if not RATE_HISTORY_FILE.exists():
             return history
         try:

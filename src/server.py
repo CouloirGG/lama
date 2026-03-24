@@ -50,7 +50,6 @@ from builds_client import (BuildsClient, enrich_item_mods, classify_build,
                            SLOT_DISPLAY, SLOT_TO_UNIQUE_SLUG)
 import guide_scraper
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
-from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from item_lookup import ItemLookup
 from oauth import OAuthManager
 from price_cache import PriceCache
@@ -58,9 +57,6 @@ from game_commands import GameCommander
 from character_client import CharacterClient
 from stash_client import StashClient
 from stash_scorer import StashScorer, TabSummary
-from telemetry import TelemetryUploader
-from trade_actions import TradeActions
-from watchlist import WatchlistWorker
 import cloud_notify
 
 logger = logging.getLogger("dashboard")
@@ -118,16 +114,11 @@ DEFAULT_SETTINGS = {
     "filter_section_visibility": {},
     "filter_gear_classes": {},
     "filter_color_preset": "default",
-    "watchlist_queries": [],
-    "watchlist_poll_interval": 300,
-    "watchlist_online_only": True,
     "start_with_windows": False,
     "overlay_mode": "stars_only",
     "overlay_show_low_value": False,
     "overlay_tier_styles": {},
     "overlay_theme": "poe2",
-    "telemetry_enabled": False,
-    "poesessid": "",
     "nux_completed": False,
     "window_width": 1100,
     "window_height": 750,
@@ -538,12 +529,9 @@ class OverlayProcess:
 
 overlay = OverlayProcess()
 log_buffer: deque[dict] = deque(maxlen=500)
-watchlist_worker: Optional[WatchlistWorker] = None
 price_cache: Optional[PriceCache] = None
 item_lookup: Optional[ItemLookup] = None
-telemetry_uploader: Optional[TelemetryUploader] = None
 game_commander = GameCommander()
-trade_actions: Optional[TradeActions] = None
 
 # Character viewer
 builds_client = BuildsClient()
@@ -591,7 +579,7 @@ stash_data: dict = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Set up the event loop reference and background tasks."""
-    global watchlist_worker, price_cache, item_lookup, telemetry_uploader, trade_actions
+    global price_cache, item_lookup
     global oauth_manager, stash_client, stash_scorer, character_client
 
     loop = asyncio.get_running_loop()
@@ -600,21 +588,8 @@ async def lifespan(app: FastAPI):
     # Background task: periodic status push
     status_task = asyncio.create_task(status_broadcast_loop())
 
-    # Initialize watchlist worker
     settings = load_settings()
     league = settings.get("league", "Fate of the Vaal")
-    watchlist_worker = WatchlistWorker(league, broadcast_fn=ws_manager.broadcast,
-                                       log_buffer=log_buffer)
-    watchlist_worker.update_queries(
-        settings.get("watchlist_queries", []),
-        settings.get("watchlist_poll_interval", 300),
-        online_only=settings.get("watchlist_online_only", True),
-    )
-    # Propagate POESESSID to watchlist worker if configured
-    poesessid = settings.get("poesessid", "")
-    if poesessid:
-        watchlist_worker.set_session_id(poesessid)
-    watchlist_worker.start(loop)
 
     # Configure cloud push notifications
     cloud_notify.configure(
@@ -623,9 +598,6 @@ async def lifespan(app: FastAPI):
         relay_url=settings.get("cloud_relay_url", ""),
         enabled=settings.get("cloud_enabled", False),
     )
-
-    # Initialize trade actions (authenticated API calls)
-    trade_actions = TradeActions(lambda: load_settings().get("poesessid", ""))
 
     # Server-side PriceCache for Markets tab (works without overlay running)
     price_cache = PriceCache(league=league)
@@ -650,11 +622,6 @@ async def lifespan(app: FastAPI):
         settings["start_with_windows"] = actual_autostart
         save_settings(settings)
 
-    # Initialize telemetry uploader (opt-in)
-    telemetry_uploader = TelemetryUploader(league=league)
-    if settings.get("telemetry_enabled", False):
-        telemetry_uploader.start_schedule()
-
     # Initialize OAuth + Stash viewer
     oauth_manager = OAuthManager()
     stash_client = StashClient(oauth_manager)
@@ -673,12 +640,8 @@ async def lifespan(app: FastAPI):
     finally:
         status_task.cancel()
         update_task.cancel()
-        if watchlist_worker:
-            watchlist_worker.stop()
         if price_cache:
             price_cache.stop()
-        if telemetry_uploader:
-            telemetry_uploader.stop_schedule()
         # Stop overlay if running
         overlay.stop()
 
@@ -817,16 +780,11 @@ class SettingsRequest(BaseModel):
     filter_section_visibility: Optional[dict] = None
     filter_gear_classes: Optional[dict] = None
     filter_color_preset: Optional[str] = None
-    watchlist_queries: Optional[list] = None
-    watchlist_poll_interval: Optional[int] = None
-    watchlist_online_only: Optional[bool] = None
     start_with_windows: Optional[bool] = None
     overlay_mode: Optional[str] = None
     overlay_show_low_value: Optional[bool] = None
     overlay_tier_styles: Optional[dict] = None
     overlay_theme: Optional[str] = None
-    telemetry_enabled: Optional[bool] = None
-    poesessid: Optional[str] = None
     nux_completed: Optional[bool] = None
 
 
@@ -891,11 +849,6 @@ async def restart_overlay(req: StartRequest = StartRequest()):
 def _redact_settings(settings: dict) -> dict:
     """Return settings with sensitive fields redacted for API responses."""
     out = dict(settings)
-    if out.get("poesessid"):
-        out["poesessid_set"] = True
-        out["poesessid"] = ""
-    else:
-        out["poesessid_set"] = False
     out.pop("companion_pin", None)
     if out.get("cloud_secret"):
         out["cloud_secret"] = ""
@@ -912,7 +865,7 @@ async def update_settings(req: SettingsRequest):
     settings = load_settings()
     updates = req.model_dump(exclude_none=True)
     # Keys that should be replaced wholesale (client sends full object, not partial)
-    REPLACE_KEYS = {"filter_tier_styles", "filter_gear_classes", "watchlist_queries", "overlay_tier_styles"}
+    REPLACE_KEYS = {"filter_tier_styles", "filter_gear_classes", "overlay_tier_styles"}
     for key in REPLACE_KEYS:
         if key in updates:
             settings[key] = updates.pop(key)
@@ -928,38 +881,6 @@ async def update_settings(req: SettingsRequest):
     if "league" in updates and price_cache:
         new_league = settings.get("league", "Fate of the Vaal")
         price_cache.league = new_league
-
-    # Start/stop telemetry schedule if the setting changed
-    if "telemetry_enabled" in updates and telemetry_uploader:
-        if settings.get("telemetry_enabled", False):
-            telemetry_uploader.start_schedule()
-        else:
-            telemetry_uploader.stop_schedule()
-
-    # Propagate POESESSID to watchlist worker
-    if "poesessid" in updates and watchlist_worker:
-        watchlist_worker.set_session_id(settings.get("poesessid", ""))
-
-    # Notify watchlist worker if queries, interval, or online filter changed
-    if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates or "watchlist_online_only" in updates):
-        queries = settings.get("watchlist_queries", [])
-        watchlist_worker.update_queries(
-            queries,
-            settings.get("watchlist_poll_interval", 300),
-            online_only=settings.get("watchlist_online_only", True),
-        )
-        # Force-refresh all enabled queries so results appear immediately
-        enabled = [q for q in queries if q.get("enabled", True) and q.get("id")]
-        for q in enabled:
-            watchlist_worker.force_refresh(q["id"])
-        # Log to dashboard console
-        log_entry = {
-            "time": time.strftime("%H:%M:%S"),
-            "message": f"Watchlist: {len(enabled)} queries queued for refresh",
-            "color": "#6b8f71",
-        }
-        log_buffer.append(log_entry)
-        await ws_manager.broadcast({"type": "log", **log_entry})
 
     return settings
 
@@ -1040,203 +961,6 @@ async def post_item_lookup(req: ItemLookupRequest):
             content={"error": "Could not parse item text"},
         )
     return result
-
-
-# ---------------------------------------------------------------------------
-# Watchlist endpoints
-# ---------------------------------------------------------------------------
-@app.get("/api/watchlist/results")
-async def get_watchlist_results():
-    """Return all cached watchlist results."""
-    if not watchlist_worker:
-        return {}
-    return watchlist_worker.get_results()
-
-
-@app.post("/api/watchlist/refresh/{query_id}")
-async def refresh_watchlist_query(query_id: str):
-    """Force-refresh a single watchlist query."""
-    if not watchlist_worker:
-        return {"error": "Watchlist not initialized"}
-    watchlist_worker.force_refresh(query_id)
-    return {"status": "queued", "query_id": query_id}
-
-
-# ---------------------------------------------------------------------------
-# Trade action endpoints (whisper, invite, hideout, trade, kick)
-# ---------------------------------------------------------------------------
-class TradeActionRequest(BaseModel):
-    player: str = ""
-    token: str = ""
-    whisper: str = ""
-
-
-@app.post("/api/trade/whisper")
-async def trade_whisper(req: TradeActionRequest):
-    """Send a trade whisper — via token API if available, else chat fallback."""
-    settings = load_settings()
-    poesessid = settings.get("poesessid", "")
-
-    if req.token and poesessid and trade_actions:
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, trade_actions.whisper_via_token, req.token
-        )
-        if result.get("status") == "sent":
-            return {**result, "method": "api"}
-        logger.warning(f"Whisper token API failed: {result.get('error')}, falling back to chat")
-
-    # The trade API whisper field is the full ready-to-paste message
-    # (e.g. "@CharName Hi, I would like to buy..."), so paste it directly.
-    if req.whisper:
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, game_commander.type_in_chat, req.whisper
-        )
-        return {**result, "method": "chat"}
-
-    if not req.player:
-        return {"error": "No whisper text or player name available"}
-
-    # Bare fallback — just open whisper prompt to player (no message)
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        None, game_commander.type_in_chat, f"@{req.player} ", False
-    )
-    return {**result, "method": "chat"}
-
-
-@app.post("/api/trade/invite")
-async def trade_invite(req: TradeActionRequest):
-    """Send /invite <player> via chat."""
-    if not req.player:
-        return {"error": "Player name required"}
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, game_commander.invite, req.player)
-    return result
-
-
-@app.post("/api/trade/hideout")
-async def trade_hideout(req: TradeActionRequest):
-    """Visit a player's hideout — requires hideout_token + POESESSID.
-
-    POE2 has no /hideout <player> chat command (unlike POE1).
-    The only programmatic way is via the token API.
-    """
-    settings = load_settings()
-    poesessid = settings.get("poesessid", "")
-
-    if req.token and poesessid and trade_actions:
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, trade_actions.hideout_via_token, req.token
-        )
-        if result.get("status") == "sent":
-            return {**result, "method": "api"}
-        return {**result, "method": "api"}
-
-    return {"error": "Hideout requires POESESSID + hideout token (POE2 has no /hideout <player> command)"}
-
-
-@app.post("/api/trade/tradewith")
-async def trade_tradewith(req: TradeActionRequest):
-    """Send /tradewith <player> via chat."""
-    if not req.player:
-        return {"error": "Player name required"}
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, game_commander.trade_with, req.player)
-    return result
-
-
-@app.post("/api/trade/kick")
-async def trade_kick(req: TradeActionRequest):
-    """Send /kick <player> via chat."""
-    if not req.player:
-        return {"error": "Player name required"}
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, game_commander.kick, req.player)
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Rate history endpoint (companion mobile app)
-# ---------------------------------------------------------------------------
-@app.get("/api/rate-history")
-async def get_rate_history(since: int = 0):
-    """Return rate history snapshots for the mobile companion app.
-
-    Query params:
-        since: Unix timestamp — only return entries newer than this (default 0 = all).
-    """
-    if not price_cache:
-        return []
-    history = price_cache._load_rate_history()
-    if since > 0:
-        history = [h for h in history if h.get("ts", 0) > since]
-    return history
-
-
-# ---------------------------------------------------------------------------
-# Market data endpoint (Markets tab)
-# ---------------------------------------------------------------------------
-@app.get("/api/market-data")
-async def get_market_data():
-    """Return currency exchange data with sparklines for the Markets tab."""
-    if not price_cache:
-        return {"currencies": [], "rates": {}, "history": [], "last_refresh": "Never", "league": ""}
-    return price_cache.get_market_data()
-
-
-@app.get("/api/trade-data/stats")
-async def get_trade_stats():
-    """Return flattened stat definitions from cache for autocomplete."""
-    if not TRADE_STATS_CACHE_FILE.exists():
-        return []
-    try:
-        with open(TRADE_STATS_CACHE_FILE) as f:
-            data = json.load(f)
-        stats = []
-        for group in data.get("result", []):
-            group_label = group.get("label", "")
-            for entry in group.get("entries", []):
-                stats.append({
-                    "id": entry.get("id", ""),
-                    "text": entry.get("text", ""),
-                    "type": group_label,
-                })
-        return stats
-    except Exception as e:
-        logger.warning(f"Failed to load trade stats: {e}")
-        return []
-
-
-@app.get("/api/trade-data/items")
-async def get_trade_items():
-    """Return base types grouped by category from cache."""
-    if not TRADE_ITEMS_CACHE_FILE.exists():
-        return []
-    try:
-        with open(TRADE_ITEMS_CACHE_FILE) as f:
-            data = json.load(f)
-        categories = []
-        for group in data.get("result", []):
-            entries = []
-            for entry in group.get("entries", []):
-                item = {"type": entry.get("type", "")}
-                if entry.get("name"):
-                    item["name"] = entry["name"]
-                if entry.get("text"):
-                    item["text"] = entry["text"]
-                entries.append(item)
-            categories.append({
-                "label": group.get("label", ""),
-                "entries": entries,
-            })
-        return categories
-    except Exception as e:
-        logger.warning(f"Failed to load trade items: {e}")
-        return []
-
 
 
 # ---------------------------------------------------------------------------
@@ -2315,20 +2039,6 @@ async def get_wealth_history():
 
 
 # ---------------------------------------------------------------------------
-# Market Signals endpoint (coming soon — Discord integration)
-# ---------------------------------------------------------------------------
-@app.get("/api/market-signals")
-async def get_market_signals():
-    """Return market signals from trusted Discord analysts.
-
-    Currently returns an empty feed. When the Discord bot is connected,
-    this will read from a local cache of messages from #market-signals.
-    Future WS event: {"type": "market_signal", "author": "...", "avatar": "...", "message": "...", "ts": ...}
-    """
-    return {"signals": [], "status": "coming_soon"}
-
-
-# ---------------------------------------------------------------------------
 # Bug report endpoint
 # ---------------------------------------------------------------------------
 class BugReportRequest(BaseModel):
@@ -2452,35 +2162,6 @@ async def submit_bug_report(req: BugReportRequest):
     except Exception as e:
         logger.error(f"Bug report upload error: {e}")
         return {"error": "Failed to send report. Saved locally."}
-
-
-# ---------------------------------------------------------------------------
-# Telemetry endpoints (opt-in anonymous calibration data)
-# ---------------------------------------------------------------------------
-@app.post("/api/telemetry/upload")
-async def telemetry_upload():
-    """Manual trigger: upload pending calibration samples now."""
-    if not telemetry_uploader:
-        return {"error": "Telemetry not initialized"}
-    settings = load_settings()
-    if not settings.get("telemetry_enabled", False):
-        return {"error": "Telemetry is disabled"}
-    loop = asyncio.get_running_loop()
-    success, reason = await loop.run_in_executor(None, telemetry_uploader.upload_now)
-    if success:
-        return {"status": "uploaded", "message": reason}
-    return {"error": reason}
-
-
-@app.get("/api/telemetry/status")
-async def telemetry_status():
-    """Return telemetry status for dashboard display."""
-    if not telemetry_uploader:
-        return {"last_upload": None, "pending_samples": 0, "enabled": False}
-    status = telemetry_uploader.get_status()
-    settings = load_settings()
-    status["enabled"] = settings.get("telemetry_enabled", False)
-    return status
 
 
 # ---------------------------------------------------------------------------
@@ -3073,9 +2754,6 @@ async def websocket_endpoint(ws: WebSocket):
             "settings": settings,
             "log": list(log_buffer),
         }
-        if watchlist_worker:
-            init_msg["watchlist_results"] = watchlist_worker.get_results()
-            init_msg["watchlist_states"] = watchlist_worker.get_query_states()
         if oauth_manager:
             init_msg["oauth_status"] = oauth_manager.get_status()
         init_msg["stash_status"] = {

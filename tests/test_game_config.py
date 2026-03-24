@@ -19,11 +19,6 @@ class TestGameConfig:
             game_id="test",
             default_league="Test League",
             cache_dir=Path("/tmp/test-cache"),
-            trade_api_base="https://example.com/api",
-            trade_stats_url="https://example.com/api/stats",
-            trade_items_url="https://example.com/api/items",
-            trade_stats_cache_file=Path("/tmp/stats.json"),
-            trade_items_cache_file=Path("/tmp/items.json"),
         )
         assert cfg.game_id == "test"
         assert cfg.default_league == "Test League"
@@ -35,20 +30,9 @@ class TestGameConfig:
             game_id="test",
             default_league="Test",
             cache_dir=Path("/tmp"),
-            trade_api_base="",
-            trade_stats_url="",
-            trade_items_url="",
-            trade_stats_cache_file=Path("/tmp/s.json"),
-            trade_items_cache_file=Path("/tmp/i.json"),
         )
-        assert cfg.trade_max_requests_per_second == 1
-        assert cfg.trade_result_count == 8
-        assert cfg.trade_cache_ttl == 300
-        assert cfg.trade_mod_min_multiplier == 0.8
         assert cfg.repoe_cache_ttl == 7 * 86400
         assert cfg.price_refresh_interval == 900
-        assert cfg.calibration_max_price_divine == 1500.0
-        assert cfg.shard_refresh_interval == 86400
         assert cfg.dps_item_classes == frozenset()
         assert cfg.grade_tier_map == {}
 
@@ -74,16 +58,6 @@ class TestPoe2Config:
         custom_dir = Path("/tmp/custom-cache")
         cfg = create_poe2_config(cache_dir=custom_dir)
         assert cfg.cache_dir == custom_dir
-
-    def test_trade_api_fields(self):
-        from games.poe2 import create_poe2_config
-        cfg = create_poe2_config()
-
-        assert "pathofexile.com" in cfg.trade_api_base
-        assert cfg.trade_stats_url.startswith(cfg.trade_api_base)
-        assert cfg.trade_items_url.startswith(cfg.trade_api_base)
-        assert cfg.trade_stats_cache_file.suffix == ".json"
-        assert cfg.trade_items_cache_file.suffix == ".json"
 
     def test_repoe_fields(self):
         from games.poe2 import create_poe2_config
@@ -125,15 +99,6 @@ class TestPoe2Config:
         cfg = create_poe2_config()
 
         assert "poe2scout" in cfg.price_source_url
-
-    def test_calibration_fields(self):
-        from games.poe2 import create_poe2_config
-        cfg = create_poe2_config()
-
-        assert cfg.calibration_log_file is not None
-        assert cfg.shard_dir is not None
-        assert cfg.shard_github_repo  # non-empty
-        assert cfg.calibration_max_price_divine == 1500.0
 
     def test_grade_tier_map(self):
         from games.poe2 import create_poe2_config
@@ -235,12 +200,8 @@ class TestPoe2Config:
         # These must all be non-empty
         assert cfg.game_id
         assert cfg.default_league
-        assert cfg.trade_api_base
-        assert cfg.trade_stats_url
-        assert cfg.trade_items_url
         assert cfg.repoe_base_url
         assert cfg.price_source_url
-        assert cfg.shard_github_repo
         assert len(cfg.dps_item_classes) > 0
         assert len(cfg.two_hand_classes) > 0
         assert len(cfg.defense_item_classes) > 0

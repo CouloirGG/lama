@@ -40,11 +40,12 @@ POE2SCOUT_API = "https://poe2scout.com/api"
 # Ascendancy → base class mapping
 ASCENDANCY_MAP = {
     "Blood Mage": "Witch",
-    "Oracle": "Witch",
+    "Infernalist": "Witch",
     "Pathfinder": "Ranger",
     "Deadeye": "Ranger",
     "Titan": "Warrior",
     "Warbringer": "Warrior",
+    "Smith of Kitava": "Warrior",
     "Stormweaver": "Sorceress",
     "Chronomancer": "Sorceress",
     "Disciple of Varashta": "Sorceress",
@@ -52,9 +53,11 @@ ASCENDANCY_MAP = {
     "Ritualist": "Huntress",
     "Witchhunter": "Mercenary",
     "Gemling Legionnaire": "Mercenary",
+    "Tactician": "Mercenary",
     "Invoker": "Monk",
     "Acolyte of Chayula": "Monk",
-    "Lich": "Druid",
+    "Lich": "Witch",
+    "Oracle": "Druid",
     "Shaman": "Druid",
 }
 

@@ -67,8 +67,6 @@ class StashScorer:
     def __init__(self):
         self._mod_parser = None
         self._mod_database = None
-        self._calibration = None
-        self._divine_to_chaos = 0.0
         self._ready = False
 
     def initialize(self) -> bool:
@@ -76,8 +74,6 @@ class StashScorer:
         try:
             from mod_parser import ModParser
             from mod_database import ModDatabase
-            from calibration import CalibrationEngine
-            from config import CALIBRATION_LOG_FILE, SHARD_DIR
 
             self._mod_parser = ModParser()
             self._mod_parser.load_stats()
@@ -85,13 +81,6 @@ class StashScorer:
             self._mod_database = ModDatabase()
             if self._mod_parser.loaded:
                 self._mod_database.load(self._mod_parser)
-
-            self._calibration = CalibrationEngine()
-            self._calibration.load(CALIBRATION_LOG_FILE)
-            try:
-                self._calibration.load_shards(SHARD_DIR)
-            except Exception:
-                pass
 
             self._ready = self._mod_parser.loaded and self._mod_database.loaded
             logger.info(f"StashScorer initialized (ready={self._ready})")
@@ -103,10 +92,6 @@ class StashScorer:
     @property
     def ready(self) -> bool:
         return self._ready
-
-    def set_divine_to_chaos(self, rate: float):
-        """Update exchange rate for chaos value calculation."""
-        self._divine_to_chaos = rate
 
     def score_item(self, parsed_item) -> Optional[ScoredItem]:
         """Score a single ParsedItem. Returns ScoredItem or None."""
@@ -130,41 +115,6 @@ class StashScorer:
             if not score:
                 return None
 
-            # Estimate price
-            estimate_divine = 0.0
-            if self._calibration and score:
-                try:
-                    mod_scores = getattr(score, "mod_scores", [])
-                    mod_tiers = {ms.mod_group: int(ms.tier_label[1:])
-                                 for ms in mod_scores
-                                 if ms.mod_group and ms.tier_label and ms.tier_label[1:].isdigit()}
-                    mod_rolls = {ms.mod_group: round(ms.roll_quality, 3)
-                                 for ms in mod_scores
-                                 if ms.mod_group and hasattr(ms, 'roll_quality')
-                                 and ms.roll_quality is not None}
-                    est = self._calibration.estimate(
-                        score.normalized_score,
-                        getattr(parsed_item, "item_class", "") or "",
-                        grade=score.grade.value,
-                        top_tier_count=getattr(score, "top_tier_count", 0),
-                        mod_count=len(mod_scores) or 4,
-                        mod_groups=[ms.mod_group for ms in mod_scores if ms.mod_group],
-                        base_type=getattr(parsed_item, "base_type", ""),
-                        mod_tiers=mod_tiers,
-                        mod_rolls=mod_rolls,
-                        somv_factor=getattr(score, "somv_factor", 1.0),
-                        pdps=getattr(parsed_item, "physical_dps", 0.0),
-                        edps=getattr(parsed_item, "elemental_dps", 0.0),
-                        item_level=getattr(parsed_item, "item_level", 0) or 0,
-                        armour=getattr(parsed_item, "armour", 0) or 0,
-                        evasion=getattr(parsed_item, "evasion", 0) or 0,
-                        energy_shield=getattr(parsed_item, "energy_shield", 0) or 0,
-                    )
-                    if est is not None:
-                        estimate_divine = round(est, 2)
-                except Exception:
-                    pass
-
             return ScoredItem(
                 name=parsed_item.name,
                 base_type=parsed_item.base_type,
@@ -173,8 +123,8 @@ class StashScorer:
                 item_level=parsed_item.item_level,
                 grade=score.grade.value if score else None,
                 score=round(score.normalized_score, 4) if score else 0,
-                estimate_divine=estimate_divine,
-                estimate_chaos=round(estimate_divine * self._divine_to_chaos, 0) if self._divine_to_chaos else 0,
+                estimate_divine=0.0,
+                estimate_chaos=0.0,
                 stack_size=parsed_item.stack_size,
                 mods=[
                     {

@@ -41,12 +41,14 @@ from config import (
     OVERLAY_PADDING,
     OVERLAY_THEME,
     OVERLAY_REFERENCE_HEIGHT,
-    PRICE_COLOR_HIGH,
-    PRICE_COLOR_GOOD,
-    PRICE_COLOR_DECENT,
-    PRICE_COLOR_LOW,
-    PRICE_COLOR_SCRAP,
 )
+
+# Tier colors (grade-based)
+TIER_COLOR_HIGH = "#ff6b35"       # Orange - S grade
+TIER_COLOR_GOOD = "#ffd700"       # Gold - A grade
+TIER_COLOR_DECENT = "#4ecdc4"     # Teal - B grade
+TIER_COLOR_LOW = "#95a5a6"        # Grey - C/JUNK grade
+TIER_COLOR_SCRAP = "#CD7F32"      # Bronze - marginal
 
 # ─── Theme Constants ──────────────────────────────────
 THEME_CLASSIC = "classic"
@@ -103,57 +105,9 @@ class PriceOverlay:
 
     _NORMAL_BORDER_COLOR = "#333355"
 
-    # Currency detection patterns for inline icon rendering
+    # Currency detection patterns (kept for text parsing, icons removed)
     _CURRENCY_SHORT_RE = re.compile(r'(?<=\d)(ex|d|c)\b')
     _CURRENCY_LONG_RE = re.compile(r'\b(Divine|Chaos|Exalted|Mirror)s?\b', re.IGNORECASE)
-
-    # Maps icon keys → resource filenames
-    _CURRENCY_ICON_FILES = {
-        "divine": "resources/img/divine_orb.png",
-        "chaos": "resources/img/chaos_orb.png",
-        "exalted": "resources/img/exalted_orb.png",
-        "mirror": "resources/img/mirror_of_kalandra.png",
-        "scrap": "resources/img/scrap_hammer.png",
-    }
-
-    # Value-based border effects:
-    #   (min_divine, colors, pulse_ms, border_width, text_cycle)
-    # pulse_ms=0 means static (no pulse). Checked highest-first.
-    # text_cycle=True cycles label text color through the palette too.
-    _VALUE_TIERS = [
-        (5000, ("#FF4040", "#FF8C00", "#FFD700", "#40FF40", "#40CCFF", "#FF69B4"),
-               150, 4, True),    # Mirror: rainbow, very fast, text cycles
-        (1000, ("#FF4500", "#FFD700"), 250, 3, False),   # Red-orange/gold, fast
-        (500,  ("#FF6600", "#FFD700"), 350, 3, False),    # Orange/gold, fast
-        (250,  ("#FFD700", "#B8860B"), 450, 3, False),    # Gold, medium
-        (100,  ("#FFD700", "#8B7536"), 600, 2, False),    # Gold, slow
-        (50,   ("#DAA520",),           0,   2, False),    # Dark gold, static
-        (25,   ("#A0A0B0",),           0,   2, False),    # Silver, static
-    ]
-
-    # POE2 Gothic: blood/crimson border palette — darker, grittier
-    _VALUE_TIERS_POE2 = [
-        (5000, ("#8b1a1a", "#a85520", "#c4a456", "#5c1510", "#6b5a2e", "#7a2020"),
-               150, 4, True),    # Mirror: blood rainbow, very fast
-        (1000, ("#8b1a1a", "#a85520"), 250, 3, False),   # Crimson/burnt, fast
-        (500,  ("#7a2020", "#a85520"), 350, 3, False),    # Blood/amber, fast
-        (250,  ("#a85520", "#6b5a2e"), 450, 3, False),    # Burnt orange/bronze
-        (100,  ("#6b5a2e", "#5a4a30"), 600, 2, False),    # Tarnished bronze
-        (50,   ("#5a4a30",),           0,   2, False),    # Aged bronze, static
-        (25,   ("#4a3a28",),           0,   2, False),    # Dark leather, static
-    ]
-
-    # Fallback for estimates below 25 divine
-    _ESTIMATE_BORDER_COLORS = ("#FFD700", "#B8860B")
-    _ESTIMATE_BORDER_COLORS_POE2 = ("#a85520", "#6b5a2e")
-    _ESTIMATE_PULSE_MS = 600
-
-    # Tier ID to divine threshold mapping (matches dashboard tier definitions)
-    _TIER_ID_MAP = {
-        "mirror": 5000, "jackpot": 1000, "big_hit": 500,
-        "great_find": 250, "good_find": 100, "worth_sell": 50,
-        "marginal": 25, "vendor": 0,
-    }
 
     def __init__(self, theme: str = OVERLAY_THEME, pulse_style: str = "sheen",
                  scale_factor: float = 1.0, game_rect: tuple = None):
@@ -180,14 +134,11 @@ class PriceOverlay:
         self._lock = threading.Lock()
         self._hwnd: int = 0  # Top-level Win32 HWND for SetWindowPos calls
         self._transparent_color = "#010101"  # Nearly black, used as transparency key
-        # Custom tier styles from dashboard settings (keyed by threshold)
-        self._custom_text_colors: dict = {}
-        self._custom_bg_colors: dict = {}
-        self._custom_border_colors: dict = {}
         # Currency icon labels (created in initialize, packed on demand)
         self._icon_label: Optional[tk.Label] = None
         self._suffix_label: Optional[tk.Label] = None
-        self._currency_icons: dict = {}  # key → ImageTk.PhotoImage (must persist)
+        # Legacy icon dict (unused, kept for API compat)
+        self._currency_icons: dict = {}
         # POE2 Canvas theme widgets (created in _initialize_poe2)
         self._canvas: Optional[tk.Canvas] = None
         self._cv_items: dict = {}  # tag → canvas item ID
@@ -238,9 +189,6 @@ class PriceOverlay:
         else:
             self._initialize_classic()
 
-        # Pre-load currency icons
-        self._load_currency_icons()
-
         # Force window realization so we get a valid HWND
         self._root.update_idletasks()
 
@@ -279,7 +227,7 @@ class PriceOverlay:
             self._frame,
             text="",
             font=("Segoe UI", self._font_size, "bold"),
-            fg=PRICE_COLOR_GOOD,
+            fg=TIER_COLOR_GOOD,
             bg=OVERLAY_BG_COLOR,
             padx=self._padding,
             pady=self._padding // 2,
@@ -301,7 +249,7 @@ class PriceOverlay:
             self._frame,
             text="",
             font=("Segoe UI", self._font_size, "bold"),
-            fg=PRICE_COLOR_GOOD,
+            fg=TIER_COLOR_GOOD,
             bg=OVERLAY_BG_COLOR,
             padx=self._padding,
             pady=self._padding // 2,
@@ -340,37 +288,15 @@ class PriceOverlay:
         )
         self._canvas.pack()
 
-        # Also create classic widgets (needed for _parse_currency icon rendering)
-        # They won't be packed in POE2 mode, but _load_currency_icons references them
+        # Also create classic widgets (used by _render_text_only fallback)
         self._frame = tk.Frame(self._root)  # hidden, never packed
         self._icon_label = tk.Label(self._frame)
         self._suffix_label = tk.Label(self._frame)
         self._label = tk.Label(self._frame)
 
     def load_custom_styles(self, overlay_tier_styles: dict):
-        """Apply custom tier colors from dashboard settings.
-
-        Args:
-            overlay_tier_styles: dict mapping tier IDs (e.g. "mirror", "jackpot")
-                to style dicts with keys: text_color, border_color, bg_color.
-        """
-        self._custom_text_colors.clear()
-        self._custom_bg_colors.clear()
-        self._custom_border_colors.clear()
-        if not overlay_tier_styles:
-            return
-        for tier_id, style in overlay_tier_styles.items():
-            threshold = self._TIER_ID_MAP.get(tier_id)
-            if threshold is None:
-                continue
-            if style.get("text_color"):
-                self._custom_text_colors[threshold] = style["text_color"]
-            if style.get("bg_color"):
-                self._custom_bg_colors[threshold] = style["bg_color"]
-            if style.get("border_color"):
-                self._custom_border_colors[threshold] = style["border_color"]
-        if self._custom_text_colors or self._custom_bg_colors or self._custom_border_colors:
-            logger.info(f"Loaded custom overlay styles for {len(overlay_tier_styles)} tier(s)")
+        """Apply custom tier colors from dashboard settings (no-op, pricing removed)."""
+        pass
 
     def set_overlay_mode(self, mode: str):
         """Set overlay display mode. 'stars_only' suppresses all popups."""
@@ -503,114 +429,6 @@ class PriceOverlay:
             pass
         return (0, 0, 1920, 1080)
 
-    def _load_currency_icons(self):
-        """Pre-load currency icon PNGs, resized to match font size."""
-        if not PIL_AVAILABLE:
-            logger.debug("PIL not available — currency icons disabled")
-            return
-
-        from bundle_paths import get_resource
-
-        icon_size = self._font_size + 4  # ~18px at default font size
-        scrap_size = self._font_size * 3  # Larger — standalone overlay icon (42px)
-        for key, rel_path in self._CURRENCY_ICON_FILES.items():
-            try:
-                img_path = get_resource(rel_path)
-                if not img_path.exists():
-                    continue
-                img = Image.open(img_path).convert("RGBA")
-                size = scrap_size if key == "scrap" else icon_size
-                img = img.resize((size, size), Image.LANCZOS)
-                photo = ImageTk.PhotoImage(img)
-                self._currency_icons[key] = photo
-            except Exception as e:
-                logger.debug(f"Failed to load currency icon {key}: {e}")
-
-        # Generate procedural dismiss X icon (same size as scrap)
-        self._generate_dismiss_icon(scrap_size)
-
-        if self._currency_icons:
-            logger.info(f"Loaded {len(self._currency_icons)} currency icon(s)")
-
-    def _generate_dismiss_icon(self, size: int):
-        """Generate a procedural X icon for the dismiss indicator.
-
-        Draws two crossed gold strokes with a dark shadow behind them,
-        matching the gothic palette (same gold as corner diamonds).
-        """
-        if not PIL_AVAILABLE:
-            return
-        from PIL import ImageDraw
-
-        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-
-        # Inset from edges so the X isn't touching the border
-        margin = size // 4
-        x0, y0 = margin, margin
-        x1, y1 = size - margin, size - margin
-
-        stroke_w = max(2, size // 12)
-
-        # Shadow (offset dark stroke for depth)
-        shadow = "#1a120c"
-        draw.line([(x0 + 1, y0 + 1), (x1 + 1, y1 + 1)],
-                  fill=shadow, width=stroke_w + 2)
-        draw.line([(x1 + 1, y0 + 1), (x0 + 1, y1 + 1)],
-                  fill=shadow, width=stroke_w + 2)
-
-        # Gold strokes (same as corner diamonds: _POE2_CORNER_GOLD)
-        gold = "#c4a456"
-        draw.line([(x0, y0), (x1, y1)], fill=gold, width=stroke_w)
-        draw.line([(x1, y0), (x0, y1)], fill=gold, width=stroke_w)
-
-        try:
-            photo = ImageTk.PhotoImage(img)
-            self._currency_icons["dismiss"] = photo
-        except Exception as e:
-            logger.debug(f"Failed to create dismiss icon: {e}")
-
-    def _parse_currency(self, text: str):
-        """Find a currency token in text and return (prefix, icon_key, suffix) or None."""
-        # Short forms: "~130d" → ("~130", "divine", " ★3: ..."),  "~45c" → chaos
-        m = self._CURRENCY_SHORT_RE.search(text)
-        if m:
-            suffix = m.group(1)
-            key = "divine" if suffix == "d" else "exalted" if suffix == "ex" else "chaos"
-            if key in self._currency_icons:
-                return text[:m.start()], key, text[m.end():]
-
-        # Long forms: "2-5 Divine", "100 Chaos", "2 Exalted", "1 Mirror"
-        m = self._CURRENCY_LONG_RE.search(text)
-        if m:
-            word = m.group(1).lower()
-            if word in self._currency_icons:
-                return text[:m.start()], word, text[m.end():]
-
-        return None
-
-    def _render_with_icon(self, prefix: str, icon_key: str, suffix: str,
-                          color: str, bg_color: str):
-        """Render as [prefix text][icon][suffix text] labels packed left-to-right."""
-        # Unpack all to ensure correct ordering
-        self._label.pack_forget()
-        self._icon_label.pack_forget()
-        self._suffix_label.pack_forget()
-
-        self._label.configure(text=f" {prefix}", fg=color, bg=bg_color,
-                              padx=(OVERLAY_PADDING, 2))
-        self._label.pack(side="left")
-
-        icon = self._currency_icons.get(icon_key)
-        if icon:
-            self._icon_label.configure(image=icon, bg=bg_color)
-            self._icon_label.pack(side="left")
-
-        if suffix and suffix.strip():
-            self._suffix_label.configure(text=f"{suffix} ", fg=color, bg=bg_color,
-                                         padx=(2, OVERLAY_PADDING))
-            self._suffix_label.pack(side="left")
-
     def _render_text_only(self, text: str, color: str, bg_color: str):
         """Render as a single text label (original behavior)."""
         self._icon_label.pack_forget()
@@ -627,10 +445,9 @@ class PriceOverlay:
                      border_color: str, border_width: int, estimate: bool):
         """Draw the POE2 gothic overlay on the Canvas widget.
 
-        Layout:  ◆──[ [A]  ~130d  ★★★ ]──◆
+        Layout:  ◆──[ [A]  text  ★★★ ]──◆
         - Grade badge (small colored rect + letter) on the left
-        - Price text (large serif) center
-        - Currency icon inline after price
+        - Main text (large serif) center
         - Secondary text (stars, mods) in muted color
         - Corner diamonds at all four corners
         - Decorative rule lines near top/bottom edges
@@ -682,16 +499,8 @@ class PriceOverlay:
                 secondary_part[star_only.end():]
             secondary_part = secondary_part.strip()
 
-        # SCRAP / dismiss ✗ — compact gothic-framed icon indicators
-        if text == "SCRAP":
-            self._render_mini_themed("scrap")
-            return
-        if text == "\u2717":
-            self._render_mini_themed("dismiss")
-            return
-
-        # UNID or low-grade without estimate — plain small tag
-        is_plain = text == "UNID" or (
+        # UNID, SCRAP, dismiss, or low-grade — plain small tag
+        is_plain = text in ("UNID", "SCRAP", "\u2717") or (
             grade_letter in ("C", "JUNK") and not estimate)
 
         if is_plain:
@@ -723,26 +532,12 @@ class PriceOverlay:
         price_w = font.measure(price_part) + 4
         x_cursor += price_w
 
-        # Currency icon (if applicable)
-        icon_key = None
-        icon_w = 0
-        currency = self._parse_currency(price_part) if self._currency_icons else None
-        if currency:
-            _, icon_key, _ = currency
-            # Recalculate: price_part is just the prefix before currency
-            price_part = currency[0]
-            price_w = font.measure(price_part) + 6  # extra for serif overhang
-            icon_w = self._font_size + 10  # icon size + gaps
-            if currency[2] and currency[2].strip():
-                secondary_part = currency[2].strip() + (
-                    ("  " + secondary_part) if secondary_part else "")
-
         # Secondary text
         secondary_w = 0
         if secondary_part:
             secondary_w = font_sm.measure(secondary_part) + 8
 
-        total_content_w = (badge_w + 6 if badge_w else 0) + price_w + icon_w + secondary_w
+        total_content_w = (badge_w + 6 if badge_w else 0) + price_w + secondary_w
         w = total_content_w + pad_x * 2
         h = line_h + pad_y * 2
 
@@ -855,13 +650,7 @@ class PriceOverlay:
             anchor="w", tags="price")
         x += price_w
 
-        # 7. Currency icon
-        if icon_key and icon_key in self._currency_icons:
-            icon = self._currency_icons[icon_key]
-            c.create_image(x + 4, cy, image=icon, anchor="w", tags="icon")
-            x += icon_w
-
-        # 8. Secondary text (non-star remainder, e.g. currency suffix)
+        # 7. Secondary text (non-star remainder)
         if secondary_part:
             c.create_text(x + 4, cy, text=secondary_part,
                           fill=_POE2_TEXT_MUTED, font=font_sm,
@@ -896,86 +685,6 @@ class PriceOverlay:
             cx - size, cy,
             fill=_POE2_CORNER_GOLD, outline="", tags="diamond"
         )
-
-    def _render_mini_themed(self, icon_key: str):
-        """Render a compact gothic-framed indicator (SCRAP hammer or dismiss X).
-
-        Applies a mini version of the full POE2 gothic treatment:
-        background fill, edge vignette, grunge splatters/scratches,
-        double border, corner diamonds, centered icon.  No sheen.
-        """
-        c = self._canvas
-        c.delete("all")
-        self._cv_items.clear()
-        c.configure(width=1, height=1)
-
-        icon = self._currency_icons.get(icon_key)
-        if not icon:
-            return
-
-        icon_size = icon.width()
-        pad = round(8 * self._scale)
-        w = icon_size + pad * 2
-        h = icon_size + pad * 2
-        diamond_size = max(2, round(2 * self._scale))
-        border_w = 2
-
-        c.configure(width=w, height=h)
-
-        # 1. Background fill
-        c.create_rectangle(1, 1, w - 1, h - 1, fill=_POE2_BG,
-                           outline="", tags="bg_fill")
-
-        # 2. Edge vignette (compressed 3-strip)
-        vig_w = max(2, w // 10)
-        vig_strip = max(1, vig_w // 3)
-        for i, intensity in enumerate([0.35, 0.20, 0.08]):
-            vc = self._blend_hex(_POE2_BG, _POE2_VIGNETTE, intensity)
-            x0 = 1 + vig_strip * i
-            x1 = 1 + vig_strip * (i + 1)
-            c.create_rectangle(x0, 1, x1, h - 1, fill=vc,
-                               outline="", tags="vignette")
-            rx0 = w - 1 - vig_strip * (i + 1)
-            rx1 = w - 1 - vig_strip * i
-            c.create_rectangle(rx0, 1, rx1, h - 1, fill=vc,
-                               outline="", tags="vignette")
-
-        # 3. Grunge: 2 splatters + 1 scratch (subset for compact space)
-        for xf, yf, sw, sh in _GRUNGE_SPLATTERS[:2]:
-            sx = int(xf * w)
-            sy = int(yf * h)
-            c.create_oval(sx, sy, sx + sw, sy + sh,
-                          fill=_POE2_BLOOD_DARK, outline="", tags="grunge")
-        for x1f, y1f, x2f, y2f in _GRUNGE_SCRATCHES[:1]:
-            c.create_line(int(x1f * w), int(y1f * h),
-                          int(x2f * w), int(y2f * h),
-                          fill=_POE2_BLOOD_MID, width=1, tags="grunge")
-
-        # 4. Double border: outer dark, inner accent
-        c.create_rectangle(1, 1, w - 1, h - 1,
-                           outline=_POE2_BORDER_NORMAL, width=border_w,
-                           fill="", tags="border")
-        c.create_rectangle(border_w + 1, border_w + 1,
-                           w - border_w - 1, h - border_w - 1,
-                           outline=_POE2_BORDER_ACCENT, width=1,
-                           fill="", tags="border_inner")
-
-        # 5. Corner diamonds (smaller than full overlay)
-        self._draw_corner_diamond(c, diamond_size + 1, diamond_size + 1,
-                                  diamond_size)
-        self._draw_corner_diamond(c, w - diamond_size - 1, diamond_size + 1,
-                                  diamond_size)
-        self._draw_corner_diamond(c, diamond_size + 1, h - diamond_size - 1,
-                                  diamond_size)
-        self._draw_corner_diamond(c, w - diamond_size - 1, h - diamond_size - 1,
-                                  diamond_size)
-
-        # 6. Centered icon
-        c.create_image(w // 2, h // 2, image=icon, anchor="center",
-                       tags="indicator_icon")
-
-        # No sheen for low-value indicators
-        self._sheen_strips = []
 
     @staticmethod
     def _blend_hex(c1: str, c2: str, t: float) -> str:
@@ -1079,12 +788,12 @@ class PriceOverlay:
 
         # Set text color based on tier
         color = {
-            "high": PRICE_COLOR_HIGH,
-            "good": PRICE_COLOR_GOOD,
-            "decent": PRICE_COLOR_DECENT,
-            "low": PRICE_COLOR_LOW,
-            "scrap": PRICE_COLOR_SCRAP,
-        }.get(tier, PRICE_COLOR_LOW)
+            "high": TIER_COLOR_HIGH,
+            "good": TIER_COLOR_GOOD,
+            "decent": TIER_COLOR_DECENT,
+            "low": TIER_COLOR_LOW,
+            "scrap": TIER_COLOR_SCRAP,
+        }.get(tier, TIER_COLOR_LOW)
 
         # Stop any existing pulse/sheen animation
         if self._pulse_timer:
@@ -1095,68 +804,21 @@ class PriceOverlay:
             self._sheen_timer = None
         self._sheen_active = False
 
-        # ── Compute border effect (shared by both themes) ──
+        # ── Compute border/background colors ──
         bg_color = _POE2_BG if self._theme == THEME_POE2 else OVERLAY_BG_COLOR
         border_color = _POE2_BORDER_NORMAL if self._theme == THEME_POE2 else self._NORMAL_BORDER_COLOR
-        border_colors = None
-        pulse_ms = 0
         border_width = 2
-        text_cycle = False
-        matched_threshold = None
-
-        # Select theme-appropriate tier table
-        value_tiers = (self._VALUE_TIERS_POE2 if self._theme == THEME_POE2
-                       else self._VALUE_TIERS)
-        est_border = (self._ESTIMATE_BORDER_COLORS_POE2 if self._theme == THEME_POE2
-                      else self._ESTIMATE_BORDER_COLORS)
 
         if borderless:
             bg_color = self._transparent_color
             if self._theme == THEME_CLASSIC:
                 self._frame.configure(
                     bg=self._transparent_color, padx=0, pady=0)
-            self._is_estimate = False
-        else:
-            for min_div, colors, pms, bw, tc in value_tiers:
-                if price_divine >= min_div:
-                    border_colors = colors
-                    pulse_ms = pms
-                    border_width = bw
-                    text_cycle = tc
-                    matched_threshold = min_div
-                    break
 
-            # Apply custom tier overrides from dashboard settings
-            if matched_threshold is not None:
-                custom_text = self._custom_text_colors.get(matched_threshold)
-                if custom_text:
-                    color = custom_text
-                custom_bg = self._custom_bg_colors.get(matched_threshold)
-                if custom_bg:
-                    bg_color = custom_bg
-                custom_border = self._custom_border_colors.get(matched_threshold)
-                if custom_border:
-                    border_colors = (custom_border,)
-                    pulse_ms = 0  # static when custom
-
-            # Fallback: estimates below value tiers still get pulse
-            if not border_colors and estimate:
-                border_colors = est_border
-                pulse_ms = self._ESTIMATE_PULSE_MS
-
-            # Apply border effect
-            self._text_pulse = text_cycle
-            if border_colors:
-                self._pulse_colors = border_colors
-                self._pulse_ms = pulse_ms
-                self._pulse_index = 0
-                border_color = border_colors[0]
-                if pulse_ms > 0 and len(border_colors) > 1:
-                    self._is_estimate = True
-                else:
-                    self._is_estimate = False
-            else:
-                self._is_estimate = False
+        self._is_estimate = False
+        self._text_pulse = False
+        self._pulse_colors = ()
+        self._pulse_ms = 0
 
         # ── Theme-specific rendering ───────────────────────
         # When sheen-only, suppress the colored border — keep default neutral
@@ -1188,33 +850,7 @@ class PriceOverlay:
             if not borderless:
                 self._frame.configure(padx=border_width, pady=border_width,
                                       bg=border_color)
-            # Render label content (with or without currency icon)
-            # SCRAP → hammer icon, dismiss ✗ → X icon
-            indicator_key = (
-                "scrap" if text == "SCRAP" else
-                "dismiss" if text == "\u2717" else None)
-            indicator_icon = (self._currency_icons.get(indicator_key)
-                              if indicator_key else None)
-            if indicator_icon:
-                self._icon_label.pack_forget()
-                self._suffix_label.pack_forget()
-                self._label.pack_forget()
-                self._icon_label.configure(image=indicator_icon, bg=bg_color)
-                self._icon_label.pack(side="left")
-            elif self._currency_icons:
-                currency = self._parse_currency(text)
-                if currency:
-                    prefix, icon_key, suffix = currency
-                    self._render_with_icon(prefix, icon_key, suffix, color, bg_color)
-                else:
-                    self._render_text_only(text, color, bg_color)
-            else:
-                self._render_text_only(text, color, bg_color)
-            if self._is_estimate:
-                # Classic theme: only border pulse (sheen is POE2-only)
-                want_border = self._pulse_style in ("border", "both", "sheen")
-                if want_border:
-                    self._start_pulse()
+            self._render_text_only(text, color, bg_color)
 
         # Position near cursor (offsets are absolute, not scaled)
         x = cursor_x + OVERLAY_OFFSET_X
@@ -1884,33 +1520,23 @@ if __name__ == "__main__":
             t.sleep(1)
 
             test_prices = [
-                # (text, tier, estimate, price_divine)
-                ("[S] ~130d ★★★", "high", True, 130),
-                ("[A] ~45d ★★", "good", True, 45),
-                ("[B] ~8d ★", "decent", False, 8),
-                ("45 Chaos", "low", False, 0.5),
-                ("SCRAP", "scrap", False, 0),
-                ("\u2717", "low", False, 0),
-                # High-value pulse tests
-                ("[S] ~6000d ★★★", "high", True, 6000),  # Mirror rainbow
-                ("[S] ~300d ★★★", "high", True, 300),     # Gold pulse
+                # (text, tier)
+                ("[S] ★★★", "high"),
+                ("[A] ★★", "good"),
+                ("[B] ★", "decent"),
+                ("[C]", "low"),
+                ("SCRAP", "scrap"),
+                ("UNID", "low"),
             ]
 
-            for entry in test_prices:
-                text, tier = entry[0], entry[1]
-                estimate = entry[2] if len(entry) > 2 else False
-                price_div = entry[3] if len(entry) > 3 else 0
+            for text, tier in test_prices:
                 cx, cy = _get_cursor_pos()
                 try:
-                    print(f"Showing ({_args.theme}): {text!r} tier={tier} "
-                          f"est={estimate} divine={price_div}")
+                    print(f"Showing ({_args.theme}): {text!r} tier={tier}")
                 except UnicodeEncodeError:
                     safe = text.encode("ascii", errors="replace").decode()
-                    print(f"Showing ({_args.theme}): {safe!r} tier={tier} "
-                          f"est={estimate} divine={price_div}")
-                overlay.show_price(text, tier, cx, cy,
-                                   estimate=estimate,
-                                   price_divine=price_div)
+                    print(f"Showing ({_args.theme}): {safe!r} tier={tier}")
+                overlay.show_price(text, tier, cx, cy)
                 t.sleep(3)
 
             overlay.shutdown()
@@ -1921,5 +1547,5 @@ if __name__ == "__main__":
     else:
         print("tkinter not available, using console overlay")
         overlay = ConsoleOverlay()
-        overlay.show_price("12 Divine", "high", 500, 400)
-        overlay.show_price("8 Exalted", "good", 600, 300)
+        overlay.show_price("[S] ★★★", "high", 500, 400)
+        overlay.show_price("[A] ★★", "good", 600, 300)
