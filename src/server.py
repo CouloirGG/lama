@@ -1179,6 +1179,14 @@ async def character_build_insights(req: BuildInsightsRequest):
     # Classify build
     archetype = classify_build(char_data)
 
+    # Persist archetype for overlay consumption (build-aware scoring)
+    try:
+        settings = load_settings()
+        settings["build_archetype"] = archetype.to_dict()
+        _save_settings(settings)
+    except Exception as e:
+        logger.debug(f"Failed to persist build archetype: {e}")
+
     # Fetch popular keystones
     char_class = char_data.ascendancy or char_data.char_class
     main_skill = archetype.main_skill
@@ -1262,6 +1270,29 @@ async def character_build_insights(req: BuildInsightsRequest):
                 # Dead mods on this slot (from archetype analysis)
                 slot_dead = [dm for dm in (archetype.dead_mods or []) if dm.get("slot") == eq.slot]
 
+                # Gap analysis: what high-value mods are missing for this build?
+                gap_analysis = []
+                try:
+                    present_groups = [t["group"] for t in all_tiers if t.get("group")]
+                    # Resolve item class from type_line
+                    gap_item_class = eq.type_line.split(" of ")[0].split(" Of ")[0].strip()
+                    # Use the base item class category (e.g. "Gloves", "Amulet")
+                    from item_parser import BASE_TYPE_TO_CLASS
+                    gap_class = BASE_TYPE_TO_CLASS.get(gap_item_class, eq.slot)
+                    # Map common slot names to item classes
+                    _SLOT_TO_CLASS = {
+                        "Helm": "Helmets", "BodyArmour": "Body Armours",
+                        "Gloves": "Gloves", "Boots": "Boots",
+                        "Amulet": "Amulets", "Ring": "Rings", "Ring2": "Rings",
+                        "Belt": "Belts", "Weapon": "Weapons", "Weapon2": "Weapons",
+                        "Offhand": "Shields",
+                    }
+                    gap_class = _SLOT_TO_CLASS.get(eq.slot, gap_class)
+                    gap_analysis = mdb.compute_gap_analysis(
+                        gap_class, present_groups, archetype=archetype)
+                except Exception as e:
+                    logger.debug(f"Gap analysis failed for {eq.slot}: {e}")
+
                 from builds_client import SLOT_DISPLAY
                 slot_summary.append({
                     "slot": eq.slot,
@@ -1274,9 +1305,29 @@ async def character_build_insights(req: BuildInsightsRequest):
                     "weakest": weakest,
                     "weakMods": weak_mods,
                     "deadMods": [{"mod": dm["mod"], "reason": dm["reason"]} for dm in slot_dead[:2]],
+                    "gapAnalysis": gap_analysis[:5],
                 })
         except Exception as e:
             logger.debug(f"Slot summary failed: {e}")
+
+    # Anti-synergy detection
+    anti_synergies = []
+    try:
+        from builds_client import detect_anti_synergies
+        anti_synergies = detect_anti_synergies(
+            archetype, set(char_data.keystones), char_data.equipment)
+        # Promote critically missing keystones (>70% adoption) as anti-synergy
+        for kg in keystone_gaps:
+            if kg["percentage"] >= 70 and not kg["hasIt"]:
+                anti_synergies.append({
+                    "id": f"missing_keystone_{kg['name'].lower().replace(' ', '_')}",
+                    "name": f"Missing popular keystone: {kg['name']}",
+                    "severity": "info",
+                    "message": (f"{kg['percentage']}% of top {archetype.main_skill} "
+                                f"builds use {kg['name']}"),
+                })
+    except Exception as e:
+        logger.debug(f"Anti-synergy detection failed: {e}")
 
     return {
         "archetype": {
@@ -1288,12 +1339,14 @@ async def character_build_insights(req: BuildInsightsRequest):
             "isCoc": archetype.is_coc,
             "elements": archetype.elements,
             "deadMods": archetype.dead_mods,
+            "level": archetype.level,
         },
         "keystoneGaps": {
             "user": list(char_data.keystones),
             "popular": keystone_gaps,
         },
         "slotSummary": slot_summary,
+        "antiSynergies": anti_synergies,
     }
 
 

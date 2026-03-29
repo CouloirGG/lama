@@ -1416,6 +1416,37 @@ class BuildArchetype:
     is_coc: bool = False
     elements: List[str] = field(default_factory=list)
     dead_mods: List[Dict[str, str]] = field(default_factory=list)
+    level: int = 0
+
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-safe dict for persistence."""
+        return {
+            "tags": self.tags,
+            "damage_type": self.damage_type,
+            "defense_type": self.defense_type,
+            "main_skill": self.main_skill,
+            "is_crit": self.is_crit,
+            "is_coc": self.is_coc,
+            "elements": self.elements,
+            "level": self.level,
+            # dead_mods excluded — rebuild from classify_build() each time
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "BuildArchetype":
+        """Deserialize from a settings dict."""
+        if not data or not isinstance(data, dict):
+            return cls()
+        return cls(
+            tags=data.get("tags", []),
+            damage_type=data.get("damage_type", "unknown"),
+            defense_type=data.get("defense_type", "life"),
+            main_skill=data.get("main_skill", ""),
+            is_crit=data.get("is_crit", False),
+            is_coc=data.get("is_coc", False),
+            elements=data.get("elements", []),
+            level=data.get("level", 0),
+        )
 
 
 def classify_build(char: CharacterData) -> BuildArchetype:
@@ -1588,12 +1619,111 @@ def classify_build(char: CharacterData) -> BuildArchetype:
         is_coc=is_coc,
         elements=sorted(elements),
         dead_mods=found_dead,
+        level=char.level,
     )
 
 
 # ---------------------------------------------------------------------------
 # Build Efficiency — upgrade priority, anoint optimizer, cost tiers, lineage ROI
 # ---------------------------------------------------------------------------
+
+# ─── Anti-Synergy Detection ──────────────────────────
+# Rules that detect common build mistakes and conflicts.
+# Each rule has a check function: (archetype, keystones_set, all_mod_texts) -> bool
+
+def _has_off_element_mods(primary_elem: str, mod_texts: list) -> bool:
+    """Check if mod texts contain damage for elements the build doesn't scale."""
+    other_elements = {"fire", "cold", "lightning"} - {primary_elem}
+    for mod in mod_texts:
+        mod_lower = mod.lower()
+        for elem in other_elements:
+            if f"adds" in mod_lower and f"{elem}" in mod_lower and "damage" in mod_lower:
+                return True
+    return False
+
+
+_ANTI_SYNERGY_RULES = [
+    {
+        "id": "crit_with_eo",
+        "name": "Crit + Elemental Overload conflict",
+        "check": lambda arch, ks, mods: (
+            "Elemental Overload" in ks and
+            any(re.search(r"Critical (Hit Chance|Damage Bonus|Strike Multiplier)",
+                          m, re.I) for m in mods)
+        ),
+        "severity": "error",
+        "message": "Elemental Overload negates crit scaling — remove crit mods or drop EO",
+    },
+    {
+        "id": "ci_life_stacking",
+        "name": "CI + Life stacking",
+        "check": lambda arch, ks, mods: (
+            "Chaos Inoculation" in ks and
+            sum(1 for m in mods if re.search(r"to maximum Life", m, re.I)) >= 3
+        ),
+        "severity": "warning",
+        "message": "Chaos Inoculation sets life to 1 — life mods are wasted affixes",
+    },
+    {
+        "id": "mom_no_mana",
+        "name": "MoM without mana investment",
+        "check": lambda arch, ks, mods: (
+            arch.defense_type == "mom" and
+            sum(1 for m in mods
+                if re.search(r"to maximum Mana|increased maximum Mana|Mana Regeneration",
+                             m, re.I)) < 2
+        ),
+        "severity": "warning",
+        "message": "Mind over Matter needs mana investment — look for mana mods on gear",
+    },
+    {
+        "id": "off_element_scaling",
+        "name": "Off-element damage mods",
+        "check": lambda arch, ks, mods: (
+            len(arch.elements) == 1 and
+            arch.elements[0] in ("fire", "cold", "lightning") and
+            _has_off_element_mods(arch.elements[0], mods)
+        ),
+        "severity": "info",
+        "message": "You have flat damage mods for elements your build doesn't scale",
+    },
+]
+
+
+def detect_anti_synergies(archetype, keystones: set,
+                          equipment: list) -> List[Dict[str, str]]:
+    """Run anti-synergy rules against build data.
+
+    Args:
+        archetype: BuildArchetype from classify_build()
+        keystones: Set of keystone names the player has
+        equipment: List of CharacterItem
+
+    Returns:
+        List of {id, name, severity, message} for triggered rules.
+    """
+    # Collect all mod texts from all equipment
+    all_mod_texts = []
+    for eq in equipment:
+        for m_list in [eq.explicit_mods, eq.crafted_mods, eq.implicit_mods,
+                       eq.fractured_mods, eq.rune_mods, eq.desecrated_mods]:
+            for m in (m_list or []):
+                all_mod_texts.append(strip_ninja_brackets(m))
+
+    findings = []
+    for rule in _ANTI_SYNERGY_RULES:
+        try:
+            if rule["check"](archetype, keystones, all_mod_texts):
+                findings.append({
+                    "id": rule["id"],
+                    "name": rule["name"],
+                    "severity": rule["severity"],
+                    "message": rule["message"],
+                })
+        except Exception:
+            continue
+    return findings
+
 
 INVESTMENT_TIERS = [
     {"label": "Starter", "min": 0, "max": 5, "desc": "Build-defining cheap uniques"},

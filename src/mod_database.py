@@ -157,8 +157,8 @@ class ModScore:
 
 @dataclass
 class ItemScore:
-    normalized_score: float  # 0.0-1.0
-    grade: Grade
+    normalized_score: float  # 0.0-1.0 (build-aware when archetype present, else universal)
+    grade: Grade             # primary grade (build-aware when archetype present)
     prefix_count: int
     suffix_count: int
     mod_scores: List[ModScore]
@@ -172,6 +172,11 @@ class ItemScore:
     total_defense: int = 0
     quality: int = 0
     sockets: int = 0
+    # Dual scoring: universal grade is always computed (build-agnostic).
+    # When archetype is provided, grade/normalized_score reflect build-aware
+    # scoring, and universal_* fields hold the build-agnostic scores.
+    universal_grade: Optional[Grade] = None        # None = no archetype was used
+    universal_normalized: Optional[float] = None   # None = no archetype was used
 
     def _format_price_point(self, price: float,
                             divine_to_chaos: float,
@@ -366,6 +371,128 @@ _WEIGHT_TABLE: List[Tuple[float, List[str]]] = [
         "lightradius",
     ]),
 ]
+
+
+# ─── Build-Aware Multipliers ────────────────────────
+# Applied on top of _WEIGHT_TABLE weights when a BuildArchetype is available.
+# Each key maps to an archetype flag; values are (multiplier, [patterns]).
+# A multiplier < 1.0 penalizes the mod; > 1.0 boosts it.
+_BUILD_MULTIPLIERS: Dict[str, List[Tuple[float, List[str]]]] = {
+    # Damage type — spell builds don't want attack mods and vice versa
+    "spell": [
+        (0.05, ["attackspeed", "localattackspeed"]),
+        (0.05, ["localphysicaldamage", "localaddedphysicaldamage",
+                 "localphysicaldamagepercent"]),
+    ],
+    "attack": [
+        (0.05, ["castspeed"]),
+        (0.05, ["spelldamage", "percentagespelldamage"]),
+    ],
+    # Crit — non-crit builds don't want crit scaling
+    "no_crit": [
+        (0.1, ["critmulti", "criticalmulti", "criticalstrikemultiplier",
+                "critchance", "criticalstrikechance", "localcriticalstrikechance"]),
+    ],
+    # Defense type
+    "es": [
+        (2.0, ["energyshield", "localenergyshield", "increasedenergy",
+                "energyshieldrecharge"]),
+        (0.3, ["increasedlife", "maximumlife"]),
+    ],
+    "mom": [
+        (2.5, ["maximummana", "increasedmana", "manaregeneration"]),
+    ],
+    # Element penalties handled separately in _get_build_multiplier()
+    # to correctly support multi-element builds.
+}
+
+# Progression-aware multipliers — early game has different priorities.
+# Keyed by progression tier name derived from character level.
+_PROGRESSION_MULTIPLIERS: Dict[str, List[Tuple[float, List[str]]]] = {
+    "leveling": [   # levels 1-44: survival first, cap resists
+        (2.5, ["resistance", "fireresist", "coldresist", "lightningresist",
+                "allresist", "elementalresist"]),
+        (2.0, ["increasedlife", "maximumlife"]),
+        (0.3, ["critmulti", "criticalmulti", "criticalstrikemultiplier"]),
+        (0.5, ["movementvelocity", "movespeed"]),
+    ],
+    "cruel": [      # levels 45-67: starting to specialize
+        (1.5, ["resistance", "fireresist", "coldresist", "lightningresist",
+                "allresist", "elementalresist"]),
+        (1.5, ["increasedlife", "maximumlife"]),
+        (0.5, ["critmulti", "criticalmulti", "criticalstrikemultiplier"]),
+    ],
+    # maps (68-81) and endgame (82+) use default weights — no adjustment
+}
+
+
+def _get_progression_tier(level: int) -> str:
+    """Map character level to a progression tier name."""
+    if level < 45:
+        return "leveling"
+    elif level < 68:
+        return "cruel"
+    elif level < 82:
+        return "maps"
+    return "endgame"
+
+
+def _get_build_multiplier(group: str, archetype) -> float:
+    """Compute combined build-aware + progression multiplier for a mod group.
+
+    Returns 1.0 when archetype is None (backward compatible).
+    """
+    if archetype is None:
+        return 1.0
+
+    multiplier = 1.0
+    group_lower = group.lower()
+
+    # Collect applicable build rule keys
+    keys: List[str] = []
+    # Damage type — but CoC builds need both attack and spell, skip penalties
+    if not archetype.is_coc and archetype.damage_type in ("spell", "attack"):
+        keys.append(archetype.damage_type)
+    # Crit
+    if not archetype.is_crit:
+        keys.append("no_crit")
+    # Defense type
+    if archetype.defense_type in ("es", "mom"):
+        keys.append(archetype.defense_type)
+    # Apply build multipliers (non-element)
+    for key in keys:
+        for mult, patterns in _BUILD_MULTIPLIERS.get(key, []):
+            for pat in patterns:
+                if pat in group_lower:
+                    multiplier *= mult
+                    break
+
+    # Element penalties: only penalize damage types for elements the build
+    # does NOT scale.  Multi-element builds keep all their elements.
+    _ELEM_DAMAGE_PATTERNS = {
+        "fire": ["addedfiredamage"],
+        "cold": ["addedcolddamage"],
+        "lightning": ["addedlightningdamage"],
+    }
+    build_elems = set(archetype.elements)
+    for elem, patterns in _ELEM_DAMAGE_PATTERNS.items():
+        if elem not in build_elems and build_elems - {"physical", "chaos"}:
+            # Build scales specific elements but not this one → penalize
+            for pat in patterns:
+                if pat in group_lower:
+                    multiplier *= 0.05
+                    break
+
+    # Apply progression multipliers
+    if archetype.level > 0:
+        prog_tier = _get_progression_tier(archetype.level)
+        for mult, patterns in _PROGRESSION_MULTIPLIERS.get(prog_tier, []):
+            for pat in patterns:
+                if pat in group_lower:
+                    multiplier *= mult
+                    break
+
+    return multiplier
 
 
 # Groups that must NOT match the premium "physicaldamage" patterns —
@@ -742,25 +869,56 @@ class ModDatabase:
         self._loaded = True
         return True
 
-    def score_item(self, item, mods) -> ItemScore:
+    def score_item(self, item, mods, archetype=None) -> ItemScore:
         """Score a complete item.
 
         Args:
             item: ParsedItem with .item_class, .base_type, .item_level
             mods: List[ParsedMod] from ModParser
+            archetype: Optional BuildArchetype for build-aware scoring.
+                       When provided, the primary grade reflects build fit
+                       and universal_grade/universal_normalized hold the
+                       build-agnostic score for comparison.
 
         Returns:
             ItemScore with grade + breakdown
         """
         item_class = self._resolve_item_class(item)
+        item_level = getattr(item, 'item_level', 0) or 0
+        item_class_raw = getattr(item, 'item_class', '') or ''
+        total_dps = getattr(item, 'total_dps', 0.0) or 0.0
+        total_defense = getattr(item, 'total_defense', 0) or 0
+
+        # Always compute universal (build-agnostic) score
+        universal_result = self._score_item_inner(
+            item, mods, item_class, item_level, item_class_raw,
+            total_dps, total_defense, archetype=None)
+
+        if archetype is None:
+            return universal_result
+
+        # Compute build-aware score
+        build_result = self._score_item_inner(
+            item, mods, item_class, item_level, item_class_raw,
+            total_dps, total_defense, archetype=archetype)
+
+        # Merge: build-aware as primary, universal as secondary
+        build_result.universal_grade = universal_result.grade
+        build_result.universal_normalized = universal_result.normalized_score
+        return build_result
+
+    def _score_item_inner(self, item, mods, item_class: str,
+                          item_level: int, item_class_raw: str,
+                          total_dps: float, total_defense: int,
+                          archetype=None) -> ItemScore:
+        """Core scoring logic — called once per scoring pass."""
         mod_scores = []
         prefix_count = 0
         suffix_count = 0
 
-        item_level = getattr(item, 'item_level', 0) or 0
-
         for mod in mods:
-            ms = self._score_mod(mod, item_class, item_level)
+            ms = self._score_mod(mod, item_class, item_level,
+                                 archetype=archetype)
             mod_scores.append(ms)
             if ms.generation_type == "prefix":
                 prefix_count += 1
@@ -787,10 +945,6 @@ class ModDatabase:
         normalized = normalized * somv_factor
 
         # Apply DPS/defense combat factors
-        item_class_raw = getattr(item, 'item_class', '') or ''
-        total_dps = getattr(item, 'total_dps', 0.0) or 0.0
-        total_defense = getattr(item, 'total_defense', 0) or 0
-
         d_factor = _dps_factor(total_dps, item_class_raw, item_level)
         a_factor = _defense_factor(total_defense, item_class_raw, item_level)
         combat_factor = min(d_factor, a_factor)  # only one applies per item
@@ -846,6 +1000,79 @@ class ModDatabase:
             quality=getattr(item, 'quality', 0) or 0,
             sockets=getattr(item, 'sockets', 0) or 0,
         )
+
+    # ─── Gap Analysis ──────────────────────────────────
+
+    def get_possible_mods_for_class(self, item_class: str) -> List[dict]:
+        """Enumerate all mod groups that can roll on an item class.
+
+        Returns list of {group, display_name, weight, generation_type,
+        tier_count, best_tier_range} sorted by weight descending.
+        """
+        resolved = item_class
+        if item_class in self._class_aliases:
+            resolved = self._class_aliases[item_class]
+
+        seen_groups: set = set()
+        result = []
+        for (group, ic), ladder in self._ladders.items():
+            if ic != resolved:
+                continue
+            if group in seen_groups:
+                continue
+            seen_groups.add(group)
+            w = _get_weight_for_group(group)
+            best_range = None
+            if ladder.tiers:
+                t = ladder.tiers[0]  # T1 = best
+                best_range = {
+                    "min": round(min(abs(t.stat_min), abs(t.stat_max)), 1),
+                    "max": round(max(abs(t.stat_min), abs(t.stat_max)), 1),
+                }
+            result.append({
+                "group": group,
+                "display_name": _display_name(group),
+                "weight": w if w is not None else 1.0,
+                "generation_type": ladder.generation_type,
+                "tier_count": len(ladder.tiers),
+                "best_tier_range": best_range,
+            })
+        return sorted(result, key=lambda x: -x["weight"])
+
+    def compute_gap_analysis(self, item_class: str,
+                             present_groups: List[str],
+                             archetype=None) -> List[dict]:
+        """Find high-value mods missing from an item for this build.
+
+        Args:
+            item_class: Item class (e.g. "Amulet", "Gloves")
+            present_groups: Mod groups already on the item
+            archetype: Optional BuildArchetype for build-aware weighting
+
+        Returns:
+            Top missing mods sorted by build_weight descending.
+        """
+        possible = self.get_possible_mods_for_class(item_class)
+        present_lower = {g.lower() for g in present_groups}
+
+        missing = []
+        for mod in possible:
+            if mod["group"].lower() in present_lower:
+                continue
+            build_weight = mod["weight"] * _get_build_multiplier(
+                mod["group"], archetype)
+            if build_weight < 0.5:
+                continue
+            missing.append({
+                "group": mod["group"],
+                "displayName": mod["display_name"],
+                "buildWeight": round(build_weight, 2),
+                "universalWeight": mod["weight"],
+                "bestTierRange": mod["best_tier_range"],
+                "generationType": mod["generation_type"],
+            })
+
+        return sorted(missing, key=lambda x: -x["buildWeight"])[:10]
 
     def get_tier_info(self, stat_id: str, value: float,
                       item_class: str) -> Tuple[str, Optional[TierInfo]]:
@@ -1293,7 +1520,8 @@ class ModDatabase:
                 return key
         return raw
 
-    def _score_mod(self, mod, item_class: str, item_level: int = 0) -> ModScore:
+    def _score_mod(self, mod, item_class: str, item_level: int = 0,
+                   archetype=None) -> ModScore:
         """Score a single parsed mod."""
         bridge_entry = self._bridge.get(mod.stat_id)
         group = ""
@@ -1366,6 +1594,12 @@ class ModDatabase:
             weight = max(weight, 2.0)  # at least Key-tier weight
             percentile = max(percentile, 0.85)  # treat as high-roll
             roll_quality = max(roll_quality, 0.85)
+
+        # Build-aware weight adjustment: multiply by archetype-specific
+        # factor (penalizes off-type mods, boosts on-type mods).
+        if archetype is not None and group:
+            build_mult = _get_build_multiplier(group, archetype)
+            weight *= build_mult
 
         # Percentile floor for key/premium mods: even a low-tier roll of a
         # premium mod type is valuable because the mod's PRESENCE matters.

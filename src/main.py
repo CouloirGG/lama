@@ -88,6 +88,7 @@ class LAMA:
 
         # Load overlay display settings from dashboard config
         self._display_settings = self._load_display_settings()
+        self._build_archetype = self._load_build_archetype()
 
         if use_console:
             self.overlay = ConsoleOverlay()
@@ -180,6 +181,26 @@ class LAMA:
         except Exception:
             pass
         return defaults
+
+    @staticmethod
+    def _load_build_archetype():
+        """Load persisted BuildArchetype from dashboard settings (if any)."""
+        import json
+        try:
+            from builds_client import BuildArchetype
+            settings_file = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "dashboard_settings.json"
+            if settings_file.exists():
+                with open(settings_file) as f:
+                    saved = json.load(f)
+                arch_data = saved.get("build_archetype")
+                if arch_data:
+                    arch = BuildArchetype.from_dict(arch_data)
+                    logger.info(f"Build archetype loaded: {arch.damage_type}/{arch.defense_type} "
+                                f"lv{arch.level} [{', '.join(arch.tags)}]")
+                    return arch
+        except Exception as e:
+            logger.debug(f"No build archetype loaded: {e}")
+        return None
 
     def start(self):
         """
@@ -508,7 +529,8 @@ class LAMA:
                            clipboard_text=None):
         """Score item locally and display grade overlay."""
         from config import GRADE_TIER_MAP
-        score = self.mod_database.score_item(item, parsed_mods)
+        score = self.mod_database.score_item(item, parsed_mods,
+                                              archetype=self._build_archetype)
         display_name = item.name or item.base_type
 
         overlay_tier = GRADE_TIER_MAP.get(score.grade.value, "low")
@@ -545,9 +567,16 @@ class LAMA:
         if score.somv_factor != 1.0:
             logger.info(f"SOMV factor: {score.somv_factor:.3f} (roll quality)")
 
-        logger.info(f"Grade {score.grade.value}: {display_name} "
-                     f"(score={score.normalized_score:.3f}) "
-                     f"{score.top_mods_summary}")
+        # Log dual grade when build archetype is active and grades diverge
+        if score.universal_grade is not None and score.universal_grade != score.grade:
+            logger.info(f"Grade {score.grade.value} (build) / "
+                         f"{score.universal_grade.value} (universal): {display_name} "
+                         f"(score={score.normalized_score:.3f}) "
+                         f"{score.top_mods_summary}")
+        else:
+            logger.info(f"Grade {score.grade.value}: {display_name} "
+                         f"(score={score.normalized_score:.3f}) "
+                         f"{score.top_mods_summary}")
 
         # Show popup overlay (unless stars_only mode)
         if mode != "stars_only":
