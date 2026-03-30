@@ -1124,14 +1124,6 @@ class WhyEngine:
                     estimated_pct=est_pct,
                 ))
 
-        categories.append(SynergyCategory(
-            category="survival", label="Survival", icon="shield",
-            value=f"{sc.ehp:,} EHP" if sc else "?",
-            status=sc.ehp_status if sc else "info",
-            contributors=surv_contributors,
-            missing=surv_missing,
-        ))
-
         # ── Sustain sub-layer for survival ──────────────
         # Build-specific sustain: mana for MoM, life cost for Blood Mage, etc.
         if pob:
