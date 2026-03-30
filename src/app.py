@@ -116,6 +116,22 @@ class WindowApi:
         if not hwnd or self._original_proc:
             return
 
+        # Ensure WS_THICKFRAME is set so Windows sends WM_NCHITTEST for resize
+        GWL_STYLE = -16
+        WS_THICKFRAME = 0x00040000
+        style = ctypes.windll.user32.GetWindowLongPtrW(hwnd, GWL_STYLE)
+        if not (style & WS_THICKFRAME):
+            ctypes.windll.user32.SetWindowLongPtrW(hwnd, GWL_STYLE, style | WS_THICKFRAME)
+            # Refresh the frame without flashing
+            SWP_FRAMECHANGED = 0x0020
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_NOZORDER = 0x0004
+            ctypes.windll.user32.SetWindowPos(
+                hwnd, 0, 0, 0, 0, 0,
+                SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER
+            )
+
         WM_WINDOWPOSCHANGING = 0x0046
         WM_NCHITTEST = 0x0084
         SWP_NOSIZE = 0x0001
@@ -610,10 +626,26 @@ def main():
         js_api=api,
     )
 
-    # Set the taskbar icon in the background (no longer needs to show/hide)
-    threading.Thread(
-        target=_set_icon_and_show, args=(api._get_hwnd, lambda: None, api, _ms), daemon=True
-    ).start()
+    def _on_shown():
+        """Install resize hook and taskbar icon once the window is shown."""
+        _log(f"[Startup] Window shown event fired ({_ms()})")
+        # Install resize hook — must happen after window exists
+        # Retry a few times since the HWND may not be ready immediately
+        for attempt in range(10):
+            hwnd = api._get_hwnd()
+            if hwnd:
+                api._install_hook()
+                _log(f"[Startup] Resize hook installed (hwnd={hwnd}, attempt={attempt})")
+                break
+            time.sleep(0.2)
+        else:
+            _log("[Startup] WARNING: Could not find window for resize hook")
+        # Set taskbar icon in background
+        threading.Thread(
+            target=_set_icon_and_show, args=(api._get_hwnd, lambda: None, api, _ms), daemon=True
+        ).start()
+
+    window.events.shown += _on_shown
 
     # This blocks until the window is destroyed (force_close / quit)
     from bundle_paths import get_resource
