@@ -7,6 +7,7 @@ build info, pre-calculated stats, passive tree, skill gems, and items.
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 import base64
+import math
 import zlib
 import re
 
@@ -188,13 +189,18 @@ def _parse_pob_xml(xml_str: str) -> PobData:
         stat_name, value_str = m.group(1), m.group(2)
         try:
             value = float(value_str)
-        except ValueError:
+        except (ValueError, OverflowError):
+            continue
+        if not math.isfinite(value):
             continue
         stats.all_stats[stat_name] = value
         field_name = _STAT_MAP.get(stat_name)
         if field_name:
             if isinstance(getattr(stats, field_name), int):
-                setattr(stats, field_name, int(value))
+                try:
+                    setattr(stats, field_name, int(value))
+                except (OverflowError, ValueError):
+                    pass
             else:
                 setattr(stats, field_name, value)
     data.stats = stats
