@@ -988,19 +988,19 @@
           <KPIRow insights={insights} comparison={comparison} />
 
           {/* Why Engine: Actions — prioritized recommendations with explanations */}
-          {whyInsights?.actions?.length > 0 && (
+          {whyInsights?.actions?.length > 0 ? (
             <WhySection title="Recommended Actions" explanations={whyInsights.actions} icon="priority_high" maxItems={5} />
+          ) : !whyInsights && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-surface border border-outline-variant">
+              <div className="w-4 h-4 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+              <span className="text-xs font-mono text-on-surface-var">Generating build explanations...</span>
+            </div>
           )}
-
-          <CriticalActionsChecklist insights={insights} />
-          <NextBigUpgradeCard improvement={improvement} />
 
           {/* Why Engine: Keystones — what you have, what you're missing, and why */}
           {whyInsights?.keystones?.length > 0 && (
             <WhySection title="Keystone Analysis" explanations={whyInsights.keystones} icon="key" maxItems={6} />
           )}
-
-          <KeystoneGapsCard insights={insights} charData={charData} />
 
           {/* Why Engine: Stats — where you stand in the population */}
           {whyInsights?.stats?.length > 0 && (
@@ -1011,6 +1011,11 @@
           {whyInsights?.meta?.length > 0 && (
             <WhySection title="Meta Context" explanations={whyInsights.meta} icon="groups" />
           )}
+
+          {/* Legacy insights sections — will eventually be replaced by why-engine */}
+          <CriticalActionsChecklist insights={insights} />
+          <NextBigUpgradeCard improvement={improvement} />
+          <KeystoneGapsCard insights={insights} charData={charData} />
         </div>
       );
     }
@@ -1589,20 +1594,29 @@
 
         const body = { account, character };
 
+        // Core analysis — fast, blocks the loading spinner
         Promise.all([
           api("/api/character/build-insights", "POST", body),
           api("/api/character/improvement-package", "POST", body),
           api("/api/character/build-compare", "POST", body),
           api("/api/character/build-efficiency", "POST", body),
-          api("/api/character/why-insights", "POST", body),
-        ]).then(([ins, imp, comp, eff, why]) => {
+        ]).then(([ins, imp, comp, eff]) => {
           if (!ins.error) setInsights(ins);
           if (!imp.error) setImprovement(imp);
           if (!comp.error) setComparison(comp);
           if (!eff.error) setEfficiency(eff);
-          if (!why.error) setWhyInsights(why);
           setAnalysisLoading(false);
         }).catch(() => setAnalysisLoading(false));
+
+        // Why-engine — runs independently, populates when ready
+        api("/api/character/why-insights", "POST", body).then(why => {
+          if (why && !why.error) {
+            console.log("[LAMA] Why-insights received:", Object.keys(why).map(k => `${k}:${Array.isArray(why[k]) ? why[k].length : Object.keys(why[k] || {}).length}`).join(", "));
+            setWhyInsights(why);
+          } else {
+            console.warn("[LAMA] Why-insights failed:", why?.error || "empty response");
+          }
+        }).catch(e => console.warn("[LAMA] Why-insights error:", e));
       }, [charData, account, character]);
 
       // Character lookup handler — accepts optional pre-fetched data from smart-lookup
