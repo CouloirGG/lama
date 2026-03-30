@@ -1132,6 +1132,40 @@ class WhyEngine:
             missing=surv_missing,
         ))
 
+        # ── Sustain sub-layer for survival ──────────────
+        # Build-specific sustain: mana for MoM, life cost for Blood Mage, etc.
+        if pob:
+            mana = pob.stats.all_stats.get("Mana", 0)
+            mana_regen = pob.stats.all_stats.get("ManaRegenRecovery", 0)
+            if mana > 0 and ("Mind Over Matter" in player_ks or archetype.defense_type == "mom"):
+                surv_contributors.append(SynergyContributor(
+                    name="Mana (MoM Buffer)", source_type="stat",
+                    contribution=f"{int(mana):,} mana ({int(mana_regen)}/s regen)",
+                    severity="positive" if mana > 1000 else "warning",
+                    detail=f"Mind Over Matter uses mana as a damage buffer. Your {int(mana):,} mana pool absorbs 40% of damage taken. Regen: {mana_regen:.0f}/s.",
+                    estimated_value=mana * 0.4,
+                    estimated_pct=round(mana * 0.4 / max(total_ehp, 1) * 100, 1),
+                ))
+
+            life_regen = pob.stats.all_stats.get("LifeRegenRecovery", 0)
+            if life_regen > 0:
+                surv_contributors.append(SynergyContributor(
+                    name="Life Regeneration", source_type="stat",
+                    contribution=f"{life_regen:.0f}/s life regen",
+                    severity="positive" if life_regen > 100 else "info",
+                ))
+
+        # Sort survival by estimated value
+        surv_contributors.sort(key=lambda c: c.estimated_value, reverse=True)
+
+        categories.append(SynergyCategory(
+            category="survival", label="Survival", icon="shield",
+            value=f"{sc.ehp:,} EHP" if sc else "?",
+            status=sc.ehp_status if sc else "info",
+            contributors=surv_contributors,
+            missing=surv_missing,
+        ))
+
         # ── Clear Speed Category ────────────────────────
         clear_contributors = []
         clear_missing = []
@@ -1145,14 +1179,88 @@ class WhyEngine:
                     name=ks, source_type="keystone",
                     contribution=info.benefits.split(".")[0] + "." if info else "Clear speed keystone",
                     severity="positive",
+                    estimated_pct=15.0,
                 ))
 
-        if pob and pob.stats.movement_speed_mod > 0:
-            speed_pct = int(pob.stats.movement_speed_mod * 100)
+        # Speed stats from POB
+        if pob:
+            if pob.stats.movement_speed_mod > 0:
+                speed_pct = int(pob.stats.movement_speed_mod * 100)
+                clear_contributors.append(SynergyContributor(
+                    name="Movement Speed", source_type="stat",
+                    contribution=f"{speed_pct}% movement speed",
+                    severity="positive" if speed_pct >= 130 else "info",
+                ))
+            cast_speed = pob.stats.speed
+            if cast_speed > 0:
+                clear_contributors.append(SynergyContributor(
+                    name="Cast/Attack Speed", source_type="stat",
+                    contribution=f"{cast_speed:.2f} casts/sec",
+                    severity="positive",
+                ))
+
+        # Gear mods affecting clear speed (cast speed, attack speed, AoE, proj speed)
+        for item in char_data.equipment:
+            if item.slot in ("Flask", "Flask2"):
+                continue
+            all_mods = (item.explicit_mods or []) + (item.implicit_mods or [])
+            item_label = item.name or item.type_line or item.slot
+            for mod in all_mods:
+                mc = _strip_ninja_brackets(mod).lower()
+                m = _re.search(r"(\d+)% increased cast speed", mc)
+                if m and archetype.damage_type == "spell":
+                    val = int(m.group(1))
+                    clear_contributors.append(SynergyContributor(
+                        name=item_label, source_type="gear", slot=item.slot,
+                        contribution=f"+{val}% cast speed",
+                        severity="positive", estimated_pct=val * 0.3,
+                    ))
+                m = _re.search(r"(\d+)% increased attack speed", mc)
+                if m and archetype.damage_type == "attack":
+                    val = int(m.group(1))
+                    clear_contributors.append(SynergyContributor(
+                        name=item_label, source_type="gear", slot=item.slot,
+                        contribution=f"+{val}% attack speed",
+                        severity="positive", estimated_pct=val * 0.3,
+                    ))
+                if "area of effect" in mc or "increased area" in mc:
+                    clear_contributors.append(SynergyContributor(
+                        name=item_label, source_type="gear", slot=item.slot,
+                        contribution="Increased AoE",
+                        severity="positive",
+                    ))
+
+        # Skill gem level as a DPS AND clear speed factor
+        main_gem_level = 0
+        for sg in char_data.skill_groups:
+            if hasattr(sg, "gems"):
+                for g in sg.gems:
+                    gname = g if isinstance(g, str) else getattr(g, "name", "")
+                    if gname == archetype.main_skill:
+                        # We don't have the actual gem level from char_data
+                        # but we can infer from +gem level gear
+                        main_gem_level = 20  # base
+                        break
+
+        # Count +gem levels from gear
+        total_gem_bonus = 0
+        for item in char_data.equipment:
+            all_mods = (item.explicit_mods or []) + (item.implicit_mods or []) + (item.crafted_mods or [])
+            for mod in all_mods:
+                mc = _strip_ninja_brackets(mod).lower()
+                m = _re.search(r"\+(\d+) to level of all .*(spell|skill)", mc)
+                if m:
+                    total_gem_bonus += int(m.group(1))
+
+        if total_gem_bonus > 0:
+            effective_level = 20 + total_gem_bonus
             clear_contributors.append(SynergyContributor(
-                name="Movement Speed", source_type="stat",
-                contribution=f"{speed_pct}% movement speed",
-                severity="positive" if speed_pct >= 130 else "info",
+                name=f"{archetype.main_skill} Gem Level",
+                source_type="stat",
+                contribution=f"Effective Lv{effective_level} (+{total_gem_bonus} from gear)",
+                severity="positive",
+                detail=f"Each gem level is ~10-12% more base damage. Your +{total_gem_bonus} from gear takes {archetype.main_skill} from Lv20 to Lv{effective_level}. Getting a Lv21 base gem (requires character Lv97+) would push this to Lv{effective_level + 1}.",
+                estimated_pct=total_gem_bonus * 11.0,
             ))
 
         for pk in popular_keystones:
@@ -1166,16 +1274,17 @@ class WhyEngine:
                     severity="critical" if pk["percentage"] > 80 else "warning",
                     adoption_pct=pk["percentage"],
                     detail=info.impact if info else "",
+                    estimated_pct=15.0,
                 ))
 
-        if clear_contributors or clear_missing:
-            categories.append(SynergyCategory(
-                category="clear_speed", label="Clear Speed", icon="speed",
-                value=f"{int(pob.stats.movement_speed_mod * 100)}% MS" if pob and pob.stats.movement_speed_mod else "",
-                status="info",
-                contributors=clear_contributors,
-                missing=clear_missing,
-            ))
+        # Always show clear speed category
+        categories.append(SynergyCategory(
+            category="clear_speed", label="Clear Speed", icon="speed",
+            value=f"Lv{20 + total_gem_bonus} {archetype.main_skill}" if total_gem_bonus > 0 else "—",
+            status="info",
+            contributors=clear_contributors,
+            missing=clear_missing,
+        ))
 
         return categories
 

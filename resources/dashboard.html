@@ -318,9 +318,9 @@
     function TopBar({ charData, onSettingsClick }) {
       return (
         <div
-          className="pywebview-drag-region fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 py-3 bg-surface-dim/95 backdrop-blur border-b border-outline-variant"
+          className="pywebview-drag-region fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-1.5 bg-surface-dim/95 backdrop-blur border-b border-outline-variant"
         >
-          <div className="font-serif text-xl font-bold tracking-widest text-primary">LAMA</div>
+          <div className="font-serif text-base font-bold tracking-widest text-primary">LAMA</div>
           {charData && (
             <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant">
               <span className="text-sm font-mono text-on-surface">{charData.name}</span>
@@ -354,7 +354,7 @@
     function TabNav({ activeTab, onTabChange, hasCharacter, onSettingsClick }) {
       if (!hasCharacter) {
         return (
-          <div className="fixed top-[57px] left-0 right-0 z-40 flex items-center justify-center px-5 py-3 bg-surface/90 backdrop-blur border-b border-outline-variant">
+          <div className="fixed top-[42px] left-0 right-0 z-40 flex items-center justify-center px-5 py-1.5 bg-surface/90 backdrop-blur border-b border-outline-variant">
             <button
               onClick={onSettingsClick}
               className="text-sm text-primary-container font-mono hover:text-primary transition-colors underline underline-offset-4"
@@ -365,7 +365,7 @@
         );
       }
       return (
-        <div className="fixed top-[57px] left-0 right-0 z-40 flex items-center gap-0 px-5 bg-surface/90 backdrop-blur border-b border-outline-variant">
+        <div className="fixed top-[42px] left-0 right-0 z-40 flex items-center gap-0 px-5 bg-surface/90 backdrop-blur border-b border-outline-variant">
           {TABS.map(tab => (
             <button
               key={tab}
@@ -1114,7 +1114,7 @@
       return (
         <div className="flex flex-col gap-0 p-6">
           {/* ── Scorecard Bar ─────────────────────────────── */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-3 gap-3 mb-4">
             <ScoreStatCard
               label="Effective HP"
               value={sc ? sc.ehp?.toLocaleString() : "..."}
@@ -1262,16 +1262,16 @@
       const fmtProjected = projected != null ? (projected >= 1e6 ? `${(projected/1e6).toFixed(1)}M` : projected >= 1e3 ? `${(projected/1e3).toFixed(0)}K` : projected.toLocaleString()) : "";
       const fmtDelta = projectedDelta > 0 ? (projectedDelta >= 1e6 ? `+${(projectedDelta/1e6).toFixed(1)}M` : projectedDelta >= 1e3 ? `+${(projectedDelta/1e3).toFixed(0)}K` : `+${projectedDelta.toLocaleString()}`) : "";
       return (
-        <div className={`bg-surface-container p-5 border-l-4 ${hasProjection ? "border-primary-container" : borderColor} transition-all`}>
-          <p className="text-[10px] uppercase tracking-widest text-on-surface-var font-mono mb-2">{label}</p>
+        <div className={`bg-surface-container px-4 py-3 border-l-4 ${hasProjection ? "border-primary-container" : borderColor} transition-all`}>
+          <p className="text-[9px] uppercase tracking-widest text-on-surface-var font-mono mb-1">{label}</p>
           <div className="flex items-baseline gap-2">
             {hasProjection ? (
               <>
                 <span className="text-xl font-serif text-on-surface-var line-through opacity-50">{value}</span>
-                <span className="text-3xl font-serif font-bold tracking-tight text-primary-container">{fmtProjected}</span>
+                <span className="text-2xl font-serif font-bold tracking-tight text-primary-container">{fmtProjected}</span>
               </>
             ) : (
-              <span className={`text-3xl font-serif font-bold tracking-tight ${textColor}`}>{value}</span>
+              <span className={`text-2xl font-serif font-bold tracking-tight ${textColor}`}>{value}</span>
             )}
           </div>
           {hasProjection ? (
@@ -2209,7 +2209,7 @@
           <TabNav activeTab={activeTab} onTabChange={setActiveTab} hasCharacter={!!charData} onSettingsClick={() => setSettingsOpen(true)} />
 
           {/* Main content area */}
-          <div className="flex-1 overflow-y-auto" style={{ marginTop: charData ? "105px" : "105px" }}>
+          <div className="flex-1 overflow-y-auto" style={{ marginTop: "76px" }}>
             {tabContent}
           </div>
 
