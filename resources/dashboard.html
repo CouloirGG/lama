@@ -233,18 +233,17 @@
     function TopBar({ charData, onSettingsClick }) {
       return (
         <div
-          className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 py-3 bg-surface-dim/95 backdrop-blur border-b border-outline-variant"
-          style={{ WebkitAppRegion: "drag" }}
+          className="pywebview-drag-region fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 py-3 bg-surface-dim/95 backdrop-blur border-b border-outline-variant"
         >
           <div className="font-serif text-xl font-bold tracking-widest text-primary">LAMA</div>
           {charData && (
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant" style={{ WebkitAppRegion: "no-drag" }}>
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant">
               <span className="text-sm font-mono text-on-surface">{charData.name}</span>
               <span className="text-xs text-on-surface-var">Lv{charData.level}</span>
               <span className="text-xs text-primary-container font-mono">{charData.ascendancy || charData.class}</span>
             </div>
           )}
-          <div className="flex items-center gap-1" style={{ WebkitAppRegion: "no-drag" }}>
+          <div className="flex items-center gap-1">
             <button onClick={onSettingsClick} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-on-surface" title="Settings">
               <Icon name="settings" />
             </button>
