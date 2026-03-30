@@ -1385,6 +1385,7 @@ ATTACK_SKILLS = frozenset([
     "Shield Wall", "Gathering Storm",
     "Whirling Assault", "Devour", "Seismic Cry", "Primal Strikes",
     "Fangs of Frost", "Storm Wave", "Falling Thunder",
+    "Slam", "Punch", "Shield Slam", "Upheaval",
     # Ranged - Bow
     "Split Arrow", "Lightning Arrow", "Ice Shot", "Burning Arrow",
     "Tornado Shot", "Rain of Arrows", "Barrage", "Caustic Arrow",
@@ -1427,6 +1428,9 @@ SPELL_SKILLS = frozenset([
     "Raise Zombie", "Summon Skeletons", "Summon Raging Spirit",
     "Summon Phantasm", "Raise Spectre",
     "Unearth", "Desecrate", "Spirit Nova",
+    "Bone Storm", "Tornado", "Tempest Flurry", "Detonate Dead",
+    "Volatile Dead", "Fire Storm", "Firestorm",
+    "Summon Skeleton", "Ice Shard",
 ])
 
 MINION_SKILLS = frozenset([
@@ -1542,12 +1546,12 @@ def classify_build(char: CharacterData) -> BuildArchetype:
     Determines damage type, defense strategy, elements, crit, CoC,
     and identifies dead mod patterns.
     """
-    # Find main skill by highest damage
+    # Find main skill by highest damage (check all DPS fields for DoT builds)
     main_skill = ""
     main_dps = 0
     for sg in char.skill_groups:
         for d in sg.dps:
-            effective = d.dps if d.dps > 0 else d.damage
+            effective = max(d.dps or 0, d.dot_dps or 0, d.damage or 0)
             if effective > main_dps:
                 main_dps = effective
                 main_skill = d.name
@@ -1645,7 +1649,7 @@ def classify_build(char: CharacterData) -> BuildArchetype:
                 is_crit = True
                 break
 
-    # Defense type
+    # Defense type — check keystones first, then fall back to actual stats
     has_ci = "Chaos Inoculation" in char.keystones
     has_mom = "Mind Over Matter" in char.keystones
     has_eb = "Eldritch Battery" in char.keystones
@@ -1653,10 +1657,21 @@ def classify_build(char: CharacterData) -> BuildArchetype:
         defense_type = "es"
     elif has_mom and has_eb:
         defense_type = "mom"
+    elif has_mom:
+        defense_type = "mom"
     elif any(k in ES_KEYSTONES for k in char.keystones):
         defense_type = "hybrid"
     else:
-        defense_type = "life"
+        # Check actual defensive stats — ES-primary if ES >> life
+        ds = char.defensive_stats or {}
+        char_life = ds.get("life", 0) or 0
+        char_es = ds.get("energyShield", 0) or 0
+        if char_es > char_life * 2 and char_es > 2000:
+            defense_type = "es"
+        elif char_es > char_life and char_es > 1000:
+            defense_type = "hybrid"
+        else:
+            defense_type = "life"
 
     # Dead mods
     dead_mods = []

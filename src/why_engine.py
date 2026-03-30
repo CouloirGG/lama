@@ -518,26 +518,39 @@ class WhyEngine:
     ) -> List[Explanation]:
         actions = []
 
-        # Uncapped resists action
+        # Uncapped resists — consolidate into single action
         if pob:
+            uncapped = []
             for resist_name, val in [
                 ("Fire", pob.stats.fire_resist),
                 ("Cold", pob.stats.cold_resist),
                 ("Lightning", pob.stats.lightning_resist),
             ]:
                 if val < 75:
-                    gap = 75 - val
-                    actions.append(Explanation(
-                        context="action", title=f"Cap {resist_name} Resistance",
-                        text=(
-                            f"Your {resist_name} resistance is {val}% — {gap}% below the 75% cap. "
-                            f"Uncapped resists mean you take {_damage_increase(val)}% more {resist_name.lower()} damage than intended. "
-                            f"Look for {resist_name.lower()} res on rings, belt, or gloves. "
-                            f"A single T2 {resist_name.lower()} res mod (35%+) would close most of this gap."
-                        ),
-                        severity="critical",
-                        source="game_knowledge",
-                    ))
+                    uncapped.append((resist_name, val, 75 - val))
+
+            if uncapped:
+                if len(uncapped) == 1:
+                    rn, rv, gap = uncapped[0]
+                    text = (
+                        f"Your {rn} resistance is {rv}% — {gap}% below the 75% cap. "
+                        f"You take {_damage_increase(rv)}% more {rn.lower()} damage than intended. "
+                        f"Look for {rn.lower()} res on rings, belt, or gloves."
+                    )
+                else:
+                    parts = [f"{rn} {rv}%" for rn, rv, _ in uncapped]
+                    text = (
+                        f"You have {len(uncapped)} uncapped elemental resistances: {', '.join(parts)}. "
+                        f"Each uncapped resist means taking significantly more damage of that type. "
+                        f"Prioritize all-resistance mods on rings, belt, or amulet to cap multiple at once."
+                    )
+                actions.append(Explanation(
+                    context="action",
+                    title=f"Cap {'Resistances' if len(uncapped) > 1 else uncapped[0][0] + ' Resistance'}",
+                    text=text,
+                    severity="critical",
+                    source="game_knowledge",
+                ))
 
             # Chaos resist warning
             if pob.stats.chaos_resist < 0:
@@ -546,7 +559,7 @@ class WhyEngine:
                     text=(
                         f"Your chaos resistance is negative ({pob.stats.chaos_resist}%). "
                         f"Chaos damage bypasses Energy Shield by default. "
-                        f"Prioritize chaos res on rings or amulet — even getting to 0% is a significant survivability boost."
+                        f"Prioritize chaos res on rings or amulet."
                     ),
                     severity="critical",
                     source="game_knowledge",
