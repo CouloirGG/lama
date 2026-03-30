@@ -33,5 +33,8 @@ setproctitle>=1.3
 # HTML parsing (guide scraper)
 beautifulsoup4>=4.12.0
 
+# Error tracking
+sentry-sdk>=2.0.0
+
 # Testing
 pytest>=7.0

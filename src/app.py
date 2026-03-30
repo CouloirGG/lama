@@ -14,6 +14,7 @@ Requirements:
 
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -22,6 +23,49 @@ from urllib.request import Request
 
 # Ensure src/ is on sys.path so bare imports and uvicorn "server:app" work
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# ---------------------------------------------------------------------------
+# Sentry — error tracking
+# ---------------------------------------------------------------------------
+def _sentry_before_send(event, hint):
+    if "extra" in event:
+        for key in list(event["extra"].keys()):
+            if any(s in key.lower() for s in ("token", "key", "secret", "password", "dsn")):
+                event["extra"][key] = "[REDACTED]"
+    return event
+
+_sentry_dsn = os.environ.get("SENTRY_DSN", "")
+if not _sentry_dsn:
+    try:
+        _settings_path = os.path.join(
+            os.path.expanduser("~"), ".poe2-price-overlay", "dashboard_settings.json"
+        )
+        if os.path.exists(_settings_path):
+            with open(_settings_path, "r") as f:
+                _sentry_dsn = json.load(f).get("sentry_dsn", "")
+    except Exception:
+        pass
+
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        _release = "unknown"
+        try:
+            _release = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                stderr=subprocess.DEVNULL, text=True
+            ).strip()
+        except Exception:
+            pass
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            release=f"lama@{_release}",
+            environment="desktop",
+            traces_sample_rate=0.1,
+            before_send=_sentry_before_send,
+        )
+    except Exception as e:
+        print(f"  Sentry: init failed ({e})")
 
 
 def _log(msg):
