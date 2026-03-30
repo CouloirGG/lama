@@ -1057,7 +1057,7 @@
         return <InlineCharacterLookup onLookup={onLookup} />;
       }
 
-      if (!insights) {
+      if (!insights && !whyInsights) {
         return (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
@@ -1066,30 +1066,255 @@
         );
       }
 
+      const sc = whyInsights?.scorecard;
+      const groups = whyInsights?.insightGroups || [];
+      const survivalGroup = groups.find(g => g.category === "survival");
+      const damageGroup = groups.find(g => g.category === "damage");
+      const clearGroup = groups.find(g => g.category === "clear_speed");
+      const qualityGroup = groups.find(g => g.category === "quality");
+      const allStats = whyInsights?.stats || [];
+
+      // Extract resist data from stats
+      const resists = allStats.filter(s => s.title.includes("Resistance"));
+      const nonResistStats = allStats.filter(s => !s.title.includes("Resistance"));
+
       return (
-        <div className="flex flex-col gap-5 p-5 max-w-4xl mx-auto">
+        <div className="flex flex-col gap-0 p-6">
+          {/* ── Scorecard Bar ─────────────────────────────── */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <ScoreStatCard
+              label="Effective HP"
+              value={sc ? sc.ehp?.toLocaleString() : "..."}
+              context={sc?.ehpContext || ""}
+              status={sc?.ehpStatus || "info"}
+              icon="shield"
+            />
+            <ScoreStatCard
+              label="Primary DPS"
+              value={sc?.dpsLabel || "..."}
+              context="Main skill damage"
+              status={sc?.dpsStatus || "info"}
+              icon="bolt"
+            />
+            <ScoreStatCard
+              label="Resistances"
+              value={sc?.resistStatus === "positive" ? "Capped" : "Gaps"}
+              context={sc?.resistSummary || ""}
+              status={sc?.resistStatus || "info"}
+              icon="verified"
+            />
+          </div>
 
-          {/* Scorecard — big numbers at the top */}
-          {whyInsights?.scorecard ? (
-            <ScorecardPanel scorecard={whyInsights.scorecard} />
-          ) : !whyInsights ? (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-surface border border-outline-variant">
-              <div className="w-4 h-4 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-              <span className="text-xs font-mono text-on-surface-var">Analyzing build...</span>
+          {/* ── 3-Column Layout ───────────────────────────── */}
+          <div className="grid grid-cols-12 gap-6" style={{ minHeight: "calc(100vh - 300px)" }}>
+
+            {/* ── LEFT: Survival Analytics ──────────────── */}
+            <div className="col-span-3 flex flex-col gap-4">
+              <div className="bg-surface-container p-5 border-l-2 border-primary-container/40 flex-1">
+                <h4 className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-primary-container mb-4">
+                  <Icon name="analytics" className="text-base" />
+                  Survival Analytics
+                </h4>
+
+                {/* Resist bars */}
+                <div className="space-y-3 mb-6">
+                  {[
+                    { name: "Fire", key: "Fire Resistance", color: "bg-red-400" },
+                    { name: "Cold", key: "Cold Resistance", color: "bg-blue-400" },
+                    { name: "Lightning", key: "Lightning Resistance", color: "bg-yellow-300" },
+                    { name: "Chaos", key: "Chaos Resistance", color: "bg-purple-400" },
+                  ].map(r => {
+                    const stat = resists.find(s => s.title === r.key);
+                    // Extract value from text like "Fire Resistance is capped at 75% with 6% overcap"
+                    const valMatch = stat?.text?.match(/(\d+)%/);
+                    const val = valMatch ? parseInt(valMatch[1]) : 0;
+                    const capped = stat?.severity === "positive";
+                    const pct = Math.max(0, Math.min(100, val));
+                    return (
+                      <div key={r.name} className="space-y-1">
+                        <div className="flex justify-between text-[10px] uppercase tracking-widest font-mono">
+                          <span className="text-on-surface-var">{r.name} Res</span>
+                          <span className={capped ? "text-primary-container" : val < 75 ? "text-error" : "text-on-surface-var"}>
+                            {val > 0 ? `${Math.min(val, 75)}%` : "?"}
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-surface-dim w-full">
+                          <div className={`h-full transition-all ${capped ? r.color : "bg-error"}`} style={{ width: `${pct}%` }} />
+                        </div>
+                        {!capped && val < 75 && (
+                          <p className="text-[9px] text-error uppercase font-mono tracking-tight">Uncapped: {75 - val}% gap</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Survival issues */}
+                {survivalGroup && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-mono uppercase tracking-widest text-on-surface-var mb-2">Issues ({survivalGroup.items.length})</p>
+                    {survivalGroup.items.slice(0, 5).map((e, i) => (
+                      <SurvivalItem key={i} explanation={e} />
+                    ))}
+                    {survivalGroup.items.length > 5 && (
+                      <p className="text-[9px] font-mono text-on-surface-var">+{survivalGroup.items.length - 5} more</p>
+                    )}
+                  </div>
+                )}
+
+                {/* EHP note */}
+                {sc && sc.ehpStatus !== "positive" && (
+                  <div className="mt-4 p-3 bg-surface-dim border-l-2 border-primary-container/30">
+                    <p className="text-[10px] font-mono text-on-surface-var leading-relaxed">
+                      <span className="text-primary-container font-bold">Note:</span> {sc.ehpContext}.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* ── CENTER: Synergy Map ──────────────────── */}
+            <div className="col-span-6 relative flex items-start justify-center pt-8">
+              {/* Grid backdrop */}
+              <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "radial-gradient(circle, #99907f 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+
+              <div className="relative z-10 w-full max-w-lg">
+                {/* Central DPS node */}
+                <div className="mx-auto w-40 h-40 bg-surface-container border-2 border-primary-container flex flex-col items-center justify-center text-center mb-8" style={{ boxShadow: "0 0 20px rgba(229, 195, 113, 0.2)" }}>
+                  <span className="text-[9px] uppercase tracking-[0.2em] text-primary-container font-mono mb-1">Build Output</span>
+                  <span className="text-3xl font-serif font-bold text-on-surface leading-none">{sc?.dpsLabel || "..."}</span>
+                  <span className="text-[9px] uppercase tracking-widest text-on-surface-var mt-1">Total DPS</span>
+                </div>
+
+                {/* Connected keystones/items as synergy nodes */}
+                {damageGroup && damageGroup.items.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    {damageGroup.items.map((e, i) => (
+                      <SynergyNode key={i} explanation={e} type="damage" />
+                    ))}
+                  </div>
+                )}
+
+                {clearGroup && clearGroup.items.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    {clearGroup.items.map((e, i) => (
+                      <SynergyNode key={i} explanation={e} type="clear" />
+                    ))}
+                  </div>
+                )}
+
+                {qualityGroup && qualityGroup.items.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {qualityGroup.items.map((e, i) => (
+                      <SynergyNode key={i} explanation={e} type="quality" />
+                    ))}
+                  </div>
+                )}
+
+                {/* Meta context */}
+                {whyInsights?.meta?.length > 0 && (
+                  <div className="mt-6 p-3 bg-surface-dim/50 border border-outline-variant/20 text-center">
+                    <p className="text-[10px] font-mono text-on-surface-var">{whyInsights.meta[0].text}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── RIGHT: Improvement Path ──────────────── */}
+            <div className="col-span-3 flex flex-col gap-4">
+              <div className="bg-surface-container p-5 border-l-2 border-secondary/40 flex-1">
+                <h4 className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-secondary mb-4">
+                  <Icon name="trending_up" className="text-base" />
+                  Improvement Path
+                </h4>
+
+                <div className="space-y-3">
+                  {/* Merge all action items from groups, sorted by severity */}
+                  {groups.flatMap(g => g.items.filter(e => e.severity === "critical" || e.context === "action"))
+                    .filter((e, i, arr) => arr.findIndex(x => x.title === e.title) === i)
+                    .slice(0, 6)
+                    .map((e, i) => (
+                      <ImprovementCard key={i} explanation={e} />
+                    ))
+                  }
+                </div>
+
+                <NextBigUpgradeCard improvement={improvement} />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Pulse sub-components ──────────────────────────────
+
+    function ScoreStatCard({ label, value, context, status, icon }) {
+      const borderColor = { critical: "border-error/40", warning: "border-yellow-500/40", positive: "border-primary-container/40", info: "border-outline-variant/30" }[status] || "border-outline-variant/30";
+      const textColor = { critical: "text-error", warning: "text-yellow-400", positive: "text-primary-container", info: "text-on-surface" }[status] || "";
+      return (
+        <div className={`bg-surface-container p-5 border-l-4 ${borderColor}`}>
+          <p className="text-[10px] uppercase tracking-widest text-on-surface-var font-mono mb-2">{label}</p>
+          <div className="flex items-baseline gap-2">
+            <span className={`text-3xl font-serif font-bold tracking-tight ${textColor}`}>{value}</span>
+          </div>
+          <p className="text-[10px] font-mono text-on-surface-var mt-2">{context}</p>
+        </div>
+      );
+    }
+
+    function SurvivalItem({ explanation }) {
+      const e = explanation;
+      const iconName = { critical: "error", warning: "warning", positive: "check_circle", info: "info" }[e.severity] || "info";
+      const iconColor = { critical: "text-error", warning: "text-yellow-400", positive: "text-primary-container", info: "text-on-surface-var" }[e.severity] || "";
+      const [open, setOpen] = useState(false);
+      return (
+        <div className="bg-surface-dim/50 p-2 cursor-pointer hover:bg-surface-dim transition-colors" onClick={() => setOpen(!open)}>
+          <div className="flex items-center gap-2">
+            <Icon name={iconName} className={`text-xs ${iconColor}`} />
+            <span className="text-[10px] font-mono font-bold text-on-surface flex-1 truncate">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</span>
+            {e.adoptionPct > 0 && <span className="text-[9px] font-mono text-on-surface-var">{e.adoptionPct.toFixed(0)}%</span>}
+          </div>
+          {open && <p className="text-[9px] font-mono text-on-surface-var mt-1 leading-relaxed pl-5">{e.text}</p>}
+        </div>
+      );
+    }
+
+    function SynergyNode({ explanation, type }) {
+      const e = explanation;
+      const borderColor = { damage: "border-secondary/30", clear: "border-tertiary/30", quality: "border-outline-variant/20" }[type] || "border-outline-variant/20";
+      const labelColor = { damage: "text-secondary", clear: "text-tertiary", quality: "text-on-surface-var" }[type] || "";
+      const typeLabel = { damage: "Damage", clear: "Clear Speed", quality: "Quality" }[type] || "";
+      const [open, setOpen] = useState(false);
+      return (
+        <div className={`bg-surface-container p-3 border ${borderColor} hover:border-primary-container/50 transition-all cursor-pointer`} onClick={() => setOpen(!open)}>
+          <div className="flex justify-between items-start mb-1">
+            <span className={`text-[8px] font-mono uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
+            {e.adoptionPct > 0 && <span className="text-[8px] font-mono text-on-surface-var">{e.adoptionPct.toFixed(0)}%</span>}
+          </div>
+          <h5 className="text-[11px] font-mono font-bold uppercase tracking-tight text-on-surface">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</h5>
+          {open && <p className="text-[9px] font-mono text-on-surface-var mt-2 leading-relaxed">{e.text}</p>}
+        </div>
+      );
+    }
+
+    function ImprovementCard({ explanation }) {
+      const e = explanation;
+      const borderColor = { critical: "border-error", warning: "border-secondary", info: "border-primary-container" }[e.severity] || "border-outline-variant";
+      const labelColor = { critical: "text-error", warning: "text-secondary", info: "text-primary-container" }[e.severity] || "";
+      const typeLabel = { critical: "Urgent", warning: "Recommended", info: "Optional" }[e.severity] || "";
+      const [open, setOpen] = useState(false);
+      return (
+        <div className={`bg-surface-dim/50 p-3 border-l-2 ${borderColor} hover:bg-surface-bright transition-all cursor-pointer group`} onClick={() => setOpen(!open)}>
+          <div className="flex justify-between items-start mb-1">
+            <span className={`text-[8px] font-mono uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
+          </div>
+          <h6 className="text-[11px] font-mono font-bold uppercase tracking-tight text-on-surface">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</h6>
+          {open ? (
+            <p className="text-[9px] font-mono text-on-surface-var mt-1 leading-relaxed">{e.text}</p>
           ) : (
-            <BuildHealthGauge insights={insights} comparison={comparison} />
+            <p className="text-[9px] font-mono text-on-surface-var mt-1 truncate">{e.text.slice(0, 60)}...</p>
           )}
-
-          {/* Insight Groups — deduped, grouped by impact */}
-          {whyInsights?.insightGroups?.map((group, i) => (
-            <InsightGroupCard key={group.category} group={group} />
-          ))}
-
-          {/* Fallback KPI row if no why-insights */}
-          {!whyInsights && <KPIRow insights={insights} comparison={comparison} />}
-
-          <NextBigUpgradeCard improvement={improvement} />
         </div>
       );
     }
