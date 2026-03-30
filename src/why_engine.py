@@ -42,6 +42,30 @@ class Explanation:
 
 
 @dataclass
+class SynergyContributor:
+    """A single item/keystone/mod that contributes to a stat category."""
+    name: str
+    source_type: str    # "keystone", "gear", "skill", "passive", "missing"
+    contribution: str   # e.g., "+30% more spell damage", "Chain explosions on kill"
+    slot: str = ""      # equipment slot if gear
+    severity: str = "info"      # "positive" if has it, "critical"/"warning" if missing
+    adoption_pct: float = 0.0
+    detail: str = ""    # full explanation text
+
+
+@dataclass
+class SynergyCategory:
+    """A stat category with its contributors for the synergy map."""
+    category: str       # "dps", "survival", "clear_speed"
+    label: str          # "DPS", "Survival", "Clear Speed"
+    icon: str
+    value: str          # "184K Comet", "18,057 EHP", etc.
+    status: str         # severity color
+    contributors: List[SynergyContributor] = field(default_factory=list)
+    missing: List[SynergyContributor] = field(default_factory=list)
+
+
+@dataclass
 class InsightGroup:
     """A group of related explanations under one impact category."""
     category: str       # "survival", "damage", "clear_speed", "quality"
@@ -81,6 +105,7 @@ class CharacterExplanations:
     # Summarized output
     scorecard: Optional[Scorecard] = None
     insight_groups: List[InsightGroup] = field(default_factory=list)
+    synergy_map: List[SynergyCategory] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Serialize for API response."""
@@ -118,6 +143,27 @@ class CharacterExplanations:
                     "items": [_exp_dict(e) for e in g.items],
                 }
                 for g in self.insight_groups
+            ]
+        if self.synergy_map:
+            result["synergyMap"] = [
+                {
+                    "category": sc.category,
+                    "label": sc.label,
+                    "icon": sc.icon,
+                    "value": sc.value,
+                    "status": sc.status,
+                    "contributors": [
+                        {"name": c.name, "sourceType": c.source_type, "contribution": c.contribution,
+                         "slot": c.slot, "severity": c.severity, "adoptionPct": c.adoption_pct, "detail": c.detail}
+                        for c in sc.contributors
+                    ],
+                    "missing": [
+                        {"name": c.name, "sourceType": c.source_type, "contribution": c.contribution,
+                         "slot": c.slot, "severity": c.severity, "adoptionPct": c.adoption_pct, "detail": c.detail}
+                        for c in sc.missing
+                    ],
+                }
+                for sc in self.synergy_map
             ]
         return result
 
@@ -186,6 +232,9 @@ class WhyEngine:
         # Summarize: build scorecard + deduped insight groups
         result.scorecard = self._build_scorecard(pob, profile, result, char_data)
         result.insight_groups = self._build_insight_groups(result)
+        result.synergy_map = self._build_synergy_map(
+            char_data, archetype, pob, profile, popular_keystones, result
+        )
 
         return result
 
@@ -873,6 +922,227 @@ class WhyEngine:
 
         return groups
 
+    # ------------------------------------------------------------------
+    # Synergy Map: contribution trees per stat category
+    # ------------------------------------------------------------------
+
+    def _build_synergy_map(
+        self, char_data: CharacterData, archetype: BuildArchetype,
+        pob: Optional[PobData], profile: Optional[dict],
+        popular_keystones: List[dict], exps: "CharacterExplanations",
+    ) -> List[SynergyCategory]:
+        """Build contribution trees for DPS, Survival, and Clear Speed."""
+        categories = []
+        sc = exps.scorecard
+        player_ks = set(char_data.keystones)
+
+        # ── DPS Category ────────────────────────────────
+        dps_contributors = []
+        dps_missing = []
+
+        # Current: main skill and support gems
+        for sg in char_data.skill_groups:
+            for d in (sg.dps if hasattr(sg, "dps") and sg.dps else []):
+                total = max(d.dps or 0, d.dot_dps or 0, d.damage or 0)
+                if total > 500:
+                    dps_contributors.append(SynergyContributor(
+                        name=d.name or "Unknown Skill",
+                        source_type="skill",
+                        contribution=_format_number(total) + " DPS",
+                        severity="positive",
+                        detail=f"Active skill dealing {_format_number(total)} damage per second.",
+                    ))
+            # Support gems linked to main skill
+            if hasattr(sg, "gems") and sg.gems:
+                for gem in sg.gems:
+                    gem_name = gem if isinstance(gem, str) else getattr(gem, "name", "")
+                    if gem_name and gem_name != archetype.main_skill:
+                        dps_contributors.append(SynergyContributor(
+                            name=gem_name, source_type="support",
+                            contribution="Support gem",
+                            severity="positive",
+                            detail=f"Linked support gem amplifying {archetype.main_skill}.",
+                        ))
+                break  # Only first skill group with gems
+
+        # Current: keystones that boost damage
+        DPS_KEYSTONES = {"Pain Attunement", "Elemental Overload", "Avatar of Fire",
+                         "Crimson Power", "Grasping Wounds", "Point Blank",
+                         "Iron Will", "Elemental Equilibrium", "Crimson Dance",
+                         "Overwhelming Toxicity"}
+        for ks in char_data.keystones:
+            if ks in DPS_KEYSTONES:
+                info = KEYSTONES.get(ks)
+                dps_contributors.append(SynergyContributor(
+                    name=ks, source_type="keystone",
+                    contribution=info.benefits.split(".")[0] + "." if info else "Damage keystone",
+                    severity="positive",
+                    detail=info.description if info else "",
+                ))
+
+        # Current: notable gear contributing to DPS
+        for item in char_data.equipment:
+            if item.rarity == "Unique" and item.slot in ("Weapon", "Weapon2", "Amulet"):
+                dps_contributors.append(SynergyContributor(
+                    name=item.name or item.type_line,
+                    source_type="gear", slot=item.slot,
+                    contribution=f"Unique {item.slot.lower()}",
+                    severity="positive",
+                    detail=f"Equipped unique: {item.name}",
+                ))
+
+        # Missing: DPS keystones from popular list
+        for pk in popular_keystones:
+            if pk["name"] in player_ks or pk["percentage"] < 50:
+                continue
+            if pk["name"] in DPS_KEYSTONES:
+                info = KEYSTONES.get(pk["name"])
+                dps_missing.append(SynergyContributor(
+                    name=pk["name"], source_type="missing",
+                    contribution=info.impact.split(".")[0] + "." if info else f"{pk['percentage']:.0f}% of builds use this",
+                    severity="critical" if pk["percentage"] > 80 else "warning",
+                    adoption_pct=pk["percentage"],
+                    detail=info.impact if info else "",
+                ))
+
+        categories.append(SynergyCategory(
+            category="dps", label="DPS", icon="bolt",
+            value=sc.dps_label if sc else "?",
+            status=sc.dps_status if sc else "info",
+            contributors=dps_contributors,
+            missing=dps_missing,
+        ))
+
+        # ── Survival Category ───────────────────────────
+        surv_contributors = []
+        surv_missing = []
+
+        # Current: defense stats from POB
+        if pob:
+            if pob.stats.life > 0:
+                surv_contributors.append(SynergyContributor(
+                    name="Life Pool", source_type="stat",
+                    contribution=f"{pob.stats.life:,} life",
+                    severity="positive" if pob.stats.life >= 3000 else "warning",
+                ))
+            if pob.stats.energy_shield > 0:
+                surv_contributors.append(SynergyContributor(
+                    name="Energy Shield", source_type="stat",
+                    contribution=f"{pob.stats.energy_shield:,} ES",
+                    severity="positive" if pob.stats.energy_shield >= 3000 else "info",
+                ))
+            if pob.stats.armour > 500:
+                surv_contributors.append(SynergyContributor(
+                    name="Armour", source_type="stat",
+                    contribution=f"{pob.stats.armour:,} armour",
+                    severity="positive",
+                ))
+            if pob.stats.evasion > 500:
+                surv_contributors.append(SynergyContributor(
+                    name="Evasion", source_type="stat",
+                    contribution=f"{pob.stats.evasion:,} evasion",
+                    severity="positive",
+                ))
+            if pob.stats.block_chance > 0:
+                surv_contributors.append(SynergyContributor(
+                    name="Block", source_type="stat",
+                    contribution=f"{pob.stats.block_chance}% block chance",
+                    severity="positive",
+                ))
+
+        # Current: survival keystones
+        SURV_KEYSTONES = {"Sanguimancy", "Mind Over Matter", "Chaos Inoculation",
+                          "Iron Reflexes", "Acrobatics", "Unwavering Stance",
+                          "Ghost Reaver", "Eldritch Battery", "Blood Magic",
+                          "Vitality Siphon"}
+        for ks in char_data.keystones:
+            if ks in SURV_KEYSTONES:
+                info = KEYSTONES.get(ks)
+                surv_contributors.append(SynergyContributor(
+                    name=ks, source_type="keystone",
+                    contribution=info.benefits.split(".")[0] + "." if info else "Survival keystone",
+                    severity="positive",
+                ))
+
+        # Current: survival gear
+        for item in char_data.equipment:
+            if item.rarity == "Unique" and item.slot in ("BodyArmour", "Helm", "Belt"):
+                surv_contributors.append(SynergyContributor(
+                    name=item.name or item.type_line,
+                    source_type="gear", slot=item.slot,
+                    contribution=f"Unique {item.slot.lower()}",
+                    severity="positive",
+                ))
+
+        # Missing survival keystones
+        for pk in popular_keystones:
+            if pk["name"] in player_ks or pk["percentage"] < 50:
+                continue
+            if pk["name"] in SURV_KEYSTONES:
+                info = KEYSTONES.get(pk["name"])
+                surv_missing.append(SynergyContributor(
+                    name=pk["name"], source_type="missing",
+                    contribution=info.impact.split(".")[0] + "." if info else f"{pk['percentage']:.0f}% of builds use this",
+                    severity="critical" if pk["percentage"] > 80 else "warning",
+                    adoption_pct=pk["percentage"],
+                    detail=info.impact if info else "",
+                ))
+
+        categories.append(SynergyCategory(
+            category="survival", label="Survival", icon="shield",
+            value=f"{sc.ehp:,} EHP" if sc else "?",
+            status=sc.ehp_status if sc else "info",
+            contributors=surv_contributors,
+            missing=surv_missing,
+        ))
+
+        # ── Clear Speed Category ────────────────────────
+        clear_contributors = []
+        clear_missing = []
+
+        CLEAR_KEYSTONES = {"Sunder the Flesh", "Running Assault", "Relentless Pursuit",
+                           "Wildsurge Incantation", "Path Seeker"}
+        for ks in char_data.keystones:
+            if ks in CLEAR_KEYSTONES:
+                info = KEYSTONES.get(ks)
+                clear_contributors.append(SynergyContributor(
+                    name=ks, source_type="keystone",
+                    contribution=info.benefits.split(".")[0] + "." if info else "Clear speed keystone",
+                    severity="positive",
+                ))
+
+        if pob and pob.stats.movement_speed_mod > 0:
+            speed_pct = int(pob.stats.movement_speed_mod * 100)
+            clear_contributors.append(SynergyContributor(
+                name="Movement Speed", source_type="stat",
+                contribution=f"{speed_pct}% movement speed",
+                severity="positive" if speed_pct >= 130 else "info",
+            ))
+
+        for pk in popular_keystones:
+            if pk["name"] in player_ks or pk["percentage"] < 50:
+                continue
+            if pk["name"] in CLEAR_KEYSTONES:
+                info = KEYSTONES.get(pk["name"])
+                clear_missing.append(SynergyContributor(
+                    name=pk["name"], source_type="missing",
+                    contribution=info.impact.split(".")[0] + "." if info else f"{pk['percentage']:.0f}% of builds use this",
+                    severity="critical" if pk["percentage"] > 80 else "warning",
+                    adoption_pct=pk["percentage"],
+                    detail=info.impact if info else "",
+                ))
+
+        if clear_contributors or clear_missing:
+            categories.append(SynergyCategory(
+                category="clear_speed", label="Clear Speed", icon="speed",
+                value=f"{int(pob.stats.movement_speed_mod * 100)}% MS" if pob and pob.stats.movement_speed_mod else "",
+                status="info",
+                contributors=clear_contributors,
+                missing=clear_missing,
+            ))
+
+        return categories
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -894,6 +1164,15 @@ def _matches_archetype(synergy_text: str, archetype: BuildArchetype) -> bool:
         if tag.lower() in text:
             return True
     return False
+
+
+def _format_number(n: float) -> str:
+    """Format a large number for display: 1234567 -> 1.2M, 12345 -> 12.3K."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.0f}K"
+    return f"{n:,.0f}"
 
 
 def _damage_increase(current_resist: int) -> int:

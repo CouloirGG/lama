@@ -1173,52 +1173,8 @@
               </div>
             </div>
 
-            {/* ── CENTER: Synergy Map ──────────────────── */}
-            <div className="col-span-6 relative flex items-start justify-center pt-8">
-              {/* Grid backdrop */}
-              <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "radial-gradient(circle, #99907f 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
-
-              <div className="relative z-10 w-full max-w-lg">
-                {/* Central DPS node */}
-                <div className="mx-auto w-40 h-40 bg-surface-container border-2 border-primary-container flex flex-col items-center justify-center text-center mb-8" style={{ boxShadow: "0 0 20px rgba(229, 195, 113, 0.2)" }}>
-                  <span className="text-[9px] uppercase tracking-[0.2em] text-primary-container font-mono mb-1">Build Output</span>
-                  <span className="text-3xl font-serif font-bold text-on-surface leading-none">{sc?.dpsLabel || "..."}</span>
-                  <span className="text-[9px] uppercase tracking-widest text-on-surface-var mt-1">Total DPS</span>
-                </div>
-
-                {/* Connected keystones/items as synergy nodes */}
-                {damageGroup && damageGroup.items.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 mb-6">
-                    {damageGroup.items.map((e, i) => (
-                      <SynergyNode key={i} explanation={e} type="damage" />
-                    ))}
-                  </div>
-                )}
-
-                {clearGroup && clearGroup.items.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 mb-6">
-                    {clearGroup.items.map((e, i) => (
-                      <SynergyNode key={i} explanation={e} type="clear" />
-                    ))}
-                  </div>
-                )}
-
-                {qualityGroup && qualityGroup.items.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {qualityGroup.items.map((e, i) => (
-                      <SynergyNode key={i} explanation={e} type="quality" />
-                    ))}
-                  </div>
-                )}
-
-                {/* Meta context */}
-                {whyInsights?.meta?.length > 0 && (
-                  <div className="mt-6 p-3 bg-surface-dim/50 border border-outline-variant/20 text-center">
-                    <p className="text-[10px] font-mono text-on-surface-var">{whyInsights.meta[0].text}</p>
-                  </div>
-                )}
-              </div>
-            </div>
+            {/* ── CENTER: Interactive Synergy Map ────────── */}
+            <SynergyMapPanel synergyMap={whyInsights?.synergyMap} meta={whyInsights?.meta} />
 
             {/* ── RIGHT: Improvement Path ──────────────── */}
             <div className="col-span-3 flex flex-col gap-4">
@@ -1276,6 +1232,134 @@
             {e.adoptionPct > 0 && <span className="text-[9px] font-mono text-on-surface-var">{e.adoptionPct.toFixed(0)}%</span>}
           </div>
           {open && <p className="text-[9px] font-mono text-on-surface-var mt-1 leading-relaxed pl-5">{e.text}</p>}
+        </div>
+      );
+    }
+
+    function SynergyMapPanel({ synergyMap, meta }) {
+      const categories = synergyMap || [];
+      const [activeCategory, setActiveCategory] = useState(categories[0]?.category || "dps");
+      const active = categories.find(c => c.category === activeCategory) || categories[0];
+
+      if (!active) {
+        return (
+          <div className="col-span-6 flex items-center justify-center">
+            <div className="w-6 h-6 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+          </div>
+        );
+      }
+
+      const catColors = {
+        dps: { border: "border-secondary", text: "text-secondary", bg: "bg-secondary/10", glow: "rgba(233, 193, 118, 0.25)" },
+        survival: { border: "border-primary-container", text: "text-primary-container", bg: "bg-primary-container/10", glow: "rgba(229, 195, 113, 0.25)" },
+        clear_speed: { border: "border-tertiary", text: "text-tertiary", bg: "bg-tertiary/10", glow: "rgba(145, 205, 255, 0.25)" },
+      };
+      const colors = catColors[active.category] || catColors.dps;
+
+      return (
+        <div className="col-span-6 relative flex flex-col">
+          {/* Grid backdrop */}
+          <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "radial-gradient(circle, #99907f 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+
+          <div className="relative z-10">
+            {/* Category tabs */}
+            <div className="flex items-center justify-center gap-1 mb-6">
+              {categories.map(cat => {
+                const isActive = cat.category === activeCategory;
+                const tabColor = catColors[cat.category] || catColors.dps;
+                return (
+                  <button
+                    key={cat.category}
+                    onClick={() => setActiveCategory(cat.category)}
+                    className={`px-4 py-2 text-[10px] font-mono uppercase tracking-widest transition-all ${
+                      isActive
+                        ? `${tabColor.bg} ${tabColor.text} border-b-2 ${tabColor.border}`
+                        : "text-on-surface-var hover:text-on-surface"
+                    }`}
+                  >
+                    <Icon name={cat.icon} className="text-sm mr-1 align-middle" />
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Central output node */}
+            <div className={`mx-auto w-44 h-36 bg-surface-container border-2 ${colors.border} flex flex-col items-center justify-center text-center mb-6`} style={{ boxShadow: `0 0 25px ${colors.glow}` }}>
+              <span className={`text-[9px] uppercase tracking-[0.2em] ${colors.text} font-mono mb-1`}>{active.label}</span>
+              <span className="text-3xl font-serif font-bold text-on-surface leading-none">{active.value || "?"}</span>
+              <span className="text-[9px] uppercase tracking-widest text-on-surface-var mt-2">
+                {active.contributors.length} active · {active.missing.length} missing
+              </span>
+            </div>
+
+            {/* Contributors: what's building into this stat */}
+            {active.contributors.length > 0 && (
+              <div className="mb-4">
+                <p className="text-[9px] font-mono uppercase tracking-widest text-on-surface-var mb-2 px-2">
+                  <Icon name="check_circle" className="text-xs text-primary-container mr-1 align-middle" />
+                  Active Contributors
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {active.contributors.map((c, i) => (
+                    <ContributorNode key={i} contributor={c} colors={colors} positive />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Missing: what could improve this stat */}
+            {active.missing.length > 0 && (
+              <div className="mb-4">
+                <p className="text-[9px] font-mono uppercase tracking-widest text-on-surface-var mb-2 px-2">
+                  <Icon name="add_circle" className="text-xs text-error mr-1 align-middle" />
+                  Missing — Would Improve {active.label}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {active.missing.map((c, i) => (
+                    <ContributorNode key={i} contributor={c} colors={colors} positive={false} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Meta context */}
+            {meta?.length > 0 && (
+              <div className="p-3 bg-surface-dim/50 border border-outline-variant/10 text-center mt-2">
+                <p className="text-[9px] font-mono text-on-surface-var">{meta[0].text}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function ContributorNode({ contributor, colors, positive }) {
+      const c = contributor;
+      const [open, setOpen] = useState(false);
+      const typeIcons = { skill: "auto_awesome", support: "link", keystone: "diamond", gear: "inventory_2", stat: "bar_chart", missing: "add" };
+      const typeLabels = { skill: "Skill", support: "Support", keystone: "Keystone", gear: "Gear", stat: "Stat", missing: "Missing" };
+      return (
+        <div
+          className={`p-2.5 border cursor-pointer transition-all ${
+            positive
+              ? `bg-surface-container border-outline-variant/20 hover:${colors.border}/30`
+              : "bg-surface-dim border-error/20 hover:border-error/40"
+          }`}
+          onClick={() => setOpen(!open)}
+        >
+          <div className="flex items-start gap-2">
+            <Icon name={typeIcons[c.sourceType] || "info"} className={`text-xs mt-px ${positive ? colors.text : "text-error"}`} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-mono font-bold text-on-surface truncate">{c.name}</span>
+                {c.adoptionPct > 0 && <span className="text-[8px] font-mono text-on-surface-var">{c.adoptionPct.toFixed(0)}%</span>}
+              </div>
+              <p className={`text-[9px] font-mono ${positive ? "text-on-surface-var" : "text-error/80"} ${open ? "" : "truncate"} leading-relaxed`}>
+                {open ? (c.detail || c.contribution) : c.contribution}
+              </p>
+            </div>
+          </div>
         </div>
       );
     }
