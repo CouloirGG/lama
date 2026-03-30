@@ -179,25 +179,28 @@
     };
     const SEV_ICONS = { critical: "error", warning: "warning", positive: "check_circle", info: "info" };
 
-    function WhyCard({ explanation }) {
+    function WhyCard({ explanation, neutral }) {
       const e = explanation;
-      const colors = SEV_COLORS[e.severity] || SEV_COLORS.info;
       const icon = SEV_ICONS[e.severity] || "info";
+      const iconColor = { critical: "text-red-400", warning: "text-yellow-400", positive: "text-green-400", info: "text-on-surface-var" }[e.severity] || "";
       const [open, setOpen] = useState(false);
       return (
-        <div className={`flex gap-2 px-3 py-2 rounded border ${colors} cursor-pointer`} onClick={() => setOpen(!open)}>
-          <Icon name={icon} className="text-base mt-px shrink-0" />
+        <div
+          className={`flex gap-2 px-3 py-1.5 rounded cursor-pointer transition-colors ${neutral ? "bg-surface/50 hover:bg-surface-container" : SEV_COLORS[e.severity] || SEV_COLORS.info}`}
+          onClick={() => setOpen(!open)}
+        >
+          <Icon name={icon} className={`text-sm mt-px shrink-0 ${neutral ? iconColor : ""}`} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono font-semibold">{e.title}</span>
+              <span className="text-xs font-mono font-semibold text-on-surface">{e.title}</span>
               {e.adoptionPct > 0 && (
-                <span className="text-[10px] font-mono opacity-60">{e.adoptionPct.toFixed(0)}%</span>
+                <span className="text-[10px] font-mono opacity-50">{e.adoptionPct.toFixed(0)}%</span>
               )}
-              {!open && <span className="text-[10px] font-mono opacity-50 truncate flex-1">{e.text.slice(0, 80)}{e.text.length > 80 ? "..." : ""}</span>}
+              {!open && <span className="text-[10px] font-mono opacity-40 truncate flex-1">{e.text.slice(0, 60)}...</span>}
             </div>
-            {open && <p className="text-xs font-mono leading-relaxed opacity-90 mt-1">{e.text}</p>}
+            {open && <p className="text-xs font-mono leading-relaxed opacity-80 mt-1">{e.text}</p>}
           </div>
-          <Icon name={open ? "expand_less" : "expand_more"} className="text-sm opacity-50 shrink-0" />
+          <Icon name={open ? "expand_less" : "expand_more"} className="text-xs opacity-30 shrink-0 mt-0.5" />
         </div>
       );
     }
@@ -267,31 +270,40 @@
     function InsightGroupCard({ group }) {
       const [open, setOpen] = useState(false);
       const g = group;
-      const colors = SEV_COLORS[g.severity] || SEV_COLORS.info;
+      const headerColor = {
+        critical: "border-l-red-500 bg-red-500/8",
+        warning: "border-l-yellow-500 bg-yellow-500/8",
+        positive: "border-l-green-500 bg-green-500/8",
+        info: "border-l-outline bg-surface-container",
+      }[g.severity] || "border-l-outline bg-surface-container";
+      const labelColor = {
+        critical: "text-red-400", warning: "text-yellow-400",
+        positive: "text-green-400", info: "text-on-surface-var"
+      }[g.severity] || "";
       return (
-        <div className={`rounded-lg border ${colors} overflow-hidden`}>
+        <div className={`rounded-lg border border-outline-variant overflow-hidden`}>
           <div
-            className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+            className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-l-4 ${headerColor}`}
             onClick={() => setOpen(!open)}
           >
-            <Icon name={g.icon} className="text-xl shrink-0" />
+            <Icon name={g.icon} className={`text-xl shrink-0 ${labelColor}`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-mono font-semibold">{g.label}</span>
+                <span className={`text-sm font-mono font-semibold ${labelColor}`}>{g.label}</span>
                 {g.statValue && (
-                  <span className={`text-xs font-mono px-2 py-0.5 rounded ${STATUS_BG[g.statStatus] || ""}`}>
+                  <span className="text-xs font-mono text-on-surface px-2 py-0.5 rounded bg-surface-container border border-outline-variant">
                     {g.statValue}
                   </span>
                 )}
-                <span className="text-[10px] font-mono opacity-50">{g.items?.length || 0} items</span>
+                <span className="text-[10px] font-mono text-on-surface-var">{g.items?.length || 0} items</span>
               </div>
-              <p className="text-xs font-mono opacity-80 mt-0.5">{g.summary}</p>
+              <p className="text-xs font-mono text-on-surface-var mt-0.5">{g.summary}</p>
             </div>
-            <Icon name={open ? "expand_less" : "expand_more"} className="text-lg opacity-50 shrink-0" />
+            <Icon name={open ? "expand_less" : "expand_more"} className="text-base text-on-surface-var shrink-0" />
           </div>
           {open && g.items?.length > 0 && (
-            <div className="flex flex-col gap-1 px-4 pb-3">
-              {g.items.map((e, i) => <WhyCard key={i} explanation={e} />)}
+            <div className="flex flex-col gap-0.5 px-3 py-2 bg-surface-dim/50">
+              {g.items.map((e, i) => <WhyCard key={i} explanation={e} neutral />)}
             </div>
           )}
         </div>

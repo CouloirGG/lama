@@ -243,16 +243,16 @@ class WhyEngine:
                 is_chaos=(range_key == "chaosres"),
             ))
 
-        # Armour
-        if stats.armour > 0:
+        # Armour / Evasion — only show if they're a meaningful part of the build
+        # (above 1000 suggests intentional investment, not just incidental gear)
+        if stats.armour > 1000:
             a_range = ranges.get("armour", {})
             explanations.append(self._stat_position_explanation(
                 "Armour", stats.armour, a_range,
                 desc=DEFENSE_MECHANICS.get("armour", None),
             ))
 
-        # Evasion
-        if stats.evasion > 0:
+        if stats.evasion > 1000:
             ev_range = ranges.get("evasion", {})
             explanations.append(self._stat_position_explanation(
                 "Evasion", stats.evasion, ev_range,
@@ -392,8 +392,8 @@ class WhyEngine:
         for pk in popular_keystones:
             if pk["name"] in player_ks_set:
                 continue
-            if pk["percentage"] < 20:
-                continue  # Only flag widely-used keystones
+            if pk["percentage"] < 50:
+                continue  # Only flag keystones used by majority of builds
 
             info = KEYSTONES.get(pk["name"])
             pct = pk["percentage"]
