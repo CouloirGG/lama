@@ -172,6 +172,28 @@ def _field_as_message(f: dict) -> List[dict]:
     return _decode_fields(f.get("data", b""))
 
 
+def _reshape_character_columns(columns: List[dict]) -> List[dict]:
+    """Reshape column-oriented character data into row-oriented dicts.
+
+    Input:  [{"column": "name", "values": ["Alice"]}, {"column": "account", "values": ["Alice-1234"]}, ...]
+    Output: [{"name": "Alice", "account": "Alice-1234", ...}]
+    """
+    if not columns:
+        return []
+    # Find max row count across all columns
+    max_rows = max((len(c["values"]) for c in columns), default=0)
+    if max_rows == 0:
+        return []
+    rows: List[dict] = [{} for _ in range(max_rows)]
+    for col in columns:
+        col_name = col["column"]
+        for i, val in enumerate(col["values"]):
+            if i < max_rows:
+                rows[i][col_name] = val
+    # Filter out empty rows
+    return [r for r in rows if r.get("name") or r.get("account")]
+
+
 @dataclass
 class CharacterItem:
     """An equipped item with full mod data."""
@@ -240,6 +262,7 @@ class BuildsClient:
         self._lock = threading.Lock()
         self._snapshot_version: Optional[str] = None
         self._snapshot_name: Optional[str] = None
+        self._snapshot_league_url: Optional[str] = None
 
     def _get_cached(self, key: str, ttl: int) -> Optional[Any]:
         """Check cache. Returns data or None if expired/missing."""
@@ -283,8 +306,9 @@ class BuildsClient:
 
             self._snapshot_version = snapshot["version"]
             self._snapshot_name = snapshot["snapshotName"]
+            self._snapshot_league_url = snapshot.get("url", "")
             self._set_cache("snapshot", True)
-            logger.debug(f"poe.ninja snapshot: v={self._snapshot_version}, name={self._snapshot_name}")
+            logger.debug(f"poe.ninja snapshot: v={self._snapshot_version}, name={self._snapshot_name}, league={self._snapshot_league_url}")
             return True
 
         except Exception as e:
@@ -371,9 +395,10 @@ class BuildsClient:
             return None
 
         try:
+            league_url = self._snapshot_league_url or ""
             url = (
                 f"{BASE_URL}/profile/characters"
-                f"/{account}/{character}/model/{profile_ver}"
+                f"/{account}/{league_url}/{character}/model/{profile_ver}"
             )
             resp = self._session.get(url, timeout=15)
 
@@ -823,6 +848,8 @@ class BuildsClient:
             total_count = 0
             dimensions = []
             dict_hashes = {}
+            stat_ranges = {}   # field 3: population stat min/max
+            characters = []    # field 5: per-character column data
 
             for f in inner_fields:
                 if f["fieldNumber"] == 1 and f["wireType"] == 0:
@@ -857,6 +884,43 @@ class BuildsClient:
                             "displayName": display_name,
                             "entries": entries,
                         })
+                elif f["fieldNumber"] == 3 and f["wireType"] == 2:
+                    # Stat range: field 1=name, field 2=min, field 3=max
+                    # Min values use unsigned varint encoding for negatives
+                    sr_fields = _field_as_message(f)
+                    sr_name = ""
+                    sr_min = 0
+                    sr_max = 0
+                    for sf in sr_fields:
+                        if sf["fieldNumber"] == 1 and sf["wireType"] == 2:
+                            sr_name = _field_as_string(sf)
+                        elif sf["fieldNumber"] == 2 and sf["wireType"] == 0:
+                            v = sf["value"]
+                            # Decode as signed 64-bit (two's complement)
+                            sr_min = v if v < (1 << 63) else v - (1 << 64)
+                        elif sf["fieldNumber"] == 3 and sf["wireType"] == 0:
+                            v = sf["value"]
+                            sr_max = v if v < (1 << 63) else v - (1 << 64)
+                    if sr_name:
+                        stat_ranges[sr_name] = {"min": sr_min, "max": sr_max}
+                elif f["fieldNumber"] == 5 and f["wireType"] == 2:
+                    # Character column: field 1=column name, field 2=values
+                    col_fields = _field_as_message(f)
+                    col_name = ""
+                    col_values = []
+                    for cf in col_fields:
+                        if cf["fieldNumber"] == 1 and cf["wireType"] == 2:
+                            col_name = _field_as_string(cf)
+                        elif cf["fieldNumber"] == 2 and cf["wireType"] == 2:
+                            # Decode repeated values
+                            val_fields = _field_as_message(cf)
+                            for vf in val_fields:
+                                if vf["wireType"] == 2:
+                                    col_values.append(_field_as_string(vf))
+                                elif vf["wireType"] == 0:
+                                    col_values.append(vf["value"])
+                    if col_name:
+                        characters.append({"column": col_name, "values": col_values})
                 elif f["fieldNumber"] == 6 and f["wireType"] == 2:
                     # Dictionary hash message
                     hash_fields = _field_as_message(f)
@@ -870,10 +934,15 @@ class BuildsClient:
                     if type_name and hash_val:
                         dict_hashes[type_name] = hash_val
 
+            # Reshape character columns into rows
+            featured_characters = _reshape_character_columns(characters)
+
             result = {
                 "totalCount": total_count,
                 "dimensions": dimensions,
                 "dictHashes": dict_hashes,
+                "statRanges": stat_ranges,
+                "featuredCharacters": featured_characters,
             }
             self._set_cache(cache_key, result)
             return result
@@ -1158,6 +1227,21 @@ class BuildsClient:
         except Exception as e:
             logger.warning(f"Popular keystones fetch failed: {e}")
             return []
+
+    def fetch_archetype_profile(self, char_class: str,
+                                skill: str) -> Optional[dict]:
+        """Fetch full population profile for an archetype (class + skill).
+
+        Returns a dict with:
+        - totalCount: population size
+        - statRanges: {stat_name: {min, max}} for 37 stats
+        - featuredCharacters: list of top characters with name, account, stats
+        - dimensions: item/keystone/skill adoption data
+        - dictHashes: for resolving dimension names
+        """
+        if not self._fetch_snapshot_info():
+            return None
+        return self._fetch_search(char_class, skill)
 
 
 # ---------------------------------------------------------------------------

@@ -505,6 +505,9 @@ def main():
         _log("=" * 50)
         sys.exit(1)
 
+    # Debug mode — enables WebView2 DevTools (right-click → Inspect)
+    _debug_mode = "--debug" in sys.argv or "-d" in sys.argv
+
     # If launched with --restart, wait for the old process to release the port
     if "--restart" in sys.argv:
         _log("Restart requested — waiting for old process to release port...")
@@ -615,7 +618,7 @@ def main():
     # This blocks until the window is destroyed (force_close / quit)
     from bundle_paths import get_resource
     ico_path = str(get_resource("resources/img/favicon.ico"))
-    webview.start(icon=ico_path)
+    webview.start(icon=ico_path, debug=_debug_mode)
 
     try:
         tray.stop()

@@ -656,6 +656,15 @@ app.add_middleware(
 )
 
 
+from fastapi.exceptions import RequestValidationError
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(request: Request, exc: RequestValidationError):
+    body = await request.body()
+    logger.warning("422 Validation Error on %s %s — body: %s — errors: %s",
+                    request.method, request.url.path, body.decode(errors="replace"), exc.errors())
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
 def _get_github_headers() -> dict:
     """Build GitHub API headers, including auth token if available."""
     headers = {
@@ -1028,8 +1037,138 @@ async def character_lookup(req: CharacterLookupRequest):
     )
 
     result = builds_client.serialize_character(char_data)
+    _enrich_equipment(char_data, result)
+    return result
 
-    # Enrich equipment mods with tier data if mod engine is available
+
+class SmartLookupRequest(BaseModel):
+    query: str
+
+
+def _parse_ninja_url(url: str):
+    """Extract account + character from a poe.ninja profile URL.
+
+    Formats:
+      .../profile/Account-1234/league/character/CharName
+      .../profile/Account-1234/character/CharName
+    """
+    import re
+    # With league segment
+    m = re.match(
+        r"https?://poe\.ninja/poe2/profile/([^/]+)/[^/]+/character/([^/?#]+)",
+        url.strip(),
+    )
+    if m:
+        return m.group(1), m.group(2)
+    # Without league segment
+    m = re.match(
+        r"https?://poe\.ninja/poe2/profile/([^/]+)/character/([^/?#]+)",
+        url.strip(),
+    )
+    if m:
+        return m.group(1), m.group(2)
+    return None, None
+
+
+@app.post("/api/character/smart-lookup")
+async def smart_character_lookup(req: SmartLookupRequest):
+    """Flexible character lookup: accepts URLs, account/character, or partial names.
+
+    Input formats:
+      - poe.ninja URL → extract account + character
+      - "account / character" or "account character" → direct lookup
+      - partial text → fuzzy-match against saved characters, then try as character name
+    """
+    q = req.query.strip()
+    if not q:
+        return JSONResponse(status_code=400, content={"error": "Enter a character name, account/character, or poe.ninja URL"})
+
+    loop = asyncio.get_running_loop()
+
+    # 1. poe.ninja URL
+    if "poe.ninja" in q:
+        acct, char = _parse_ninja_url(q)
+        if acct and char:
+            char_data = await loop.run_in_executor(
+                None, _lookup_character_with_fallback, acct, char
+            )
+            if char_data:
+                _save_recent_character(acct, char_data.name,
+                                       char_data.ascendancy or char_data.char_class, char_data.level)
+                result = builds_client.serialize_character(char_data)
+                _enrich_equipment(char_data, result)
+                return result
+            return JSONResponse(status_code=404, content={"error": f"Character not found: {char} (account: {acct})"})
+        return JSONResponse(status_code=400, content={"error": "Could not parse poe.ninja URL. Expected format: poe.ninja/poe2/profile/Account/league/character/Name"})
+
+    # 2. "account / character" or "account, character"
+    for sep in ["/", ","]:
+        if sep in q:
+            parts = [p.strip() for p in q.split(sep, 1)]
+            if len(parts) == 2 and parts[0] and parts[1]:
+                char_data = await loop.run_in_executor(
+                    None, _lookup_character_with_fallback, parts[0], parts[1]
+                )
+                if char_data:
+                    _save_recent_character(parts[0], char_data.name,
+                                           char_data.ascendancy or char_data.char_class, char_data.level)
+                    result = builds_client.serialize_character(char_data)
+                    _enrich_equipment(char_data, result)
+                    return result
+                return JSONResponse(status_code=404, content={"error": f"Character not found: {parts[1]} (account: {parts[0]})"})
+
+    # 3. Single term — fuzzy match saved characters, then try as character name across saved accounts
+    settings = load_settings()
+    saved = settings.get("saved_characters", [])
+    q_lower = q.lower()
+
+    # Check for exact or fuzzy character name match in saved list
+    for acct_group in saved:
+        acct_name = acct_group.get("accountName", "")
+        for ch in acct_group.get("characters", []):
+            if ch["name"].lower() == q_lower:
+                char_data = await loop.run_in_executor(
+                    None, _lookup_character_with_fallback, acct_name, ch["name"]
+                )
+                if char_data:
+                    _save_recent_character(acct_name, char_data.name,
+                                           char_data.ascendancy or char_data.char_class, char_data.level)
+                    result = builds_client.serialize_character(char_data)
+                    _enrich_equipment(char_data, result)
+                    return result
+
+    # Check if query matches an account name — return suggestions
+    acct_matches = []
+    for acct_group in saved:
+        acct_name = acct_group.get("accountName", "")
+        if q_lower in acct_name.lower():
+            for ch in acct_group.get("characters", []):
+                acct_matches.append({"account": acct_name, "name": ch["name"],
+                                     "class": ch.get("class", ""), "level": ch.get("level", 0)})
+
+    # Check if query partially matches any character name
+    char_matches = []
+    for acct_group in saved:
+        acct_name = acct_group.get("accountName", "")
+        for ch in acct_group.get("characters", []):
+            if q_lower in ch["name"].lower() and ch["name"].lower() != q_lower:
+                char_matches.append({"account": acct_name, "name": ch["name"],
+                                     "class": ch.get("class", ""), "level": ch.get("level", 0)})
+
+    suggestions = acct_matches + char_matches
+    if suggestions:
+        return JSONResponse(status_code=300, content={
+            "error": "Multiple matches found. Select one:",
+            "suggestions": suggestions,
+        })
+
+    return JSONResponse(status_code=404, content={
+        "error": f"No character found for \"{q}\". Try: account/character, a poe.ninja URL, or a saved character name."
+    })
+
+
+def _enrich_equipment(char_data, result: dict):
+    """Add mod tier data to equipment in result dict."""
     if item_lookup and item_lookup.ready:
         try:
             mp = item_lookup._mod_parser
@@ -1042,8 +1181,6 @@ async def character_lookup(req: CharacterLookupRequest):
                     result["equipment"][i]["modTiers"] = tier_data
         except Exception as e:
             logger.debug(f"Mod tier enrichment failed: {e}")
-
-    return result
 
 
 @app.get("/api/character/saved")
@@ -1098,10 +1235,11 @@ def _save_recent_character(account: str, name: str, char_class: str, level: int)
         "lastLookup": int(time.time()),
     }
 
-    # Find or create account
+    # Find or create account (normalize # ↔ - for poe.ninja compatibility)
     acct = None
+    normalized = account.lower().replace("#", "-")
     for a in saved:
-        if a["accountName"].lower() == account.lower():
+        if a["accountName"].lower().replace("#", "-") == normalized:
             acct = a
             break
 
