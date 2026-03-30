@@ -226,6 +226,79 @@
     }
 
     // -----------------------------------------------------------------------
+    // Scorecard — big numbers at the top of the Pulse tab
+    // -----------------------------------------------------------------------
+    const STATUS_BG = {
+      critical: "bg-red-500/15 border-red-500/40 text-red-300",
+      warning: "bg-yellow-500/15 border-yellow-500/40 text-yellow-200",
+      positive: "bg-green-500/15 border-green-500/40 text-green-300",
+      info: "bg-surface-container border-outline-variant text-on-surface-var",
+    };
+
+    function ScorecardPanel({ scorecard }) {
+      const sc = scorecard;
+      return (
+        <div className="grid grid-cols-3 gap-3">
+          {/* EHP */}
+          <div className={`flex flex-col items-center p-4 rounded-lg border ${STATUS_BG[sc.ehpStatus] || STATUS_BG.info}`}>
+            <span className="text-[10px] font-mono tracking-widest opacity-60 mb-1">EFFECTIVE HP</span>
+            <span className="text-2xl font-mono font-bold">{sc.ehp?.toLocaleString() || "?"}</span>
+            <span className="text-[10px] font-mono opacity-70 mt-1">{sc.ehpContext}</span>
+          </div>
+          {/* DPS */}
+          <div className={`flex flex-col items-center p-4 rounded-lg border ${STATUS_BG[sc.dpsStatus] || STATUS_BG.info}`}>
+            <span className="text-[10px] font-mono tracking-widest opacity-60 mb-1">DPS</span>
+            <span className="text-2xl font-mono font-bold">{sc.dpsLabel || "?"}</span>
+            <span className="text-[10px] font-mono opacity-70 mt-1">Primary skill</span>
+          </div>
+          {/* Resists */}
+          <div className={`flex flex-col items-center p-4 rounded-lg border ${STATUS_BG[sc.resistStatus] || STATUS_BG.info}`}>
+            <span className="text-[10px] font-mono tracking-widest opacity-60 mb-1">RESISTANCES</span>
+            <span className="text-lg font-mono font-bold">{sc.resistStatus === "positive" ? "Capped" : "Gaps"}</span>
+            <span className="text-[10px] font-mono opacity-70 mt-1 text-center">{sc.resistSummary}</span>
+          </div>
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // InsightGroupCard — collapsible group of related explanations
+    // -----------------------------------------------------------------------
+    function InsightGroupCard({ group }) {
+      const [open, setOpen] = useState(false);
+      const g = group;
+      const colors = SEV_COLORS[g.severity] || SEV_COLORS.info;
+      return (
+        <div className={`rounded-lg border ${colors} overflow-hidden`}>
+          <div
+            className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+            onClick={() => setOpen(!open)}
+          >
+            <Icon name={g.icon} className="text-xl shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-mono font-semibold">{g.label}</span>
+                {g.statValue && (
+                  <span className={`text-xs font-mono px-2 py-0.5 rounded ${STATUS_BG[g.statStatus] || ""}`}>
+                    {g.statValue}
+                  </span>
+                )}
+                <span className="text-[10px] font-mono opacity-50">{g.items?.length || 0} items</span>
+              </div>
+              <p className="text-xs font-mono opacity-80 mt-0.5">{g.summary}</p>
+            </div>
+            <Icon name={open ? "expand_less" : "expand_more"} className="text-lg opacity-50 shrink-0" />
+          </div>
+          {open && g.items?.length > 0 && (
+            <div className="flex flex-col gap-1 px-4 pb-3">
+              {g.items.map((e, i) => <WhyCard key={i} explanation={e} />)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
     // TopBar
     // -----------------------------------------------------------------------
     const getWindowApi = () => window.pywebview?.api;
@@ -982,34 +1055,27 @@
       }
 
       return (
-        <div className="flex flex-col gap-6 p-5 max-w-4xl mx-auto">
-          <BuildHealthGauge insights={insights} comparison={comparison} />
-          <KPIRow insights={insights} comparison={comparison} />
+        <div className="flex flex-col gap-5 p-5 max-w-4xl mx-auto">
 
-          {/* Why Engine: Actions — prioritized recommendations with explanations */}
-          {whyInsights?.actions?.length > 0 ? (
-            <WhySection title="Recommended Actions" explanations={whyInsights.actions} icon="priority_high" maxItems={5} />
-          ) : !whyInsights && (
+          {/* Scorecard — big numbers at the top */}
+          {whyInsights?.scorecard ? (
+            <ScorecardPanel scorecard={whyInsights.scorecard} />
+          ) : !whyInsights ? (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-surface border border-outline-variant">
               <div className="w-4 h-4 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-              <span className="text-xs font-mono text-on-surface-var">Generating build explanations...</span>
+              <span className="text-xs font-mono text-on-surface-var">Analyzing build...</span>
             </div>
+          ) : (
+            <BuildHealthGauge insights={insights} comparison={comparison} />
           )}
 
-          {/* Why Engine: Keystones — what you have, what you're missing, and why */}
-          {whyInsights?.keystones?.length > 0 && (
-            <WhySection title="Keystone Analysis" explanations={whyInsights.keystones} icon="key" maxItems={6} />
-          )}
+          {/* Insight Groups — deduped, grouped by impact */}
+          {whyInsights?.insightGroups?.map((group, i) => (
+            <InsightGroupCard key={group.category} group={group} />
+          ))}
 
-          {/* Why Engine: Stats — where you stand in the population */}
-          {whyInsights?.stats?.length > 0 && (
-            <WhySection title="Stat Breakdown" explanations={whyInsights.stats} icon="monitoring" maxItems={8} />
-          )}
-
-          {/* Why Engine: Meta context */}
-          {whyInsights?.meta?.length > 0 && (
-            <WhySection title="Meta Context" explanations={whyInsights.meta} icon="groups" />
-          )}
+          {/* Fallback KPI row if no why-insights */}
+          {!whyInsights && <KPIRow insights={insights} comparison={comparison} />}
 
           <NextBigUpgradeCard improvement={improvement} />
         </div>

@@ -42,23 +42,84 @@ class Explanation:
 
 
 @dataclass
+class InsightGroup:
+    """A group of related explanations under one impact category."""
+    category: str       # "survival", "damage", "clear_speed", "quality"
+    label: str          # "Survival", "Damage", "Clear Speed", "Quality of Life"
+    icon: str           # material icon name
+    severity: str       # worst severity in group
+    summary: str        # 1-2 sentence summary of the group
+    items: List[Explanation] = field(default_factory=list)
+    stat_value: Optional[str] = None   # e.g., "18,057 EHP" or "4.5M DPS"
+    stat_status: str = "info"          # color of the stat: "critical", "warning", "positive"
+
+
+@dataclass
+class Scorecard:
+    """Top-level build scorecard — the first thing the player sees."""
+    ehp: int = 0
+    ehp_status: str = "info"        # "critical", "warning", "positive"
+    ehp_context: str = ""           # "Bottom 15% of this build"
+    dps: float = 0.0
+    dps_label: str = ""             # "4.5M Poisonburst Arrow"
+    dps_status: str = "info"
+    resist_summary: str = ""        # "All capped" or "Fire 45% / Cold 75% / Light 75% / Chaos -12%"
+    resist_status: str = "info"
+    critical_count: int = 0         # number of critical issues
+    warning_count: int = 0
+    positive_count: int = 0
+
+
+@dataclass
 class CharacterExplanations:
     """All explanations for a character."""
     keystones: List[Explanation] = field(default_factory=list)
-    gear: Dict[str, List[Explanation]] = field(default_factory=dict)  # slot -> explanations
+    gear: Dict[str, List[Explanation]] = field(default_factory=dict)
     stats: List[Explanation] = field(default_factory=list)
     actions: List[Explanation] = field(default_factory=list)
     meta: List[Explanation] = field(default_factory=list)
+    # Summarized output
+    scorecard: Optional[Scorecard] = None
+    insight_groups: List[InsightGroup] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """Serialize for API response."""
-        return {
+        result = {
             "keystones": [_exp_dict(e) for e in self.keystones],
             "gear": {slot: [_exp_dict(e) for e in exps] for slot, exps in self.gear.items()},
             "stats": [_exp_dict(e) for e in self.stats],
             "actions": [_exp_dict(e) for e in self.actions],
             "meta": [_exp_dict(e) for e in self.meta],
         }
+        if self.scorecard:
+            result["scorecard"] = {
+                "ehp": self.scorecard.ehp,
+                "ehpStatus": self.scorecard.ehp_status,
+                "ehpContext": self.scorecard.ehp_context,
+                "dps": self.scorecard.dps,
+                "dpsLabel": self.scorecard.dps_label,
+                "dpsStatus": self.scorecard.dps_status,
+                "resistSummary": self.scorecard.resist_summary,
+                "resistStatus": self.scorecard.resist_status,
+                "criticalCount": self.scorecard.critical_count,
+                "warningCount": self.scorecard.warning_count,
+                "positiveCount": self.scorecard.positive_count,
+            }
+        if self.insight_groups:
+            result["insightGroups"] = [
+                {
+                    "category": g.category,
+                    "label": g.label,
+                    "icon": g.icon,
+                    "severity": g.severity,
+                    "summary": g.summary,
+                    "statValue": g.stat_value,
+                    "statStatus": g.stat_status,
+                    "items": [_exp_dict(e) for e in g.items],
+                }
+                for g in self.insight_groups
+            ]
+        return result
 
 
 def _exp_dict(e: Explanation) -> dict:
@@ -121,6 +182,10 @@ class WhyEngine:
         )
         result.gear = self._explain_gear(char_data, archetype, profile)
         result.meta = self._explain_meta(archetype, profile)
+
+        # Summarize: build scorecard + deduped insight groups
+        result.scorecard = self._build_scorecard(pob, profile, result, char_data)
+        result.insight_groups = self._build_insight_groups(result)
 
         return result
 
@@ -569,10 +634,254 @@ class WhyEngine:
 
         return explanations
 
+    # ------------------------------------------------------------------
+    # Summarization: Scorecard + Insight Groups
+    # ------------------------------------------------------------------
+
+    def _build_scorecard(
+        self, pob: Optional[PobData], profile: Optional[dict],
+        exps: "CharacterExplanations", char_data: Optional[CharacterData] = None,
+    ) -> Scorecard:
+        """Build the top-level scorecard with big numbers."""
+        sc = Scorecard()
+
+        if pob:
+            # EHP
+            sc.ehp = int(pob.stats.total_ehp)
+            ranges = profile.get("statRanges", {}) if profile else {}
+            ehp_range = ranges.get("ehp", {})
+            ehp_max = ehp_range.get("max", 0)
+            ehp_thresh = STAT_THRESHOLDS.get("ehp")
+            if ehp_thresh and sc.ehp < ehp_thresh.endgame_min:
+                sc.ehp_status = "critical"
+                sc.ehp_context = f"Below endgame minimum ({ehp_thresh.endgame_min:,})"
+            elif ehp_thresh and sc.ehp < ehp_thresh.boss_ready:
+                sc.ehp_status = "warning"
+                sc.ehp_context = f"OK for mapping, below boss-ready ({ehp_thresh.boss_ready:,})"
+            elif ehp_max > 0:
+                pct = min(100, max(0, (sc.ehp / ehp_max) * 100))
+                if pct > 50:
+                    sc.ehp_status = "positive"
+                    sc.ehp_context = f"Top {100 - int(pct)}% of this build"
+                else:
+                    sc.ehp_status = "info"
+                    sc.ehp_context = f"Average for this build"
+
+            # DPS — from character skill groups (poe.ninja calculates these)
+            best_dps = 0.0
+            best_skill = ""
+            if char_data:
+                for sg in char_data.skill_groups:
+                    for d in (sg.dps if hasattr(sg, "dps") and sg.dps else []):
+                        total = max(d.dps or 0, d.dot_dps or 0, d.damage or 0)
+                        if total > best_dps:
+                            best_dps = total
+                            best_skill = d.name or ""
+
+            # Fall back to POB stats if character data didn't have DPS
+            if best_dps == 0:
+                if pob.stats.combined_dps > 0:
+                    best_dps = pob.stats.combined_dps
+                if pob.stats.total_dot > best_dps:
+                    best_dps = pob.stats.total_dot
+
+            if best_dps > 0:
+                sc.dps = best_dps
+                if best_dps >= 1_000_000:
+                    label = f"{best_dps / 1_000_000:.1f}M"
+                elif best_dps >= 1_000:
+                    label = f"{best_dps / 1_000:.0f}K"
+                else:
+                    label = f"{best_dps:,.0f}"
+                sc.dps_label = f"{label} {best_skill}".strip()
+                sc.dps_status = "info"
+
+            # Resists
+            resists = {
+                "Fire": pob.stats.fire_resist,
+                "Cold": pob.stats.cold_resist,
+                "Lightning": pob.stats.lightning_resist,
+                "Chaos": pob.stats.chaos_resist,
+            }
+            all_capped = all(v >= 75 for v in resists.values())
+            ele_capped = all(resists[r] >= 75 for r in ["Fire", "Cold", "Lightning"])
+            if all_capped:
+                sc.resist_summary = "All resistances capped"
+                sc.resist_status = "positive"
+            elif ele_capped:
+                sc.resist_summary = f"Elemental capped, Chaos {resists['Chaos']}%"
+                sc.resist_status = "warning" if resists["Chaos"] < 0 else "info"
+            else:
+                uncapped = [f"{n} {v}%" for n, v in resists.items() if v < 75]
+                sc.resist_summary = f"Uncapped: {', '.join(uncapped)}"
+                sc.resist_status = "critical"
+
+        # Count severities across all explanations
+        all_exps = (exps.actions + exps.keystones + exps.stats
+                    + exps.meta + [e for sl in exps.gear.values() for e in sl])
+        sc.critical_count = sum(1 for e in all_exps if e.severity == "critical")
+        sc.warning_count = sum(1 for e in all_exps if e.severity == "warning")
+        sc.positive_count = sum(1 for e in all_exps if e.severity == "positive")
+
+        return sc
+
+    def _build_insight_groups(
+        self, exps: "CharacterExplanations",
+    ) -> List[InsightGroup]:
+        """Dedup and group explanations into impact categories."""
+
+        # Collect all explanations, tagging each with an impact category
+        seen_titles = set()  # for dedup
+        survival_items = []
+        damage_items = []
+        clear_items = []
+        quality_items = []
+
+        # Classify keywords for routing
+        SURVIVAL_KW = {"life", "ehp", "health", "resist", "armour", "armor",
+                       "evasion", "block", "suppress", "deflect", "es ", "energy shield",
+                       "sanguimancy", "mind over matter", "chaos inoculation",
+                       "sustain", "leech", "regen", "recovery", "survive", "die",
+                       "damage taken", "hit taken", "defensive"}
+        DAMAGE_KW = {"dps", "damage", "multiplier", "crit", "penetration",
+                     "pain attunement", "crimson power", "elemental overload",
+                     "more damage", "spell damage", "attack damage", "dot",
+                     "grasping wounds", "vitality siphon"}
+        CLEAR_KW = {"clear", "explosion", "chain", "area", "aoe",
+                    "sunder the flesh", "movement", "speed"}
+
+        def _categorize(e: Explanation) -> str:
+            text_lower = (e.title + " " + e.text).lower()
+            # Score each category
+            surv = sum(1 for kw in SURVIVAL_KW if kw in text_lower)
+            dmg = sum(1 for kw in DAMAGE_KW if kw in text_lower)
+            clr = sum(1 for kw in CLEAR_KW if kw in text_lower)
+            if clr > surv and clr > dmg:
+                return "clear_speed"
+            if dmg > surv:
+                return "damage"
+            if surv > 0:
+                return "survival"
+            return "quality"
+
+        def _dedup_add(e: Explanation, target: list):
+            # Dedup by title (strip "Missing: " prefix for keystone matching)
+            key = e.title.replace("Missing: ", "").replace("Allocate ", "")
+            if key in seen_titles:
+                return
+            seen_titles.add(key)
+            target.append(e)
+
+        # Process actions first (highest priority), then keystones, stats, gear
+        for e in exps.actions:
+            cat = _categorize(e)
+            _dedup_add(e, {"survival": survival_items, "damage": damage_items,
+                           "clear_speed": clear_items, "quality": quality_items}[cat])
+
+        for e in exps.keystones:
+            cat = _categorize(e)
+            _dedup_add(e, {"survival": survival_items, "damage": damage_items,
+                           "clear_speed": clear_items, "quality": quality_items}[cat])
+
+        # Stats: only include non-positive (skip "Fire Resistance is capped" type noise)
+        for e in exps.stats:
+            if e.severity == "positive":
+                continue  # Don't clutter with "all good" items
+            cat = _categorize(e)
+            _dedup_add(e, {"survival": survival_items, "damage": damage_items,
+                           "clear_speed": clear_items, "quality": quality_items}[cat])
+
+        for slot_exps in exps.gear.values():
+            for e in slot_exps:
+                if e.severity in ("info",) and "unique" in e.text.lower():
+                    continue  # Skip generic "you're using unique X" noise
+                cat = _categorize(e)
+                _dedup_add(e, {"survival": survival_items, "damage": damage_items,
+                               "clear_speed": clear_items, "quality": quality_items}[cat])
+
+        # Build groups
+        groups = []
+
+        if survival_items:
+            worst = _worst_severity(survival_items)
+            crit_count = sum(1 for e in survival_items if e.severity == "critical")
+            warn_count = sum(1 for e in survival_items if e.severity == "warning")
+            summary_parts = []
+            if crit_count:
+                summary_parts.append(f"{crit_count} critical issue{'s' if crit_count > 1 else ''}")
+            if warn_count:
+                summary_parts.append(f"{warn_count} improvement{'s' if warn_count > 1 else ''}")
+            summary = f"Survival: {' and '.join(summary_parts)} found." if summary_parts else "Survival looks solid."
+            # Add specific context
+            if crit_count:
+                top_issue = next(e for e in survival_items if e.severity == "critical")
+                summary += f" Top priority: {top_issue.title.replace('Missing: ', '').replace('Allocate ', '')}."
+
+            sc = exps.scorecard
+            groups.append(InsightGroup(
+                category="survival", label="Survival", icon="shield",
+                severity=worst, summary=summary,
+                items=survival_items,
+                stat_value=f"{sc.ehp:,} EHP" if sc and sc.ehp else None,
+                stat_status=sc.ehp_status if sc else "info",
+            ))
+
+        if damage_items:
+            worst = _worst_severity(damage_items)
+            crit_count = sum(1 for e in damage_items if e.severity == "critical")
+            warn_count = sum(1 for e in damage_items if e.severity == "warning")
+            summary_parts = []
+            if crit_count:
+                summary_parts.append(f"{crit_count} critical")
+            if warn_count:
+                summary_parts.append(f"{warn_count} improvement{'s' if warn_count > 1 else ''}")
+            summary = f"Damage: {' and '.join(summary_parts)} found." if summary_parts else "Damage scaling looks solid."
+            if crit_count:
+                top_issue = next(e for e in damage_items if e.severity == "critical")
+                summary += f" Top priority: {top_issue.title.replace('Missing: ', '').replace('Allocate ', '')}."
+
+            sc = exps.scorecard
+            groups.append(InsightGroup(
+                category="damage", label="Damage", icon="bolt",
+                severity=worst, summary=summary,
+                items=damage_items,
+                stat_value=sc.dps_label if sc and sc.dps_label else None,
+                stat_status=sc.dps_status if sc else "info",
+            ))
+
+        if clear_items:
+            worst = _worst_severity(clear_items)
+            summary = f"Clear Speed: {len(clear_items)} item{'s' if len(clear_items) > 1 else ''} to address."
+            groups.append(InsightGroup(
+                category="clear_speed", label="Clear Speed", icon="speed",
+                severity=worst, summary=summary,
+                items=clear_items,
+            ))
+
+        if quality_items:
+            worst = _worst_severity(quality_items)
+            summary = f"{len(quality_items)} additional consideration{'s' if len(quality_items) > 1 else ''}."
+            groups.append(InsightGroup(
+                category="quality", label="Quality of Life", icon="tune",
+                severity=worst, summary=summary,
+                items=quality_items,
+            ))
+
+        # Sort groups by severity (critical first)
+        sev_order = {"critical": 0, "warning": 1, "info": 2, "positive": 3}
+        groups.sort(key=lambda g: sev_order.get(g.severity, 9))
+
+        return groups
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _worst_severity(items: List[Explanation]) -> str:
+    """Return the most severe severity in a list."""
+    sev_order = {"critical": 0, "warning": 1, "info": 2, "positive": 3}
+    return min((e.severity for e in items), key=lambda s: sev_order.get(s, 9), default="info")
 
 def _matches_archetype(synergy_text: str, archetype: BuildArchetype) -> bool:
     """Check if a synergy description is relevant to the archetype."""
