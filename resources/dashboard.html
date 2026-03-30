@@ -228,7 +228,7 @@
     // -----------------------------------------------------------------------
     // TopBar
     // -----------------------------------------------------------------------
-    const pywebview = () => window.pywebview?.api;
+    const getWindowApi = () => window.pywebview?.api;
 
     function TopBar({ charData, onSettingsClick }) {
       return (
@@ -248,13 +248,13 @@
             <button onClick={onSettingsClick} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-on-surface" title="Settings">
               <Icon name="settings" />
             </button>
-            <button onClick={() => pywebview()?.minimize()} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-on-surface" title="Minimize">
+            <button onClick={() => getWindowApi()?.minimize()} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-on-surface" title="Minimize">
               <Icon name="remove" />
             </button>
-            <button onClick={() => pywebview()?.toggle_maximize()} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-on-surface" title="Maximize">
+            <button onClick={() => getWindowApi()?.toggle_maximize()} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-on-surface" title="Maximize">
               <Icon name="crop_square" />
             </button>
-            <button onClick={() => pywebview()?.quit()} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-error" title="Close">
+            <button onClick={() => getWindowApi()?.quit()} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-error" title="Close">
               <Icon name="close" />
             </button>
           </div>
