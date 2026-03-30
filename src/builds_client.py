@@ -38,27 +38,40 @@ TTL_PRICES = 900        # 15 minutes
 POE2SCOUT_API = "https://poe2scout.com/api"
 
 # Ascendancy → base class mapping
+# Base classes (8 released): Warrior, Witch, Ranger, Sorceress, Monk, Mercenary, Huntress, Druid
+# Unreleased: Duelist, Templar, Shadow, Marauder (4 more base classes, 12 more ascendancies)
 ASCENDANCY_MAP = {
-    "Blood Mage": "Witch",
-    "Infernalist": "Witch",
-    "Pathfinder": "Ranger",
-    "Deadeye": "Ranger",
+    # Warrior (3/3)
     "Titan": "Warrior",
     "Warbringer": "Warrior",
     "Smith of Kitava": "Warrior",
+    # Witch (3/3)
+    "Blood Mage": "Witch",
+    "Lich": "Witch",
+    "Infernalist": "Witch",
+    # Ranger (2/3 — 3rd unrevealed)
+    "Pathfinder": "Ranger",
+    "Deadeye": "Ranger",
+    # Sorceress (3/3)
     "Stormweaver": "Sorceress",
     "Chronomancer": "Sorceress",
     "Disciple of Varashta": "Sorceress",
-    "Amazon": "Huntress",
-    "Ritualist": "Huntress",
-    "Witchhunter": "Mercenary",
-    "Gemling Legionnaire": "Mercenary",
-    "Tactician": "Mercenary",
+    # Monk (2/3 — 3rd unrevealed)
     "Invoker": "Monk",
     "Acolyte of Chayula": "Monk",
-    "Lich": "Witch",
+    # Mercenary (3/3)
+    "Tactician": "Mercenary",
+    "Witchhunter": "Mercenary",       # poe.ninja spells it without space
+    "Witch Hunter": "Mercenary",      # alternate spelling
+    "Gemling Legionnaire": "Mercenary",
+    # Huntress (2/3 — 3rd unrevealed)
+    "Amazon": "Huntress",
+    "Ritualist": "Huntress",
+    # Druid (2/3 — 3rd unrevealed)
     "Oracle": "Druid",
     "Shaman": "Druid",
+    # Special / alternate forms
+    "Abyssal Lich": "Witch",          # variant of Lich on poe.ninja
 }
 
 # Equipment slot display names (inventoryId → readable)
