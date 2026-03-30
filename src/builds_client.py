@@ -1434,9 +1434,11 @@ SPELL_SKILLS = frozenset([
 ])
 
 MINION_SKILLS = frozenset([
-    "Raise Zombie", "Summon Skeletons", "Summon Raging Spirit",
-    "Summon Phantasm", "Raise Spectre", "Animate Weapon",
-    "Dominate", "Summon Reaper", "Summon Volatile Dead",
+    "Raise Zombie", "Summon Skeletons", "Summon Skeleton",
+    "Summon Raging Spirit", "Summon Phantasm", "Raise Spectre",
+    "Animate Weapon", "Dominate", "Summon Reaper",
+    "Summon Volatile Dead", "Raise Zombie",
+    "Summon Holy Relic", "Absolution",
 ])
 
 MELEE_SKILLS = frozenset([
@@ -1556,6 +1558,16 @@ def classify_build(char: CharacterData) -> BuildArchetype:
                 main_dps = effective
                 main_skill = d.name
 
+    # Fallback: check for minion skills in gem list (minion DPS is often 0 for the player)
+    if not main_skill and char.skill_groups:
+        for sg in char.skill_groups:
+            for g in sg.gems:
+                if g in MINION_SKILLS:
+                    main_skill = g
+                    break
+            if main_skill:
+                break
+
     # Fallback: first gem in first skill group
     if not main_skill and char.skill_groups:
         gems = char.skill_groups[0].gems
@@ -1586,7 +1598,7 @@ def classify_build(char: CharacterData) -> BuildArchetype:
 
     # Damage type
     if main_skill in MINION_SKILLS:
-        damage_type = "spell"
+        damage_type = "minion"
     elif main_skill in SPELL_SKILLS:
         damage_type = "spell"
     elif main_skill in ATTACK_SKILLS:
