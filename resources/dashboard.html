@@ -1338,12 +1338,12 @@
       const c = contributor;
       const [open, setOpen] = useState(false);
       const typeIcons = { skill: "auto_awesome", support: "link", keystone: "diamond", gear: "inventory_2", stat: "bar_chart", missing: "add" };
-      const typeLabels = { skill: "Skill", support: "Support", keystone: "Keystone", gear: "Gear", stat: "Stat", missing: "Missing" };
+      const hasEstimate = c.estimatedValue > 0 || c.estimatedPct > 0;
       return (
         <div
           className={`p-2.5 border cursor-pointer transition-all ${
             positive
-              ? `bg-surface-container border-outline-variant/20 hover:${colors.border}/30`
+              ? "bg-surface-container border-outline-variant/20 hover:border-outline"
               : "bg-surface-dim border-error/20 hover:border-error/40"
           }`}
           onClick={() => setOpen(!open)}
@@ -1353,8 +1353,18 @@
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-mono font-bold text-on-surface truncate">{c.name}</span>
-                {c.adoptionPct > 0 && <span className="text-[8px] font-mono text-on-surface-var">{c.adoptionPct.toFixed(0)}%</span>}
+                {hasEstimate && (
+                  <span className={`text-[9px] font-mono font-bold ${positive ? colors.text : "text-error"}`}>
+                    {c.estimatedPct > 0 ? `${c.estimatedPct.toFixed(0)}%` : ""}
+                  </span>
+                )}
+                {c.adoptionPct > 0 && <span className="text-[8px] font-mono text-on-surface-var">{c.adoptionPct.toFixed(0)}% use</span>}
               </div>
+              {hasEstimate && c.estimatedValue > 0 && (
+                <div className={`text-[10px] font-mono font-bold ${positive ? "text-on-surface" : "text-error"} mb-0.5`}>
+                  {positive ? "" : "+"}{c.estimatedValue >= 1000 ? (c.estimatedValue >= 1e6 ? `${(c.estimatedValue/1e6).toFixed(1)}M` : `${(c.estimatedValue/1e3).toFixed(0)}K`) : c.estimatedValue.toFixed(0)}
+                </div>
+              )}
               <p className={`text-[9px] font-mono ${positive ? "text-on-surface-var" : "text-error/80"} ${open ? "" : "truncate"} leading-relaxed`}>
                 {open ? (c.detail || c.contribution) : c.contribution}
               </p>

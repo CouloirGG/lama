@@ -51,6 +51,8 @@ class SynergyContributor:
     severity: str = "info"      # "positive" if has it, "critical"/"warning" if missing
     adoption_pct: float = 0.0
     detail: str = ""    # full explanation text
+    estimated_value: float = 0.0   # estimated raw DPS or EHP contribution
+    estimated_pct: float = 0.0     # estimated % of total
 
 
 @dataclass
@@ -154,12 +156,14 @@ class CharacterExplanations:
                     "status": sc.status,
                     "contributors": [
                         {"name": c.name, "sourceType": c.source_type, "contribution": c.contribution,
-                         "slot": c.slot, "severity": c.severity, "adoptionPct": c.adoption_pct, "detail": c.detail}
+                         "slot": c.slot, "severity": c.severity, "adoptionPct": c.adoption_pct,
+                         "detail": c.detail, "estimatedValue": c.estimated_value, "estimatedPct": c.estimated_pct}
                         for c in sc.contributors
                     ],
                     "missing": [
                         {"name": c.name, "sourceType": c.source_type, "contribution": c.contribution,
-                         "slot": c.slot, "severity": c.severity, "adoptionPct": c.adoption_pct, "detail": c.detail}
+                         "slot": c.slot, "severity": c.severity, "adoptionPct": c.adoption_pct,
+                         "detail": c.detail, "estimatedValue": c.estimated_value, "estimatedPct": c.estimated_pct}
                         for c in sc.missing
                     ],
                 }
@@ -935,37 +939,67 @@ class WhyEngine:
         categories = []
         sc = exps.scorecard
         player_ks = set(char_data.keystones)
+        total_dps = sc.dps if sc else 0
+
+        # ── Analyze gear mods for DPS/survival contributions ──
+        gear_dps_mods = []   # (slot, item_name, mod_text, category, est_pct)
+        gear_surv_mods = []
+
+        for item in char_data.equipment:
+            if item.slot in ("Flask", "Flask2"):
+                continue
+            all_mods = (item.explicit_mods or []) + (item.implicit_mods or []) + (item.crafted_mods or [])
+            slot_label = item.slot
+            item_label = item.name or item.type_line or slot_label
+
+            for mod in all_mods:
+                mod_clean = _strip_ninja_brackets(mod)
+                analysis = _analyze_mod_contribution(mod_clean, archetype)
+                if analysis:
+                    cat, desc, est_pct = analysis
+                    if cat == "dps":
+                        gear_dps_mods.append((slot_label, item_label, mod_clean, desc, est_pct))
+                    elif cat == "survival":
+                        gear_surv_mods.append((slot_label, item_label, mod_clean, desc, est_pct))
+
+        # Sort by estimated impact
+        gear_dps_mods.sort(key=lambda x: x[4], reverse=True)
+        gear_surv_mods.sort(key=lambda x: x[4], reverse=True)
 
         # ── DPS Category ────────────────────────────────
         dps_contributors = []
         dps_missing = []
 
-        # Current: main skill and support gems
+        # Main skill with DPS value
         for sg in char_data.skill_groups:
             for d in (sg.dps if hasattr(sg, "dps") and sg.dps else []):
-                total = max(d.dps or 0, d.dot_dps or 0, d.damage or 0)
-                if total > 500:
+                skill_total = max(d.dps or 0, d.dot_dps or 0, d.damage or 0)
+                if skill_total > 500:
+                    pct = (skill_total / total_dps * 100) if total_dps > 0 else 0
                     dps_contributors.append(SynergyContributor(
                         name=d.name or "Unknown Skill",
                         source_type="skill",
-                        contribution=_format_number(total) + " DPS",
+                        contribution=f"{_format_number(skill_total)} DPS",
                         severity="positive",
-                        detail=f"Active skill dealing {_format_number(total)} damage per second.",
+                        detail=f"Active skill dealing {_format_number(skill_total)} damage per second.",
+                        estimated_value=skill_total,
+                        estimated_pct=round(pct, 1),
                     ))
-            # Support gems linked to main skill
-            if hasattr(sg, "gems") and sg.gems:
-                for gem in sg.gems:
-                    gem_name = gem if isinstance(gem, str) else getattr(gem, "name", "")
-                    if gem_name and gem_name != archetype.main_skill:
-                        dps_contributors.append(SynergyContributor(
-                            name=gem_name, source_type="support",
-                            contribution="Support gem",
-                            severity="positive",
-                            detail=f"Linked support gem amplifying {archetype.main_skill}.",
-                        ))
-                break  # Only first skill group with gems
 
-        # Current: keystones that boost damage
+        # Gear mods contributing to DPS (top items — +gem levels, % damage, etc.)
+        for slot, item_name, mod_text, desc, est_pct in gear_dps_mods[:8]:
+            est_val = total_dps * est_pct / 100 if total_dps > 0 else 0
+            dps_contributors.append(SynergyContributor(
+                name=f"{item_name}",
+                source_type="gear", slot=slot,
+                contribution=f"{desc} ({mod_text})",
+                severity="positive",
+                detail=f"On {slot}: {mod_text}. Estimated ~{est_pct:.0f}% of total DPS.",
+                estimated_value=est_val,
+                estimated_pct=est_pct,
+            ))
+
+        # DPS keystones the player has
         DPS_KEYSTONES = {"Pain Attunement", "Elemental Overload", "Avatar of Fire",
                          "Crimson Power", "Grasping Wounds", "Point Blank",
                          "Iron Will", "Elemental Equilibrium", "Crimson Dance",
@@ -973,37 +1007,41 @@ class WhyEngine:
         for ks in char_data.keystones:
             if ks in DPS_KEYSTONES:
                 info = KEYSTONES.get(ks)
+                # Estimate keystone DPS contribution
+                est_pct = _estimate_keystone_dps_pct(ks)
+                est_val = total_dps * est_pct / 100 if total_dps > 0 else 0
                 dps_contributors.append(SynergyContributor(
                     name=ks, source_type="keystone",
-                    contribution=info.benefits.split(".")[0] + "." if info else "Damage keystone",
+                    contribution=f"~{est_pct:.0f}% DPS ({info.benefits.split('.')[0]})" if info else f"~{est_pct:.0f}% DPS",
                     severity="positive",
                     detail=info.description if info else "",
+                    estimated_value=est_val,
+                    estimated_pct=est_pct,
                 ))
 
-        # Current: notable gear contributing to DPS
-        for item in char_data.equipment:
-            if item.rarity == "Unique" and item.slot in ("Weapon", "Weapon2", "Amulet"):
-                dps_contributors.append(SynergyContributor(
-                    name=item.name or item.type_line,
-                    source_type="gear", slot=item.slot,
-                    contribution=f"Unique {item.slot.lower()}",
-                    severity="positive",
-                    detail=f"Equipped unique: {item.name}",
-                ))
-
-        # Missing: DPS keystones from popular list
+        # Missing DPS keystones
         for pk in popular_keystones:
             if pk["name"] in player_ks or pk["percentage"] < 50:
                 continue
             if pk["name"] in DPS_KEYSTONES:
                 info = KEYSTONES.get(pk["name"])
+                est_pct = _estimate_keystone_dps_pct(pk["name"])
+                est_val = total_dps * est_pct / 100 if total_dps > 0 else 0
                 dps_missing.append(SynergyContributor(
                     name=pk["name"], source_type="missing",
-                    contribution=info.impact.split(".")[0] + "." if info else f"{pk['percentage']:.0f}% of builds use this",
+                    contribution=f"+~{_format_number(est_val)} DPS (~{est_pct:.0f}%)" if est_val > 0 else (info.impact.split(".")[0] + "." if info else ""),
                     severity="critical" if pk["percentage"] > 80 else "warning",
                     adoption_pct=pk["percentage"],
                     detail=info.impact if info else "",
+                    estimated_value=est_val,
+                    estimated_pct=est_pct,
                 ))
+
+        # Missing gear upgrades — suggest +gem levels if player doesn't have max
+        _add_gear_upgrade_suggestions(char_data, archetype, total_dps, dps_missing)
+
+        # Sort contributors by estimated value
+        dps_contributors.sort(key=lambda c: c.estimated_value, reverse=True)
 
         categories.append(SynergyCategory(
             category="dps", label="DPS", icon="bolt",
@@ -1016,32 +1054,26 @@ class WhyEngine:
         # ── Survival Category ───────────────────────────
         surv_contributors = []
         surv_missing = []
+        total_ehp = sc.ehp if sc else 0
 
-        # Current: defense stats from POB
         if pob:
             if pob.stats.life > 0:
+                pct = (pob.stats.life / total_ehp * 100) if total_ehp > 0 else 0
                 surv_contributors.append(SynergyContributor(
                     name="Life Pool", source_type="stat",
                     contribution=f"{pob.stats.life:,} life",
                     severity="positive" if pob.stats.life >= 3000 else "warning",
+                    estimated_value=float(pob.stats.life),
+                    estimated_pct=round(pct, 1),
                 ))
             if pob.stats.energy_shield > 0:
+                pct = (pob.stats.energy_shield / total_ehp * 100) if total_ehp > 0 else 0
                 surv_contributors.append(SynergyContributor(
                     name="Energy Shield", source_type="stat",
                     contribution=f"{pob.stats.energy_shield:,} ES",
                     severity="positive" if pob.stats.energy_shield >= 3000 else "info",
-                ))
-            if pob.stats.armour > 500:
-                surv_contributors.append(SynergyContributor(
-                    name="Armour", source_type="stat",
-                    contribution=f"{pob.stats.armour:,} armour",
-                    severity="positive",
-                ))
-            if pob.stats.evasion > 500:
-                surv_contributors.append(SynergyContributor(
-                    name="Evasion", source_type="stat",
-                    contribution=f"{pob.stats.evasion:,} evasion",
-                    severity="positive",
+                    estimated_value=float(pob.stats.energy_shield),
+                    estimated_pct=round(pct, 1),
                 ))
             if pob.stats.block_chance > 0:
                 surv_contributors.append(SynergyContributor(
@@ -1050,7 +1082,18 @@ class WhyEngine:
                     severity="positive",
                 ))
 
-        # Current: survival keystones
+        # Gear mods contributing to survival (top items)
+        for slot, item_name, mod_text, desc, est_pct in gear_surv_mods[:6]:
+            est_val = total_ehp * est_pct / 100 if total_ehp > 0 else 0
+            surv_contributors.append(SynergyContributor(
+                name=f"{item_name}",
+                source_type="gear", slot=slot,
+                contribution=f"{desc} ({mod_text})",
+                severity="positive",
+                estimated_value=est_val,
+                estimated_pct=est_pct,
+            ))
+
         SURV_KEYSTONES = {"Sanguimancy", "Mind Over Matter", "Chaos Inoculation",
                           "Iron Reflexes", "Acrobatics", "Unwavering Stance",
                           "Ghost Reaver", "Eldritch Battery", "Blood Magic",
@@ -1064,28 +1107,21 @@ class WhyEngine:
                     severity="positive",
                 ))
 
-        # Current: survival gear
-        for item in char_data.equipment:
-            if item.rarity == "Unique" and item.slot in ("BodyArmour", "Helm", "Belt"):
-                surv_contributors.append(SynergyContributor(
-                    name=item.name or item.type_line,
-                    source_type="gear", slot=item.slot,
-                    contribution=f"Unique {item.slot.lower()}",
-                    severity="positive",
-                ))
-
-        # Missing survival keystones
         for pk in popular_keystones:
             if pk["name"] in player_ks or pk["percentage"] < 50:
                 continue
             if pk["name"] in SURV_KEYSTONES:
                 info = KEYSTONES.get(pk["name"])
+                est_pct = _estimate_keystone_ehp_pct(pk["name"])
+                est_val = total_ehp * est_pct / 100 if total_ehp > 0 else 0
                 surv_missing.append(SynergyContributor(
                     name=pk["name"], source_type="missing",
-                    contribution=info.impact.split(".")[0] + "." if info else f"{pk['percentage']:.0f}% of builds use this",
+                    contribution=f"+~{_format_number(est_val)} EHP (~{est_pct:.0f}%)" if est_val > 0 else (info.impact.split(".")[0] + "." if info else ""),
                     severity="critical" if pk["percentage"] > 80 else "warning",
                     adoption_pct=pk["percentage"],
                     detail=info.impact if info else "",
+                    estimated_value=est_val,
+                    estimated_pct=est_pct,
                 ))
 
         categories.append(SynergyCategory(
@@ -1177,10 +1213,178 @@ def _format_number(n: float) -> str:
 
 def _damage_increase(current_resist: int) -> int:
     """Calculate how much more damage you take with uncapped resist vs 75%."""
-    # At 75% resist you take 25% of damage
-    # At current_resist you take (100 - current_resist)% of damage
     if current_resist >= 75:
         return 0
-    baseline = 100 - 75  # 25% damage taken at cap
+    baseline = 100 - 75
     actual = 100 - max(current_resist, -100)
     return int(((actual - baseline) / baseline) * 100)
+
+
+import re as _re
+
+_NINJA_BRACKET = _re.compile(r"\[([^|\]]*\|)?([^\]]*)\]")
+
+def _strip_ninja_brackets(text: str) -> str:
+    """Strip poe.ninja bracket formatting: [tag|display] -> display."""
+    return _NINJA_BRACKET.sub(r"\2", text)
+
+
+def _analyze_mod_contribution(mod_text: str, archetype) -> Optional[tuple]:
+    """Analyze a mod for its DPS or survival contribution.
+    Returns (category, description, estimated_pct) or None if not relevant.
+    """
+    ml = mod_text.lower()
+
+    # +N to level of all spell/skill gems — massive DPS (~10-12% per level)
+    m = _re.search(r"\+(\d+) to level of all .*(spell|skill)", ml)
+    if m:
+        levels = int(m.group(1))
+        est = levels * 11  # ~11% per gem level
+        return ("dps", f"+{levels} gem levels (~{est}% DPS)", est)
+
+    # +N to level of specific skill gems
+    m = _re.search(r"\+(\d+) to level of all .*(cold|fire|lightning|chaos|physical)", ml)
+    if m:
+        levels = int(m.group(1))
+        est = levels * 8
+        return ("dps", f"+{levels} element gem levels (~{est}% DPS)", est)
+
+    # % increased spell damage
+    m = _re.search(r"(\d+)% increased .*spell.*damage", ml)
+    if m and archetype.damage_type == "spell":
+        val = int(m.group(1))
+        est = val * 0.15  # rough: 100% inc spell = ~15% more DPS (diminishing)
+        return ("dps", f"+{val}% spell damage", round(est, 1))
+
+    # Gain X% of damage as extra element
+    m = _re.search(r"(\d+)% of damage as extra", ml)
+    if m:
+        val = int(m.group(1))
+        est = val * 0.7  # extra damage conversion is very efficient
+        return ("dps", f"+{val}% as extra elemental", round(est, 1))
+
+    # % increased critical hit chance
+    m = _re.search(r"(\d+)% increased .*critical.*hit.*chance", ml)
+    if m and archetype.is_crit:
+        val = int(m.group(1))
+        est = val * 0.08  # crit chance is good but diminishing
+        return ("dps", f"+{val}% crit chance", round(est, 1))
+
+    # % increased cast speed
+    m = _re.search(r"(\d+)% increased cast speed", ml)
+    if m and archetype.damage_type == "spell":
+        val = int(m.group(1))
+        est = val * 0.5  # cast speed is roughly linear DPS
+        return ("dps", f"+{val}% cast speed", round(est, 1))
+
+    # +N to maximum life
+    m = _re.search(r"\+(\d+) to maximum life", ml)
+    if m:
+        val = int(m.group(1))
+        if val >= 30:
+            return ("survival", f"+{val} life", round(val / 50, 1))
+
+    # +N to maximum energy shield / % increased energy shield
+    m = _re.search(r"\+(\d+) to maximum energy shield", ml)
+    if m:
+        val = int(m.group(1))
+        if val >= 30:
+            return ("survival", f"+{val} ES", round(val / 50, 1))
+
+    m = _re.search(r"(\d+)% increased energy shield", ml)
+    if m:
+        val = int(m.group(1))
+        if val >= 20:
+            return ("survival", f"+{val}% ES", round(val * 0.3, 1))
+
+    # % to resistances
+    m = _re.search(r"\+(\d+)% to all .*resist", ml)
+    if m:
+        val = int(m.group(1))
+        return ("survival", f"+{val}% all res", round(val * 0.2, 1))
+
+    return None
+
+
+def _estimate_keystone_dps_pct(name: str) -> float:
+    """Rough DPS contribution estimate for a keystone, based on game knowledge."""
+    estimates = {
+        "Pain Attunement": 30.0,
+        "Elemental Overload": 25.0,
+        "Crimson Power": 20.0,
+        "Grasping Wounds": 15.0,
+        "Avatar of Fire": 12.0,
+        "Point Blank": 20.0,
+        "Iron Will": 15.0,
+        "Elemental Equilibrium": 18.0,
+        "Crimson Dance": 25.0,
+        "Overwhelming Toxicity": 30.0,
+    }
+    return estimates.get(name, 10.0)
+
+
+def _estimate_keystone_ehp_pct(name: str) -> float:
+    """Rough EHP contribution estimate for a keystone."""
+    estimates = {
+        "Sanguimancy": 80.0,  # enables low-life which transforms EHP
+        "Mind Over Matter": 40.0,
+        "Chaos Inoculation": 50.0,
+        "Eldritch Battery": 25.0,
+        "Vitality Siphon": 30.0,  # sustain = effective EHP
+        "Iron Reflexes": 20.0,
+        "Acrobatics": 15.0,
+        "Unwavering Stance": 10.0,
+        "Ghost Reaver": 20.0,
+        "Blood Magic": 15.0,
+    }
+    return estimates.get(name, 10.0)
+
+
+def _add_gear_upgrade_suggestions(
+    char_data, archetype, total_dps: float, missing: list,
+):
+    """Add gear upgrade suggestions based on what could improve DPS."""
+    # Check for +gem level opportunities
+    total_gem_levels = 0
+    has_amulet_gem = False
+    for item in char_data.equipment:
+        all_mods = (item.explicit_mods or []) + (item.implicit_mods or []) + (item.crafted_mods or [])
+        for mod in all_mods:
+            ml = _strip_ninja_brackets(mod).lower()
+            m = _re.search(r"\+(\d+) to level of all .*(spell|skill)", ml)
+            if m:
+                total_gem_levels += int(m.group(1))
+                if item.slot == "Amulet":
+                    has_amulet_gem = True
+
+    # Suggest +gem level upgrade if player has low total
+    if total_gem_levels < 5 and archetype.damage_type == "spell":
+        est_per_level = total_dps * 0.11 if total_dps > 0 else 0
+        missing.append(SynergyContributor(
+            name="+Gem Level Gear",
+            source_type="missing",
+            contribution=f"+~{_format_number(est_per_level * 3)} DPS — get +gem levels on weapon/amulet",
+            severity="warning",
+            detail=(
+                f"You have +{total_gem_levels} total gem levels from gear. "
+                f"Top players often have +8 to +10. Each gem level is ~11% more DPS. "
+                f"Look for weapons with '+N to level of all Spell Skills' or amulets with '+N to all Skill Gems'."
+            ),
+            estimated_value=est_per_level * 3,
+            estimated_pct=33.0,
+        ))
+
+    if not has_amulet_gem and archetype.damage_type == "spell":
+        est = total_dps * 0.22 if total_dps > 0 else 0
+        missing.append(SynergyContributor(
+            name="Amulet: +Gem Levels",
+            source_type="missing",
+            contribution=f"+~{_format_number(est)} DPS — amulet with +2-3 gem levels",
+            severity="warning",
+            detail=(
+                "Your amulet doesn't have +gem levels. A +2 or +3 amulet is one of the biggest "
+                "single-slot DPS upgrades for spell builds. Also consider corrupting for +1 gem levels."
+            ),
+            estimated_value=est,
+            estimated_pct=22.0,
+        ))
