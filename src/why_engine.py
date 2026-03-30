@@ -218,9 +218,17 @@ class WhyEngine:
         profile = None
         popular_keystones = []
 
+        popular_rare_mods = {}
+
         if char_class and skill:
             profile = self._client.fetch_archetype_profile(char_class, skill)
             popular_keystones = self._client.fetch_popular_keystones(char_class, skill)
+            try:
+                popular_rare_mods = self._client.fetch_popular_rare_mods(
+                    char_class, skill, max_chars=20
+                )
+            except Exception as e:
+                logger.debug(f"Popular rare mods fetch failed: {e}")
 
         # Generate explanations by category
         result.stats = self._explain_stats(pob, profile, char_data)
@@ -237,7 +245,8 @@ class WhyEngine:
         result.scorecard = self._build_scorecard(pob, profile, result, char_data)
         result.insight_groups = self._build_insight_groups(result)
         result.synergy_map = self._build_synergy_map(
-            char_data, archetype, pob, profile, popular_keystones, result
+            char_data, archetype, pob, profile, popular_keystones, result,
+            popular_rare_mods=popular_rare_mods,
         )
 
         return result
@@ -986,6 +995,7 @@ class WhyEngine:
         self, char_data: CharacterData, archetype: BuildArchetype,
         pob: Optional[PobData], profile: Optional[dict],
         popular_keystones: List[dict], exps: "CharacterExplanations",
+        popular_rare_mods: Optional[dict] = None,
     ) -> List[SynergyCategory]:
         """Build contribution trees for DPS, Survival, and Clear Speed."""
         categories = []
@@ -1070,6 +1080,44 @@ class WhyEngine:
                     estimated_value=est_val,
                     estimated_pct=est_pct,
                 ))
+
+        # Popular rare mod comparison — show what mods top players use vs what player has
+        if popular_rare_mods:
+            for item in char_data.equipment:
+                if item.rarity != "Rare" or item.slot in ("Flask", "Flask2"):
+                    continue
+                slot_mods = popular_rare_mods.get(item.slot, [])
+                if not slot_mods:
+                    continue
+                # Check which popular mods the player is missing
+                player_mods = set()
+                for mod in (item.explicit_mods or []) + (item.implicit_mods or []):
+                    clean = _strip_ninja_brackets(mod)
+                    normalized = _re.sub(r"[\d,.]+", "#", clean).strip()
+                    player_mods.add(normalized)
+
+                missing_popular = []
+                for mod_norm, pct in slot_mods[:5]:
+                    if mod_norm not in player_mods and pct >= 30:
+                        missing_popular.append(f"{mod_norm.replace('#', 'X')} ({pct:.0f}%)")
+
+                if missing_popular:
+                    item_name = item.name or item.type_line or item.slot
+                    slot_name = item.slot.lower().rstrip("s") + "s" if not item.slot.lower().endswith("s") else item.slot.lower()
+                    detail_lines = [f"Top players' rare {slot_name} commonly have:"]
+                    for mod_norm, pct in slot_mods[:6]:
+                        has_it = "✓" if mod_norm in player_mods else "✗"
+                        detail_lines.append(f"  {has_it} {mod_norm.replace('#', 'X')} ({pct:.0f}%)")
+
+                    dps_missing.append(SynergyContributor(
+                        name=f"{item_name}: Missing Key Mods",
+                        source_type="missing", slot=item.slot,
+                        contribution=f"Missing: {', '.join(missing_popular[:3])}",
+                        severity="warning",
+                        detail="\n".join(detail_lines),
+                        estimated_pct=len(missing_popular) * 5.0,
+                        estimated_value=total_dps * len(missing_popular) * 0.05,
+                    ))
 
         # Missing DPS keystones
         for pk in popular_keystones:

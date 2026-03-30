@@ -1259,6 +1259,70 @@ class BuildsClient:
             return None
         return self._fetch_search(char_class, skill)
 
+    def fetch_popular_rare_mods(self, char_class: str, skill: str,
+                                max_chars: int = 30) -> dict:
+        """Analyze rare item mods across featured characters for an archetype.
+
+        Returns: {slot: [(normalized_mod, percentage), ...]} showing what mods
+        top players stack on rare items in each slot. Samples up to max_chars
+        featured characters from the search endpoint.
+        """
+        import time as _time
+
+        profile = self.fetch_archetype_profile(char_class, skill)
+        if not profile:
+            return {}
+
+        featured = profile.get("featuredCharacters", [])
+        if not featured:
+            return {}
+
+        slot_mod_counts: dict = {}  # slot -> Counter
+        slot_item_counts: dict = {}  # slot -> int
+
+        for ch in featured[:max_chars]:
+            acct = ch.get("account", "")
+            name = ch.get("name", "")
+            if not acct or not name:
+                continue
+            char = self.lookup_character(acct, name)
+            if not char:
+                continue
+
+            for item in char.equipment:
+                if item.rarity != "Rare" or item.slot in ("Flask", "Flask2"):
+                    continue
+                slot = item.slot
+                if slot not in slot_mod_counts:
+                    from collections import Counter as _Counter
+                    slot_mod_counts[slot] = _Counter()
+                    slot_item_counts[slot] = 0
+
+                slot_item_counts[slot] += 1
+                all_mods = (item.explicit_mods or []) + (item.implicit_mods or [])
+                for mod in all_mods:
+                    clean = _NINJA_BRACKET_RE.sub(r"\2", mod)
+                    normalized = re.sub(r"[\d,.]+", "#", clean).strip()
+                    slot_mod_counts[slot][normalized] += 1
+
+            _time.sleep(0.2)
+
+        # Convert to percentage-based results
+        result = {}
+        for slot in slot_mod_counts:
+            total = slot_item_counts.get(slot, 1)
+            if total == 0:
+                continue
+            mods_with_pct = [
+                (mod, round(count / total * 100, 1))
+                for mod, count in slot_mod_counts[slot].most_common(10)
+                if count / total > 0.15  # only show mods on 15%+ of rares
+            ]
+            if mods_with_pct:
+                result[slot] = mods_with_pct
+
+        return result
+
 
 # ---------------------------------------------------------------------------
 # Bracket-stripping utility (poe.ninja mod text: [tag|display] → display)
