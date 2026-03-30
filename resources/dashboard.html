@@ -183,21 +183,21 @@
       const e = explanation;
       const colors = SEV_COLORS[e.severity] || SEV_COLORS.info;
       const icon = SEV_ICONS[e.severity] || "info";
+      const [open, setOpen] = useState(false);
       return (
-        <div className={`flex gap-3 p-3 rounded-lg border ${colors}`}>
-          <Icon name={icon} className="text-lg mt-0.5 shrink-0" />
+        <div className={`flex gap-2 px-3 py-2 rounded border ${colors} cursor-pointer`} onClick={() => setOpen(!open)}>
+          <Icon name={icon} className="text-base mt-px shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-mono font-semibold">{e.title}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-semibold">{e.title}</span>
               {e.adoptionPct > 0 && (
-                <span className="text-xs font-mono opacity-70">{e.adoptionPct.toFixed(0)}% use</span>
+                <span className="text-[10px] font-mono opacity-60">{e.adoptionPct.toFixed(0)}%</span>
               )}
-              {e.statDelta && (
-                <span className="text-xs font-mono opacity-70">{e.statDelta}</span>
-              )}
+              {!open && <span className="text-[10px] font-mono opacity-50 truncate flex-1">{e.text.slice(0, 80)}{e.text.length > 80 ? "..." : ""}</span>}
             </div>
-            <p className="text-xs font-mono leading-relaxed opacity-90">{e.text}</p>
+            {open && <p className="text-xs font-mono leading-relaxed opacity-90 mt-1">{e.text}</p>}
           </div>
+          <Icon name={open ? "expand_less" : "expand_more"} className="text-sm opacity-50 shrink-0" />
         </div>
       );
     }
@@ -983,7 +983,7 @@
       }
 
       return (
-        <div className="flex flex-col gap-6 p-5 max-w-2xl mx-auto">
+        <div className="flex flex-col gap-6 p-5 max-w-4xl mx-auto">
           <BuildHealthGauge insights={insights} comparison={comparison} />
           <KPIRow insights={insights} comparison={comparison} />
 
@@ -1012,10 +1012,7 @@
             <WhySection title="Meta Context" explanations={whyInsights.meta} icon="groups" />
           )}
 
-          {/* Legacy insights sections — will eventually be replaced by why-engine */}
-          <CriticalActionsChecklist insights={insights} />
           <NextBigUpgradeCard improvement={improvement} />
-          <KeystoneGapsCard insights={insights} charData={charData} />
         </div>
       );
     }
@@ -1160,44 +1157,56 @@
 
       const slots = insights.slotSummary || [];
 
+      const selectedSlot = slots.find(s => s.slot === expandedSlot);
+
       return (
-        <div className="p-5 max-w-2xl mx-auto">
+        <div className="p-5 max-w-4xl mx-auto">
           <h2 className="font-serif text-lg text-on-surface mb-4">Equipment</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {slots.map(sl => {
-              const isExpanded = expandedSlot === sl.slot;
-              const hasDeadMods = (sl.deadMods?.length || 0) > 0;
-              return (
-                <React.Fragment key={sl.slot}>
+          <div className="flex gap-4">
+            {/* Slot list — left side */}
+            <div className="flex flex-col gap-2 w-64 shrink-0">
+              {slots.map(sl => {
+                const isSelected = expandedSlot === sl.slot;
+                const hasDeadMods = (sl.deadMods?.length || 0) > 0;
+                return (
                   <div
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer card-hover ${
-                      isExpanded ? "bg-surface-bright border-primary-container/40" : "bg-surface border-outline-variant"
+                    key={sl.slot}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      isSelected ? "bg-surface-bright border-primary-container/40" : "bg-surface border-outline-variant hover:border-outline"
                     }`}
-                    onClick={() => setExpandedSlot(isExpanded ? null : sl.slot)}
+                    onClick={() => setExpandedSlot(isSelected ? null : sl.slot)}
                   >
                     <div className="relative">
-                      <Icon name={slotIcon(sl.slot)} className="text-on-surface-var text-xl" />
+                      <Icon name={slotIcon(sl.slot)} className="text-on-surface-var text-lg" />
                       {hasDeadMods && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-mono text-on-surface-var">{sl.slotDisplay}</div>
-                      <div className="text-sm font-mono text-on-surface truncate">{sl.itemName}</div>
+                      <div className="text-[10px] font-mono text-on-surface-var">{sl.slotDisplay}</div>
+                      <div className="text-xs font-mono text-on-surface truncate">{sl.itemName}</div>
                     </div>
-                    <span className={`text-xs font-mono px-2 py-0.5 rounded border ${tierColor(sl.avgTier)}`}>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${tierColor(sl.avgTier)}`}>
                       T{sl.avgTier}
                     </span>
                   </div>
-                  {isExpanded && (
-                    <SlotDetailPanel
-                      slot={sl}
-                      charData={charData}
-                      insights={insights}
-                      account={charData._account || ""}
-                    />
-                  )}
-                </React.Fragment>
-              );
-            })}
+                );
+              })}
+            </div>
+            {/* Detail panel — right side */}
+            <div className="flex-1 min-w-0">
+              {selectedSlot ? (
+                <SlotDetailPanel
+                  slot={selectedSlot}
+                  charData={charData}
+                  insights={insights}
+                  account={charData._account || ""}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-on-surface-var py-12">
+                  <Icon name="touch_app" className="text-4xl mb-2 opacity-50" />
+                  <span className="text-sm font-mono opacity-70">Select an item to view details</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       );
@@ -1351,7 +1360,7 @@
       }
 
       return (
-        <div className="flex flex-col gap-6 p-5 max-w-2xl mx-auto">
+        <div className="flex flex-col gap-6 p-5 max-w-4xl mx-auto">
           <CostTierBreakdown efficiency={efficiency} />
           <UpgradeSuggestions efficiency={efficiency} />
           <BudgetPlanner efficiency={efficiency} />
@@ -1555,7 +1564,7 @@
       };
 
       return (
-        <div className="flex flex-col gap-4 p-5 max-w-2xl mx-auto">
+        <div className="flex flex-col gap-4 p-5 max-w-4xl mx-auto">
           <h2 className="font-serif text-lg text-on-surface">Build Guides</h2>
           <GuideImportBar onImport={handleImport} />
           <GuideList guides={guides} selectedId={selectedGuideId} onSelect={handleSelect} onDelete={handleDelete} />

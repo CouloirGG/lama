@@ -132,7 +132,7 @@ class WindowApi:
         HTBOTTOMLEFT = 16
         HTBOTTOMRIGHT = 17
 
-        RESIZE_BORDER = 6  # pixels from edge that trigger resize cursor
+        RESIZE_BORDER = 8  # pixels from edge that trigger resize cursor
 
         class WINDOWPOS(ctypes.Structure):
             _fields_ = [
