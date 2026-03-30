@@ -349,7 +349,7 @@
     // -----------------------------------------------------------------------
     // TabNav
     // -----------------------------------------------------------------------
-    const TABS = ["PULSE", "GEAR", "MARKET", "GUIDE"];
+    const TABS = ["BUILD", "MARKET", "GUIDE"];
 
     function TabNav({ activeTab, onTabChange, hasCharacter, onSettingsClick }) {
       if (!hasCharacter) {
@@ -1111,6 +1111,11 @@
       const projectedDps = (sc?.dps || 0) + projectedDeltas.dps;
       const hasProjections = projectedDeltas.dps > 0 || projectedDeltas.ehp > 0;
 
+      // Gear state — integrated into Build tab
+      const [selectedGearSlot, setSelectedGearSlot] = useState(null);
+      const [leftPanel, setLeftPanel] = useState("survival"); // "survival" or "gear"
+      const gearSlots = insights?.slotSummary || [];
+
       return (
         <div className="flex flex-col gap-0 p-6">
           {/* ── Scorecard Bar ─────────────────────────────── */}
@@ -1145,69 +1150,113 @@
           {/* ── 3-Column Layout ───────────────────────────── */}
           <div className="grid grid-cols-12 gap-6" style={{ minHeight: "calc(100vh - 300px)" }}>
 
-            {/* ── LEFT: Survival Analytics ──────────────── */}
-            <div className="col-span-3 flex flex-col gap-4">
-              <div className="bg-surface-container p-5 border-l-2 border-primary-container/40 flex-1">
-                <h4 className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-primary-container mb-4">
-                  <Icon name="analytics" className="text-base" />
-                  Survival Analytics
-                </h4>
-
-                {/* Resist bars */}
-                <div className="space-y-3 mb-6">
-                  {[
-                    { name: "Fire", key: "Fire Resistance", color: "bg-red-400" },
-                    { name: "Cold", key: "Cold Resistance", color: "bg-blue-400" },
-                    { name: "Lightning", key: "Lightning Resistance", color: "bg-yellow-300" },
-                    { name: "Chaos", key: "Chaos Resistance", color: "bg-purple-400" },
-                  ].map(r => {
-                    const stat = resists.find(s => s.title === r.key);
-                    // Extract value from text like "Fire Resistance is capped at 75% with 6% overcap"
-                    const valMatch = stat?.text?.match(/(\d+)%/);
-                    const val = valMatch ? parseInt(valMatch[1]) : 0;
-                    const capped = stat?.severity === "positive";
-                    const pct = Math.max(0, Math.min(100, val));
-                    return (
-                      <div key={r.name} className="space-y-1">
-                        <div className="flex justify-between text-[10px] uppercase tracking-widest font-mono">
-                          <span className="text-on-surface-var">{r.name} Res</span>
-                          <span className={capped ? "text-primary-container" : val < 75 ? "text-error" : "text-on-surface-var"}>
-                            {val > 0 ? `${Math.min(val, 75)}%` : "?"}
-                          </span>
-                        </div>
-                        <div className="h-1.5 bg-surface-dim w-full">
-                          <div className={`h-full transition-all ${capped ? r.color : "bg-error"}`} style={{ width: `${pct}%` }} />
-                        </div>
-                        {!capped && val < 75 && (
-                          <p className="text-[9px] text-error uppercase font-mono tracking-tight">Uncapped: {75 - val}% gap</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Survival issues */}
-                {survivalGroup && (
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-mono uppercase tracking-widest text-on-surface-var mb-2">Issues ({survivalGroup.items.length})</p>
-                    {survivalGroup.items.slice(0, 5).map((e, i) => (
-                      <SurvivalItem key={i} explanation={e} />
-                    ))}
-                    {survivalGroup.items.length > 5 && (
-                      <p className="text-[9px] font-mono text-on-surface-var">+{survivalGroup.items.length - 5} more</p>
-                    )}
-                  </div>
-                )}
-
-                {/* EHP note */}
-                {sc && sc.ehpStatus !== "positive" && (
-                  <div className="mt-4 p-3 bg-surface-dim border-l-2 border-primary-container/30">
-                    <p className="text-[10px] font-mono text-on-surface-var leading-relaxed">
-                      <span className="text-primary-container font-bold">Note:</span> {sc.ehpContext}.
-                    </p>
-                  </div>
-                )}
+            {/* ── LEFT: Survival / Gear Panel ──────────── */}
+            <div className="col-span-3 flex flex-col gap-0">
+              {/* Panel toggle tabs */}
+              <div className="flex border-b border-outline-variant/20">
+                <button
+                  onClick={() => { setLeftPanel("survival"); setSelectedGearSlot(null); }}
+                  className={`flex-1 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all ${
+                    leftPanel === "survival" ? "text-primary-container border-b-2 border-primary-container" : "text-on-surface-var hover:text-on-surface"
+                  }`}
+                >
+                  <Icon name="shield" className="text-xs mr-1 align-middle" />Survival
+                </button>
+                <button
+                  onClick={() => setLeftPanel("gear")}
+                  className={`flex-1 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all ${
+                    leftPanel === "gear" ? "text-secondary border-b-2 border-secondary" : "text-on-surface-var hover:text-on-surface"
+                  }`}
+                >
+                  <Icon name="inventory_2" className="text-xs mr-1 align-middle" />Gear
+                </button>
               </div>
+
+              {leftPanel === "survival" ? (
+                <div className="bg-surface-container p-4 border-l-2 border-primary-container/40 flex-1 overflow-y-auto">
+                  {/* Resist bars — compact */}
+                  <div className="space-y-2 mb-4">
+                    {[
+                      { name: "Fire", key: "Fire Resistance", color: "bg-red-400" },
+                      { name: "Cold", key: "Cold Resistance", color: "bg-blue-400" },
+                      { name: "Lightning", key: "Lightning Resistance", color: "bg-yellow-300" },
+                      { name: "Chaos", key: "Chaos Resistance", color: "bg-purple-400" },
+                    ].map(r => {
+                      const stat = resists.find(s => s.title === r.key);
+                      const valMatch = stat?.text?.match(/(\d+)%/);
+                      const val = valMatch ? parseInt(valMatch[1]) : 0;
+                      const capped = stat?.severity === "positive";
+                      const pct = Math.max(0, Math.min(100, val));
+                      return (
+                        <div key={r.name} className="space-y-0.5">
+                          <div className="flex justify-between text-[9px] uppercase tracking-widest font-mono">
+                            <span className="text-on-surface-var">{r.name}</span>
+                            <span className={capped ? "text-primary-container" : "text-error"}>
+                              {val > 0 ? `${Math.min(val, 75)}%` : "?"}
+                            </span>
+                          </div>
+                          <div className="h-1 bg-surface-dim w-full">
+                            <div className={`h-full ${capped ? r.color : "bg-error"}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Survival issues */}
+                  {survivalGroup && survivalGroup.items.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[9px] font-mono uppercase tracking-widest text-on-surface-var">Issues ({survivalGroup.items.length})</p>
+                      {survivalGroup.items.slice(0, 5).map((e, i) => (
+                        <SurvivalItem key={i} explanation={e} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-surface-container p-4 border-l-2 border-secondary/40 flex-1 overflow-y-auto">
+                  {/* Gear slot list */}
+                  {selectedGearSlot ? (
+                    <div>
+                      <button
+                        onClick={() => setSelectedGearSlot(null)}
+                        className="flex items-center gap-1 text-[9px] font-mono text-on-surface-var hover:text-on-surface mb-3"
+                      >
+                        <Icon name="arrow_back" className="text-xs" /> All Gear
+                      </button>
+                      <SlotDetailPanel
+                        slot={gearSlots.find(s => s.slot === selectedGearSlot) || { slot: selectedGearSlot }}
+                        charData={charData}
+                        insights={insights}
+                        account={charData?._account || ""}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {gearSlots.map(sl => {
+                        const hasDeadMods = (sl.deadMods?.length || 0) > 0;
+                        return (
+                          <div
+                            key={sl.slot}
+                            className="flex items-center gap-2 p-2 cursor-pointer hover:bg-surface-bright transition-colors"
+                            onClick={() => setSelectedGearSlot(sl.slot)}
+                          >
+                            <Icon name={slotIcon(sl.slot)} className="text-on-surface-var text-sm" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[9px] font-mono text-on-surface-var">{sl.slotDisplay}</div>
+                              <div className="text-[10px] font-mono text-on-surface truncate">{sl.itemName}</div>
+                            </div>
+                            {hasDeadMods && <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />}
+                            <span className={`text-[9px] font-mono px-1 py-0.5 ${tierColor(sl.avgTier)}`}>
+                              T{sl.avgTier}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ── CENTER: Interactive Synergy Map ────────── */}
@@ -2113,7 +2162,7 @@
       const [improvement, setImprovement] = useState(null);
       const [comparison, setComparison] = useState(null);
       const [whyInsights, setWhyInsights] = useState(null);
-      const [activeTab, setActiveTab] = useState("PULSE");
+      const [activeTab, setActiveTab] = useState("BUILD");
       const [settings, setSettings] = useState({});
       const [status, setStatus] = useState({});
       const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2190,10 +2239,8 @@
 
       const tabContent = useMemo(() => {
         switch (activeTab) {
-          case "PULSE":
+          case "BUILD":
             return <PulseTab charData={charData} insights={insights} improvement={improvement} comparison={comparison} whyInsights={whyInsights} onLookup={handleLookup} />;
-          case "GEAR":
-            return <GearTab charData={charData} insights={insights} account={account} />;
           case "MARKET":
             return <MarketTab charData={charData} efficiency={efficiency} />;
           case "GUIDE":
@@ -2201,7 +2248,7 @@
           default:
             return null;
         }
-      }, [activeTab, charData, insights, improvement, comparison, efficiency, account]);
+      }, [activeTab, charData, insights, improvement, comparison, efficiency, whyInsights, account]);
 
       return (
         <div className="flex flex-col h-full">
