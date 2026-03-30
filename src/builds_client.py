@@ -1386,6 +1386,10 @@ ATTACK_SKILLS = frozenset([
     "Whirling Assault", "Devour", "Seismic Cry", "Primal Strikes",
     "Fangs of Frost", "Storm Wave", "Falling Thunder",
     "Slam", "Punch", "Shield Slam", "Upheaval",
+    # Monk skills
+    "Bell", "Tempest Bell", "Sacred Bell", "Palm Strike",
+    "Frozen Sweep", "Inner Fire", "Lightning Kick", "Spinning Kick",
+    "Rising Palm", "Thunder Palm",
     # Ranged - Bow
     "Split Arrow", "Lightning Arrow", "Ice Shot", "Burning Arrow",
     "Tornado Shot", "Rain of Arrows", "Barrage", "Caustic Arrow",
