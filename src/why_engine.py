@@ -591,6 +591,14 @@ class WhyEngine:
                 source="game_knowledge",
             ))
 
+        # ── Gear-based improvement recommendations ──────────
+        total_dps = 0
+        for sg in char_data.skill_groups:
+            for d in (sg.dps if hasattr(sg, "dps") and sg.dps else []):
+                total_dps = max(total_dps, d.dps or 0, d.dot_dps or 0, d.damage or 0)
+
+        _add_gear_improvement_actions(char_data, archetype, pob, total_dps, actions)
+
         # Sort by severity
         sev_order = {"critical": 0, "warning": 1, "info": 2, "positive": 3}
         actions.sort(key=lambda a: sev_order.get(a.severity, 9))
@@ -1312,6 +1320,188 @@ def _format_number(n: float) -> str:
     return f"{n:,.0f}"
 
 
+def _add_gear_improvement_actions(
+    char_data, archetype, pob, total_dps: float, actions: list,
+):
+    """Add gear-based improvement recommendations to the actions list."""
+    if not total_dps:
+        return
+
+    # Analyze each slot for DPS and survival contribution
+    slot_dps = {}  # slot -> total estimated DPS %
+    slot_items = {}  # slot -> item
+
+    for item in char_data.equipment:
+        if item.slot in ("Flask", "Flask2"):
+            continue
+        all_mods = (item.explicit_mods or []) + (item.implicit_mods or []) + (item.crafted_mods or [])
+        total_pct = 0
+        slot_items[item.slot] = item
+        for mod in all_mods:
+            mc = _strip_ninja_brackets(mod)
+            a = _analyze_mod_contribution(mc, archetype)
+            if a and a[0] == "dps":
+                total_pct += a[2]
+        slot_dps[item.slot] = total_pct
+
+    # ── Skill gem level upgrade ──────────────────────
+    # Count total +gem levels from gear
+    total_gem_bonus = 0
+    for item in char_data.equipment:
+        all_mods = (item.explicit_mods or []) + (item.implicit_mods or []) + (item.crafted_mods or [])
+        for mod in all_mods:
+            mc = _strip_ninja_brackets(mod).lower()
+            m = _re.search(r"\+(\d+) to level of all .*(spell|skill)", mc)
+            if m:
+                total_gem_bonus += int(m.group(1))
+
+    effective_gem_level = 20 + total_gem_bonus
+    char_level = char_data.level or 0
+
+    # Lv21 gem upgrade
+    if char_level >= 97:
+        est_dps_gain = total_dps * 0.11
+        actions.append(Explanation(
+            context="action",
+            title=f"Lv21 {archetype.main_skill} Gem",
+            text=(
+                f"At character Lv{char_level}, you can use a Lv21 {archetype.main_skill} gem. "
+                f"This takes your effective gem level from {effective_gem_level} to {effective_gem_level + 1}. "
+                f"Each gem level is ~11% more base damage — estimated +{_format_number(est_dps_gain)} DPS. "
+                f"Lv21 gems drop from corrupting Lv20 gems with a Vaal Orb (1-in-8 chance)."
+            ),
+            severity="warning",
+            source="game_knowledge",
+        ))
+    elif char_level >= 90:
+        levels_needed = 97 - char_level
+        actions.append(Explanation(
+            context="action",
+            title=f"Level to 97 for Lv21 Gem",
+            text=(
+                f"You're Lv{char_level} — {levels_needed} levels from being able to use a Lv21 {archetype.main_skill} gem. "
+                f"This would add ~11% more base damage (~{_format_number(total_dps * 0.11)} DPS). "
+                f"One of the biggest single upgrades available."
+            ),
+            severity="info",
+            source="game_knowledge",
+        ))
+
+    # ── Gem quality upgrade ──────────────────────────
+    # Quality on skill gems typically gives 0.5-1% more damage per quality point
+    # A 20% quality gem vs 0% quality is ~10-20% more DPS
+    actions.append(Explanation(
+        context="action",
+        title=f"Quality {archetype.main_skill} Gem",
+        text=(
+            f"If your {archetype.main_skill} gem isn't 20% quality, use Gemcutter's Prisms to max it. "
+            f"20% quality typically adds 10-20% more damage or AoE depending on the gem. "
+            f"For Cast on Crit builds, also quality your trigger skill (attack gem) for crit chance."
+        ),
+        severity="info",
+        source="game_knowledge",
+    ))
+
+    # ── Slots with low DPS contribution ──────────────
+    # Identify gear slots that could have DPS mods but don't
+    DPS_ELIGIBLE_SLOTS = {
+        "spell": ["Weapon", "Weapon2", "Amulet", "Ring", "Ring2", "Helm", "Gloves"],
+        "attack": ["Weapon", "Weapon2", "Amulet", "Ring", "Ring2", "Gloves", "Belt"],
+    }
+    eligible = DPS_ELIGIBLE_SLOTS.get(archetype.damage_type, [])
+
+    for slot in eligible:
+        if slot not in slot_dps:
+            continue
+        dps_pct = slot_dps[slot]
+        item = slot_items.get(slot)
+        if not item:
+            continue
+
+        # Skip uniques — can't easily change their mods
+        if item.rarity == "Unique":
+            continue
+
+        item_name = item.name or item.type_line or slot
+
+        if dps_pct < 3 and archetype.damage_type == "spell":
+            # This slot has almost no DPS mods — suggest adding some
+            suggestions = []
+            if slot in ("Ring", "Ring2"):
+                suggestions = ["+% spell damage", "+% cast speed", "+% cold/fire/lightning damage"]
+            elif slot == "Helm":
+                suggestions = ["+% spell damage", "+to gem levels", "+% crit chance"]
+            elif slot == "Gloves":
+                suggestions = ["+% cast speed", "+% spell damage", "added damage"]
+            elif slot == "Belt":
+                suggestions = ["+% damage", "+% elemental damage"]
+
+            if suggestions:
+                est_gain = total_dps * 0.08  # conservative estimate for adding DPS mods
+                actions.append(Explanation(
+                    context="action",
+                    title=f"Add DPS Mods: {item_name} ({slot})",
+                    text=(
+                        f"Your {slot.lower()} ({item_name}) has almost no damage mods. "
+                        f"For a {archetype.damage_type} build, look for: {', '.join(suggestions)}. "
+                        f"Even mid-tier DPS mods here could add ~{_format_number(est_gain)} DPS."
+                    ),
+                    severity="warning",
+                    source="game_knowledge",
+                    slot=slot,
+                ))
+
+    # ── Survival gear upgrades ───────────────────────
+    if pob and pob.stats.life < 3000 and archetype.defense_type == "life":
+        # Find slots without life mods
+        slots_without_life = []
+        for item in char_data.equipment:
+            if item.slot in ("Flask", "Flask2", "Weapon", "Weapon2"):
+                continue
+            all_mods = (item.explicit_mods or []) + (item.implicit_mods or []) + (item.crafted_mods or [])
+            has_life = any("maximum life" in _strip_ninja_brackets(m).lower() for m in all_mods)
+            if not has_life and item.rarity != "Unique":
+                slots_without_life.append(item.slot)
+
+        if slots_without_life:
+            actions.append(Explanation(
+                context="action",
+                title=f"Add Life to {len(slots_without_life)} Slots",
+                text=(
+                    f"Your life pool ({pob.stats.life:,}) is low. "
+                    f"Slots without +life mods: {', '.join(slots_without_life)}. "
+                    f"Adding T2+ life (80+) to each would add ~{len(slots_without_life) * 80} life, "
+                    f"significantly boosting your survivability."
+                ),
+                severity="critical" if pob.stats.life < 2000 else "warning",
+                source="game_knowledge",
+            ))
+
+    # ── Weapon upgrade for spell builds ──────────────
+    if archetype.damage_type == "spell":
+        for wslot in ("Weapon", "Weapon2"):
+            item = slot_items.get(wslot)
+            if not item or item.rarity == "Unique":
+                continue
+            dpct = slot_dps.get(wslot, 0)
+            if dpct < 40:
+                # Weapon should be the highest DPS contributor for spell builds
+                actions.append(Explanation(
+                    context="action",
+                    title=f"Upgrade {wslot}: {item.name or item.type_line}",
+                    text=(
+                        f"Your {wslot.lower()} contributes ~{dpct:.0f}% of DPS. "
+                        f"For spell builds, weapons should provide +gem levels, % spell damage, "
+                        f"% as extra elemental damage, and cast speed. "
+                        f"A well-rolled weapon with +3 gem levels and 100%+ spell damage "
+                        f"is typically the single biggest DPS upgrade."
+                    ),
+                    severity="warning",
+                    source="game_knowledge",
+                    slot=wslot,
+                ))
+
+
 def _damage_increase(current_resist: int) -> int:
     """Calculate how much more damage you take with uncapped resist vs 75%."""
     if current_resist >= 75:
@@ -1489,3 +1679,47 @@ def _add_gear_upgrade_suggestions(
             estimated_value=est,
             estimated_pct=22.0,
         ))
+
+    # Lv21 gem upgrade suggestion
+    char_level = char_data.level or 0
+    if char_level >= 97 and total_dps > 0:
+        est = total_dps * 0.11
+        missing.append(SynergyContributor(
+            name=f"Lv21 {archetype.main_skill} Gem",
+            source_type="missing",
+            contribution=f"+~{_format_number(est)} DPS — Lv21 gem (+1 base level)",
+            severity="warning",
+            detail=(
+                f"At Lv{char_level}, you can equip a Lv21 gem. "
+                f"Corrupt a Lv20 gem with a Vaal Orb for a 1-in-8 chance at Lv21. "
+                f"Each gem level is ~11% more base damage."
+            ),
+            estimated_value=est,
+            estimated_pct=11.0,
+        ))
+
+    # Slots with no DPS contribution that could have some
+    DPS_ELIGIBLE = {"spell": ["Ring", "Ring2"], "attack": ["Ring", "Ring2", "Belt"]}
+    eligible = DPS_ELIGIBLE.get(archetype.damage_type, [])
+    for slot in eligible:
+        item = next((eq for eq in char_data.equipment if eq.slot == slot), None)
+        if not item or item.rarity == "Unique":
+            continue
+        all_mods = (item.explicit_mods or []) + (item.implicit_mods or []) + (item.crafted_mods or [])
+        has_dps = False
+        for mod in all_mods:
+            mc = _strip_ninja_brackets(mod).lower()
+            if any(kw in mc for kw in ["spell damage", "cast speed", "attack speed", "critical", "added", "gem"]):
+                has_dps = True
+                break
+        if not has_dps and total_dps > 0:
+            est = total_dps * 0.08
+            missing.append(SynergyContributor(
+                name=f"{item.name or item.type_line} ({slot})",
+                source_type="missing",
+                contribution=f"+~{_format_number(est)} DPS — add damage mods to {slot.lower()}",
+                severity="info",
+                detail=f"Your {slot.lower()} has no DPS mods. Adding spell damage, cast speed, or crit could add ~8% DPS.",
+                estimated_value=est,
+                estimated_pct=8.0,
+            ))
