@@ -1205,6 +1205,7 @@ class BuildsClient:
                 return []
 
             total = search["totalCount"] or 1
+            types = dictionary.get("metadata", {}).get("type", [])
             result = []
             for entry in ks_dim["entries"]:
                 key = entry["key"]
@@ -1213,10 +1214,12 @@ class BuildsClient:
                 name = dictionary["names"][key]
                 if not name:
                     continue
+                node_type = types[key] if key < len(types) else ""
                 result.append({
                     "name": name,
                     "count": entry["count"],
                     "percentage": round((entry["count"] / total) * 100, 1),
+                    "type": node_type,  # "Ascendancy" or "Keystone"
                 })
 
             result.sort(key=lambda x: x["count"], reverse=True)

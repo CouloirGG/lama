@@ -442,46 +442,61 @@ class WhyEngine:
             ))
 
         # Flag popular keystones the player is MISSING — lead with IMPACT
+        # Separate ascendancy passives from tree keystones
         for pk in popular_keystones:
             if pk["name"] in player_ks_set:
                 continue
             if pk["percentage"] < 50:
-                continue  # Only flag keystones used by majority of builds
+                continue
 
             info = KEYSTONES.get(pk["name"])
             pct = pk["percentage"]
+            node_type = pk.get("type", "")  # "Ascendancy" or "Keystone"
+            is_ascendancy = node_type == "Ascendancy"
 
+            # Build the explanation text
             if info:
-                # Lead with what the player is LOSING by not having this
                 text = info.impact
                 text += f" ({pct:.0f}% of this build uses {pk['name']}.)"
-            else:
-                # No game knowledge — infer impact from adoption rate
-                if pct >= 95:
+            elif is_ascendancy:
+                if pct >= 90:
                     text = (
-                        f"{pk['name']} is used by {pct:.0f}% of players in this build — "
-                        f"it's essentially mandatory. Without it, you're at a significant "
-                        f"disadvantage in either damage or survivability compared to "
-                        f"virtually every other player running this build."
-                    )
-                elif pct >= 70:
-                    text = (
-                        f"{pk['name']} is used by {pct:.0f}% of players in this build. "
-                        f"The high adoption rate suggests it provides a major damage or "
-                        f"survivability boost that most players consider essential for "
-                        f"this archetype."
+                        f"{pk['name']} is a core ascendancy passive used by {pct:.0f}% of this build. "
+                        f"You earn ascendancy passives by completing ascendancy trials. "
+                        f"This is likely essential to how the build functions."
                     )
                 else:
                     text = (
-                        f"{pk['name']} is used by {pct:.0f}% of players in this build. "
-                        f"It's a popular but not universal choice — it likely provides "
-                        f"a meaningful boost that complements this archetype."
+                        f"{pk['name']} is an ascendancy passive used by {pct:.0f}% of this build. "
+                        f"Check if you have ascendancy points to allocate it."
+                    )
+            else:
+                if pct >= 95:
+                    text = (
+                        f"{pk['name']} is a passive tree keystone used by {pct:.0f}% of this build — "
+                        f"essentially mandatory. You need to path to it on the passive tree."
+                    )
+                elif pct >= 70:
+                    text = (
+                        f"{pk['name']} is a passive tree keystone used by {pct:.0f}% of this build. "
+                        f"Pathing to it on the passive tree requires investing points in that region."
+                    )
+                else:
+                    text = (
+                        f"{pk['name']} is used by {pct:.0f}% of this build. "
+                        f"A popular choice that complements this archetype."
                     )
 
             severity = "critical" if pct > 70 else "warning"
+            # Ascendancy passives with very high adoption are less "critical" since
+            # the player probably has them and we just can't see them
+            if is_ascendancy and pct > 90:
+                severity = "warning"
+
+            title_prefix = "Ascendancy: " if is_ascendancy else "Keystone: "
 
             explanations.append(Explanation(
-                context="keystone", title=f"Missing: {pk['name']}",
+                context="keystone", title=f"{title_prefix}{pk['name']}",
                 text=text, severity=severity,
                 source="population" if not info else "game_knowledge",
                 adoption_pct=pct,
@@ -537,26 +552,42 @@ class WhyEngine:
                     source="game_knowledge",
                 ))
 
-        # Missing high-adoption keystones — lead with impact
+        # Missing high-adoption keystones — lead with impact, distinguish type
         player_ks = set(char_data.keystones)
         for pk in popular_keystones:
             if pk["name"] in player_ks or pk["percentage"] < 70:
                 continue
             info = KEYSTONES.get(pk["name"])
             pct = pk["percentage"]
+            node_type = pk.get("type", "")
+            is_ascendancy = node_type == "Ascendancy"
+
             if info:
                 text = f"{info.impact} ({pct:.0f}% of this build uses it.)"
+            elif is_ascendancy:
+                text = (
+                    f"{pk['name']} is a core ascendancy passive ({pct:.0f}% adoption). "
+                    f"Earn it by completing ascendancy trials."
+                )
             else:
                 text = (
-                    f"{pk['name']} is used by {pct:.0f}% of this build — "
-                    f"without it, you're at a significant disadvantage in either "
-                    f"damage or survivability."
+                    f"{pk['name']} is used by {pct:.0f}% of this build. "
+                    f"Path to it on the passive tree for a significant boost."
                 )
+
+            # Ascendancy passives at 90%+ are likely already taken — downgrade severity
+            if is_ascendancy and pct > 90:
+                sev = "info"
+                title = f"Check Ascendancy: {pk['name']}"
+            else:
+                sev = "critical" if pct > 90 else "warning"
+                title = f"Allocate {pk['name']}" if not is_ascendancy else f"Ascendancy: {pk['name']}"
+
             actions.append(Explanation(
                 context="action",
-                title=f"Allocate {pk['name']}",
+                title=title,
                 text=text,
-                severity="critical" if pct > 90 else "warning",
+                severity=sev,
                 source="population" if not info else "game_knowledge",
                 adoption_pct=pct,
             ))
@@ -1561,12 +1592,27 @@ def _analyze_mod_contribution(mod_text: str, archetype) -> Optional[tuple]:
         est = val * 0.08  # crit chance is good but diminishing
         return ("dps", f"+{val}% crit chance", round(est, 1))
 
-    # % increased cast speed
+    # % increased cast speed — DPS for spell builds
     m = _re.search(r"(\d+)% increased cast speed", ml)
     if m and archetype.damage_type == "spell":
         val = int(m.group(1))
-        est = val * 0.5  # cast speed is roughly linear DPS
+        est = val * 0.5
         return ("dps", f"+{val}% cast speed", round(est, 1))
+
+    # % increased attack speed — DPS for attack builds AND Cast on Crit builds
+    m = _re.search(r"(\d+)% increased (?:local )?attack speed", ml)
+    if m and (archetype.damage_type == "attack" or archetype.is_coc):
+        val = int(m.group(1))
+        est = val * 0.6 if archetype.is_coc else val * 0.5  # CoC: more attacks = more triggers
+        label = f"+{val}% attack speed (CoC trigger rate)" if archetype.is_coc else f"+{val}% attack speed"
+        return ("dps", label, round(est, 1))
+
+    # % increased elemental/cold/fire/lightning damage
+    m = _re.search(r"(\d+)% increased (?:cold|fire|lightning|elemental) damage", ml)
+    if m:
+        val = int(m.group(1))
+        est = val * 0.12
+        return ("dps", f"+{val}% elemental damage", round(est, 1))
 
     # +N to maximum life
     m = _re.search(r"\+(\d+) to maximum life", ml)
