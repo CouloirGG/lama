@@ -1078,6 +1078,39 @@
       const resists = allStats.filter(s => s.title.includes("Resistance"));
       const nonResistStats = allStats.filter(s => !s.title.includes("Resistance"));
 
+      // Projection state: toggled improvements
+      const [projections, setProjections] = useState({});  // { itemName: true/false }
+      const toggleProjection = useCallback((name) => {
+        setProjections(prev => ({ ...prev, [name]: !prev[name] }));
+      }, []);
+
+      // Calculate projected stat deltas from toggled items
+      const projectedDeltas = useMemo(() => {
+        const deltas = { dps: 0, ehp: 0 };
+        const synergyMap = whyInsights?.synergyMap || [];
+        for (const cat of synergyMap) {
+          for (const item of cat.missing) {
+            if (projections[item.name] && item.estimatedValue > 0) {
+              if (cat.category === "dps") deltas.dps += item.estimatedValue;
+              if (cat.category === "survival") deltas.ehp += item.estimatedValue;
+            }
+          }
+        }
+        // Also check improvement path items
+        for (const g of groups) {
+          for (const item of g.items) {
+            if (projections[item.title?.replace("Allocate ", "").replace("Missing: ", "")] && item.estimatedValue > 0) {
+              // Avoid double-counting — synergy map already has these
+            }
+          }
+        }
+        return deltas;
+      }, [projections, whyInsights, groups]);
+
+      const projectedEhp = (sc?.ehp || 0) + projectedDeltas.ehp;
+      const projectedDps = (sc?.dps || 0) + projectedDeltas.dps;
+      const hasProjections = projectedDeltas.dps > 0 || projectedDeltas.ehp > 0;
+
       return (
         <div className="flex flex-col gap-0 p-6">
           {/* ── Scorecard Bar ─────────────────────────────── */}
@@ -1088,6 +1121,8 @@
               context={sc?.ehpContext || ""}
               status={sc?.ehpStatus || "info"}
               icon="shield"
+              projected={hasProjections && projectedDeltas.ehp > 0 ? projectedEhp : null}
+              projectedDelta={projectedDeltas.ehp}
             />
             <ScoreStatCard
               label="Primary DPS"
@@ -1095,6 +1130,8 @@
               context="Main skill damage"
               status={sc?.dpsStatus || "info"}
               icon="bolt"
+              projected={hasProjections && projectedDeltas.dps > 0 ? projectedDps : null}
+              projectedDelta={projectedDeltas.dps}
             />
             <ScoreStatCard
               label="Resistances"
@@ -1174,7 +1211,12 @@
             </div>
 
             {/* ── CENTER: Interactive Synergy Map ────────── */}
-            <SynergyMapPanel synergyMap={whyInsights?.synergyMap} meta={whyInsights?.meta} />
+            <SynergyMapPanel
+              synergyMap={whyInsights?.synergyMap}
+              meta={whyInsights?.meta}
+              projections={projections}
+              onToggle={toggleProjection}
+            />
 
             {/* ── RIGHT: Improvement Path ──────────────── */}
             <div className="col-span-3 flex flex-col gap-4">
@@ -1189,9 +1231,17 @@
                   {groups.flatMap(g => g.items.filter(e => e.severity === "critical" || e.context === "action"))
                     .filter((e, i, arr) => arr.findIndex(x => x.title === e.title) === i)
                     .slice(0, 6)
-                    .map((e, i) => (
-                      <ImprovementCard key={i} explanation={e} />
-                    ))
+                    .map((e, i) => {
+                      const name = e.title?.replace("Allocate ", "").replace("Missing: ", "");
+                      return (
+                        <ImprovementCard
+                          key={i}
+                          explanation={e}
+                          toggled={!!projections[name]}
+                          onToggle={() => toggleProjection(name)}
+                        />
+                      );
+                    })
                   }
                 </div>
 
@@ -1205,16 +1255,30 @@
 
     // ── Pulse sub-components ──────────────────────────────
 
-    function ScoreStatCard({ label, value, context, status, icon }) {
+    function ScoreStatCard({ label, value, context, status, icon, projected, projectedDelta }) {
       const borderColor = { critical: "border-error/40", warning: "border-yellow-500/40", positive: "border-primary-container/40", info: "border-outline-variant/30" }[status] || "border-outline-variant/30";
       const textColor = { critical: "text-error", warning: "text-yellow-400", positive: "text-primary-container", info: "text-on-surface" }[status] || "";
+      const hasProjection = projected != null && projectedDelta > 0;
+      const fmtProjected = projected != null ? (projected >= 1e6 ? `${(projected/1e6).toFixed(1)}M` : projected >= 1e3 ? `${(projected/1e3).toFixed(0)}K` : projected.toLocaleString()) : "";
+      const fmtDelta = projectedDelta > 0 ? (projectedDelta >= 1e6 ? `+${(projectedDelta/1e6).toFixed(1)}M` : projectedDelta >= 1e3 ? `+${(projectedDelta/1e3).toFixed(0)}K` : `+${projectedDelta.toLocaleString()}`) : "";
       return (
-        <div className={`bg-surface-container p-5 border-l-4 ${borderColor}`}>
+        <div className={`bg-surface-container p-5 border-l-4 ${hasProjection ? "border-primary-container" : borderColor} transition-all`}>
           <p className="text-[10px] uppercase tracking-widest text-on-surface-var font-mono mb-2">{label}</p>
           <div className="flex items-baseline gap-2">
-            <span className={`text-3xl font-serif font-bold tracking-tight ${textColor}`}>{value}</span>
+            {hasProjection ? (
+              <>
+                <span className="text-xl font-serif text-on-surface-var line-through opacity-50">{value}</span>
+                <span className="text-3xl font-serif font-bold tracking-tight text-primary-container">{fmtProjected}</span>
+              </>
+            ) : (
+              <span className={`text-3xl font-serif font-bold tracking-tight ${textColor}`}>{value}</span>
+            )}
           </div>
-          <p className="text-[10px] font-mono text-on-surface-var mt-2">{context}</p>
+          {hasProjection ? (
+            <p className="text-[10px] font-mono text-primary-container mt-2">{fmtDelta} with selected improvements</p>
+          ) : (
+            <p className="text-[10px] font-mono text-on-surface-var mt-2">{context}</p>
+          )}
         </div>
       );
     }
@@ -1236,7 +1300,7 @@
       );
     }
 
-    function SynergyMapPanel({ synergyMap, meta }) {
+    function SynergyMapPanel({ synergyMap, meta, projections = {}, onToggle }) {
       const categories = synergyMap || [];
       const [activeCategory, setActiveCategory] = useState(categories[0]?.category || "dps");
       const active = categories.find(c => c.category === activeCategory) || categories[0];
@@ -1285,13 +1349,48 @@
             </div>
 
             {/* Central output node */}
-            <div className={`mx-auto w-44 h-36 bg-surface-container border-2 ${colors.border} flex flex-col items-center justify-center text-center mb-6`} style={{ boxShadow: `0 0 25px ${colors.glow}` }}>
-              <span className={`text-[9px] uppercase tracking-[0.2em] ${colors.text} font-mono mb-1`}>{active.label}</span>
-              <span className="text-3xl font-serif font-bold text-on-surface leading-none">{active.value || "?"}</span>
-              <span className="text-[9px] uppercase tracking-widest text-on-surface-var mt-2">
-                {active.contributors.length} active · {active.missing.length} missing
-              </span>
-            </div>
+            {(() => {
+              // Calculate projected value for this category
+              const toggledDelta = active.missing
+                .filter(m => projections[m.name] && m.estimatedValue > 0)
+                .reduce((sum, m) => sum + m.estimatedValue, 0);
+              const hasProjected = toggledDelta > 0;
+
+              return (
+                <div className={`mx-auto w-44 bg-surface-container border-2 ${colors.border} flex flex-col items-center justify-center text-center mb-6 py-5 px-4 transition-all`} style={{ boxShadow: `0 0 ${hasProjected ? 35 : 25}px ${colors.glow}` }}>
+                  <span className={`text-[9px] uppercase tracking-[0.2em] ${colors.text} font-mono mb-1`}>{active.label}</span>
+                  {hasProjected ? (
+                    <>
+                      <span className="text-lg font-serif text-on-surface-var line-through opacity-40 leading-none">{active.value || "?"}</span>
+                      <span className="text-3xl font-serif font-bold text-primary-container leading-none">
+                        {(() => {
+                          // Parse current value and add delta
+                          const curMatch = (active.value || "").match(/([\d,.]+)\s*([KkMm]?)/);
+                          if (curMatch) {
+                            let cur = parseFloat(curMatch[1].replace(",",""));
+                            if ((curMatch[2] || "").toUpperCase() === "K") cur *= 1000;
+                            if ((curMatch[2] || "").toUpperCase() === "M") cur *= 1e6;
+                            const proj = cur + toggledDelta;
+                            return proj >= 1e6 ? `${(proj/1e6).toFixed(1)}M` : proj >= 1e3 ? `${(proj/1e3).toFixed(0)}K` : proj.toLocaleString();
+                          }
+                          return active.value;
+                        })()}
+                      </span>
+                      <span className="text-[9px] font-mono text-primary-container mt-1">
+                        +{toggledDelta >= 1e6 ? `${(toggledDelta/1e6).toFixed(1)}M` : toggledDelta >= 1e3 ? `${(toggledDelta/1e3).toFixed(0)}K` : toggledDelta.toLocaleString()} projected
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-3xl font-serif font-bold text-on-surface leading-none">{active.value || "?"}</span>
+                      <span className="text-[9px] uppercase tracking-widest text-on-surface-var mt-2">
+                        {active.contributors.length} active · {active.missing.length} missing
+                      </span>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Contributors: what's building into this stat */}
             {active.contributors.length > 0 && (
@@ -1317,7 +1416,14 @@
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {active.missing.map((c, i) => (
-                    <ContributorNode key={i} contributor={c} colors={colors} positive={false} />
+                    <ContributorNode
+                      key={i}
+                      contributor={c}
+                      colors={colors}
+                      positive={false}
+                      toggled={!!projections[c.name]}
+                      onToggle={onToggle ? () => onToggle(c.name) : null}
+                    />
                   ))}
                 </div>
               </div>
@@ -1334,38 +1440,52 @@
       );
     }
 
-    function ContributorNode({ contributor, colors, positive }) {
+    function ContributorNode({ contributor, colors, positive, toggled, onToggle }) {
       const c = contributor;
       const [open, setOpen] = useState(false);
       const typeIcons = { skill: "auto_awesome", support: "link", keystone: "diamond", gear: "inventory_2", stat: "bar_chart", missing: "add" };
       const hasEstimate = c.estimatedValue > 0 || c.estimatedPct > 0;
+      const isToggled = toggled && !positive;
       return (
         <div
           className={`p-2.5 border cursor-pointer transition-all ${
-            positive
-              ? "bg-surface-container border-outline-variant/20 hover:border-outline"
-              : "bg-surface-dim border-error/20 hover:border-error/40"
+            isToggled
+              ? "bg-primary-container/10 border-primary-container/40"
+              : positive
+                ? "bg-surface-container border-outline-variant/20 hover:border-outline"
+                : "bg-surface-dim border-error/20 hover:border-error/40"
           }`}
           onClick={() => setOpen(!open)}
         >
           <div className="flex items-start gap-2">
-            <Icon name={typeIcons[c.sourceType] || "info"} className={`text-xs mt-px ${positive ? colors.text : "text-error"}`} />
+            {/* Toggle checkbox for missing items */}
+            {!positive && onToggle && (
+              <div
+                className={`w-4 h-4 mt-px shrink-0 border flex items-center justify-center cursor-pointer transition-all ${
+                  isToggled ? "bg-primary-container border-primary-container" : "border-outline-variant hover:border-outline"
+                }`}
+                onClick={(e) => { e.stopPropagation(); onToggle(); }}
+              >
+                {isToggled && <Icon name="check" className="text-[10px] text-surface-dim" />}
+              </div>
+            )}
+            {positive && <Icon name={typeIcons[c.sourceType] || "info"} className={`text-xs mt-px ${colors.text}`} />}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-mono font-bold text-on-surface truncate">{c.name}</span>
+                <span className={`text-[10px] font-mono font-bold truncate ${isToggled ? "text-primary-container" : "text-on-surface"}`}>{c.name}</span>
                 {hasEstimate && (
-                  <span className={`text-[9px] font-mono font-bold ${positive ? colors.text : "text-error"}`}>
-                    {c.estimatedPct > 0 ? `${c.estimatedPct.toFixed(0)}%` : ""}
+                  <span className={`text-[9px] font-mono font-bold ${isToggled ? "text-primary-container" : positive ? colors.text : "text-error"}`}>
+                    {c.estimatedPct > 0 ? `${positive ? "" : "+"}${c.estimatedPct.toFixed(0)}%` : ""}
                   </span>
                 )}
                 {c.adoptionPct > 0 && <span className="text-[8px] font-mono text-on-surface-var">{c.adoptionPct.toFixed(0)}% use</span>}
               </div>
               {hasEstimate && c.estimatedValue > 0 && (
-                <div className={`text-[10px] font-mono font-bold ${positive ? "text-on-surface" : "text-error"} mb-0.5`}>
+                <div className={`text-[10px] font-mono font-bold mb-0.5 ${isToggled ? "text-primary-container" : positive ? "text-on-surface" : "text-error"}`}>
                   {positive ? "" : "+"}{c.estimatedValue >= 1000 ? (c.estimatedValue >= 1e6 ? `${(c.estimatedValue/1e6).toFixed(1)}M` : `${(c.estimatedValue/1e3).toFixed(0)}K`) : c.estimatedValue.toFixed(0)}
                 </div>
               )}
-              <p className={`text-[9px] font-mono ${positive ? "text-on-surface-var" : "text-error/80"} ${open ? "" : "truncate"} leading-relaxed`}>
+              <p className={`text-[9px] font-mono ${positive ? "text-on-surface-var" : isToggled ? "text-primary-container/70" : "text-error/80"} ${open ? "" : "truncate"} leading-relaxed`}>
                 {open ? (c.detail || c.contribution) : c.contribution}
               </p>
             </div>
@@ -1392,22 +1512,34 @@
       );
     }
 
-    function ImprovementCard({ explanation }) {
+    function ImprovementCard({ explanation, toggled, onToggle }) {
       const e = explanation;
-      const borderColor = { critical: "border-error", warning: "border-secondary", info: "border-primary-container" }[e.severity] || "border-outline-variant";
-      const labelColor = { critical: "text-error", warning: "text-secondary", info: "text-primary-container" }[e.severity] || "";
-      const typeLabel = { critical: "Urgent", warning: "Recommended", info: "Optional" }[e.severity] || "";
+      const borderColor = toggled ? "border-primary-container" : ({ critical: "border-error", warning: "border-secondary", info: "border-primary-container" }[e.severity] || "border-outline-variant");
+      const labelColor = toggled ? "text-primary-container" : ({ critical: "text-error", warning: "text-secondary", info: "text-primary-container" }[e.severity] || "");
+      const typeLabel = toggled ? "Projected" : ({ critical: "Urgent", warning: "Recommended", info: "Optional" }[e.severity] || "");
       const [open, setOpen] = useState(false);
+      const name = e.title?.replace("Allocate ", "").replace("Missing: ", "");
       return (
-        <div className={`bg-surface-dim/50 p-3 border-l-2 ${borderColor} hover:bg-surface-bright transition-all cursor-pointer group`} onClick={() => setOpen(!open)}>
+        <div className={`p-3 border-l-2 ${borderColor} transition-all cursor-pointer group ${toggled ? "bg-primary-container/10" : "bg-surface-dim/50 hover:bg-surface-bright"}`} onClick={() => setOpen(!open)}>
           <div className="flex justify-between items-start mb-1">
             <span className={`text-[8px] font-mono uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
+            {onToggle && (
+              <div
+                className={`w-4 h-4 border flex items-center justify-center cursor-pointer transition-all ${
+                  toggled ? "bg-primary-container border-primary-container" : "border-outline-variant hover:border-outline"
+                }`}
+                onClick={(ev) => { ev.stopPropagation(); onToggle(); }}
+                title="Toggle to project impact"
+              >
+                {toggled && <Icon name="check" className="text-[10px] text-surface-dim" />}
+              </div>
+            )}
           </div>
-          <h6 className="text-[11px] font-mono font-bold uppercase tracking-tight text-on-surface">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</h6>
+          <h6 className={`text-[11px] font-mono font-bold uppercase tracking-tight ${toggled ? "text-primary-container" : "text-on-surface"}`}>{name}</h6>
           {open ? (
-            <p className="text-[9px] font-mono text-on-surface-var mt-1 leading-relaxed">{e.text}</p>
+            <p className={`text-[9px] font-mono mt-1 leading-relaxed ${toggled ? "text-primary-container/70" : "text-on-surface-var"}`}>{e.text}</p>
           ) : (
-            <p className="text-[9px] font-mono text-on-surface-var mt-1 truncate">{e.text.slice(0, 60)}...</p>
+            <p className={`text-[9px] font-mono mt-1 truncate ${toggled ? "text-primary-container/70" : "text-on-surface-var"}`}>{e.text.slice(0, 60)}...</p>
           )}
         </div>
       );
