@@ -169,6 +169,63 @@
     }
 
     // -----------------------------------------------------------------------
+    // WhyBadge — inline explanation component
+    // -----------------------------------------------------------------------
+    const SEV_COLORS = {
+      critical: "border-red-500/50 bg-red-500/10 text-red-300",
+      warning: "border-yellow-500/50 bg-yellow-500/10 text-yellow-200",
+      positive: "border-green-500/50 bg-green-500/10 text-green-300",
+      info: "border-outline-variant bg-surface-container text-on-surface-var",
+    };
+    const SEV_ICONS = { critical: "error", warning: "warning", positive: "check_circle", info: "info" };
+
+    function WhyCard({ explanation }) {
+      const e = explanation;
+      const colors = SEV_COLORS[e.severity] || SEV_COLORS.info;
+      const icon = SEV_ICONS[e.severity] || "info";
+      return (
+        <div className={`flex gap-3 p-3 rounded-lg border ${colors}`}>
+          <Icon name={icon} className="text-lg mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-mono font-semibold">{e.title}</span>
+              {e.adoptionPct > 0 && (
+                <span className="text-xs font-mono opacity-70">{e.adoptionPct.toFixed(0)}% use</span>
+              )}
+              {e.statDelta && (
+                <span className="text-xs font-mono opacity-70">{e.statDelta}</span>
+              )}
+            </div>
+            <p className="text-xs font-mono leading-relaxed opacity-90">{e.text}</p>
+          </div>
+        </div>
+      );
+    }
+
+    function WhySection({ title, explanations, icon, maxItems = 10 }) {
+      if (!explanations || explanations.length === 0) return null;
+      const [expanded, setExpanded] = useState(false);
+      const shown = expanded ? explanations : explanations.slice(0, maxItems);
+      return (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            {icon && <Icon name={icon} className="text-base text-primary-container" />}
+            <h3 className="font-serif text-base text-on-surface">{title}</h3>
+            <span className="text-xs font-mono text-on-surface-var">({explanations.length})</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {shown.map((e, i) => <WhyCard key={i} explanation={e} />)}
+          </div>
+          {explanations.length > maxItems && !expanded && (
+            <button onClick={() => setExpanded(true)} className="text-xs font-mono text-primary-container hover:text-primary">
+              Show {explanations.length - maxItems} more...
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    // -----------------------------------------------------------------------
     // TopBar
     // -----------------------------------------------------------------------
     const pywebview = () => window.pywebview?.api;
@@ -911,7 +968,7 @@
     // -----------------------------------------------------------------------
     // PULSE Tab
     // -----------------------------------------------------------------------
-    function PulseTab({ charData, insights, improvement, comparison, onLookup }) {
+    function PulseTab({ charData, insights, improvement, comparison, whyInsights, onLookup }) {
       if (!charData) {
         return <InlineCharacterLookup onLookup={onLookup} />;
       }
@@ -929,9 +986,31 @@
         <div className="flex flex-col gap-6 p-5 max-w-2xl mx-auto">
           <BuildHealthGauge insights={insights} comparison={comparison} />
           <KPIRow insights={insights} comparison={comparison} />
+
+          {/* Why Engine: Actions — prioritized recommendations with explanations */}
+          {whyInsights?.actions?.length > 0 && (
+            <WhySection title="Recommended Actions" explanations={whyInsights.actions} icon="priority_high" maxItems={5} />
+          )}
+
           <CriticalActionsChecklist insights={insights} />
           <NextBigUpgradeCard improvement={improvement} />
+
+          {/* Why Engine: Keystones — what you have, what you're missing, and why */}
+          {whyInsights?.keystones?.length > 0 && (
+            <WhySection title="Keystone Analysis" explanations={whyInsights.keystones} icon="key" maxItems={6} />
+          )}
+
           <KeystoneGapsCard insights={insights} charData={charData} />
+
+          {/* Why Engine: Stats — where you stand in the population */}
+          {whyInsights?.stats?.length > 0 && (
+            <WhySection title="Stat Breakdown" explanations={whyInsights.stats} icon="monitoring" maxItems={8} />
+          )}
+
+          {/* Why Engine: Meta context */}
+          {whyInsights?.meta?.length > 0 && (
+            <WhySection title="Meta Context" explanations={whyInsights.meta} icon="groups" />
+          )}
         </div>
       );
     }
@@ -1491,6 +1570,7 @@
       const [efficiency, setEfficiency] = useState(null);
       const [improvement, setImprovement] = useState(null);
       const [comparison, setComparison] = useState(null);
+      const [whyInsights, setWhyInsights] = useState(null);
       const [activeTab, setActiveTab] = useState("PULSE");
       const [settings, setSettings] = useState({});
       const [status, setStatus] = useState({});
@@ -1505,6 +1585,7 @@
         setEfficiency(null);
         setImprovement(null);
         setComparison(null);
+        setWhyInsights(null);
 
         const body = { account, character };
 
@@ -1513,11 +1594,13 @@
           api("/api/character/improvement-package", "POST", body),
           api("/api/character/build-compare", "POST", body),
           api("/api/character/build-efficiency", "POST", body),
-        ]).then(([ins, imp, comp, eff]) => {
+          api("/api/character/why-insights", "POST", body),
+        ]).then(([ins, imp, comp, eff, why]) => {
           if (!ins.error) setInsights(ins);
           if (!imp.error) setImprovement(imp);
           if (!comp.error) setComparison(comp);
           if (!eff.error) setEfficiency(eff);
+          if (!why.error) setWhyInsights(why);
           setAnalysisLoading(false);
         }).catch(() => setAnalysisLoading(false));
       }, [charData, account, character]);
@@ -1557,7 +1640,7 @@
       const tabContent = useMemo(() => {
         switch (activeTab) {
           case "PULSE":
-            return <PulseTab charData={charData} insights={insights} improvement={improvement} comparison={comparison} onLookup={handleLookup} />;
+            return <PulseTab charData={charData} insights={insights} improvement={improvement} comparison={comparison} whyInsights={whyInsights} onLookup={handleLookup} />;
           case "GEAR":
             return <GearTab charData={charData} insights={insights} account={account} />;
           case "MARKET":

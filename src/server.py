@@ -49,6 +49,7 @@ from builds_client import (BuildsClient, enrich_item_mods, classify_build,
                            compute_improvement_package,
                            SLOT_DISPLAY, SLOT_TO_UNIQUE_SLUG)
 import guide_scraper
+from why_engine import WhyEngine
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from item_lookup import ItemLookup
 from oauth import OAuthManager
@@ -535,6 +536,7 @@ game_commander = GameCommander()
 
 # Character viewer
 builds_client = BuildsClient()
+why_engine_instance = WhyEngine(builds_client)
 
 
 def _lookup_character_with_fallback(account: str, character: str):
@@ -1486,6 +1488,36 @@ async def character_build_insights(req: BuildInsightsRequest):
         "slotSummary": slot_summary,
         "antiSynergies": anti_synergies,
     }
+
+
+class WhyInsightsRequest(BaseModel):
+    account: str
+    character: str
+
+
+@app.post("/api/character/why-insights")
+async def character_why_insights(req: WhyInsightsRequest):
+    """Generate plain-language explanations for a character's build choices."""
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character required"})
+    loop = asyncio.get_running_loop()
+
+    char_data = await loop.run_in_executor(
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
+    )
+    if not char_data:
+        return JSONResponse(status_code=404, content={"error": "Character not found"})
+
+    archetype = classify_build(char_data)
+
+    try:
+        explanations = await loop.run_in_executor(
+            None, why_engine_instance.explain_character, char_data, archetype
+        )
+        return explanations.to_dict()
+    except Exception as e:
+        logger.error(f"Why-engine failed: {e}")
+        return {"keystones": [], "gear": {}, "stats": [], "actions": [], "meta": []}
 
 
 class BuildEfficiencyRequest(BaseModel):
