@@ -17,6 +17,7 @@ from typing import List, Dict, Optional
 class KeystoneInfo:
     description: str
     benefits: str
+    impact: str  # What the player LOSES without this — the "why you'll struggle" line
     synergies: List[str]
     anti_synergies: List[str]
     build_types: List[str]
@@ -53,241 +54,295 @@ class StatThreshold:
 
 KEYSTONES: Dict[str, KeystoneInfo] = {
 
+    # ------------------------------------------------------------------
+    # Core passive tree keystones
+    # ------------------------------------------------------------------
+
     "Blood Magic": KeystoneInfo(
         description="Removes all mana. Skills cost life instead of mana.",
-        benefits=(
-            "Eliminates mana problems entirely. Lets you invest fully into "
-            "life, resulting in a massive life pool since mana nodes and gear "
-            "become irrelevant."
-        ),
-        synergies=["Life stacking gear", "Life regeneration", "Life leech",
-                   "Life flask sustain", "Strength stacking"],
-        anti_synergies=["Energy Shield builds", "Mind Over Matter",
-                        "Mana-based auras", "Archmage"],
+        benefits="Eliminates mana problems entirely. Lets you invest fully into life since mana nodes and gear become irrelevant.",
+        impact="Without Blood Magic, you need to manage mana as a resource — mana gear, mana flask, and mana regen all compete with damage and survival stats on your gear.",
+        synergies=["Life stacking gear", "Life regeneration", "Strength stacking"],
+        anti_synergies=["Energy Shield builds", "Mind Over Matter", "Mana-based auras"],
         build_types=["life_stacking", "attack_physical", "melee"],
     ),
 
     "Pain Attunement": KeystoneInfo(
         description="30% more spell damage while on low life (below 50% life).",
-        benefits=(
-            "Massive damage multiplier for spell builds. Achieved by "
-            "reserving life with auras or using Petrified Blood to stay "
-            "at low life permanently."
-        ),
-        synergies=["Sanguimancy", "Energy Shield gear", "Life reservation",
-                   "Petrified Blood", "Low-life builds"],
-        anti_synergies=["Life stacking", "Blood Magic (unless reserving life)",
-                        "Builds without ES backup"],
+        benefits="Massive 30% MORE damage multiplier for spell builds. Achieved by reserving life with auras to stay at low life permanently.",
+        impact="Without Pain Attunement, you're missing a 30% more damage multiplier — one of the biggest single damage boosts in the game. Your spell DPS will be roughly 30% lower than other players running this build.",
+        synergies=["Sanguimancy", "Energy Shield gear", "Life reservation"],
+        anti_synergies=["Life stacking", "Builds without ES backup"],
         build_types=["spell_damage", "low_life", "energy_shield"],
     ),
 
     "Sanguimancy": KeystoneInfo(
         description="Life costs are paid from Energy Shield instead of Life.",
-        benefits=(
-            "Enables low-life builds safely — you can reserve life for "
-            "Pain Attunement without dying to skill costs. Your ES absorbs "
-            "the skill costs while your life stays reserved."
-        ),
-        synergies=["Pain Attunement", "Energy Shield gear",
-                   "Life reservation", "ES recharge"],
-        anti_synergies=["Chaos Inoculation", "Builds with no ES",
-                        "Blood Magic"],
+        benefits="Enables low-life builds safely — you can reserve life for Pain Attunement without dying to skill costs. Your ES absorbs the skill costs while your life stays reserved.",
+        impact="Without Sanguimancy, every skill cast drains your life pool. On a low-life build, this means you'll constantly dip below the threshold and die to skill costs. This keystone is what makes the entire low-life archetype functional.",
+        synergies=["Pain Attunement", "Energy Shield gear", "Life reservation", "ES recharge"],
+        anti_synergies=["Chaos Inoculation", "Builds with no ES", "Blood Magic"],
         build_types=["low_life", "energy_shield", "spell_damage"],
     ),
 
     "Elemental Overload": KeystoneInfo(
-        description=(
-            "Your hits can't critically strike. If you've dealt a critical "
-            "strike recently, 40% more elemental damage."
-        ),
-        benefits=(
-            "Huge damage boost for builds that invest minimally in crit. "
-            "You only need enough crit chance to proc it once every 4 seconds, "
-            "then you get a free 40% more multiplier."
-        ),
-        synergies=["Elemental damage skills", "Fast-hitting skills",
-                   "Orb of Storms (for easy crit procs)", "Minimal crit gear"],
-        anti_synergies=["Crit multi stacking", "Crit chance stacking",
-                        "Assassin ascendancy", "Brittle"],
+        description="Your hits can't critically strike. If you've dealt a critical strike recently, 40% more elemental damage.",
+        benefits="Huge 40% more elemental damage for builds that invest minimally in crit. You only need enough crit chance to proc it once every 4 seconds.",
+        impact="Without Elemental Overload, non-crit builds lose a free 40% more damage multiplier. You'd need massive investment in crit chance AND crit multiplier gear to match this damage through actual crits.",
+        synergies=["Elemental damage skills", "Fast-hitting skills", "Minimal crit gear"],
+        anti_synergies=["Crit multi stacking", "Crit chance stacking"],
         build_types=["elemental_non_crit", "spell_damage", "elemental_attack"],
     ),
 
     "Avatar of Fire": KeystoneInfo(
-        description=(
-            "50% of physical, lightning, and cold damage is converted to fire. "
-            "You can only deal fire damage."
-        ),
-        benefits=(
-            "Converts all your damage to fire, letting you scale everything "
-            "with fire damage modifiers. Simplifies gear and passive choices "
-            "to a single element."
-        ),
-        synergies=["Fire penetration", "Fire damage gear",
-                   "Conversion gloves/weapons", "Elemental Equilibrium (from allies)"],
-        anti_synergies=["Chaos damage", "Non-fire elemental builds",
-                        "Poison", "Bleed (physical)"],
+        description="50% of physical, lightning, and cold damage is converted to fire. You can only deal fire damage.",
+        benefits="Converts all damage to fire, letting you scale everything with fire damage modifiers. Simplifies gearing to a single element.",
+        impact="Without Avatar of Fire, your damage is split across multiple elements, making it harder to scale with penetration and modifiers. Fire-focused builds lose significant damage scaling efficiency.",
+        synergies=["Fire penetration", "Fire damage gear", "Conversion"],
+        anti_synergies=["Chaos damage", "Non-fire elemental builds", "Poison"],
         build_types=["fire_damage", "conversion", "elemental_attack"],
     ),
 
     "Chaos Inoculation": KeystoneInfo(
         description="Maximum life becomes 1. You are immune to chaos damage.",
-        benefits=(
-            "Complete chaos immunity removes an entire damage type from the "
-            "game. You rely entirely on Energy Shield as your health pool, "
-            "freeing you from needing any chaos resistance."
-        ),
-        synergies=["Energy Shield gear", "ES recharge", "Ghost Reaver",
-                   "ES leech", "Discipline aura", "Intelligence stacking"],
-        anti_synergies=["Life stacking", "Life leech", "Life flasks",
-                        "Blood Magic", "Mind Over Matter", "Pain Attunement"],
+        benefits="Complete chaos immunity removes an entire damage type. You rely entirely on Energy Shield, freeing all chaos resistance gear slots for other stats.",
+        impact="Without CI, ES builds must invest heavily in chaos resistance on gear (which competes with ES and damage stats), or risk being one-shot by chaos damage which bypasses ES by default.",
+        synergies=["Energy Shield gear", "ES recharge", "Ghost Reaver", "Discipline aura"],
+        anti_synergies=["Life stacking", "Life leech", "Blood Magic"],
         build_types=["energy_shield", "chaos_immune", "intelligence_stacking"],
     ),
 
     "Mind Over Matter": KeystoneInfo(
         description="40% of damage taken from hits is deducted from mana before life.",
-        benefits=(
-            "Effectively adds 40% of your mana pool as extra EHP. Great for "
-            "builds that naturally have a large mana pool and good mana "
-            "recovery."
-        ),
-        synergies=["Large mana pool", "Mana regeneration", "Clarity aura",
-                   "Mana flask", "Mana on hit"],
-        anti_synergies=["Blood Magic", "Low mana builds",
-                        "Heavy mana reservation", "Energy Shield focus"],
+        benefits="Effectively adds 40% of your mana pool as extra EHP. Great for builds with large mana pools and good mana recovery.",
+        impact="Without Mind Over Matter, all hit damage goes directly to your life pool. You're missing a significant defensive layer — potentially thousands of extra effective HP that your unused mana could be providing.",
+        synergies=["Large mana pool", "Mana regeneration", "Clarity aura"],
+        anti_synergies=["Blood Magic", "Low mana builds", "Heavy mana reservation"],
         build_types=["mana_stacking", "hybrid_life_mana", "spell_damage"],
     ),
 
     "Ancestral Bond": KeystoneInfo(
         description="You can't deal damage directly. +1 to maximum number of summoned totems.",
-        benefits=(
-            "Extra totem lets totem builds scale their clear and single-target. "
-            "The 'no damage' downside is irrelevant because totems deal "
-            "the damage for you."
-        ),
-        synergies=["Totem skills", "Totem placement speed", "Totem life",
-                   "Multiple totems support"],
-        anti_synergies=["Self-cast builds", "Attack builds", "Minion builds",
-                        "Any non-totem playstyle"],
+        benefits="Extra totem scales clear speed and single-target damage. The 'no damage' downside is irrelevant because totems deal the damage for you.",
+        impact="Without Ancestral Bond, totem builds have one fewer totem, directly reducing your damage output and coverage. For totem builds, this is a pure damage gain.",
+        synergies=["Totem skills", "Totem placement speed"],
+        anti_synergies=["Self-cast builds", "Attack builds"],
         build_types=["totem"],
     ),
 
     "Iron Reflexes": KeystoneInfo(
         description="Converts all evasion rating to armour rating.",
-        benefits=(
-            "Lets you stack armour from both armour and evasion sources. "
-            "Dexterity-based gear with high evasion becomes armour, giving "
-            "huge physical damage reduction."
-        ),
-        synergies=["Armour stacking", "Grace aura (becomes armour)",
-                   "Determination aura", "Molten Shell", "Granite Flask"],
-        anti_synergies=["Evasion builds", "Acrobatics", "Dodge chance",
-                        "Blind synergies"],
+        benefits="Stack armour from both armour and evasion sources. Dexterity-based gear with high evasion becomes armour, giving huge physical damage reduction.",
+        impact="Without Iron Reflexes, your evasion and armour are split defenses — neither reaches its full potential. Converting evasion to armour gives much more consistent physical mitigation than split defenses.",
+        synergies=["Armour stacking", "Grace aura (becomes armour)", "Determination aura"],
+        anti_synergies=["Evasion builds", "Acrobatics", "Dodge chance"],
         build_types=["armour_stacking", "physical_mitigation", "melee"],
     ),
 
     "Acrobatics": KeystoneInfo(
         description="Grants dodge chance but reduces armour and energy shield.",
-        benefits=(
-            "Strong layer of avoidance for evasion-based characters. Dodge "
-            "is checked independently of evasion, giving two chances to avoid "
-            "hits entirely."
-        ),
-        synergies=["Evasion gear", "Grace aura", "Blind", "Jade Flask",
-                   "Dexterity stacking"],
-        anti_synergies=["Iron Reflexes", "Armour stacking",
-                        "Energy Shield builds", "Determination aura"],
+        benefits="Strong avoidance layer for evasion-based characters. Dodge is checked independently of evasion, giving two chances to avoid hits.",
+        impact="Without Acrobatics, evasion-based characters lack a secondary avoidance layer. When evasion fails (and it will — it's entropy-based), you take the full hit with minimal mitigation.",
+        synergies=["Evasion gear", "Grace aura", "Dexterity stacking"],
+        anti_synergies=["Iron Reflexes", "Armour stacking", "Energy Shield builds"],
         build_types=["evasion", "dodge", "ranged_attack"],
     ),
 
     "Ghost Reaver": KeystoneInfo(
         description="Life leech applies to Energy Shield instead of life.",
-        benefits=(
-            "Gives ES builds access to leech-based sustain, which is normally "
-            "life-only. Essential for attack-based ES characters who need "
-            "instant recovery during fights."
-        ),
-        synergies=["Energy Shield gear", "Attack builds", "Life leech sources",
-                   "Chaos Inoculation", "Vaal Pact"],
-        anti_synergies=["Life builds", "ES recharge builds (leech stops recharge)",
-                        "Spell-only builds without leech"],
+        benefits="Gives ES builds access to leech-based sustain. Essential for attack-based ES characters who need instant recovery during fights.",
+        impact="Without Ghost Reaver, ES builds can't leech — your only recovery is ES recharge (which has a delay). In sustained combat, you'll have no way to recover ES until you stop taking damage.",
+        synergies=["Energy Shield gear", "Attack builds", "Life leech sources"],
+        anti_synergies=["Life builds", "ES recharge builds"],
         build_types=["energy_shield", "attack_es"],
     ),
 
     "Resolute Technique": KeystoneInfo(
         description="Your hits always connect (100% hit chance). You can never critically strike.",
-        benefits=(
-            "Eliminates accuracy as a stat requirement entirely. Perfect "
-            "for builds that don't invest in crit and just want reliable, "
-            "consistent damage."
-        ),
-        synergies=["Non-crit attack builds", "Elemental Overload (conflict — "
-                   "can't crit to proc)", "Strength-based melee",
-                   "Bleed builds", "Ignite via other means"],
-        anti_synergies=["Critical strike builds", "Elemental Overload",
-                        "Assassin ascendancy", "Brittle"],
+        benefits="Eliminates accuracy as a stat requirement. Perfect for non-crit builds that want reliable, consistent damage without investing in accuracy gear.",
+        impact="Without Resolute Technique, non-crit attack builds need significant accuracy investment on gear and passives. Missing attacks is a direct DPS loss — even 90% hit chance means 10% of your attacks deal zero damage.",
+        synergies=["Non-crit attack builds", "Strength-based melee"],
+        anti_synergies=["Critical strike builds", "Elemental Overload"],
         build_types=["non_crit_attack", "melee", "physical_attack"],
     ),
 
     "Unwavering Stance": KeystoneInfo(
         description="Cannot be stunned. Cannot evade attacks.",
-        benefits=(
-            "Stun immunity is critical for builds that channel or have long "
-            "cast animations. The 'cannot evade' downside is irrelevant "
-            "for armour-based characters."
-        ),
-        synergies=["Armour stacking", "Iron Reflexes", "Channelling skills",
-                   "Determination aura"],
-        anti_synergies=["Evasion builds", "Acrobatics", "Dodge builds",
-                        "Grace aura"],
+        benefits="Stun immunity is critical for builds that channel or have long cast animations. The 'cannot evade' downside is irrelevant for armour-based characters.",
+        impact="Without Unwavering Stance, you can be stunned mid-cast or mid-channel, interrupting your damage and leaving you vulnerable. In boss fights, a stun at the wrong moment means death.",
+        synergies=["Armour stacking", "Iron Reflexes", "Channelling skills"],
+        anti_synergies=["Evasion builds", "Acrobatics", "Grace aura"],
         build_types=["armour_stacking", "melee", "channelling"],
     ),
 
     "Crimson Dance": KeystoneInfo(
         description="Bleeding you inflict can stack up to 8 times on an enemy.",
-        benefits=(
-            "Massively increases bleed DPS by allowing stacking. Normally "
-            "only the strongest bleed counts — with Crimson Dance, fast "
-            "attacks apply many bleeds simultaneously."
-        ),
-        synergies=["Bleed chance", "Physical damage", "Attack speed",
-                   "Multistrike", "Lacerate", "Puncture"],
-        anti_synergies=["Elemental builds", "Spell builds",
-                        "Slow-hitting builds (less stacking)"],
+        benefits="Massively increases bleed DPS by allowing stacking. Normally only the strongest bleed counts — with Crimson Dance, fast attacks apply many bleeds simultaneously.",
+        impact="Without Crimson Dance, only your single strongest bleed applies. You're losing up to 7x bleed damage potential. For bleed builds, this is the difference between viable and non-functional boss damage.",
+        synergies=["Bleed chance", "Physical damage", "Attack speed"],
+        anti_synergies=["Elemental builds", "Spell builds"],
         build_types=["bleed", "physical_attack", "melee"],
     ),
 
     "Point Blank": KeystoneInfo(
-        description=(
-            "Projectiles deal up to 30% more damage to close targets, "
-            "scaling down to 30% less damage at far range."
-        ),
-        benefits=(
-            "Huge damage boost for close-range projectile builds. "
-            "Perfect for bow or wand characters who fight at melee range "
-            "or use shotgunning skills."
-        ),
-        synergies=["Close-range projectile skills", "Barrage", "Rain of Arrows",
-                   "Short-range wand skills", "Shotgunning mechanics"],
-        anti_synergies=["Long-range playstyles", "Off-screen clearing",
-                        "Artillery-style skills"],
+        description="Projectiles deal up to 30% more damage to close targets, scaling down to 30% less at far range.",
+        benefits="Huge damage boost for close-range projectile builds. Perfect for bow or wand characters who fight at short range.",
+        impact="Without Point Blank, close-range projectile builds miss a 30% more multiplier. That's a massive DPS loss for builds designed to fight up close.",
+        synergies=["Close-range projectile skills", "Barrage", "Rain of Arrows"],
+        anti_synergies=["Long-range playstyles", "Off-screen clearing"],
         build_types=["projectile_close_range", "bow_attack", "wand_attack"],
     ),
 
     "Iron Will": KeystoneInfo(
-        description=(
-            "Strength's damage bonus applies to spell damage instead of "
-            "only melee physical damage."
-        ),
-        benefits=(
-            "Lets strength-stacking characters scale spell damage. "
-            "Every point of strength gives both life (survivability) and "
-            "spell damage (offense), making gearing very efficient."
-        ),
-        synergies=["Strength stacking", "Hybrid spell/melee gear",
-                   "Battlemage", "Shaper of Storms"],
-        anti_synergies=["Dexterity stacking", "Intelligence stacking",
-                        "Pure caster builds that don't stack STR"],
+        description="Strength's damage bonus applies to spell damage instead of only melee physical damage.",
+        benefits="Lets strength-stacking characters scale spell damage. Every point of strength gives both life (survivability) and spell damage (offense).",
+        impact="Without Iron Will, strength-stacking casters get zero spell damage from their primary attribute. You'd need to dual-scale both STR (for life) and INT (for damage), making gearing much harder.",
+        synergies=["Strength stacking", "Battlemage"],
+        anti_synergies=["Dexterity stacking", "Intelligence stacking"],
         build_types=["strength_stacking", "spell_damage", "hybrid_melee_caster"],
+    ),
+
+    "Eldritch Battery": KeystoneInfo(
+        description="Energy Shield protects mana instead of life.",
+        benefits="Lets you spend ES as mana, enabling high-cost skills without mana investment. Combined with Mind Over Matter, your ES also becomes a defensive layer via mana absorption.",
+        impact="Without Eldritch Battery, high-cost skill builds struggle with mana sustain. You'd need heavy mana investment on gear and passives that could otherwise go toward damage or defenses.",
+        synergies=["Mind Over Matter", "ES gear", "High mana cost skills"],
+        anti_synergies=["CI", "ES as primary defense pool"],
+        build_types=["mana_stacking", "spell_damage"],
+    ),
+
+    "Elemental Equilibrium": KeystoneInfo(
+        description="Enemies you hit gain resistance to the element you hit them with, but lose resistance to other elements.",
+        benefits="Lets you debuff enemy resistance to your main damage element by hitting with a different element first. Effectively adds penetration for free.",
+        impact="Without Elemental Equilibrium, you're missing a significant resistance debuff on enemies. Builds that use this gain what amounts to 25-50% penetration for free — a huge DPS multiplier especially against bosses.",
+        synergies=["Multi-element setups", "Trigger skills with off-element"],
+        anti_synergies=["Single-element self-hit builds"],
+        build_types=["elemental_damage", "spell_damage"],
+    ),
+
+    # ------------------------------------------------------------------
+    # Blood Mage (Witch) ascendancy keystones
+    # ------------------------------------------------------------------
+
+    "Sunder the Flesh": KeystoneInfo(
+        description="Your critical strikes cause enemies to explode on death, dealing a percentage of their life as physical damage to nearby enemies.",
+        benefits="Massive clear speed boost — every enemy you kill becomes a chain explosion. In dense packs, one kill cascades into wiping the entire screen.",
+        impact="Without Sunder the Flesh, your clear speed drops dramatically. You'll need to hit every enemy individually instead of relying on chain explosions. This is the primary reason Blood Mage clears faster than other ascendancies.",
+        synergies=["Crit builds", "High pack density", "Physical damage scaling"],
+        anti_synergies=["Non-crit builds", "Single-target focused"],
+        build_types=["spell_damage", "crit", "clear_speed"],
+    ),
+
+    "Vitality Siphon": KeystoneInfo(
+        description="Life and ES leech from spell damage. Spell hits recover a percentage of damage dealt as life and energy shield.",
+        benefits="Gives spell builds sustain they normally can't get — life and ES leech from every spell hit. Keeps you alive during sustained combat without relying on flasks or regen.",
+        impact="Without Vitality Siphon, your spell build has no leech. You'll rely entirely on regen, flasks, and ES recharge for sustain. In prolonged boss fights, you'll run out of recovery and die.",
+        synergies=["High DPS spells", "ES builds", "Sanguimancy"],
+        anti_synergies=["Low hit-rate builds", "DoT-only builds"],
+        build_types=["spell_damage", "energy_shield", "sustain"],
+    ),
+
+    "Grasping Wounds": KeystoneInfo(
+        description="Your hits have a chance to inflict Grasping Wounds, slowing enemies and causing them to take increased damage.",
+        benefits="Enemies take more damage from all sources AND are slowed. This is both a damage multiplier and a defensive layer — slowed enemies are easier to avoid and kite.",
+        impact="Without Grasping Wounds, you're missing both a damage multiplier on enemies AND a slow defensive layer. Your effective DPS is lower and enemies reach you faster. Nearly all Blood Mage builds take this for good reason.",
+        synergies=["High hit rate", "Multi-hit spells", "Comet", "Cast on Crit"],
+        anti_synergies=["DoT-only builds"],
+        build_types=["spell_damage", "attack_damage", "crit"],
+    ),
+
+    "Crimson Power": KeystoneInfo(
+        description="Gain increased spell damage based on your missing life percentage. More missing life = more damage.",
+        benefits="Synergizes perfectly with low-life builds — the more life you reserve, the more spell damage you get. Combined with Pain Attunement, this creates massive damage scaling.",
+        impact="Without Crimson Power, low-life Blood Mage builds lose a significant damage multiplier that scales with reserved life. You're leaving potentially 40-80% increased spell damage on the table.",
+        synergies=["Low-life builds", "Pain Attunement", "Sanguimancy", "Life reservation"],
+        anti_synergies=["Full life builds", "Life stacking"],
+        build_types=["low_life", "spell_damage"],
+    ),
+
+    "Gore Spike": KeystoneInfo(
+        description="Corpse skills deal additional damage and have increased area of effect.",
+        benefits="Direct damage boost and AoE increase for corpse-based skills like Unearth, Detonate Dead, and Volatile Dead.",
+        impact="Without Gore Spike, corpse-based builds deal less damage per corpse and have smaller explosion radius. If you're running corpse skills, this is free damage and coverage.",
+        synergies=["Unearth", "Detonate Dead", "Volatile Dead", "Corpse skills"],
+        anti_synergies=["Non-corpse builds"],
+        build_types=["spell_damage", "corpse_skills"],
+    ),
+
+    "Sanguine Tides": KeystoneInfo(
+        description="Blood skills have increased damage and reduced cost.",
+        benefits="Makes blood-themed skills cheaper to cast and deal more damage. Efficiency boost for builds centered on blood skills.",
+        impact="Without Sanguine Tides, blood skill builds pay higher costs and deal less damage. The cost reduction is especially important for sustain on skills that cost life.",
+        synergies=["Blood skills", "Life cost management"],
+        anti_synergies=["Non-blood skill builds"],
+        build_types=["spell_damage", "blood_skills"],
+    ),
+
+    "Sacrifice of Blood": KeystoneInfo(
+        description="Sacrifice a portion of life to gain a powerful temporary buff to spell damage and cast speed.",
+        benefits="Massive burst damage window — sacrifice life for a significant spell damage and speed boost. Used for burst phases on bosses.",
+        impact="Without Sacrifice of Blood, you lack an on-demand burst damage cooldown. Boss phases that require high burst DPS will take longer, and some DPS checks become harder to meet.",
+        synergies=["Sanguimancy (ES pays the life cost)", "Burst damage builds"],
+        anti_synergies=["Builds without ES backup for the life cost"],
+        build_types=["spell_damage", "burst_damage"],
+    ),
+
+    # ------------------------------------------------------------------
+    # Other common ascendancy keystones (cross-class)
+    # ------------------------------------------------------------------
+
+    "Running Assault": KeystoneInfo(
+        description="Gain a damage buff after using a movement skill. Attacks and spells deal more damage for a short duration after dashing.",
+        benefits="Free damage multiplier triggered by your movement skill. Since you're already dashing to dodge mechanics, this is essentially permanent uptime in most content.",
+        impact="Without Running Assault, you're missing a more damage multiplier that has near-100% uptime in active gameplay. Every other player in your build is doing more damage simply by dashing before attacking.",
+        synergies=["Movement skills", "Active playstyle", "Boss fights"],
+        anti_synergies=["Stationary playstyles", "Totem builds"],
+        build_types=["attack_damage", "spell_damage"],
+    ),
+
+    "Path Seeker": KeystoneInfo(
+        description="Increased effect of buffs on you. Auras, heralds, and other buffs are more powerful.",
+        benefits="Multiplies the effect of all your buffs — auras, heralds, flasks, temporary buffs. The more buffs you run, the more value this gives.",
+        impact="Without Path Seeker, every aura, herald, and buff you run is less effective. If you're running 3+ buffs (and most builds do), you're losing a compounding efficiency bonus across all of them.",
+        synergies=["Multiple auras", "Heralds", "Flask effect", "Buff stacking"],
+        anti_synergies=["Builds with few buffs"],
+        build_types=["aura_stacking", "buff_scaling"],
+    ),
+
+    "Path of the Sorceress": KeystoneInfo(
+        description="Increased spell damage and cast speed based on intelligence.",
+        benefits="Scales your spell damage and cast speed from intelligence. Since casters already stack INT, this gives free damage from a stat you're already investing in.",
+        impact="Without Path of the Sorceress, your intelligence only gives mana and ES — you're not extracting damage value from your primary attribute. Other casters are getting both defense AND offense from every point of INT.",
+        synergies=["Intelligence stacking", "Spell builds", "ES gear"],
+        anti_synergies=["Attack builds", "Strength-based casters"],
+        build_types=["spell_damage", "intelligence_stacking"],
+    ),
+
+    "Overwhelming Toxicity": KeystoneInfo(
+        description="Poisons you inflict deal damage faster and have increased damage.",
+        benefits="Dramatically increases poison DPS by making poisons tick faster and harder. Core keystone for any poison build — it's the difference between poisons being a minor DOT and being your primary damage source.",
+        impact="Without Overwhelming Toxicity, your poisons tick slowly and deal less damage. Poison builds without this do a fraction of the DPS. If your build relies on poison at all, this is non-negotiable.",
+        synergies=["Poison chance", "Chaos damage", "Fast-hitting skills"],
+        anti_synergies=["Non-poison builds", "Pure elemental builds"],
+        build_types=["poison", "chaos_damage", "dot"],
+    ),
+
+    "Relentless Pursuit": KeystoneInfo(
+        description="Increased damage while moving. Bonus damage and speed when you haven't stopped recently.",
+        benefits="Rewards aggressive, mobile playstyle with a persistent damage bonus. Since most ranged builds are always repositioning, this has near-permanent uptime.",
+        impact="Without Relentless Pursuit, you're dealing less damage than players who take it — and it's essentially free since you're already moving to dodge mechanics. It's a damage multiplier with no real downside.",
+        synergies=["Ranged builds", "Mobile playstyle", "Bow skills"],
+        anti_synergies=["Stationary channelling", "Totem builds"],
+        build_types=["ranged_attack", "mobile_playstyle"],
+    ),
+
+    "Wildsurge Incantation": KeystoneInfo(
+        description="Spell skills fire an additional projectile or chain, with increased spell damage.",
+        benefits="Extra projectile/chain means more hits per cast, more coverage, and more damage. Directly scales multi-hit spell builds.",
+        impact="Without Wildsurge Incantation, your spells hit fewer targets per cast. In both clear (fewer enemies hit) and single-target (fewer hits per cast), you lose damage throughput.",
+        synergies=["Projectile spells", "Chain spells", "Multi-hit builds"],
+        anti_synergies=["Single-target only builds", "Non-projectile spells"],
+        build_types=["spell_damage", "projectile"],
     ),
 }
 

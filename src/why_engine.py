@@ -307,7 +307,7 @@ class WhyEngine:
             pct = pop["percentage"] if pop else 0
 
             if info:
-                text = f"{info.description} {info.benefits}"
+                text = f"{info.benefits}"
                 if pct > 0:
                     text += f" {pct:.0f}% of players in this build use it."
                 severity = "positive" if pct > 50 else "info"
@@ -323,7 +323,7 @@ class WhyEngine:
                 adoption_pct=pct,
             ))
 
-        # Flag popular keystones the player is MISSING
+        # Flag popular keystones the player is MISSING — lead with IMPACT
         for pk in popular_keystones:
             if pk["name"] in player_ks_set:
                 continue
@@ -334,23 +334,39 @@ class WhyEngine:
             pct = pk["percentage"]
 
             if info:
-                text = (
-                    f"{pct:.0f}% of players in this build use {pk['name']}. "
-                    f"{info.description} {info.benefits}"
-                )
-                # Add synergy context if relevant to archetype
-                synergy_match = [s for s in info.synergies if _matches_archetype(s, archetype)]
-                if synergy_match:
-                    text += f" Synergizes with your build: {', '.join(synergy_match[:2])}."
+                # Lead with what the player is LOSING by not having this
+                text = info.impact
+                text += f" ({pct:.0f}% of this build uses {pk['name']}.)"
             else:
-                text = f"{pct:.0f}% of similar builds use {pk['name']}, but you don't have it allocated."
+                # No game knowledge — infer impact from adoption rate
+                if pct >= 95:
+                    text = (
+                        f"{pk['name']} is used by {pct:.0f}% of players in this build — "
+                        f"it's essentially mandatory. Without it, you're at a significant "
+                        f"disadvantage in either damage or survivability compared to "
+                        f"virtually every other player running this build."
+                    )
+                elif pct >= 70:
+                    text = (
+                        f"{pk['name']} is used by {pct:.0f}% of players in this build. "
+                        f"The high adoption rate suggests it provides a major damage or "
+                        f"survivability boost that most players consider essential for "
+                        f"this archetype."
+                    )
+                else:
+                    text = (
+                        f"{pk['name']} is used by {pct:.0f}% of players in this build. "
+                        f"It's a popular but not universal choice — it likely provides "
+                        f"a meaningful boost that complements this archetype."
+                    )
 
             severity = "critical" if pct > 70 else "warning"
 
             explanations.append(Explanation(
                 context="keystone", title=f"Missing: {pk['name']}",
                 text=text, severity=severity,
-                source="population", adoption_pct=pct,
+                source="population" if not info else "game_knowledge",
+                adoption_pct=pct,
             ))
 
         return explanations
@@ -403,24 +419,29 @@ class WhyEngine:
                     source="game_knowledge",
                 ))
 
-        # Missing high-adoption keystones
+        # Missing high-adoption keystones — lead with impact
         player_ks = set(char_data.keystones)
         for pk in popular_keystones:
             if pk["name"] in player_ks or pk["percentage"] < 70:
                 continue
             info = KEYSTONES.get(pk["name"])
+            pct = pk["percentage"]
             if info:
-                actions.append(Explanation(
-                    context="action",
-                    title=f"Consider {pk['name']}",
-                    text=(
-                        f"{pk['percentage']:.0f}% of players in this build use {pk['name']}. "
-                        f"{info.benefits}"
-                    ),
-                    severity="warning",
-                    source="population",
-                    adoption_pct=pk["percentage"],
-                ))
+                text = f"{info.impact} ({pct:.0f}% of this build uses it.)"
+            else:
+                text = (
+                    f"{pk['name']} is used by {pct:.0f}% of this build — "
+                    f"without it, you're at a significant disadvantage in either "
+                    f"damage or survivability."
+                )
+            actions.append(Explanation(
+                context="action",
+                title=f"Allocate {pk['name']}",
+                text=text,
+                severity="critical" if pct > 90 else "warning",
+                source="population" if not info else "game_knowledge",
+                adoption_pct=pct,
+            ))
 
         # Low EHP warning
         if pob and pob.stats.total_ehp > 0:
