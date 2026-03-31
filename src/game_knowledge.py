@@ -553,6 +553,283 @@ UNIQUE_JEWELS: Dict[str, UniqueJewelInfo] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# CLASS_SCALING — Per-class DPS scaling weights derived from 410-build analysis.
+# Values represent the correlation ratio (top 1/3 vs bottom 1/3 DPS).
+# Higher = more important for that class.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ClassScaling:
+    primary_factor: str  # name of #1 scaling factor
+    weights: Dict[str, float]  # factor_name -> correlation_ratio
+    defense_meta: str  # dominant defense type
+    key_keystones: List[str]  # most important keystones
+    keystone_combo: str  # description of the keystone pattern
+    top_unique: str  # most popular unique item
+    top_unique_pct: float  # adoption %
+
+CLASS_SCALING: Dict[str, ClassScaling] = {
+    "Warrior": ClassScaling(
+        primary_factor="extra_elemental",
+        weights={
+            "extra_as": 3.3, "atk_speed": 3.2, "evasion_pct": 3.6,
+            "crit_chance": 2.6, "crit_multi": 2.3, "armour_pct": 1.9,
+            "cast_speed": 4.1, "gem_levels": 1.0,
+        },
+        defense_meta="life",
+        key_keystones=["Blood Magic", "Giant's Blood", "Sacrifice of Flesh"],
+        keystone_combo="Blood Magic + Giant's Blood for life scaling",
+        top_unique="Headhunter",
+        top_unique_pct=57.0,
+    ),
+    "Witch": ClassScaling(
+        primary_factor="crit_multi",
+        weights={
+            "crit_multi": 11.7, "crit_chance": 3.5, "extra_as": 1.8,
+            "evasion_pct": 1.7, "jewel_count": 1.6, "es_pct": 1.4,
+            "gem_levels": 1.4, "cast_speed": 1.2,
+        },
+        defense_meta="es",
+        key_keystones=["Eldritch Battery", "Mind Over Matter", "Blood Magic"],
+        keystone_combo="EB + MoM for ES-as-mana defense, or Blood Magic for life builds",
+        top_unique="The Vertex",
+        top_unique_pct=49.0,
+    ),
+    "Ranger": ClassScaling(
+        primary_factor="crit_chance",
+        weights={
+            "crit_chance": 2.6, "gem_levels": 1.6, "crit_multi": 1.5,
+            "cast_speed": 3.0, "evasion_pct": 1.2, "es_pct": 1.2,
+            "atk_speed": 1.0, "extra_as": 1.0,
+        },
+        defense_meta="es",
+        key_keystones=[],
+        keystone_combo="Minimal keystones — Ranger scales through gear and gems",
+        top_unique="Headhunter",
+        top_unique_pct=92.0,
+    ),
+    "Sorceress": ClassScaling(
+        primary_factor="extra_elemental",
+        weights={
+            "extra_as": 1.5, "crit_multi": 1.5, "es_flat": 1.4,
+            "crit_chance": 1.3, "gem_levels": 1.3, "cast_speed": 1.2,
+            "spell_dmg": 1.2, "jewel_count": 1.2,
+        },
+        defense_meta="es",
+        key_keystones=["Chaos Inoculation", "Elemental Equilibrium"],
+        keystone_combo="CI for chaos immunity + ES as primary defense",
+        top_unique="Maligaro's Virtuosity",
+        top_unique_pct=54.0,
+    ),
+    "Monk": ClassScaling(
+        primary_factor="crit_multi",
+        weights={
+            "crit_multi": 2.7, "extra_as": 2.7, "armour_pct": 5.2,
+            "phys_dmg": 1.7, "crit_chance": 1.6, "jewel_count": 1.5,
+            "cast_speed": 5.0, "gem_levels": 1.0,
+        },
+        defense_meta="es",
+        key_keystones=["Chaos Inoculation"],
+        keystone_combo="CI for chaos immunity, some builds use Resonance",
+        top_unique="Headhunter",
+        top_unique_pct=69.0,
+    ),
+    "Mercenary": ClassScaling(
+        primary_factor="crit_chance",
+        weights={
+            "crit_chance": 3.6, "crit_multi": 2.9, "cast_speed": 2.7,
+            "extra_as": 2.5, "jewel_count": 2.4, "es_flat": 1.9,
+            "gem_levels": 1.4, "es_pct": 1.4,
+        },
+        defense_meta="life",
+        key_keystones=["Mind Over Matter", "Eldritch Battery", "Blood Magic"],
+        keystone_combo="EB + MoM or Blood Magic depending on build",
+        top_unique="Headhunter",
+        top_unique_pct=58.0,
+    ),
+    "Huntress": ClassScaling(
+        primary_factor="spell_damage",
+        weights={
+            "spell_dmg": 5.4, "crit_multi": 3.8, "cast_speed": 3.6,
+            "gem_levels": 2.4, "extra_as": 1.8, "es_pct": 1.6,
+            "jewel_count": 1.5, "es_flat": 1.4,
+        },
+        defense_meta="es",
+        key_keystones=["Chaos Inoculation", "Mind Over Matter", "Eldritch Battery"],
+        keystone_combo="CI + MoM + EB triple defense layer",
+        top_unique="Headhunter",
+        top_unique_pct=76.0,
+    ),
+    "Druid": ClassScaling(
+        primary_factor="crit_multi",
+        weights={
+            "crit_multi": 10.7, "cast_speed": 2.8, "es_flat": 1.8,
+            "atk_speed": 1.6, "extra_as": 1.6, "crit_chance": 1.5,
+            "evasion_pct": 1.4, "jewel_count": 1.4,
+        },
+        defense_meta="mom",
+        key_keystones=["Mind Over Matter", "Wildsurge Incantation", "Eldritch Battery", "Conduit", "Resonance", "Hollow Palm Technique", "Blackflame Covenant"],
+        keystone_combo="MoM + EB + Wildsurge + Conduit (64-71% of top builds). Most complex keystone stacking of any class.",
+        top_unique="The Covenant",
+        top_unique_pct=55.0,
+    ),
+}
+
+
+# ---------------------------------------------------------------------------
+# TOP_SUPPORT_GEMS — Support gems that separate top from bottom builds.
+# These appear in top 1/3 but rarely in bottom 1/3.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SupportGemInfo:
+    description: str
+    impact: str
+    best_for: List[str]  # class names or "all"
+
+TOP_SUPPORT_GEMS: Dict[str, SupportGemInfo] = {
+    "Cast on Critical": SupportGemInfo(
+        description="Triggers linked spells when you critically strike with an attack.",
+        impact="Enables Cast on Crit builds — the highest DPS archetype this meta. Turns attack speed and crit chance into spell DPS.",
+        best_for=["Witch", "Sorceress", "Mercenary", "Huntress"],
+    ),
+    "Rakiata's Flow": SupportGemInfo(
+        description="Grants additional projectile and damage scaling.",
+        impact="Top-only support gem — 54 top builds use it vs 0 bottom builds. Core for projectile and multi-hit builds.",
+        best_for=["all"],
+    ),
+    "Boundless Energy II": SupportGemInfo(
+        description="Increases energy and damage scaling for linked skills.",
+        impact="39 top builds vs 0 bottom. Provides both damage and sustain scaling.",
+        best_for=["Witch", "Mercenary", "Huntress"],
+    ),
+    "Garukhan's Resolve": SupportGemInfo(
+        description="Grants evasion-based defense bonuses and damage.",
+        impact="37 top builds vs 0 bottom. Defensive + offensive support.",
+        best_for=["Warrior", "Ranger", "Monk", "Huntress"],
+    ),
+    "Dialla's Desire": SupportGemInfo(
+        description="Increases damage based on gem levels.",
+        impact="Top Sorceress support — scales with the +gem level stacking strategy.",
+        best_for=["Sorceress"],
+    ),
+    "Uul-Netol's Embrace": SupportGemInfo(
+        description="Physical damage scaling and life conversion.",
+        impact="Warrior top-only support — core for melee physical builds.",
+        best_for=["Warrior"],
+    ),
+    "Uhtred's Augury": SupportGemInfo(
+        description="Spell augmentation and damage multiplier.",
+        impact="Top Witch and Mercenary support for spell builds.",
+        best_for=["Witch", "Mercenary"],
+    ),
+    "Concentrated Area": SupportGemInfo(
+        description="Reduces area but increases area damage.",
+        impact="DPS boost for AoE skills — trades clear speed for single-target damage.",
+        best_for=["Monk", "Sorceress", "Druid"],
+    ),
+}
+
+
+# ---------------------------------------------------------------------------
+# POPULAR_UNIQUES — Build-defining unique items with adoption rates and
+# class affinity from 410-build analysis.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class UniqueItemInfo:
+    description: str
+    impact: str
+    slot: str
+    global_adoption: float  # % of all builds
+    best_classes: List[str]
+    class_adoption: Dict[str, float]  # class -> adoption %
+
+POPULAR_UNIQUES: Dict[str, UniqueItemInfo] = {
+    "Headhunter": UniqueItemInfo(
+        description="Steals rare monster mods on kill, granting massive temporary buffs.",
+        impact="THE endgame belt. Stolen mods can multiply your DPS by 10-100x during mapping. Near-mandatory for endgame clear speed.",
+        slot="Belt",
+        global_adoption=67.0,
+        best_classes=["all"],
+        class_adoption={"Ranger": 92, "Huntress": 76, "Monk": 69, "Druid": 67, "Mercenary": 58, "Warrior": 57, "Witch": 40},
+    ),
+    "The Vertex": UniqueItemInfo(
+        description="Helmet with +gem levels, ES, and removes attribute requirements from gems.",
+        impact="Frees up attribute investment and adds gem levels. Core for ES/spell builds.",
+        slot="Helm",
+        global_adoption=34.0,
+        best_classes=["Witch", "Sorceress", "Mercenary"],
+        class_adoption={"Sorceress": 68, "Witch": 49, "Mercenary": 29, "Huntress": 27, "Druid": 26, "Monk": 24},
+    ),
+    "Kalandra's Touch": UniqueItemInfo(
+        description="Ring that mirrors the mods of your other ring.",
+        impact="Doubles the mods of your best ring. If your other ring has strong mods, this is massive value.",
+        slot="Ring2",
+        global_adoption=29.0,
+        best_classes=["all"],
+        class_adoption={"Huntress": 49, "Ranger": 39, "Mercenary": 34, "Druid": 33, "Witch": 32},
+    ),
+    "The Covenant": UniqueItemInfo(
+        description="Body armour that adds chaos damage to spells and life cost.",
+        impact="Build-defining for Druid (55% adoption). Adds significant chaos damage to spells at the cost of life per cast. Synergizes with Sanguimancy (ES pays the life cost).",
+        slot="BodyArmour",
+        global_adoption=18.0,
+        best_classes=["Druid", "Sorceress", "Mercenary", "Huntress"],
+        class_adoption={"Druid": 55, "Sorceress": 32, "Mercenary": 21, "Huntress": 16},
+    ),
+    "Hyrri's Ire": UniqueItemInfo(
+        description="Body armour with high evasion, cold damage, and dodge.",
+        impact="Best-in-slot for evasion-based ranged builds. Adds cold damage and dodge chance.",
+        slot="BodyArmour",
+        global_adoption=11.0,
+        best_classes=["Ranger", "Mercenary"],
+        class_adoption={"Ranger": 45, "Mercenary": 37},
+    ),
+    "Maligaro's Virtuosity": UniqueItemInfo(
+        description="Gloves with massive crit multiplier bonus.",
+        impact="54% of Sorceress builds use these — the crit multi bonus is one of the biggest single DPS multipliers in the game.",
+        slot="Gloves",
+        global_adoption=9.0,
+        best_classes=["Sorceress"],
+        class_adoption={"Sorceress": 54},
+    ),
+    "Choir of the Storm": UniqueItemInfo(
+        description="Amulet that adds lightning damage based on critical strikes.",
+        impact="Strong for crit spell builds — each crit adds lightning bolts. Synergizes with high crit chance builds.",
+        slot="Amulet",
+        global_adoption=7.0,
+        best_classes=["Druid", "Witch"],
+        class_adoption={"Druid": 24, "Witch": 14},
+    ),
+    "Palm of the Dreamer": UniqueItemInfo(
+        description="Offhand that grants extra elemental damage.",
+        impact="27% extra elemental damage as a shield slot — massive DPS for spell builds that don't need a second weapon.",
+        slot="Offhand",
+        global_adoption=5.0,
+        best_classes=["Witch", "Druid"],
+        class_adoption={"Druid": 14, "Witch": 11, "Warrior": 11},
+    ),
+    "Essentia Sanguis": UniqueItemInfo(
+        description="Gloves with ES leech and attack bonuses.",
+        impact="Core for ES-based attack builds (Monk, Huntress). Provides ES sustain through leech.",
+        slot="Gloves",
+        global_adoption=6.0,
+        best_classes=["Monk", "Huntress"],
+        class_adoption={"Huntress": 29, "Monk": 18},
+    ),
+    "Plaguefinger": UniqueItemInfo(
+        description="Gloves that enhance poison and chaos damage.",
+        impact="43% of Rangers use these — core for Poisonburst Arrow builds.",
+        slot="Gloves",
+        global_adoption=5.0,
+        best_classes=["Ranger"],
+        class_adoption={"Ranger": 43},
+    ),
+}
+
+
 MOD_SYNERGIES: List[ModSynergyInfo] = [
 
     ModSynergyInfo(

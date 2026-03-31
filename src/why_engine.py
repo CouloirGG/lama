@@ -14,13 +14,19 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
-from builds_client import BuildsClient, CharacterData, BuildArchetype
+from builds_client import BuildsClient, CharacterData, BuildArchetype, ASCENDANCY_MAP
 from pob_decoder import decode_pob_code, PobData, PobStats
 from game_knowledge import (
     KEYSTONES, DEFENSE_MECHANICS, STAT_THRESHOLDS, MOD_SYNERGIES,
     UNIQUE_JEWELS,
     KeystoneInfo, StatThreshold,
 )
+try:
+    from game_knowledge import CLASS_SCALING, TOP_SUPPORT_GEMS, POPULAR_UNIQUES
+except ImportError:
+    CLASS_SCALING = {}
+    TOP_SUPPORT_GEMS = {}
+    POPULAR_UNIQUES = {}
 
 logger = logging.getLogger("why_engine")
 
@@ -754,6 +760,28 @@ class WhyEngine:
                 source="game_knowledge",
             ))
 
+        # Class-specific scaling context
+        base_class = ""
+        for asc_name, bc in ASCENDANCY_MAP.items():
+            if asc_name in (archetype.tags or []):
+                base_class = bc
+                break
+
+        class_data = CLASS_SCALING.get(base_class)
+        if class_data:
+            explanations.append(Explanation(
+                context="meta",
+                title=f"{base_class} Scaling",
+                text=(
+                    f"For {base_class} builds, the #1 DPS factor is {class_data.primary_factor.replace('_', ' ')} "
+                    f"(top players have {list(class_data.weights.values())[0]:.1f}x more than bottom). "
+                    f"Defense meta: {class_data.defense_meta}. "
+                    f"{class_data.keystone_combo}"
+                ),
+                severity="info",
+                source="game_knowledge",
+            ))
+
         return explanations
 
     # ------------------------------------------------------------------
@@ -1048,6 +1076,7 @@ class WhyEngine:
         sc = exps.scorecard
         player_ks = set(char_data.keystones)
         total_dps = sc.dps if sc else 0
+        base_class = ASCENDANCY_MAP.get(char_data.ascendancy or "", "")
 
         # ── Analyze gear mods for DPS/survival contributions ──
         gear_dps_mods = []   # (slot, item_name, mod_text, category, est_pct)
@@ -1062,7 +1091,7 @@ class WhyEngine:
 
             for mod in all_mods:
                 mod_clean = _strip_ninja_brackets(mod)
-                analysis = _analyze_mod_contribution(mod_clean, archetype)
+                analysis = _analyze_mod_contribution(mod_clean, archetype, base_class)
                 if analysis:
                     cat, desc, est_pct = analysis
                     if cat == "dps":
@@ -1162,6 +1191,46 @@ class WhyEngine:
                     estimated_pct=round((ratio - 1) * 100, 0),
                 ))
 
+        # Check for missing top-tier support gems
+        if main_skill_group and profile:
+            player_supports = set(main_skill_group.gems) - {archetype.main_skill}
+            for gem_name, gem_info in TOP_SUPPORT_GEMS.items():
+                if gem_name in player_supports:
+                    continue  # player has it
+                if "all" in gem_info.best_for or base_class in gem_info.best_for:
+                    dps_missing.append(SynergyContributor(
+                        name=f"Support: {gem_name}",
+                        source_type="missing",
+                        contribution=gem_info.impact[:80],
+                        severity="warning",
+                        detail=gem_info.impact,
+                        estimated_pct=8.0,
+                        estimated_value=total_dps * 0.08 if total_dps > 0 else 0,
+                    ))
+
+        # Check for missing popular unique items for this class
+        player_uniques = set()
+        for eq in char_data.equipment:
+            if eq.rarity == "Unique" and eq.name:
+                player_uniques.add(eq.name)
+
+        for uname, uinfo in POPULAR_UNIQUES.items():
+            if uname in player_uniques:
+                continue
+            class_pct = uinfo.class_adoption.get(base_class, 0)
+            if class_pct >= 25:  # only suggest if 25%+ of this class uses it
+                dps_missing.append(SynergyContributor(
+                    name=uname,
+                    source_type="missing",
+                    contribution=f"{class_pct:.0f}% of {base_class} builds use {uname} ({uinfo.slot}). {uinfo.impact[:60]}",
+                    severity="info" if class_pct < 50 else "warning",
+                    detail=uinfo.impact,
+                    slot=uinfo.slot,
+                    adoption_pct=class_pct,
+                    estimated_pct=class_pct * 0.15,
+                    estimated_value=total_dps * class_pct * 0.0015 if total_dps > 0 else 0,
+                ))
+
         # Gear mods contributing to DPS (top items — +gem levels, % damage, etc.)
         for slot, item_name, mod_text, desc, est_pct in gear_dps_mods[:8]:
             est_val = total_dps * est_pct / 100 if total_dps > 0 else 0
@@ -1221,7 +1290,7 @@ class WhyEngine:
             # Analyze mod contributions
             for mod in all_j_mods:
                 mc = _strip_ninja_brackets(mod)
-                a = _analyze_mod_contribution(mc, archetype)
+                a = _analyze_mod_contribution(mc, archetype, base_class)
                 if a and a[0] == "dps":
                     j_dps_pct += a[2]
                     j_key_mods.append(a[1])
@@ -1654,6 +1723,8 @@ def _add_gear_improvement_actions(
     if not total_dps:
         return
 
+    base_class = ASCENDANCY_MAP.get(getattr(char_data, "ascendancy", "") or "", "")
+
     # Analyze each slot for DPS and survival contribution
     slot_dps = {}  # slot -> total estimated DPS %
     slot_items = {}  # slot -> item
@@ -1666,7 +1737,7 @@ def _add_gear_improvement_actions(
         slot_items[item.slot] = item
         for mod in all_mods:
             mc = _strip_ninja_brackets(mod)
-            a = _analyze_mod_contribution(mc, archetype)
+            a = _analyze_mod_contribution(mc, archetype, base_class)
             if a and a[0] == "dps":
                 total_pct += a[2]
         slot_dps[item.slot] = total_pct
@@ -1847,10 +1918,22 @@ def _strip_ninja_brackets(text: str) -> str:
     return _NINJA_BRACKET.sub(r"\2", text)
 
 
-def _analyze_mod_contribution(mod_text: str, archetype) -> Optional[tuple]:
+def _analyze_mod_contribution(mod_text: str, archetype, base_class: str = "") -> Optional[tuple]:
     """Analyze a mod for its DPS or survival contribution.
     Returns (category, description, estimated_pct) or None if not relevant.
     """
+    # Get class-specific weights if available
+    class_data = CLASS_SCALING.get(base_class)
+    crit_weight = 0.15  # default
+    cast_speed_weight = 0.8  # default
+    gem_level_weight = 6  # default
+    extra_elem_weight = 0.7  # default
+    if class_data:
+        crit_weight = min(class_data.weights.get("crit_chance", 1.0) * 0.06, 0.3)
+        cast_speed_weight = min(class_data.weights.get("cast_speed", 1.0) * 0.3, 1.5)
+        gem_level_weight = min(class_data.weights.get("gem_levels", 1.0) * 4, 15)
+        extra_elem_weight = min(class_data.weights.get("extra_as", 1.0) * 0.3, 1.2)
+
     ml = mod_text.lower()
 
     # +N to level of all spell/skill gems
@@ -1860,7 +1943,7 @@ def _analyze_mod_contribution(mod_text: str, archetype) -> Optional[tuple]:
     m = _re.search(r"\+(\d+) to level of all .*(spell|skill)", ml)
     if m:
         levels = int(m.group(1))
-        est = levels * 6  # ~6% per gem level (was 11%, data shows less impact)
+        est = levels * gem_level_weight  # ~6% per gem level (was 11%, data shows less impact)
         return ("dps", f"+{levels} gem levels (~{est}% DPS)", est)
 
     # +N to level of specific skill gems
@@ -1881,7 +1964,7 @@ def _analyze_mod_contribution(mod_text: str, archetype) -> Optional[tuple]:
     m = _re.search(r"(\d+)% of damage as extra", ml)
     if m:
         val = int(m.group(1))
-        est = val * 0.7  # extra damage conversion is very efficient
+        est = val * extra_elem_weight  # extra damage conversion is very efficient
         return ("dps", f"+{val}% as extra elemental", round(est, 1))
 
     # % increased critical hit chance
@@ -1889,7 +1972,7 @@ def _analyze_mod_contribution(mod_text: str, archetype) -> Optional[tuple]:
     m = _re.search(r"(\d+)% increased .*critical.*hit.*chance", ml)
     if m and archetype.is_crit:
         val = int(m.group(1))
-        est = val * 0.15  # crit chance is strong for crit builds (was 0.08)
+        est = val * crit_weight  # crit chance is strong for crit builds (was 0.08)
         return ("dps", f"+{val}% crit chance", round(est, 1))
 
     # % increased cast speed — #1 DPS factor per scaling analysis (4.7x top vs bottom)
@@ -1897,7 +1980,7 @@ def _analyze_mod_contribution(mod_text: str, archetype) -> Optional[tuple]:
     m = _re.search(r"(\d+)% increased cast speed", ml)
     if m and archetype.damage_type == "spell":
         val = int(m.group(1))
-        est = val * 0.8  # cast speed is near-linear DPS scaling (was 0.5)
+        est = val * cast_speed_weight  # cast speed is near-linear DPS scaling (was 0.5)
         return ("dps", f"+{val}% cast speed", round(est, 1))
 
     # % increased attack speed — DPS for attack builds AND Cast on Crit builds
