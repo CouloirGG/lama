@@ -1597,10 +1597,121 @@
     // -----------------------------------------------------------------------
     // Equipment Grid + Slot Detail
     // -----------------------------------------------------------------------
+    function ModRow({ name, tierNum, tierCount, value, barWidth, barColor, dotColor, benefitColor, benefitReason, tierText, tierSeverity }) {
+      const [open, setOpen] = useState(false);
+      return (
+        <div className={`p-1.5 border-l-2 cursor-pointer ${benefitColor}`} onClick={() => setOpen(!open)}>
+          <div className="flex items-center gap-2">
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
+            <span className="text-[10px] font-mono text-on-surface truncate flex-1">{name}</span>
+            {tierNum > 0 && <span className="text-[9px] font-mono text-on-surface-var whitespace-nowrap">T{tierNum}/{tierCount}</span>}
+            {value != null && <span className="text-[9px] font-mono text-outline whitespace-nowrap">{value}</span>}
+          </div>
+          {tierNum > 0 && (
+            <div className="mt-0.5 ml-3.5 h-1 bg-surface-container overflow-hidden">
+              <div className={`h-full tier-bar ${barColor}`} style={{ width: `${barWidth}%` }} />
+            </div>
+          )}
+          {open && (
+            <div className="mt-1 ml-3.5 space-y-0.5">
+              {benefitReason && (
+                <p className={`text-[9px] font-mono ${dotColor === "bg-green-400" ? "text-green-400/70" : dotColor === "bg-red-400" ? "text-red-400/70" : "text-on-surface-var"}`}>
+                  {benefitReason}
+                </p>
+              )}
+              {tierText && (
+                <p className={`text-[9px] font-mono ${tierSeverity === "positive" ? "text-green-400/70" : tierSeverity === "critical" ? "text-red-400/70" : "text-yellow-400/70"}`}>
+                  {tierText}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
     function tierColor(avg) {
       if (avg <= 2) return "bg-green-400/20 text-green-400 border-green-400/30";
       if (avg <= 3.5) return "bg-yellow-400/20 text-yellow-400 border-yellow-400/30";
       return "bg-red-400/20 text-red-400 border-red-400/30";
+    }
+
+    // Classify a mod as beneficial, neutral, or wasted for a build
+    function classifyMod(modText, archetype) {
+      if (!modText || !archetype) return { benefit: "neutral", reason: "" };
+      const ml = modText.toLowerCase();
+      const dmgType = archetype.damageType || archetype.damage_type || "";
+      const defType = archetype.defenseType || archetype.defense_type || "";
+      const isCrit = archetype.isCrit || archetype.is_crit || archetype.isCoc || archetype.is_coc;
+      const isSpell = dmgType === "spell";
+      const isAttack = dmgType === "attack";
+      const isMinion = dmgType === "minion";
+
+      // GREEN: directly benefits the build
+      if (isSpell) {
+        if (/spell.*damage|cast speed|gem level|level of all.*spell|level of all.*skill/.test(ml))
+          return { benefit: "green", reason: "Scales your spell damage directly" };
+        if (/as extra.*damage|elemental damage|cold damage|fire damage|lightning damage/.test(ml))
+          return { benefit: "green", reason: "Adds elemental damage scaling" };
+      }
+      if (isAttack) {
+        if (/attack speed|physical damage|added.*damage to attack|melee damage/.test(ml))
+          return { benefit: "green", reason: "Scales your attack damage directly" };
+      }
+      if (isCrit && /critical.*hit.*chance|critical.*damage|critical.*multiplier/.test(ml))
+        return { benefit: "green", reason: "Scales your crit damage" };
+      if (/maximum life/.test(ml) && (defType === "life" || defType === "hybrid"))
+        return { benefit: "green", reason: "Increases your life pool" };
+      if (/energy shield|maximum energy shield/.test(ml) && (defType === "es" || defType === "hybrid"))
+        return { benefit: "green", reason: "Increases your ES pool" };
+      if (/resist/.test(ml))
+        return { benefit: "green", reason: "Helps cap resistances" };
+      if (/movement speed/.test(ml))
+        return { benefit: "green", reason: "Faster movement = better clear" };
+      if (/spirit/.test(ml))
+        return { benefit: "green", reason: "Enables more skill reservations" };
+
+      // RED: wasted on this build
+      if (isSpell && /attack speed|local.*physical|added.*damage to attack/.test(ml))
+        return { benefit: "red", reason: "Attack mod on a spell build — wasted" };
+      if (isAttack && /spell.*damage|cast speed/.test(ml))
+        return { benefit: "red", reason: "Spell mod on an attack build — wasted" };
+      if (!isCrit && /critical.*hit.*chance|critical.*multiplier/.test(ml))
+        return { benefit: "red", reason: "Crit mod on a non-crit build — wasted" };
+      if (defType === "es" && /maximum life/.test(ml) && /armour|evasion/.test(ml))
+        return { benefit: "red", reason: "Life/armour mod on an ES build" };
+      if (/mana.*regeneration|maximum mana/.test(ml) && defType !== "mom")
+        return { benefit: "neutral", reason: "Mana — minor utility" };
+      if (/item rarity|item quantity/.test(ml))
+        return { benefit: "neutral", reason: "Magic find — doesn't affect combat" };
+      if (/light radius|stun/.test(ml))
+        return { benefit: "neutral", reason: "Minor utility" };
+
+      return { benefit: "neutral", reason: "" };
+    }
+
+    // Plain-language tier explanation
+    function tierExplanation(tierNum, tierCount, value, tierRange, modName) {
+      if (!tierNum || !tierCount) return null;
+      const pct = Math.round(((tierCount - tierNum + 1) / tierCount) * 100);
+
+      if (tierNum === 1) {
+        return { text: "Best possible roll (Tier 1). This is the highest value this mod can roll.", severity: "positive" };
+      }
+      if (tierNum <= 2) {
+        return { text: `Near-perfect roll (Tier ${tierNum} of ${tierCount}). Only ${tierNum - 1} tier${tierNum > 2 ? "s" : ""} higher exist.`, severity: "positive" };
+      }
+      if (tierNum <= Math.ceil(tierCount / 2)) {
+        const nextRange = tierRange || "";
+        return {
+          text: `Mid-tier roll (Tier ${tierNum} of ${tierCount}). Higher tiers exist with better values${nextRange ? ` — next tier rolls ${nextRange}` : ""}. Search player trade for an upgrade.`,
+          severity: "warning"
+        };
+      }
+      return {
+        text: `Low roll (Tier ${tierNum} of ${tierCount}). Significantly better versions of this mod exist. Look for Tier 1-${Math.ceil(tierCount / 3)} on trade — the difference is substantial.`,
+        severity: "critical"
+      };
     }
 
     function SlotDetailPanel({ slot, charData, insights, account }) {
@@ -1628,6 +1739,25 @@
         return result;
       }, [modTiers]);
 
+      // Build archetype from insights for mod classification
+      const archetype = insights?.archetype || {};
+
+      // Raw mods from equipment (fallback when tier data unavailable)
+      const rawMods = useMemo(() => {
+        if (!equipment) return [];
+        const mods = [];
+        for (const mod of (equipment.explicitMods || equipment.explicit_mods || [])) {
+          mods.push({ text: mod, type: "explicit" });
+        }
+        for (const mod of (equipment.implicitMods || equipment.implicit_mods || [])) {
+          mods.push({ text: mod, type: "implicit" });
+        }
+        for (const mod of (equipment.craftedMods || equipment.crafted_mods || [])) {
+          mods.push({ text: mod, type: "crafted" });
+        }
+        return mods;
+      }, [equipment]);
+
       const deadMods = slotData?.deadMods || [];
       const weakMods = slotData?.weakMods || [];
 
@@ -1645,42 +1775,67 @@
       };
 
       return (
-        <div className="col-span-2 p-4 rounded-lg bg-surface-bright border border-outline-variant fade-in">
-          <div className="text-sm font-mono font-semibold text-on-surface mb-3">{slot.itemName || "Unknown Item"}</div>
+        <div className="p-3 bg-surface-bright border border-outline-variant fade-in">
+          <div className="text-xs font-mono font-semibold text-on-surface mb-2">{slot.itemName || "Unknown Item"}</div>
 
-          {/* Mod list with tier bars */}
-          {allMods.length > 0 && (
-            <div className="flex flex-col gap-2 mb-4">
-              {allMods.map((mod, i) => {
+          {/* Mod list — with tier data if available, raw mods as fallback */}
+          <div className="flex flex-col gap-1 mb-3">
+            {allMods.length > 0 ? (
+              allMods.map((mod, i) => {
                 const isDead = deadMods.some(dm => mod.display_name?.includes(dm.mod) || dm.mod?.includes(mod.display_name));
-                const isWeak = mod.tier_num >= 3;
-                const weakInfo = weakMods.find(wm => wm.name === mod.display_name);
+                const benefit = classifyMod(mod.display_name, archetype);
+                const tierExp = tierExplanation(mod.tier_num, mod.tier_count, mod.value, mod.tier_range, mod.display_name);
                 const barWidth = mod.tier_count > 0 ? Math.max(5, ((mod.tier_count - mod.tier_num + 1) / mod.tier_count) * 100) : 50;
+                const benefitColor = isDead ? "border-red-500/30 bg-red-500/5" :
+                  benefit.benefit === "green" ? "border-green-500/20 bg-green-500/5" :
+                  benefit.benefit === "red" ? "border-red-500/20 bg-red-500/5" :
+                  "border-outline-variant/20";
+                const dotColor = isDead ? "bg-red-400" : benefit.benefit === "green" ? "bg-green-400" : benefit.benefit === "red" ? "bg-red-400" : "bg-outline";
                 const barColor = mod.tier_num <= 2 ? "bg-green-400" : mod.tier_num <= 3 ? "bg-yellow-400" : "bg-red-400";
 
                 return (
-                  <div key={i} className={`p-2 rounded ${isDead ? "bg-red-400/10 border border-red-400/20" : isWeak ? "bg-yellow-400/5" : ""}`}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-mono text-on-surface truncate flex-1">{mod.display_name}</span>
-                      <span className="text-xs font-mono text-on-surface-var whitespace-nowrap">T{mod.tier_num}/{mod.tier_count}</span>
-                      <span className="text-xs font-mono text-outline whitespace-nowrap">{mod.value ?? ""}</span>
+                  <ModRow key={i}
+                    name={mod.display_name}
+                    tierNum={mod.tier_num} tierCount={mod.tier_count} value={mod.value}
+                    barWidth={barWidth} barColor={barColor}
+                    dotColor={dotColor} benefitColor={benefitColor}
+                    benefitReason={isDead ? (deadMods.find(dm => mod.display_name?.includes(dm.mod))?.reason || "Dead mod — wasted on this build") : benefit.reason}
+                    tierText={tierExp?.text}
+                    tierSeverity={tierExp?.severity}
+                  />
+                );
+              })
+            ) : rawMods.length > 0 ? (
+              rawMods.map((mod, i) => {
+                // Strip poe.ninja bracket formatting for display
+                const cleanText = (mod.text || "").replace(/\[([^|\]]*\|)?([^\]]*)\]/g, "$2");
+                const benefit = classifyMod(cleanText, archetype);
+                const dotColor = benefit.benefit === "green" ? "bg-green-400" : benefit.benefit === "red" ? "bg-red-400" : "bg-outline";
+                const benefitColor = benefit.benefit === "green" ? "border-green-500/20 bg-green-500/5" :
+                  benefit.benefit === "red" ? "border-red-500/20 bg-red-500/5" : "border-outline-variant/20";
+                const typeLabel = mod.type === "implicit" ? "implicit" : mod.type === "crafted" ? "crafted" : "";
+
+                return (
+                  <div key={i} className={`flex items-start gap-2 p-1.5 border-l-2 ${benefitColor}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono text-on-surface flex-1">{cleanText}</span>
+                        {typeLabel && <span className="text-[8px] font-mono text-outline uppercase">{typeLabel}</span>}
+                      </div>
+                      {benefit.reason && (
+                        <p className={`text-[9px] font-mono mt-0.5 ${benefit.benefit === "green" ? "text-green-400/70" : benefit.benefit === "red" ? "text-red-400/70" : "text-on-surface-var"}`}>
+                          {benefit.reason}
+                        </p>
+                      )}
                     </div>
-                    <div className="mt-1 h-1.5 rounded-full bg-surface-container overflow-hidden">
-                      <div className={`h-full rounded-full tier-bar ${barColor}`} style={{ width: `${barWidth}%` }} />
-                    </div>
-                    {isDead && <div className="text-xs text-secondary mt-1">{deadMods.find(dm => mod.display_name?.includes(dm.mod))?.reason || "Dead mod"}</div>}
-                    {isWeak && weakInfo?.nextTierRange && (
-                      <div className="text-xs text-yellow-400/80 mt-1">Next: T{weakInfo.nextTier} would be {weakInfo.nextTierRange}</div>
-                    )}
                   </div>
                 );
-              })}
-            </div>
-          )}
-
-          {allMods.length === 0 && (
-            <div className="text-xs text-outline font-mono mb-4">No tier data available for this item</div>
-          )}
+              })
+            ) : (
+              <div className="text-[10px] text-outline font-mono py-2">No mod data available</div>
+            )}
+          </div>
 
           {/* Popular Items + Rare Mod Breakdown */}
           <button
