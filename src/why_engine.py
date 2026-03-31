@@ -18,6 +18,7 @@ from builds_client import BuildsClient, CharacterData, BuildArchetype
 from pob_decoder import decode_pob_code, PobData, PobStats
 from game_knowledge import (
     KEYSTONES, DEFENSE_MECHANICS, STAT_THRESHOLDS, MOD_SYNERGIES,
+    UNIQUE_JEWELS,
     KeystoneInfo, StatThreshold,
 )
 
@@ -1177,28 +1178,63 @@ class WhyEngine:
         # Jewels — analyze DPS contribution from each jewel
         jewels = getattr(char_data, 'jewels', [])
         jewel_total_dps_pct = 0
-        build_defining_jewels = []
+        has_adorned = False
+        has_megalomaniac = False
+        has_from_nothing = False
+        has_historic = False
+        magic_jewel_count = 0
+
         for jewel in jewels:
             jname = jewel.name or jewel.type_line or "Unknown Jewel"
             all_j_mods = (jewel.explicit_mods or []) + (jewel.desecrated_mods or []) + (jewel.implicit_mods or [])
             j_dps_pct = 0
             j_key_mods = []
+
+            # Check for known unique jewels
+            unique_info = UNIQUE_JEWELS.get(jname)
+            if unique_info:
+                est_pct = 20.0 if jname == "The Adorned" else 15.0
+                dps_contributors.append(SynergyContributor(
+                    name=jname,
+                    source_type="gear", slot="Jewel",
+                    contribution=unique_info.description[:80],
+                    severity="positive",
+                    detail=f"{unique_info.description} {unique_info.impact}",
+                    estimated_pct=est_pct,
+                    estimated_value=total_dps * est_pct / 100 if total_dps > 0 else 0,
+                ))
+                if jname == "The Adorned":
+                    has_adorned = True
+                elif jname == "Megalomaniac":
+                    has_megalomaniac = True
+                elif jname == "From Nothing":
+                    has_from_nothing = True
+                elif jname in ("Heroic Tragedy", "Undying Hate"):
+                    has_historic = True
+                jewel_total_dps_pct += est_pct
+                continue
+
+            # Track magic jewels (relevant for The Adorned)
+            if jewel.rarity in ("Magic", "magic"):
+                magic_jewel_count += 1
+
+            # Analyze mod contributions
             for mod in all_j_mods:
                 mc = _strip_ninja_brackets(mod)
                 a = _analyze_mod_contribution(mc, archetype)
                 if a and a[0] == "dps":
                     j_dps_pct += a[2]
                     j_key_mods.append(a[1])
-                # Detect build-defining jewel mechanics
                 ml = mc.lower()
-                if "effect of jewel" in ml or "jewel socket" in ml:
-                    build_defining_jewels.append((jname, mc))
-                if "extra" in ml and "damage" in ml:
-                    build_defining_jewels.append((jname, mc))
                 if "cooldown recovery" in ml:
-                    j_key_mods.append(mc)
+                    j_key_mods.append(f"Cooldown Recovery ({mc})")
 
-            if j_dps_pct > 3 or j_key_mods:
+            if j_dps_pct > 2 or j_key_mods:
+                # If The Adorned is present and this is a magic jewel, mods are multiplied
+                if has_adorned and jewel.rarity in ("Magic", "magic"):
+                    j_dps_pct *= 2.0  # rough estimate of Adorned multiplier effect
+                    j_key_mods.insert(0, "Adorned-multiplied")
+
                 jewel_total_dps_pct += j_dps_pct
                 est_val = total_dps * j_dps_pct / 100 if total_dps > 0 else 0
                 dps_contributors.append(SynergyContributor(
@@ -1206,33 +1242,51 @@ class WhyEngine:
                     source_type="gear", slot="Jewel",
                     contribution=f"~{j_dps_pct:.0f}% DPS: {', '.join(j_key_mods[:2])}",
                     severity="positive",
-                    detail=f"Jewel with {len(all_j_mods)} mods: {', '.join(j_key_mods[:3])}",
+                    detail=f"Jewel with {len(all_j_mods)} mods. {', '.join(j_key_mods[:3])}",
                     estimated_value=est_val,
                     estimated_pct=j_dps_pct,
                 ))
 
-        # Flag build-defining jewels specially
-        for jname, mod_text in build_defining_jewels:
-            dps_contributors.append(SynergyContributor(
-                name=f"{jname} (Build-Defining)",
-                source_type="gear", slot="Jewel",
-                contribution=mod_text,
-                severity="positive",
-                detail=f"This jewel has a unique mechanic that significantly impacts the build: {mod_text}",
-                estimated_pct=15.0,
-                estimated_value=total_dps * 0.15 if total_dps > 0 else 0,
+        # Missing jewel recommendations
+        if len(jewels) < 8 and total_dps > 50000:
+            per_slot = 7.0 if has_adorned else 5.0
+            slots_missing = max(0, 8 - len(jewels))
+            dps_missing.append(SynergyContributor(
+                name=f"Fill Jewel Slots ({len(jewels)}/8+)",
+                source_type="missing",
+                contribution=f"Only {len(jewels)} jewels. Top players use 8-10. Each adds ~{per_slot:.0f}% DPS.",
+                severity="warning",
+                detail=(
+                    f"Each jewel with spell damage, crit, and elemental damage mods adds significant scaling. "
+                    f"{'The Adorned multiplies magic jewel mods — prioritize well-rolled corrupted magic jewels. ' if has_adorned else ''}"
+                    f"Look for: Megalomaniac (3 random notables), or rare/magic jewels with your build's damage type + crit."
+                ),
+                estimated_pct=min(slots_missing * per_slot, 35),
+                estimated_value=total_dps * min(slots_missing * per_slot / 100, 0.35),
             ))
 
-        # Jewel slot count — more jewels = more scaling
-        if len(jewels) < 8 and total_dps > 50000:
+        # Suggest The Adorned if player doesn't have it and uses magic jewels
+        if not has_adorned and magic_jewel_count >= 3:
             dps_missing.append(SynergyContributor(
-                name=f"Jewel Slots ({len(jewels)}/10+)",
+                name="The Adorned",
                 source_type="missing",
-                contribution=f"Only {len(jewels)} jewels equipped. Top players use 8-10 jewels for additional scaling.",
+                contribution=f"You have {magic_jewel_count} magic jewels — The Adorned would multiply ALL their mods by ~2.5x.",
                 severity="warning",
-                detail=f"Each jewel with spell damage, crit, and elemental damage mods adds ~5-10% DPS. Filling more jewel slots is a significant upgrade path.",
-                estimated_pct=min((10 - len(jewels)) * 5, 30),
-                estimated_value=total_dps * min((10 - len(jewels)) * 0.05, 0.30),
+                detail=UNIQUE_JEWELS["The Adorned"].impact,
+                estimated_pct=magic_jewel_count * 5.0,
+                estimated_value=total_dps * magic_jewel_count * 0.05 if total_dps > 0 else 0,
+            ))
+
+        # Suggest Megalomaniac if player doesn't have one
+        if not has_megalomaniac and total_dps > 100000:
+            dps_missing.append(SynergyContributor(
+                name="Megalomaniac",
+                source_type="missing",
+                contribution="3 random notable passives — search for combos matching your build.",
+                severity="info",
+                detail=UNIQUE_JEWELS["Megalomaniac"].impact,
+                estimated_pct=10.0,
+                estimated_value=total_dps * 0.10 if total_dps > 0 else 0,
             ))
 
         # DPS keystones the player has

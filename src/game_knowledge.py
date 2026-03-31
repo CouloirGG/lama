@@ -505,6 +505,54 @@ DEFENSE_MECHANICS: Dict[str, DefenseMechanicInfo] = {
 # MOD_SYNERGIES
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# UNIQUE JEWELS — build-defining jewels with special mechanics
+# ---------------------------------------------------------------------------
+
+@dataclass
+class UniqueJewelInfo:
+    description: str
+    impact: str  # what the build gains/loses
+    build_types: List[str]
+    restriction: str = ""  # e.g., "only one Historic jewel at a time"
+
+
+UNIQUE_JEWELS: Dict[str, UniqueJewelInfo] = {
+    "The Adorned": UniqueJewelInfo(
+        description="Increases the effect of all Corrupted Magic Jewel Socket Passive Skills by its effect value (e.g., 148% = 2.48x multiplier on all magic jewel mods).",
+        impact="Build-defining for magic jewel stacking builds. Every corrupted magic jewel's mods get multiplied — a 15% spell damage mod becomes 37%. With 8+ magic jewels, this is often 30-50% of total DPS.",
+        build_types=["spell_damage", "attack_damage", "crit"],
+    ),
+    "Megalomaniac": UniqueJewelInfo(
+        description="Grants 3 random notable passives from the passive tree. The most universally accessible power jewel.",
+        impact="Any 2-3 notable combo that aligns with your build is essentially free passive points without pathing. Top players search for specific combos that synergize with their build.",
+        build_types=["any"],
+    ),
+    "From Nothing": UniqueJewelInfo(
+        description="Allows allocating a Keystone without pathing to it on the passive tree.",
+        impact="Sleeper strong for builds that want an off-tree Keystone without spending 10-15 passive points pathing across the tree. Saves passive points for damage or defense nodes.",
+        build_types=["any"],
+    ),
+    "Heart of the Well": UniqueJewelInfo(
+        description="Grants extra damage as Lightning, cooldown recovery rate, and crit scaling.",
+        impact="Strong for Cast on Crit and spell builds. The cooldown recovery rate directly increases CoC trigger frequency, and extra Lightning damage is a direct DPS multiplier.",
+        build_types=["spell_damage", "crit", "coc"],
+    ),
+    "Heroic Tragedy": UniqueJewelInfo(
+        description="Historic jewel that transforms passives within its radius based on its seed number. Can place powerful Keystones near your socket.",
+        impact="Build-defining IF the seed rolls the right Keystone near your jewel socket. A gamble on placement, but the ceiling is very high.",
+        build_types=["any"],
+        restriction="Only one Historic jewel can be socketed at a time (mutually exclusive with Undying Hate)",
+    ),
+    "Undying Hate": UniqueJewelInfo(
+        description="Historic jewel that transforms passives within its radius. Alternative to Heroic Tragedy with different transformation options.",
+        impact="Similar to Heroic Tragedy — seed-dependent passive transformation. Can enable unique passive combinations not available otherwise.",
+        build_types=["any"],
+        restriction="Only one Historic jewel can be socketed at a time (mutually exclusive with Heroic Tragedy)",
+    ),
+}
+
+
 MOD_SYNERGIES: List[ModSynergyInfo] = [
 
     ModSynergyInfo(
