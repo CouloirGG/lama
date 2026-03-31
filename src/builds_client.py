@@ -254,6 +254,7 @@ class CharacterData:
     pob_code: str = ""
     defensive_stats: Optional[dict] = None           # poe.ninja pre-calculated defenses
     ascendancy_points: int = 0                       # number of ascendancy points allocated
+    jewels: list = field(default_factory=list)        # List[CharacterItem] — jewels with mods
 
 
 @dataclass
@@ -488,6 +489,26 @@ class BuildsClient:
                 elif isinstance(k, dict) and "name" in k:
                     keystones.append(k["name"])
 
+            # Jewels — parse full mod data
+            jewels = []
+            for j in data.get("jewels", []):
+                jdata = j.get("itemData", j) if isinstance(j, dict) else {}
+                if not isinstance(jdata, dict):
+                    continue
+                jewel = CharacterItem(
+                    name=jdata.get("name", "") or "",
+                    type_line=jdata.get("typeLine", "") or "",
+                    slot="Jewel",
+                    rarity=jdata.get("rarity", "") or "",
+                    implicit_mods=self._to_str_list(jdata.get("implicitMods")),
+                    explicit_mods=self._to_str_list(jdata.get("explicitMods")),
+                    crafted_mods=self._to_str_list(jdata.get("craftedMods")),
+                    desecrated_mods=self._to_str_list(jdata.get("desecratedMods")),
+                    enchant_mods=self._to_str_list(jdata.get("enchantMods")),
+                )
+                if jewel.name or jewel.explicit_mods or jewel.desecrated_mods:
+                    jewels.append(jewel)
+
             # Class/ascendancy
             asc_name = data.get("class", "")
             base_class = ASCENDANCY_MAP.get(asc_name, asc_name)
@@ -547,6 +568,7 @@ class BuildsClient:
                 pob_code=data.get("pathOfBuildingExport", "") or "",
                 defensive_stats=defensive_stats,
                 ascendancy_points=ascendancy_points,
+                jewels=jewels,
             )
 
         except Exception as e:
