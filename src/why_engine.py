@@ -817,6 +817,44 @@ class WhyEngine:
                 sc.dps_label = f"{label} {best_skill}".strip()
                 sc.dps_status = "info"
 
+                # DPS ceiling + percentile from featured characters
+                if profile:
+                    featured = profile.get("featuredCharacters", [])
+                    pop_dps_values = []
+                    # Extract DPS from featured characters
+                    for fch in featured:
+                        for fk, fv in fch.items():
+                            if fk.startswith("dps") and fv:
+                                try:
+                                    dps_str = str(fv)
+                                    m = _re.match(r"([\d.]+)\s*([KkMm])?", dps_str)
+                                    if m:
+                                        v = float(m.group(1))
+                                        mult = m.group(2) or ""
+                                        if mult.upper() == "K": v *= 1000
+                                        elif mult.upper() == "M": v *= 1_000_000
+                                        if v > 100:
+                                            pop_dps_values.append(v)
+                                except (ValueError, TypeError):
+                                    pass
+
+                    if pop_dps_values:
+                        pop_dps_values.sort()
+                        dps_max = max(pop_dps_values)
+                        dps_median = pop_dps_values[len(pop_dps_values) // 2]
+                        # Percentile: what % of population is below this player
+                        below = sum(1 for v in pop_dps_values if v <= best_dps)
+                        dps_pct = int(below / len(pop_dps_values) * 100)
+
+                        top_label = _format_number(dps_max)
+                        median_label = _format_number(dps_median)
+
+                        if dps_pct < 25:
+                            sc.dps_status = "warning"
+                            sc.dps_label += f" (top players hit {top_label})"
+                        elif dps_pct > 75:
+                            sc.dps_status = "positive"
+
             # Resists
             resists = {
                 "Fire": pob.stats.fire_resist,
@@ -1054,6 +1092,74 @@ class WhyEngine:
                         estimated_value=skill_total,
                         estimated_pct=round(pct, 1),
                     ))
+
+        # Support gems — each is a damage multiplier
+        main_skill_group = None
+        for sg in char_data.skill_groups:
+            if any(d.name == archetype.main_skill for d in (sg.dps if hasattr(sg, 'dps') and sg.dps else [])):
+                main_skill_group = sg
+                break
+        if not main_skill_group:
+            for sg in char_data.skill_groups:
+                if archetype.main_skill in sg.gems:
+                    main_skill_group = sg
+                    break
+
+        if main_skill_group:
+            support_count = 0
+            for gem in main_skill_group.gems:
+                gem_name = gem if isinstance(gem, str) else getattr(gem, "name", "")
+                if gem_name and gem_name != archetype.main_skill:
+                    support_count += 1
+                    # Each support is roughly a 30-40% MORE multiplier
+                    est_pct = 25.0  # conservative per-support estimate
+                    dps_contributors.append(SynergyContributor(
+                        name=gem_name, source_type="support",
+                        contribution=f"Support gem (~{est_pct:.0f}% more multiplier)",
+                        severity="positive",
+                        detail=f"Linked to {archetype.main_skill}. Each support gem multiplies damage — {support_count} supports means roughly {support_count}x multiplied base damage.",
+                        estimated_pct=est_pct,
+                        estimated_value=total_dps * est_pct / 100 if total_dps > 0 else 0,
+                    ))
+
+        # Cross-build comparison: what do top featured characters have that we don't?
+        if profile:
+            featured = profile.get("featuredCharacters", [])
+            # Get top 3 DPS characters' names for reference
+            top_chars = []
+            for fch in featured[:50]:  # check more featured chars for DPS ceiling
+                for fk, fv in fch.items():
+                    if fk.startswith("dps") and fv:
+                        try:
+                            dps_str = str(fv)
+                            m = _re.match(r"([\d.]+)\s*([KkMm])?", dps_str)
+                            if m:
+                                v = float(m.group(1))
+                                mult = m.group(2) or ""
+                                if mult.upper() == "K": v *= 1000
+                                elif mult.upper() == "M": v *= 1_000_000
+                                if v > total_dps * 1.5:
+                                    top_chars.append({
+                                        "name": fch.get("name", "?"),
+                                        "account": fch.get("account", "?"),
+                                        "dps": v,
+                                    })
+                        except (ValueError, TypeError):
+                            pass
+                        break
+
+            if top_chars and total_dps > 0:
+                best = max(top_chars, key=lambda x: x["dps"])
+                ratio = best["dps"] / total_dps
+                dps_missing.append(SynergyContributor(
+                    name=f"DPS Ceiling: {_format_number(best['dps'])}",
+                    source_type="missing",
+                    contribution=f"Top player ({best['name']}) achieves {_format_number(best['dps'])} DPS — {ratio:.1f}x your current {_format_number(total_dps)}",
+                    severity="info",
+                    detail=f"Look up {best['name']} on poe.ninja to see their full gear and gem setup. The gap comes from gear quality, gem levels, jewels, and support gems.",
+                    estimated_value=best["dps"] - total_dps,
+                    estimated_pct=round((ratio - 1) * 100, 0),
+                ))
 
         # Gear mods contributing to DPS (top items — +gem levels, % damage, etc.)
         for slot, item_name, mod_text, desc, est_pct in gear_dps_mods[:8]:
