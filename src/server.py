@@ -1346,12 +1346,11 @@ async def character_popular_items(req: PopularItemsRequest):
 
     try:
         rare_mods = await loop.run_in_executor(
-            None, builds_client.fetch_popular_rare_mods, char_class, skill, 15
+            None, builds_client.fetch_popular_rare_mods, char_class, skill, 5
         )
         slot_mods = rare_mods.get(slot, [])
 
-        if slot_mods and isinstance(result, list):
-            # Get the player's current mods on this slot for comparison
+        if slot_mods:
             import re
             player_item = next((eq for eq in char_data.equipment if eq.slot == slot), None)
             player_mod_norms = set()
@@ -1361,7 +1360,9 @@ async def character_popular_items(req: PopularItemsRequest):
                     clean = _strip_ninja_brackets(mod)
                     player_mod_norms.add(re.sub(r"[\d,.]+", "#", clean).strip())
 
-            for item in result:
+            # Result is a dict with "items" key
+            items_list = result.get("items", []) if isinstance(result, dict) else result
+            for item in items_list:
                 if isinstance(item, dict) and item.get("rarity") != "unique":
                     item["topMods"] = [
                         {

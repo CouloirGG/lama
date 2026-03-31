@@ -1263,7 +1263,7 @@ class BuildsClient:
         return self._fetch_search(char_class, skill)
 
     def fetch_popular_rare_mods(self, char_class: str, skill: str,
-                                max_chars: int = 30) -> dict:
+                                max_chars: int = 5) -> dict:
         """Analyze rare item mods across featured characters for an archetype.
 
         Returns: {slot: [(normalized_mod, percentage), ...]} showing what mods
@@ -1271,6 +1271,11 @@ class BuildsClient:
         featured characters from the search endpoint.
         """
         import time as _time
+
+        cache_key = f"rare-mods-{char_class}-{skill}"
+        cached = self._get_cached(cache_key, TTL_SEARCH)
+        if cached is not None:
+            return cached
 
         profile = self.fetch_archetype_profile(char_class, skill)
         if not profile:
@@ -1324,6 +1329,7 @@ class BuildsClient:
             if mods_with_pct:
                 result[slot] = mods_with_pct
 
+        self._set_cache(cache_key, result)
         return result
 
 

@@ -223,9 +223,10 @@ class WhyEngine:
         if char_class and skill:
             profile = self._client.fetch_archetype_profile(char_class, skill)
             popular_keystones = self._client.fetch_popular_keystones(char_class, skill)
+            # Rare mod analysis — use only 5 chars to keep it fast
             try:
                 popular_rare_mods = self._client.fetch_popular_rare_mods(
-                    char_class, skill, max_chars=20
+                    char_class, skill, max_chars=5
                 )
             except Exception as e:
                 logger.debug(f"Popular rare mods fetch failed: {e}")
