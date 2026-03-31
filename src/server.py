@@ -1337,6 +1337,44 @@ async def character_popular_items(req: PopularItemsRequest):
     result = await loop.run_in_executor(
         None, builds_client.get_popular_items_for_slot, char_data, req.slot.strip()
     )
+
+    # Enrich rare items with popular mod breakdown
+    slot = req.slot.strip()
+    archetype = classify_build(char_data)
+    char_class = char_data.ascendancy or char_data.char_class
+    skill = archetype.main_skill
+
+    try:
+        rare_mods = await loop.run_in_executor(
+            None, builds_client.fetch_popular_rare_mods, char_class, skill, 15
+        )
+        slot_mods = rare_mods.get(slot, [])
+
+        if slot_mods and isinstance(result, list):
+            # Get the player's current mods on this slot for comparison
+            import re
+            player_item = next((eq for eq in char_data.equipment if eq.slot == slot), None)
+            player_mod_norms = set()
+            if player_item:
+                from why_engine import _strip_ninja_brackets
+                for mod in (player_item.explicit_mods or []) + (player_item.implicit_mods or []):
+                    clean = _strip_ninja_brackets(mod)
+                    player_mod_norms.add(re.sub(r"[\d,.]+", "#", clean).strip())
+
+            for item in result:
+                if isinstance(item, dict) and item.get("rarity") != "unique":
+                    item["topMods"] = [
+                        {
+                            "name": mod_norm.replace("#", "X"),
+                            "pct": round(pct),
+                            "hasIt": mod_norm in player_mod_norms,
+                        }
+                        for mod_norm, pct in slot_mods[:6]
+                        if pct >= 20
+                    ]
+    except Exception as e:
+        logger.debug(f"Rare mod enrichment failed: {e}")
+
     return result
 
 
