@@ -546,6 +546,7 @@ class WhyEngine:
                 ("Fire", pob.stats.fire_resist),
                 ("Cold", pob.stats.cold_resist),
                 ("Lightning", pob.stats.lightning_resist),
+                ("Chaos", pob.stats.chaos_resist),
             ]:
                 if val < 75:
                     uncapped.append((resist_name, val, 75 - val))
@@ -573,18 +574,7 @@ class WhyEngine:
                     source="game_knowledge",
                 ))
 
-            # Chaos resist warning
-            if pob.stats.chaos_resist < 0:
-                actions.append(Explanation(
-                    context="action", title="Fix Chaos Resistance",
-                    text=(
-                        f"Your chaos resistance is negative ({pob.stats.chaos_resist}%). "
-                        f"Chaos damage bypasses Energy Shield by default. "
-                        f"Prioritize chaos res on rings or amulet."
-                    ),
-                    severity="critical",
-                    source="game_knowledge",
-                ))
+            # Note: chaos resist is now included in the uncapped check above
 
         # Missing high-adoption keystones — lead with impact, distinguish type
         player_ks = set(char_data.keystones)

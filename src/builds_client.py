@@ -1670,27 +1670,26 @@ def classify_build(char: CharacterData) -> BuildArchetype:
         if gems:
             main_skill = gems[0]
 
-    # Detect Cast on Crit — relaxed: CoC gem anywhere + main skill is spell,
-    # or CoC gem + any spell + any attack across all skill groups
+    # Detect Cast on Crit
+    # CoC gem in same group as the main DPS spell = CoC build
+    # CoC gem anywhere + main skill is spell + attack gem exists = likely CoC
     is_coc = False
     all_gems = [g for sg in char.skill_groups for g in sg.gems]
     has_coc_gem = any("Cast on Crit" in g or "Cast when Crit" in g for g in all_gems)
     if has_coc_gem:
-        if main_skill in SPELL_SKILLS:
-            is_coc = True
-        else:
-            has_any_spell = any(g in SPELL_SKILLS for g in all_gems)
-            has_any_attack = any(g in ATTACK_SKILLS for g in all_gems)
-            if has_any_spell and has_any_attack:
-                is_coc = True
-    # Heuristic fallback: spell DPS + attack gem in same group
-    if not is_coc and main_skill in SPELL_SKILLS:
+        # Check if CoC + main skill + attack are in the same group
         for sg in char.skill_groups:
-            has_dps = any(d.name == main_skill for d in sg.dps)
+            has_coc_here = any("Cast on Crit" in g or "Cast when Crit" in g for g in sg.gems)
+            if not has_coc_here:
+                continue
+            has_spell = any(g in SPELL_SKILLS for g in sg.gems)
             has_attack = any(g in ATTACK_SKILLS for g in sg.gems)
-            if has_dps and has_attack:
+            has_main_dps = any(d.name == main_skill for d in sg.dps) if main_skill in SPELL_SKILLS else False
+            if (has_spell and has_attack) or has_main_dps:
                 is_coc = True
                 break
+        # Note: removed overly broad fallback that flagged any spell+attack as CoC.
+        # Only flag CoC when the CoC gem is literally in a group with the spell.
 
     # Damage type
     if main_skill in MINION_SKILLS:
