@@ -2199,7 +2199,7 @@
       );
     }
 
-    function MarketTab({ charData, efficiency }) {
+    function MarketTab({ charData, efficiency, whyInsights }) {
       if (!charData) {
         return (
           <div className="flex flex-col items-center justify-center h-full gap-4">
@@ -2209,7 +2209,7 @@
         );
       }
 
-      if (!efficiency) {
+      if (!efficiency && !whyInsights) {
         return (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
@@ -2218,11 +2218,87 @@
         );
       }
 
+      // Build upgrade paths from synergy map missing items
+      const upgradePaths = useMemo(() => {
+        if (!whyInsights?.synergyMap) return [];
+        const paths = [];
+        for (const cat of whyInsights.synergyMap) {
+          for (const m of (cat.missing || [])) {
+            paths.push({
+              category: cat.label,
+              categoryIcon: cat.icon,
+              name: m.name,
+              contribution: m.contribution,
+              detail: m.detail,
+              estimatedPct: m.estimatedPct || 0,
+              estimatedValue: m.estimatedValue || 0,
+              severity: m.severity || "info",
+              slot: m.slot || "",
+              adoptionPct: m.adoptionPct || 0,
+            });
+          }
+        }
+        // Sort by estimated value descending
+        paths.sort((a, b) => b.estimatedValue - a.estimatedValue);
+        return paths;
+      }, [whyInsights]);
+
       return (
         <div className="flex flex-col gap-6 p-5 max-w-4xl mx-auto">
-          <CostTierBreakdown efficiency={efficiency} />
-          <UpgradeSuggestions efficiency={efficiency} />
-          <BudgetPlanner efficiency={efficiency} />
+          {/* Build Path Recommendations — sorted by impact */}
+          {upgradePaths.length > 0 && (
+            <div>
+              <h3 className="font-serif text-lg text-on-surface mb-3">
+                <Icon name="route" className="text-base mr-2 align-middle text-primary-container" />
+                Upgrade Priority
+              </h3>
+              <p className="text-xs font-mono text-on-surface-var mb-4">
+                Sorted by estimated DPS/survival impact. Click to expand details.
+              </p>
+              <div className="space-y-2">
+                {upgradePaths.slice(0, 15).map((path, i) => (
+                  <UpgradePathCard key={i} path={path} rank={i + 1} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {efficiency && <CostTierBreakdown efficiency={efficiency} />}
+          {efficiency && <UpgradeSuggestions efficiency={efficiency} />}
+          {efficiency && <BudgetPlanner efficiency={efficiency} />}
+        </div>
+      );
+    }
+
+    function UpgradePathCard({ path, rank }) {
+      const [open, setOpen] = useState(false);
+      const p = path;
+      const borderColor = { critical: "border-error", warning: "border-secondary", info: "border-primary-container" }[p.severity] || "border-outline-variant";
+      const valueLabel = p.estimatedValue >= 1e6 ? `+${(p.estimatedValue/1e6).toFixed(1)}M` :
+                         p.estimatedValue >= 1e3 ? `+${(p.estimatedValue/1e3).toFixed(0)}K` :
+                         p.estimatedValue > 0 ? `+${p.estimatedValue.toFixed(0)}` : "";
+      return (
+        <div className={`p-3 border-l-2 ${borderColor} bg-surface-container cursor-pointer hover:bg-surface-bright transition-colors`} onClick={() => setOpen(!open)}>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-mono text-on-surface-var w-6">#{rank}</span>
+            <Icon name={p.categoryIcon || "trending_up"} className="text-sm text-on-surface-var" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono font-bold text-on-surface truncate">{p.name}</span>
+                {p.estimatedPct > 0 && <span className="text-xs font-mono text-secondary">+{p.estimatedPct.toFixed(0)}%</span>}
+                {valueLabel && <span className="text-xs font-mono text-primary-container">{valueLabel}</span>}
+              </div>
+              {!open && <p className="text-xs font-mono text-on-surface-var truncate mt-0.5">{p.contribution}</p>}
+            </div>
+            <span className="text-xs font-mono text-on-surface-var uppercase">{p.category}</span>
+          </div>
+          {open && (
+            <div className="mt-2 ml-9">
+              <p className="text-xs font-mono text-on-surface-var leading-relaxed">{p.detail || p.contribution}</p>
+              {p.slot && <p className="text-xs font-mono text-outline mt-1">Slot: {p.slot}</p>}
+              {p.adoptionPct > 0 && <p className="text-xs font-mono text-outline mt-1">{p.adoptionPct.toFixed(0)}% of top players use this</p>}
+            </div>
+          )}
         </div>
       );
     }
@@ -2524,7 +2600,7 @@
           case "BUILD":
             return <PulseTab charData={charData} insights={insights} improvement={improvement} comparison={comparison} whyInsights={whyInsights} onLookup={handleLookup} />;
           case "MARKET":
-            return <MarketTab charData={charData} efficiency={efficiency} />;
+            return <MarketTab charData={charData} efficiency={efficiency} whyInsights={whyInsights} />;
           case "GUIDE":
             return <GuideTab charData={charData} />;
           default:
