@@ -1,0 +1,676 @@
+[
+  {
+    "account": "HavL-6028",
+    "name": "SparkAgainIGuess",
+    "ascendancy": "Blood Mage",
+    "base_class": "Witch",
+    "level": 100,
+    "tier": "mid",
+    "search_skill": "Spark",
+    "pn_keystones": [
+      "Blood Magic"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 2319,
+    "pn_es": 482,
+    "pn_ehp": 7382,
+    "pn_fire_res": 74,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 31,
+    "pn_dps": 0,
+    "pn_jewel_count": 10,
+    "pn_jewel_names": [
+      "Mystic Sapphire of Annihilating",
+      "Mystic Sapphire of Unmaking",
+      "Mystic Sapphire of Annihilating",
+      "Heart of the Well",
+      "Mystic Sapphire of Unmaking",
+      "The Adorned",
+      "Mystic Sapphire of Unmaking",
+      "Mystic Sapphire of Unmaking",
+      "Mystic Sapphire of Unmaking",
+      "Prismatic Sapphire of Annihilating"
+    ],
+    "expected_defense_type": "life",
+    "expected_resists_capped": false,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives"
+    ]
+  },
+  {
+    "account": "Aengus-2685",
+    "name": "peakAengus",
+    "ascendancy": "Pathfinder",
+    "base_class": "Ranger",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Poisonburst Arrow",
+    "pn_keystones": [],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1527,
+    "pn_es": 5712,
+    "pn_ehp": 34742,
+    "pn_fire_res": 75,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 49,
+    "pn_dps": 27000000.0,
+    "pn_jewel_count": 4,
+    "pn_jewel_names": [
+      "Entropy Joy",
+      "Heart of the Well",
+      "Megalomaniac",
+      "Glyph Prism"
+    ],
+    "expected_defense_type": "es",
+    "expected_resists_capped": true,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives",
+      "add_life_critical"
+    ]
+  },
+  {
+    "account": "iweber95-3993",
+    "name": "Pepe_Finder",
+    "ascendancy": "Pathfinder",
+    "base_class": "Ranger",
+    "level": 100,
+    "tier": "mid",
+    "search_skill": "Vine Arrow",
+    "pn_keystones": [],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1664,
+    "pn_es": 793,
+    "pn_ehp": 9981,
+    "pn_fire_res": 43,
+    "pn_cold_res": 57,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 0,
+    "pn_dps": 0,
+    "pn_jewel_count": 3,
+    "pn_jewel_names": [
+      "Ghoul Essence",
+      "Heart of the Well",
+      "Dragon Hope"
+    ],
+    "expected_defense_type": "life",
+    "expected_resists_capped": false,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives"
+    ]
+  },
+  {
+    "account": "Zb02ny-2579",
+    "name": "Chrysospeir",
+    "ascendancy": "Stormweaver",
+    "base_class": "Sorceress",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Spark",
+    "pn_keystones": [
+      "Mind Over Matter",
+      "Eldritch Battery"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1824,
+    "pn_es": 0,
+    "pn_ehp": 10609,
+    "pn_fire_res": 68,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 13,
+    "pn_dps": 164000.0,
+    "pn_jewel_count": 6,
+    "pn_jewel_names": [
+      "Heart of the Well",
+      "Pandemonium Spark",
+      "Controlled Metamorphosis",
+      "Megalomaniac",
+      "From Nothing",
+      "Spirit Prism"
+    ],
+    "expected_defense_type": "mom",
+    "expected_resists_capped": false,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives"
+    ]
+  },
+  {
+    "account": "Angryalways69-6010",
+    "name": "Babysmut",
+    "ascendancy": "Stormweaver",
+    "base_class": "Sorceress",
+    "level": 100,
+    "tier": "mid",
+    "search_skill": "Arc",
+    "pn_keystones": [
+      "Chaos Inoculation"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1,
+    "pn_es": 6191,
+    "pn_ehp": 12837,
+    "pn_fire_res": 52,
+    "pn_cold_res": 71,
+    "pn_lightning_res": 58,
+    "pn_chaos_res": 100,
+    "pn_dps": 0,
+    "pn_jewel_count": 6,
+    "pn_jewel_names": [
+      "Heart of the Well",
+      "From Nothing",
+      "Behemoth Prism",
+      "Hypnotic Ornament",
+      "Cataclysm Creed",
+      "Fulgent Hope"
+    ],
+    "expected_defense_type": "es",
+    "expected_resists_capped": false,
+    "expected_chaos_capped": true,
+    "should_not_recommend": [
+      "ascendancy_passives",
+      "add_life_critical"
+    ]
+  },
+  {
+    "account": "methanman-2640",
+    "name": "drubringer",
+    "ascendancy": "Titan",
+    "base_class": "Warrior",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Slam",
+    "pn_keystones": [
+      "Blood Magic"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 3627,
+    "pn_es": 0,
+    "pn_ehp": 29624,
+    "pn_fire_res": 76,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 75,
+    "pn_dps": 0,
+    "pn_jewel_count": 3,
+    "pn_jewel_names": [
+      "Viper Shine",
+      "Heart of the Well",
+      "From Nothing"
+    ],
+    "expected_defense_type": "life",
+    "expected_resists_capped": true,
+    "expected_chaos_capped": true,
+    "should_not_recommend": [
+      "ascendancy_passives",
+      "cap_resists"
+    ]
+  },
+  {
+    "account": "Whiteyang123456-2065",
+    "name": "看看你的牛子",
+    "ascendancy": "Oracle",
+    "base_class": "Druid",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Bone Storm",
+    "pn_keystones": [
+      "Mind Over Matter",
+      "Scarred Faith",
+      "Wildsurge Incantation",
+      "Eldritch Battery",
+      "Resonance",
+      "Hollow Palm Technique",
+      "Vaal Pact"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1643,
+    "pn_es": 0,
+    "pn_ehp": 16933,
+    "pn_fire_res": 75,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 45,
+    "pn_dps": 0,
+    "pn_jewel_count": 5,
+    "pn_jewel_names": [
+      "From Nothing",
+      "Controlled Metamorphosis",
+      "Heart of the Well",
+      "Flesh Crucible",
+      "Prism of Belief"
+    ],
+    "expected_defense_type": "mom",
+    "expected_resists_capped": true,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives"
+    ]
+  },
+  {
+    "account": "l767965778-4770",
+    "name": "穿越化腾",
+    "ascendancy": "Invoker",
+    "base_class": "Monk",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Bell",
+    "pn_keystones": [],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1458,
+    "pn_es": 1946,
+    "pn_ehp": 11859,
+    "pn_fire_res": 69,
+    "pn_cold_res": 67,
+    "pn_lightning_res": 66,
+    "pn_chaos_res": 57,
+    "pn_dps": 0,
+    "pn_jewel_count": 3,
+    "pn_jewel_names": [
+      "Soul Wound",
+      "Heart of the Well",
+      "Megalomaniac"
+    ],
+    "expected_defense_type": "hybrid",
+    "expected_resists_capped": false,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives"
+    ]
+  },
+  {
+    "account": "yegorah-5357",
+    "name": "ПедроПиксель",
+    "ascendancy": "Invoker",
+    "base_class": "Monk",
+    "level": 100,
+    "tier": "mid",
+    "search_skill": "Flicker Strike",
+    "pn_keystones": [
+      "Chaos Inoculation"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1,
+    "pn_es": 4735,
+    "pn_ehp": 7679,
+    "pn_fire_res": -1,
+    "pn_cold_res": 5,
+    "pn_lightning_res": 2,
+    "pn_chaos_res": 100,
+    "pn_dps": 0,
+    "pn_jewel_count": 4,
+    "pn_jewel_names": [
+      "Ghoul Solace",
+      "Megalomaniac",
+      "Prism of Belief",
+      "Heart of the Well"
+    ],
+    "expected_defense_type": "es",
+    "expected_resists_capped": false,
+    "expected_chaos_capped": true,
+    "should_not_recommend": [
+      "ascendancy_passives",
+      "add_life_critical"
+    ]
+  },
+  {
+    "account": "Traurus-7050",
+    "name": "Trauros",
+    "ascendancy": "Acolyte of Chayula",
+    "base_class": "Monk",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Bell",
+    "pn_keystones": [],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1590,
+    "pn_es": 3004,
+    "pn_ehp": 15083,
+    "pn_fire_res": 75,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 85,
+    "pn_dps": 0,
+    "pn_jewel_count": 5,
+    "pn_jewel_names": [
+      "Against the Darkness",
+      "From Nothing",
+      "Heart of the Well",
+      "Megalomaniac",
+      "Armageddon Ornament"
+    ],
+    "expected_defense_type": "hybrid",
+    "expected_resists_capped": true,
+    "expected_chaos_capped": true,
+    "should_not_recommend": [
+      "ascendancy_passives",
+      "cap_resists"
+    ]
+  },
+  {
+    "account": "olleyDE-4339",
+    "name": "ChillaMaggiTTVfan",
+    "ascendancy": "Deadeye",
+    "base_class": "Ranger",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Lightning Arrow",
+    "pn_keystones": [],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1498,
+    "pn_es": 3139,
+    "pn_ehp": 17489,
+    "pn_fire_res": 75,
+    "pn_cold_res": 69,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 41,
+    "pn_dps": 1100000.0,
+    "pn_jewel_count": 4,
+    "pn_jewel_names": [
+      "Dragon Ornament",
+      "Prism of Belief",
+      "Heart of the Well",
+      "Chimeric Spark"
+    ],
+    "expected_defense_type": "es",
+    "expected_resists_capped": false,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives",
+      "add_life_critical"
+    ]
+  },
+  {
+    "account": "Tempest-2044",
+    "name": "TempestLevels",
+    "ascendancy": "Ritualist",
+    "base_class": "Huntress",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Bone Storm",
+    "pn_keystones": [
+      "Mind Over Matter",
+      "Eldritch Battery"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1697,
+    "pn_es": 509,
+    "pn_ehp": 14359,
+    "pn_fire_res": 75,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 0,
+    "pn_dps": 0,
+    "pn_jewel_count": 6,
+    "pn_jewel_names": [
+      "Viper Stone",
+      "Carrion Ornament",
+      "Kraken Essence",
+      "Heart of the Well",
+      "Glyph Joy",
+      "Brood Wound"
+    ],
+    "expected_defense_type": "mom",
+    "expected_resists_capped": true,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives"
+    ]
+  },
+  {
+    "account": "whity12345-5995",
+    "name": "whityL",
+    "ascendancy": "Lich",
+    "base_class": "Witch",
+    "level": 100,
+    "tier": "mid",
+    "search_skill": "Bone Storm",
+    "pn_keystones": [
+      "Whispers of Doom"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1555,
+    "pn_es": 9344,
+    "pn_ehp": 28060,
+    "pn_fire_res": 70,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 75,
+    "pn_dps": 0,
+    "pn_jewel_count": 6,
+    "pn_jewel_names": [
+      "Glyph Stone",
+      "Megalomaniac",
+      "From Nothing",
+      "Luminous Wound",
+      "Armageddon Vessel",
+      "Prism of Belief"
+    ],
+    "expected_defense_type": "es",
+    "expected_resists_capped": false,
+    "expected_chaos_capped": true,
+    "should_not_recommend": [
+      "ascendancy_passives",
+      "add_life_critical"
+    ]
+  },
+  {
+    "account": "amrita0612-3170",
+    "name": "あむよん",
+    "ascendancy": "Amazon",
+    "base_class": "Huntress",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Barrage",
+    "pn_keystones": [
+      "Dance with Death"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1890,
+    "pn_es": 2323,
+    "pn_ehp": 50443,
+    "pn_fire_res": 75,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 75,
+    "pn_dps": 0,
+    "pn_jewel_count": 4,
+    "pn_jewel_names": [
+      "Oblivion Curio",
+      "Prism of Belief",
+      "Heart of the Well",
+      "Spirit Shine"
+    ],
+    "expected_defense_type": "hybrid",
+    "expected_resists_capped": true,
+    "expected_chaos_capped": true,
+    "should_not_recommend": [
+      "ascendancy_passives",
+      "cap_resists"
+    ]
+  },
+  {
+    "account": "Bhongskii-1846",
+    "name": "Bhongskiiiiiiii",
+    "ascendancy": "Witchhunter",
+    "base_class": "Mercenary",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Power Shot",
+    "pn_keystones": [],
+    "pn_ascendancy_points": 8,
+    "pn_life": 2088,
+    "pn_es": 83,
+    "pn_ehp": 9236,
+    "pn_fire_res": 76,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 45,
+    "pn_dps": 0,
+    "pn_jewel_count": 4,
+    "pn_jewel_names": [
+      "Megalomaniac",
+      "Heart of the Well",
+      "Maelström Glisten",
+      "Against the Darkness"
+    ],
+    "expected_defense_type": "life",
+    "expected_resists_capped": true,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives"
+    ]
+  },
+  {
+    "account": "litvin19900-5981",
+    "name": "fdghnt",
+    "ascendancy": "Gemling Legionnaire",
+    "base_class": "Mercenary",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Comet",
+    "pn_keystones": [
+      "Blood Magic"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 2085,
+    "pn_es": 3212,
+    "pn_ehp": 9101,
+    "pn_fire_res": 58,
+    "pn_cold_res": 35,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 74,
+    "pn_dps": 621000.0,
+    "pn_jewel_count": 10,
+    "pn_jewel_names": [
+      "Mystic Sapphire of Unmaking",
+      "Shimmering Sapphire of Annihilating",
+      "Heart of the Well",
+      "The Adorned",
+      "Shimmering Sapphire of Annihilating",
+      "Mystic Sapphire of Annihilation",
+      "Shimmering Sapphire of Annihilating",
+      "Shimmering Sapphire of Annihilating",
+      "Shimmering Sapphire of Annihilating",
+      "Shimmering Sapphire of Potency"
+    ],
+    "expected_defense_type": "hybrid",
+    "expected_resists_capped": false,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives"
+    ]
+  },
+  {
+    "account": "TR0Ul3LEMAKER-7764",
+    "name": "BACKFORBLOODMAGE",
+    "ascendancy": "Infernalist",
+    "base_class": "Witch",
+    "level": 96,
+    "tier": "mid",
+    "search_skill": "Comet",
+    "pn_keystones": [
+      "Pain Attunement",
+      "Mind Over Matter",
+      "Eldritch Battery"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 1997,
+    "pn_es": 0,
+    "pn_ehp": 7234,
+    "pn_fire_res": 32,
+    "pn_cold_res": 65,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 58,
+    "pn_dps": 0,
+    "pn_jewel_count": 8,
+    "pn_jewel_names": [
+      "Armageddon Prism",
+      "Heart of the Well",
+      "Loath Ruin",
+      "From Nothing",
+      "Against the Darkness",
+      "Entropy Cut",
+      "Spirit Stone",
+      "Carrion Vessel"
+    ],
+    "expected_defense_type": "mom",
+    "expected_resists_capped": false,
+    "expected_chaos_capped": false,
+    "should_not_recommend": [
+      "ascendancy_passives"
+    ]
+  },
+  {
+    "account": "Prec0cious-1317",
+    "name": "xxxTheWizardOfOsu",
+    "ascendancy": "Smith of Kitava",
+    "base_class": "Warrior",
+    "level": 100,
+    "tier": "top",
+    "search_skill": "Slam",
+    "pn_keystones": [],
+    "pn_ascendancy_points": 8,
+    "pn_life": 3645,
+    "pn_es": 0,
+    "pn_ehp": 86242,
+    "pn_fire_res": 76,
+    "pn_cold_res": 76,
+    "pn_lightning_res": 76,
+    "pn_chaos_res": 75,
+    "pn_dps": 0,
+    "pn_jewel_count": 2,
+    "pn_jewel_names": [
+      "Heart of the Well",
+      "Foe Splinter"
+    ],
+    "expected_defense_type": "life",
+    "expected_resists_capped": true,
+    "expected_chaos_capped": true,
+    "should_not_recommend": [
+      "ascendancy_passives",
+      "cap_resists"
+    ]
+  },
+  {
+    "account": "kldpetrov-4622",
+    "name": "ИванФедоровичКрузенштер",
+    "ascendancy": "Warbringer",
+    "base_class": "Warrior",
+    "level": 98,
+    "tier": "mid",
+    "search_skill": "Slam",
+    "pn_keystones": [
+      "Giant's Blood"
+    ],
+    "pn_ascendancy_points": 8,
+    "pn_life": 2787,
+    "pn_es": 72,
+    "pn_ehp": 30697,
+    "pn_fire_res": 75,
+    "pn_cold_res": 75,
+    "pn_lightning_res": 75,
+    "pn_chaos_res": 75,
+    "pn_dps": 0,
+    "pn_jewel_count": 5,
+    "pn_jewel_names": [
+      "Vivid Joy",
+      "From Nothing",
+      "Heart of the Well",
+      "Vivid Splinter",
+      "Chimeric Eye"
+    ],
+    "expected_defense_type": "life",
+    "expected_resists_capped": true,
+    "expected_chaos_capped": true,
+    "should_not_recommend": [
+      "ascendancy_passives",
+      "cap_resists"
+    ]
+  }
+]
