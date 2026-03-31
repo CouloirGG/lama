@@ -906,6 +906,72 @@ MOD_SYNERGIES: List[ModSynergyInfo] = [
 
 
 # ---------------------------------------------------------------------------
+# KEYSTONE_COMBOS — synergistic keystone pairings from data analysis
+# ---------------------------------------------------------------------------
+
+@dataclass
+class KeystoneCombo:
+    keystones: List[str]
+    description: str
+    impact: str
+    best_classes: List[str]
+    adoption_pct: float  # % of top builds using this combo
+
+
+KEYSTONE_COMBOS: List[KeystoneCombo] = [
+    KeystoneCombo(
+        keystones=["Eldritch Battery", "Mind Over Matter"],
+        description="ES protects mana (EB), then mana absorbs 40% of damage (MoM). Your Energy Shield becomes a massive damage buffer without needing life investment.",
+        impact="The #1 defensive combo for top spell builds. 32% of top Witch builds and 36% of top Mercenary builds use this. Turns ES into an EHP multiplier — your ES pool effectively becomes extra life.",
+        best_classes=["Witch", "Mercenary", "Huntress", "Druid"],
+        adoption_pct=25.0,
+    ),
+    KeystoneCombo(
+        keystones=["Mind Over Matter", "Eldritch Battery", "Wildsurge Incantation", "Conduit"],
+        description="The Druid mega-combo: EB+MoM for defense, Wildsurge for extra projectile/chain, Conduit for charge sharing. 64-71% of top Druid builds use ALL of these.",
+        impact="This 4-keystone combo defines the Druid meta. Without all 4, you're fundamentally weaker than other top Druid builds. Requires pathing across the passive tree.",
+        best_classes=["Druid"],
+        adoption_pct=65.0,
+    ),
+    KeystoneCombo(
+        keystones=["Blood Magic", "Giant's Blood"],
+        description="Blood Magic removes mana (skills cost life), Giant's Blood increases life pool and regen. Together they create a massive life pool with strong sustain.",
+        impact="Core Warrior combo — 47-62% of top Warriors use both. Your entire resource system is life-based, making gearing simpler and life scaling exponential.",
+        best_classes=["Warrior"],
+        adoption_pct=47.0,
+    ),
+    KeystoneCombo(
+        keystones=["Chaos Inoculation"],
+        description="CI alone transforms your build: 1 life, immune to chaos, ES is your only health pool. Not a combo — it's a standalone build archetype.",
+        impact="The most popular keystone globally (26% of all builds). Removes chaos resistance as a gear concern entirely. Requires heavy ES investment on gear.",
+        best_classes=["Sorceress", "Monk", "Huntress"],
+        adoption_pct=26.0,
+    ),
+    KeystoneCombo(
+        keystones=["Blood Magic", "Sanguimancy", "Pain Attunement"],
+        description="Blood Magic (skills cost life) + Sanguimancy (life costs paid from ES) + Pain Attunement (30% more spell damage on low life). The low-life spell archetype.",
+        impact="Enables low-life builds: reserve life for Pain Attunement's 30% more damage, while Sanguimancy ensures skill costs come from ES instead of draining your reserved life.",
+        best_classes=["Witch"],
+        adoption_pct=20.0,
+    ),
+    KeystoneCombo(
+        keystones=["Mind Over Matter", "Blackflame Covenant"],
+        description="MoM for defense (mana absorbs damage) + Blackflame Covenant for chaos/fire damage scaling. 100% of top Druid builds use both.",
+        impact="Blackflame Covenant converts fire damage to chaos — combined with MoM for defense, this is the Druid's offensive + defensive identity.",
+        best_classes=["Druid"],
+        adoption_pct=79.0,
+    ),
+    KeystoneCombo(
+        keystones=["Blood Magic", "Sacrifice of Flesh"],
+        description="Blood Magic (skills cost life) + Sacrifice of Flesh (sacrifice life for power). The Warrior burst damage combo.",
+        impact="42% of top Warriors use Sacrifice of Flesh — it provides burst damage windows at the cost of life, which Blood Magic builds have in abundance.",
+        best_classes=["Warrior"],
+        adoption_pct=42.0,
+    ),
+]
+
+
+# ---------------------------------------------------------------------------
 # STAT_THRESHOLDS
 # ---------------------------------------------------------------------------
 

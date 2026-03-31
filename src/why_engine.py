@@ -18,7 +18,7 @@ from builds_client import BuildsClient, CharacterData, BuildArchetype, ASCENDANC
 from pob_decoder import decode_pob_code, PobData, PobStats
 from game_knowledge import (
     KEYSTONES, DEFENSE_MECHANICS, STAT_THRESHOLDS, MOD_SYNERGIES,
-    UNIQUE_JEWELS,
+    UNIQUE_JEWELS, KEYSTONE_COMBOS,
     KeystoneInfo, StatThreshold,
 )
 try:
@@ -243,6 +243,7 @@ class WhyEngine:
         result.keystones = self._explain_keystones(
             char_data.keystones, popular_keystones, archetype, pob, profile,
             ascendancy_points=getattr(char_data, 'ascendancy_points', 0),
+            player_ascendancy=char_data.ascendancy or "",
         )
         result.actions = self._generate_actions(
             char_data, archetype, pob, profile, popular_keystones
@@ -433,6 +434,7 @@ class WhyEngine:
         pob: Optional[PobData],
         profile: Optional[dict],
         ascendancy_points: int = 0,
+        player_ascendancy: str = "",
     ) -> List[Explanation]:
         explanations = []
         player_ks_set = set(player_keystones)
@@ -529,6 +531,41 @@ class WhyEngine:
                 source="population" if not info else "game_knowledge",
                 adoption_pct=pct,
             ))
+
+        # Keystone combo analysis — check for synergistic combos
+        base_class = ASCENDANCY_MAP.get(player_ascendancy, "")
+
+        for combo in KEYSTONE_COMBOS:
+            if base_class and combo.best_classes and base_class not in combo.best_classes:
+                continue  # not relevant for this class
+
+            has_count = sum(1 for k in combo.keystones if k in player_ks_set)
+            total = len(combo.keystones)
+
+            if has_count == total:
+                # Player has the full combo — explain the synergy
+                explanations.append(Explanation(
+                    context="keystone",
+                    title=f"Combo: {' + '.join(combo.keystones[:3])}",
+                    text=f"{combo.description} ({combo.adoption_pct:.0f}% of top {base_class or 'builds'} use this combo.)",
+                    severity="positive",
+                    source="game_knowledge",
+                ))
+            elif has_count > 0 and has_count < total:
+                # Partial combo — suggest completing it
+                missing = [k for k in combo.keystones if k not in player_ks_set]
+                explanations.append(Explanation(
+                    context="keystone",
+                    title=f"Incomplete Combo: {' + '.join(combo.keystones[:3])}",
+                    text=(
+                        f"You have {has_count}/{total} keystones from this combo. "
+                        f"Missing: {', '.join(missing)}. "
+                        f"{combo.impact}"
+                    ),
+                    severity="warning",
+                    source="game_knowledge",
+                    adoption_pct=combo.adoption_pct,
+                ))
 
         return explanations
 
