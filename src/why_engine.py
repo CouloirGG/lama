@@ -1853,11 +1853,14 @@ def _analyze_mod_contribution(mod_text: str, archetype) -> Optional[tuple]:
     """
     ml = mod_text.lower()
 
-    # +N to level of all spell/skill gems — massive DPS (~10-12% per level)
+    # +N to level of all spell/skill gems
+    # Data shows gem levels are only 1.1x between top/bottom — less impactful
+    # than cast speed or crit. Each level ~5-8% more base damage but diminishing
+    # with other scaling factors already present.
     m = _re.search(r"\+(\d+) to level of all .*(spell|skill)", ml)
     if m:
         levels = int(m.group(1))
-        est = levels * 11  # ~11% per gem level
+        est = levels * 6  # ~6% per gem level (was 11%, data shows less impact)
         return ("dps", f"+{levels} gem levels (~{est}% DPS)", est)
 
     # +N to level of specific skill gems
@@ -1882,17 +1885,19 @@ def _analyze_mod_contribution(mod_text: str, archetype) -> Optional[tuple]:
         return ("dps", f"+{val}% as extra elemental", round(est, 1))
 
     # % increased critical hit chance
+    # % increased critical hit chance — #2 DPS factor (2.5x top vs bottom)
     m = _re.search(r"(\d+)% increased .*critical.*hit.*chance", ml)
     if m and archetype.is_crit:
         val = int(m.group(1))
-        est = val * 0.08  # crit chance is good but diminishing
+        est = val * 0.15  # crit chance is strong for crit builds (was 0.08)
         return ("dps", f"+{val}% crit chance", round(est, 1))
 
-    # % increased cast speed — DPS for spell builds
+    # % increased cast speed — #1 DPS factor per scaling analysis (4.7x top vs bottom)
+    # Cast speed directly multiplies DPS: more casts per second = more damage per second
     m = _re.search(r"(\d+)% increased cast speed", ml)
     if m and archetype.damage_type == "spell":
         val = int(m.group(1))
-        est = val * 0.5
+        est = val * 0.8  # cast speed is near-linear DPS scaling (was 0.5)
         return ("dps", f"+{val}% cast speed", round(est, 1))
 
     # % increased attack speed — DPS for attack builds AND Cast on Crit builds
