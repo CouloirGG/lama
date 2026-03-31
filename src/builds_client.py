@@ -300,6 +300,9 @@ class BuildsClient:
             resp = self._session.get(f"{BASE_URL}/data/index-state", timeout=10)
             if resp.status_code != 200:
                 logger.warning(f"poe.ninja index-state: HTTP {resp.status_code}")
+                # Use last known good values if we have them
+                if self._snapshot_version and self._snapshot_name:
+                    return True
                 return False
 
             data = resp.json()
