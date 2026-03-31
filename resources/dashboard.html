@@ -1597,7 +1597,7 @@
     // -----------------------------------------------------------------------
     // Equipment Grid + Slot Detail
     // -----------------------------------------------------------------------
-    function ModRow({ name, tierNum, tierCount, value, barWidth, barColor, dotColor, benefitColor, benefitReason, tierText, tierSeverity }) {
+    function ModRow({ name, tierNum, tierCount, value, barWidth, barColor, dotColor, benefitColor, benefitReason, replaceText, tierText, tierSeverity }) {
       const [open, setOpen] = useState(false);
       return (
         <div className={`p-1.5 border-l-2 cursor-pointer ${benefitColor}`} onClick={() => setOpen(!open)}>
@@ -1613,15 +1613,20 @@
             </div>
           )}
           {open && (
-            <div className="mt-1 ml-3.5 space-y-0.5">
+            <div className="mt-1 ml-3.5 space-y-1">
               {benefitReason && (
-                <p className={`text-[12px] font-mono ${dotColor === "bg-green-400" ? "text-green-400/70" : dotColor === "bg-red-400" ? "text-red-400/70" : "text-on-surface-var"}`}>
+                <p className={`text-[12px] font-mono ${dotColor === "bg-green-400" ? "text-green-400/80" : dotColor === "bg-red-400" ? "text-red-400/80" : "text-on-surface-var"}`}>
                   {benefitReason}
                 </p>
               )}
               {tierText && (
-                <p className={`text-[12px] font-mono ${tierSeverity === "positive" ? "text-green-400/70" : tierSeverity === "critical" ? "text-red-400/70" : "text-yellow-400/70"}`}>
+                <p className={`text-[12px] font-mono ${tierSeverity === "positive" ? "text-green-400/80" : tierSeverity === "critical" ? "text-red-400/80" : "text-yellow-400/80"}`}>
                   {tierText}
+                </p>
+              )}
+              {replaceText && (
+                <p className="text-[12px] font-mono text-secondary">
+                  <span className="font-bold">→</span> {replaceText}
                 </p>
               )}
             </div>
@@ -1671,23 +1676,38 @@
       if (/spirit/.test(ml))
         return { benefit: "green", reason: "Enables more skill reservations" };
 
-      // RED: wasted on this build
+      // RED: wasted on this build — include replacement suggestion
       if (isSpell && /attack speed|local.*physical|added.*damage to attack/.test(ml))
-        return { benefit: "red", reason: "Attack mod on a spell build — wasted" };
+        return { benefit: "red", reason: "Attack mod on a spell build — wasted",
+          replace: "Replace with: % spell damage, % cast speed, or +gem levels" };
       if (isAttack && /spell.*damage|cast speed/.test(ml))
-        return { benefit: "red", reason: "Spell mod on an attack build — wasted" };
+        return { benefit: "red", reason: "Spell mod on an attack build — wasted",
+          replace: "Replace with: % attack speed, flat physical damage, or % elemental damage" };
       if (!isCrit && /critical.*hit.*chance|critical.*multiplier/.test(ml))
-        return { benefit: "red", reason: "Crit mod on a non-crit build — wasted" };
+        return { benefit: "red", reason: "Crit mod on a non-crit build — wasted",
+          replace: "Replace with: % increased damage, flat damage, or defensive mod" };
       if (defType === "es" && /maximum life/.test(ml) && /armour|evasion/.test(ml))
-        return { benefit: "red", reason: "Life/armour mod on an ES build" };
-      if (/mana.*regeneration|maximum mana/.test(ml) && defType !== "mom")
-        return { benefit: "neutral", reason: "Mana — minor utility" };
-      if (/item rarity|item quantity/.test(ml))
-        return { benefit: "neutral", reason: "Magic find — doesn't affect combat" };
-      if (/light radius|stun/.test(ml))
-        return { benefit: "neutral", reason: "Minor utility" };
+        return { benefit: "red", reason: "Life/armour mod on an ES build",
+          replace: "Replace with: +ES, % increased ES, or ES recharge" };
 
-      return { benefit: "neutral", reason: "" };
+      // NEUTRAL: not helping much — suggest better options
+      if (/mana.*regeneration/.test(ml) && defType !== "mom")
+        return { benefit: "neutral", reason: "Mana regen — minor utility for this build",
+          replace: isSpell ? "Could be: % spell damage, cast speed, or resistance" : "Could be: attack speed, flat damage, or resistance" };
+      if (/maximum mana/.test(ml) && defType !== "mom")
+        return { benefit: "neutral", reason: "Mana pool — minor utility unless using Mind Over Matter",
+          replace: defType === "life" ? "Better as: +maximum life, resistance, or damage mod" : "Better as: +ES, resistance, or damage mod" };
+      if (/item rarity|item quantity/.test(ml))
+        return { benefit: "neutral", reason: "Magic find — doesn't help in combat",
+          replace: "Could be a damage or survivability mod instead" };
+      if (/light radius|stun/.test(ml))
+        return { benefit: "neutral", reason: "Minor utility — low impact",
+          replace: isSpell ? "Better as: spell damage, cast speed, or resistance" : "Better as: damage, attack speed, or resistance" };
+      if (/intelligence|dexterity|strength/.test(ml) && !/damage/.test(ml))
+        return { benefit: "neutral", reason: "Attribute — may be needed for gem requirements",
+          replace: "" };  // don't suggest replacing attributes, they might be required
+
+      return { benefit: "neutral", reason: "", replace: "" };
     }
 
     // Plain-language tier explanation
@@ -1800,6 +1820,7 @@
                     barWidth={barWidth} barColor={barColor}
                     dotColor={dotColor} benefitColor={benefitColor}
                     benefitReason={isDead ? (deadMods.find(dm => mod.display_name?.includes(dm.mod))?.reason || "Dead mod — wasted on this build") : benefit.reason}
+                    replaceText={isDead ? (isSpell ? "Replace with: % spell damage, cast speed, or +gem levels" : isAttack ? "Replace with: attack speed, flat damage, or resistance" : "Replace with a build-relevant mod") : benefit.replace}
                     tierText={tierExp?.text}
                     tierSeverity={tierExp?.severity}
                   />
@@ -1824,8 +1845,13 @@
                         {typeLabel && <span className="text-xs font-mono text-outline uppercase">{typeLabel}</span>}
                       </div>
                       {benefit.reason && (
-                        <p className={`text-[12px] font-mono mt-0.5 ${benefit.benefit === "green" ? "text-green-400/70" : benefit.benefit === "red" ? "text-red-400/70" : "text-on-surface-var"}`}>
+                        <p className={`text-[12px] font-mono mt-0.5 ${benefit.benefit === "green" ? "text-green-400/80" : benefit.benefit === "red" ? "text-red-400/80" : "text-on-surface-var"}`}>
                           {benefit.reason}
+                        </p>
+                      )}
+                      {benefit.replace && (
+                        <p className="text-[12px] font-mono mt-0.5 text-secondary">
+                          <span className="font-bold">→</span> {benefit.replace}
                         </p>
                       )}
                     </div>
