@@ -1602,6 +1602,56 @@ async def character_why_insights(req: WhyInsightsRequest):
         return {"keystones": [], "gear": {}, "stats": [], "actions": [], "meta": []}
 
 
+class BuildCompareRequest2(BaseModel):
+    player_account: str
+    player_character: str
+    target_query: str  # poe.ninja URL or account/character
+
+
+@app.post("/api/character/compare")
+async def character_compare(req: BuildCompareRequest2):
+    """Compare player build against a target build (guide/reference)."""
+    if not req.player_account.strip() or not req.player_character.strip() or not req.target_query.strip():
+        return JSONResponse(status_code=400, content={"error": "Player and target build required"})
+    loop = asyncio.get_running_loop()
+
+    # Look up player
+    player = await loop.run_in_executor(
+        None, _lookup_character_with_fallback, req.player_account.strip(), req.player_character.strip()
+    )
+    if not player:
+        return JSONResponse(status_code=404, content={"error": "Player character not found"})
+
+    # Parse target — could be a poe.ninja URL or account/character
+    target_query = req.target_query.strip()
+    target = None
+
+    if "poe.ninja" in target_query:
+        acct, char_name = _parse_ninja_url(target_query)
+        if acct and char_name:
+            target = await loop.run_in_executor(
+                None, _lookup_character_with_fallback, acct, char_name
+            )
+    elif "/" in target_query:
+        parts = [p.strip() for p in target_query.split("/", 1)]
+        if len(parts) == 2:
+            target = await loop.run_in_executor(
+                None, _lookup_character_with_fallback, parts[0], parts[1]
+            )
+
+    if not target:
+        return JSONResponse(status_code=404, content={"error": f"Target build not found: {target_query}"})
+
+    try:
+        result = await loop.run_in_executor(
+            None, why_engine_instance.compare_builds, player, target
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Build comparison failed: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 class BuildEfficiencyRequest(BaseModel):
     account: str
     character: str

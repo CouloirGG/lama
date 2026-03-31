@@ -1116,6 +1116,26 @@
       const [leftPanel, setLeftPanel] = useState("survival"); // "survival" or "gear"
       const gearSlots = insights?.slotSummary || [];
 
+      // Build comparison state
+      const [compareQuery, setCompareQuery] = useState("");
+      const [compareResult, setCompareResult] = useState(null);
+      const [compareLoading, setCompareLoading] = useState(false);
+      const [compareError, setCompareError] = useState("");
+
+      const handleCompare = async () => {
+        if (!compareQuery.trim() || !account || !character) return;
+        setCompareLoading(true);
+        setCompareError("");
+        const data = await api("/api/character/compare", "POST", {
+          player_account: account,
+          player_character: character,
+          target_query: compareQuery.trim(),
+        });
+        setCompareLoading(false);
+        if (data.error) setCompareError(data.error);
+        else setCompareResult(data);
+      };
+
       return (
         <div className="flex flex-col gap-0 p-6">
           {/* ── Scorecard Bar ─────────────────────────────── */}
@@ -1295,6 +1315,46 @@
                 </div>
 
                 <NextBigUpgradeCard improvement={improvement} />
+
+                {/* ── Compare to Build ── */}
+                <div className="mt-4 pt-4 border-t border-outline-variant/20">
+                  <h4 className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-primary-container mb-3">
+                    <Icon name="compare_arrows" className="text-base" />
+                    Compare to Build
+                  </h4>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      value={compareQuery}
+                      onChange={e => { setCompareQuery(e.target.value); setCompareError(""); }}
+                      placeholder="poe.ninja URL or account/char"
+                      className="flex-1 px-2 py-1.5 bg-surface-dim border border-outline-variant text-xs font-mono text-on-surface placeholder-outline focus:border-primary-container focus:outline-none"
+                      onKeyDown={e => { if (e.key === "Enter") handleCompare(); }}
+                    />
+                    <button
+                      onClick={handleCompare}
+                      disabled={compareLoading || !compareQuery.trim()}
+                      className="px-3 py-1.5 bg-primary-container text-surface-dim text-xs font-mono hover:bg-primary transition-colors disabled:opacity-50"
+                    >
+                      {compareLoading ? "..." : "Diff"}
+                    </button>
+                  </div>
+                  {compareError && <p className="text-xs text-error font-mono mb-2">{compareError}</p>}
+                  {compareResult && (
+                    <div className="space-y-1.5">
+                      <div className="text-xs font-mono text-on-surface-var mb-2">
+                        vs <span className="text-primary-container">{compareResult.target?.name}</span>
+                        {" "}({compareResult.target?.ascendancy} Lv{compareResult.target?.level})
+                        {" — "}{compareResult.player_dps} vs {compareResult.target_dps} DPS
+                      </div>
+                      {compareResult.diffs?.slice(0, 10).map((d, i) => (
+                        <ComparisonDiffCard key={i} diff={d} />
+                      ))}
+                      {compareResult.total_diffs > 10 && (
+                        <p className="text-xs font-mono text-on-surface-var">+{compareResult.total_diffs - 10} more differences</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1557,6 +1617,24 @@
           </div>
           <h5 className="text-xs font-mono font-bold uppercase tracking-tight text-on-surface">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</h5>
           {open && <p className="text-[12px] font-mono text-on-surface-var mt-2 leading-relaxed">{e.text}</p>}
+        </div>
+      );
+    }
+
+    function ComparisonDiffCard({ diff }) {
+      const d = diff;
+      const [open, setOpen] = useState(false);
+      const borderColor = { critical: "border-error", warning: "border-secondary", info: "border-outline-variant", positive: "border-primary-container" }[d.severity] || "border-outline-variant";
+      const catIcons = { dps: "bolt", survival: "shield", gear: "inventory_2", jewels: "diamond", keystones: "key", supports: "link" };
+      return (
+        <div className={`p-2 border-l-2 ${borderColor} bg-surface-dim/50 cursor-pointer`} onClick={() => setOpen(!open)}>
+          <div className="flex items-center gap-2">
+            <Icon name={catIcons[d.category] || "compare_arrows"} className="text-xs text-on-surface-var" />
+            <span className="text-xs font-mono font-bold text-on-surface flex-1 truncate">{d.title}</span>
+            {d.dps_diff_pct > 0 && <span className="text-xs font-mono text-secondary">+{d.dps_diff_pct}%</span>}
+          </div>
+          {open && <p className="text-xs font-mono text-on-surface-var mt-1 ml-5">{d.text}</p>}
+          {!open && <p className="text-xs font-mono text-on-surface-var mt-0.5 ml-5 truncate opacity-70">{d.text.slice(0, 60)}</p>}
         </div>
       );
     }

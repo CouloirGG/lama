@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
-from builds_client import BuildsClient, CharacterData, BuildArchetype, ASCENDANCY_MAP
+from builds_client import BuildsClient, CharacterData, BuildArchetype, ASCENDANCY_MAP, classify_build
 from pob_decoder import decode_pob_code, PobData, PobStats
 from game_knowledge import (
     KEYSTONES, DEFENSE_MECHANICS, STAT_THRESHOLDS, MOD_SYNERGIES,
@@ -1683,6 +1683,193 @@ class WhyEngine:
         ))
 
         return categories
+
+    # ------------------------------------------------------------------
+    # Build Comparison: diff player vs target build
+    # ------------------------------------------------------------------
+
+    def compare_builds(
+        self, player: CharacterData, target: CharacterData,
+    ) -> dict:
+        """Compare player build against a target build (guide/reference).
+
+        Returns a structured diff with prioritized upgrade recommendations.
+        """
+        player_arch = classify_build(player)
+        target_arch = classify_build(target)
+        player_pob = decode_pob_code(player.pob_code) if player.pob_code else None
+        target_pob = decode_pob_code(target.pob_code) if target.pob_code else None
+
+        diffs = []
+
+        # ── DPS comparison ──
+        player_dps = 0
+        target_dps = 0
+        for sg in player.skill_groups:
+            for d in (sg.dps if hasattr(sg, 'dps') and sg.dps else []):
+                player_dps = max(player_dps, d.dps or 0, d.dot_dps or 0, d.damage or 0)
+        for sg in target.skill_groups:
+            for d in (sg.dps if hasattr(sg, 'dps') and sg.dps else []):
+                target_dps = max(target_dps, d.dps or 0, d.dot_dps or 0, d.damage or 0)
+
+        if target_dps > 0 and player_dps > 0:
+            ratio = target_dps / player_dps
+            diffs.append({
+                "category": "dps", "priority": 0,
+                "title": f"DPS: {_format_number(player_dps)} vs {_format_number(target_dps)}",
+                "text": f"Target build does {ratio:.1f}x your DPS.",
+                "severity": "critical" if ratio > 3 else "warning" if ratio > 1.5 else "positive" if ratio < 1 else "info",
+                "player": _format_number(player_dps),
+                "target": _format_number(target_dps),
+            })
+
+        # ── EHP comparison ──
+        p_ehp = int(player_pob.stats.total_ehp) if player_pob else 0
+        t_ehp = int(target_pob.stats.total_ehp) if target_pob else 0
+        if p_ehp > 0 and t_ehp > 0:
+            diffs.append({
+                "category": "survival", "priority": 1,
+                "title": f"EHP: {p_ehp:,} vs {t_ehp:,}",
+                "text": f"Target has {t_ehp/max(p_ehp,1):.1f}x your effective HP.",
+                "severity": "warning" if t_ehp > p_ehp * 1.5 else "info",
+                "player": f"{p_ehp:,}", "target": f"{t_ehp:,}",
+            })
+
+        # ── Gear slot-by-slot comparison ──
+        target_items = {eq.slot: eq for eq in target.equipment if eq.slot not in ("Flask", "Flask2")}
+        player_items = {eq.slot: eq for eq in player.equipment if eq.slot not in ("Flask", "Flask2")}
+        base_class = ASCENDANCY_MAP.get(player.ascendancy or "", "")
+
+        for slot in target_items:
+            t_item = target_items[slot]
+            p_item = player_items.get(slot)
+            t_name = t_item.name or t_item.type_line or slot
+            p_name = (p_item.name or p_item.type_line or slot) if p_item else "Empty"
+
+            if t_name == p_name and t_item.rarity == (p_item.rarity if p_item else ""):
+                continue  # same item
+
+            # Calculate DPS contribution difference
+            t_dps_pct = 0
+            p_dps_pct = 0
+            for item, pct_var in [(t_item, "t"), (p_item, "p")]:
+                if not item:
+                    continue
+                total = 0
+                for mod in (item.explicit_mods or []) + (item.implicit_mods or []) + (item.crafted_mods or []):
+                    mc = _strip_ninja_brackets(mod)
+                    a = _analyze_mod_contribution(mc, player_arch, base_class)
+                    if a and a[0] == "dps":
+                        total += a[2]
+                if pct_var == "t":
+                    t_dps_pct = total
+                else:
+                    p_dps_pct = total
+
+            diff_pct = t_dps_pct - p_dps_pct
+            severity = "critical" if diff_pct > 30 else "warning" if diff_pct > 10 else "info"
+
+            # Describe what's different
+            if t_item.rarity == "Unique" and (not p_item or p_item.rarity != "Unique" or p_item.name != t_item.name):
+                text = f"Target uses {t_name} ({t_item.rarity}). "
+                unique_info = POPULAR_UNIQUES.get(t_name)
+                if unique_info:
+                    text += unique_info.impact[:80]
+                elif diff_pct > 5:
+                    text += f"Estimated +{diff_pct:.0f}% DPS vs your current gear."
+            elif diff_pct > 5:
+                text = f"Target's {slot} has ~{diff_pct:.0f}% more DPS contribution than yours."
+            else:
+                text = f"Different item in {slot} — similar DPS contribution."
+                severity = "info"
+
+            diffs.append({
+                "category": "gear", "priority": 2 if diff_pct > 10 else 5,
+                "title": f"{slot}: {p_name} → {t_name}",
+                "text": text,
+                "severity": severity,
+                "player": p_name, "target": t_name,
+                "dps_diff_pct": round(diff_pct, 1),
+                "slot": slot,
+            })
+
+        # ── Jewel comparison ──
+        p_jewels = set((j.name or j.type_line) for j in getattr(player, 'jewels', []) if j.name or j.type_line)
+        t_jewels = set((j.name or j.type_line) for j in getattr(target, 'jewels', []) if j.name or j.type_line)
+
+        missing_jewels = t_jewels - p_jewels
+        for jn in missing_jewels:
+            jewel_info = UNIQUE_JEWELS.get(jn)
+            text = jewel_info.impact[:80] if jewel_info else f"Target uses {jn} — you don't have it."
+            diffs.append({
+                "category": "jewels", "priority": 3,
+                "title": f"Missing Jewel: {jn}",
+                "text": text,
+                "severity": "warning",
+                "player": "—", "target": jn,
+            })
+
+        p_jcount = len(getattr(player, 'jewels', []))
+        t_jcount = len(getattr(target, 'jewels', []))
+        if t_jcount > p_jcount + 2:
+            diffs.append({
+                "category": "jewels", "priority": 3,
+                "title": f"Jewel Count: {p_jcount} vs {t_jcount}",
+                "text": f"Target has {t_jcount - p_jcount} more jewels equipped.",
+                "severity": "warning",
+                "player": str(p_jcount), "target": str(t_jcount),
+            })
+
+        # ── Keystone comparison ──
+        p_ks = set(player.keystones)
+        t_ks = set(target.keystones)
+        for k in (t_ks - p_ks):
+            info = KEYSTONES.get(k)
+            text = info.impact[:80] if info else f"Target uses {k} keystone."
+            diffs.append({
+                "category": "keystones", "priority": 2,
+                "title": f"Missing Keystone: {k}",
+                "text": text,
+                "severity": "warning",
+                "player": "—", "target": k,
+            })
+
+        # ── Support gem comparison ──
+        p_supports = set()
+        t_supports = set()
+        for sg in player.skill_groups:
+            if any(d.name == player_arch.main_skill for d in (sg.dps if hasattr(sg, 'dps') and sg.dps else [])):
+                p_supports = set(sg.gems) - {player_arch.main_skill}
+                break
+        for sg in target.skill_groups:
+            if any(d.name == target_arch.main_skill for d in (sg.dps if hasattr(sg, 'dps') and sg.dps else [])):
+                t_supports = set(sg.gems) - {target_arch.main_skill}
+                break
+
+        missing_supports = t_supports - p_supports
+        for s in missing_supports:
+            gem_info = TOP_SUPPORT_GEMS.get(s)
+            text = gem_info.impact[:80] if gem_info else f"Target links {s} — you don't."
+            diffs.append({
+                "category": "supports", "priority": 3,
+                "title": f"Missing Support: {s}",
+                "text": text,
+                "severity": "warning" if gem_info else "info",
+                "player": "—", "target": s,
+            })
+
+        # Sort by priority then severity
+        sev_order = {"critical": 0, "warning": 1, "info": 2, "positive": 3}
+        diffs.sort(key=lambda d: (d.get("priority", 9), sev_order.get(d.get("severity", "info"), 9)))
+
+        return {
+            "player": {"name": player.name, "ascendancy": player.ascendancy, "level": player.level},
+            "target": {"name": target.name, "ascendancy": target.ascendancy, "level": target.level},
+            "player_dps": _format_number(player_dps) if player_dps > 0 else "?",
+            "target_dps": _format_number(target_dps) if target_dps > 0 else "?",
+            "diffs": diffs,
+            "total_diffs": len(diffs),
+        }
 
 
 # ---------------------------------------------------------------------------
