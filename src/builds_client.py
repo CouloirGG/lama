@@ -658,8 +658,8 @@ class BuildsClient:
 
         try:
             url = (
-                f"{BASE_URL}/builds/{quote(self._snapshot_version)}/popular-skills"
-                f"?overview={quote(self._snapshot_name)}"
+                f"{BASE_URL}/builds/{quote(str(self._snapshot_version))}/popular-skills"
+                f"?overview={quote(str(self._snapshot_name))}"
             )
             resp = self._session.get(url, timeout=10)
             if resp.status_code != 200:
@@ -702,10 +702,10 @@ class BuildsClient:
 
         try:
             url = (
-                f"{BASE_URL}/builds/{quote(self._snapshot_version)}/popular-anoints"
-                f"?overview={quote(self._snapshot_name)}"
-                f"&characterClass={quote(char_class)}"
-                f"&skill={quote(skill)}"
+                f"{BASE_URL}/builds/{quote(str(self._snapshot_version))}/popular-anoints"
+                f"?overview={quote(str(self._snapshot_name))}"
+                f"&characterClass={quote(str(char_class))}"
+                f"&skill={quote(str(skill))}"
             )
             resp = self._session.get(url, timeout=10)
             if resp.status_code != 200:
@@ -834,10 +834,10 @@ class BuildsClient:
 
         try:
             url = (
-                f"{BASE_URL}/builds/{quote(self._snapshot_version)}/search"
-                f"?overview={quote(self._snapshot_name)}"
-                f"&class={quote(char_class)}"
-                f"&skills={quote(skill)}"
+                f"{BASE_URL}/builds/{quote(str(self._snapshot_version))}/search"
+                f"?overview={quote(str(self._snapshot_name))}"
+                f"&class={quote(str(char_class))}"
+                f"&skills={quote(str(skill))}"
             )
             resp = self._session.get(url, timeout=15)
             if resp.status_code != 200:
@@ -972,7 +972,7 @@ class BuildsClient:
             return cached
 
         try:
-            url = f"{BASE_URL}/builds/dictionary/{quote(hash_val)}"
+            url = f"{BASE_URL}/builds/dictionary/{quote(str(hash_val))}"
             resp = self._session.get(url, timeout=15)
             if resp.status_code != 200:
                 logger.warning(f"poe.ninja dictionary: HTTP {resp.status_code}")
