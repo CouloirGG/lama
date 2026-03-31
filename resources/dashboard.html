@@ -19,7 +19,7 @@
             primary: { DEFAULT: '#e5c371', container: '#c4a456' },
             secondary: { DEFAULT: '#ffb3ae' },
             tertiary: { DEFAULT: '#91cdff' },
-            on: { surface: '#e8e1db', 'surface-var': '#d0c5b3' },
+            on: { surface: '#ede8e2', 'surface-var': '#dbd3c5' },
             outline: { DEFAULT: '#99907f', variant: '#4d4638' },
             error: { DEFAULT: '#ffb4ab' },
           },
@@ -40,7 +40,7 @@
     @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; margin: 0; padding: 0; }
-    body { background: #151310; color: #e8e1db; font-family: 'Work Sans', 'Segoe UI', system-ui, sans-serif; }
+    body { background: #151310; color: #e8e1db; font-family: 'Work Sans', 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
     #root { width: 100%; height: 100%; }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -194,9 +194,9 @@
             <div className="flex items-center gap-2">
               <span className="text-xs font-mono font-semibold text-on-surface">{e.title}</span>
               {e.adoptionPct > 0 && (
-                <span className="text-[10px] font-mono opacity-50">{e.adoptionPct.toFixed(0)}%</span>
+                <span className="text-xs font-mono opacity-70">{e.adoptionPct.toFixed(0)}%</span>
               )}
-              {!open && <span className="text-[10px] font-mono opacity-40 truncate flex-1">{e.text.slice(0, 60)}...</span>}
+              {!open && <span className="text-xs font-mono opacity-60 truncate flex-1">{e.text.slice(0, 60)}...</span>}
             </div>
             {open && <p className="text-xs font-mono leading-relaxed opacity-80 mt-1">{e.text}</p>}
           </div>
@@ -244,21 +244,21 @@
         <div className="grid grid-cols-3 gap-3">
           {/* EHP */}
           <div className={`flex flex-col items-center p-4 rounded-lg border ${STATUS_BG[sc.ehpStatus] || STATUS_BG.info}`}>
-            <span className="text-[10px] font-mono tracking-widest opacity-60 mb-1">EFFECTIVE HP</span>
+            <span className="text-xs font-mono tracking-widest opacity-60 mb-1">EFFECTIVE HP</span>
             <span className="text-2xl font-mono font-bold">{sc.ehp?.toLocaleString() || "?"}</span>
-            <span className="text-[10px] font-mono opacity-70 mt-1">{sc.ehpContext}</span>
+            <span className="text-xs font-mono opacity-70 mt-1">{sc.ehpContext}</span>
           </div>
           {/* DPS */}
           <div className={`flex flex-col items-center p-4 rounded-lg border ${STATUS_BG[sc.dpsStatus] || STATUS_BG.info}`}>
-            <span className="text-[10px] font-mono tracking-widest opacity-60 mb-1">DPS</span>
+            <span className="text-xs font-mono tracking-widest opacity-60 mb-1">DPS</span>
             <span className="text-2xl font-mono font-bold">{sc.dpsLabel || "?"}</span>
-            <span className="text-[10px] font-mono opacity-70 mt-1">Primary skill</span>
+            <span className="text-xs font-mono opacity-70 mt-1">Primary skill</span>
           </div>
           {/* Resists */}
           <div className={`flex flex-col items-center p-4 rounded-lg border ${STATUS_BG[sc.resistStatus] || STATUS_BG.info}`}>
-            <span className="text-[10px] font-mono tracking-widest opacity-60 mb-1">RESISTANCES</span>
+            <span className="text-xs font-mono tracking-widest opacity-60 mb-1">RESISTANCES</span>
             <span className="text-lg font-mono font-bold">{sc.resistStatus === "positive" ? "Capped" : "Gaps"}</span>
-            <span className="text-[10px] font-mono opacity-70 mt-1 text-center">{sc.resistSummary}</span>
+            <span className="text-xs font-mono opacity-70 mt-1 text-center">{sc.resistSummary}</span>
           </div>
         </div>
       );
@@ -295,7 +295,7 @@
                     {g.statValue}
                   </span>
                 )}
-                <span className="text-[10px] font-mono text-on-surface-var">{g.items?.length || 0} items</span>
+                <span className="text-xs font-mono text-on-surface-var">{g.items?.length || 0} items</span>
               </div>
               <p className="text-xs font-mono text-on-surface-var mt-0.5">{g.summary}</p>
             </div>
@@ -523,7 +523,7 @@
               <button
                 onClick={() => handleSmartLookup()}
                 disabled={lookupLoading || !query.trim()}
-                className="w-full py-2 rounded bg-primary-container text-surface-dim text-sm font-mono font-semibold hover:bg-primary transition-colors disabled:opacity-50"
+                className="w-full py-2 rounded bg-primary-container text-surface-dim text-sm font-mono font-semibold hover:bg-primary transition-colors disabled:opacity-70"
               >
                 {lookupLoading ? "Looking up..." : "Look Up"}
               </button>
@@ -999,7 +999,7 @@
             <button
               onClick={() => handleSmartLookup()}
               disabled={loading || !query.trim()}
-              className="w-full py-3 rounded-lg bg-primary-container text-surface-dim text-sm font-mono font-semibold hover:bg-primary transition-colors disabled:opacity-50"
+              className="w-full py-3 rounded-lg bg-primary-container text-surface-dim text-sm font-mono font-semibold hover:bg-primary transition-colors disabled:opacity-70"
             >
               {loading ? "Looking up..." : "Look Up Character"}
             </button>
@@ -1156,7 +1156,7 @@
               <div className="flex border-b border-outline-variant/20">
                 <button
                   onClick={() => { setLeftPanel("survival"); setSelectedGearSlot(null); }}
-                  className={`flex-1 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all ${
+                  className={`flex-1 py-1.5 text-[12px] font-mono uppercase tracking-widest transition-all ${
                     leftPanel === "survival" ? "text-primary-container border-b-2 border-primary-container" : "text-on-surface-var hover:text-on-surface"
                   }`}
                 >
@@ -1164,7 +1164,7 @@
                 </button>
                 <button
                   onClick={() => setLeftPanel("gear")}
-                  className={`flex-1 py-1.5 text-[9px] font-mono uppercase tracking-widest transition-all ${
+                  className={`flex-1 py-1.5 text-[12px] font-mono uppercase tracking-widest transition-all ${
                     leftPanel === "gear" ? "text-secondary border-b-2 border-secondary" : "text-on-surface-var hover:text-on-surface"
                   }`}
                 >
@@ -1189,7 +1189,7 @@
                       const pct = Math.max(0, Math.min(100, val));
                       return (
                         <div key={r.name} className="space-y-0.5">
-                          <div className="flex justify-between text-[9px] uppercase tracking-widest font-mono">
+                          <div className="flex justify-between text-[12px] uppercase tracking-widest font-mono">
                             <span className="text-on-surface-var">{r.name}</span>
                             <span className={capped ? "text-primary-container" : "text-error"}>
                               {val > 0 ? `${Math.min(val, 75)}%` : "?"}
@@ -1206,7 +1206,7 @@
                   {/* Survival issues */}
                   {survivalGroup && survivalGroup.items.length > 0 && (
                     <div className="space-y-1.5">
-                      <p className="text-[9px] font-mono uppercase tracking-widest text-on-surface-var">Issues ({survivalGroup.items.length})</p>
+                      <p className="text-[12px] font-mono uppercase tracking-widest text-on-surface-var">Issues ({survivalGroup.items.length})</p>
                       {survivalGroup.items.slice(0, 5).map((e, i) => (
                         <SurvivalItem key={i} explanation={e} />
                       ))}
@@ -1220,7 +1220,7 @@
                     <div>
                       <button
                         onClick={() => setSelectedGearSlot(null)}
-                        className="flex items-center gap-1 text-[9px] font-mono text-on-surface-var hover:text-on-surface mb-3"
+                        className="flex items-center gap-1 text-[12px] font-mono text-on-surface-var hover:text-on-surface mb-3"
                       >
                         <Icon name="arrow_back" className="text-xs" /> All Gear
                       </button>
@@ -1243,11 +1243,11 @@
                           >
                             <Icon name={slotIcon(sl.slot)} className="text-on-surface-var text-sm" />
                             <div className="flex-1 min-w-0">
-                              <div className="text-[9px] font-mono text-on-surface-var">{sl.slotDisplay}</div>
-                              <div className="text-[10px] font-mono text-on-surface truncate">{sl.itemName}</div>
+                              <div className="text-[12px] font-mono text-on-surface-var">{sl.slotDisplay}</div>
+                              <div className="text-xs font-mono text-on-surface truncate">{sl.itemName}</div>
                             </div>
                             {hasDeadMods && <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />}
-                            <span className={`text-[9px] font-mono px-1 py-0.5 ${tierColor(sl.avgTier)}`}>
+                            <span className={`text-[12px] font-mono px-1 py-0.5 ${tierColor(sl.avgTier)}`}>
                               T{sl.avgTier}
                             </span>
                           </div>
@@ -1312,11 +1312,11 @@
       const fmtDelta = projectedDelta > 0 ? (projectedDelta >= 1e6 ? `+${(projectedDelta/1e6).toFixed(1)}M` : projectedDelta >= 1e3 ? `+${(projectedDelta/1e3).toFixed(0)}K` : `+${projectedDelta.toLocaleString()}`) : "";
       return (
         <div className={`bg-surface-container px-4 py-3 border-l-4 ${hasProjection ? "border-primary-container" : borderColor} transition-all`}>
-          <p className="text-[9px] uppercase tracking-widest text-on-surface-var font-mono mb-1">{label}</p>
+          <p className="text-[12px] uppercase tracking-widest text-on-surface-var font-mono mb-1">{label}</p>
           <div className="flex items-baseline gap-2">
             {hasProjection ? (
               <>
-                <span className="text-xl font-serif text-on-surface-var line-through opacity-50">{value}</span>
+                <span className="text-xl font-serif text-on-surface-var line-through opacity-70">{value}</span>
                 <span className="text-2xl font-serif font-bold tracking-tight text-primary-container">{fmtProjected}</span>
               </>
             ) : (
@@ -1324,9 +1324,9 @@
             )}
           </div>
           {hasProjection ? (
-            <p className="text-[10px] font-mono text-primary-container mt-2">{fmtDelta} with selected improvements</p>
+            <p className="text-xs font-mono text-primary-container mt-2">{fmtDelta} with selected improvements</p>
           ) : (
-            <p className="text-[10px] font-mono text-on-surface-var mt-2">{context}</p>
+            <p className="text-xs font-mono text-on-surface-var mt-2">{context}</p>
           )}
         </div>
       );
@@ -1341,10 +1341,10 @@
         <div className="bg-surface-dim/50 p-2 cursor-pointer hover:bg-surface-dim transition-colors" onClick={() => setOpen(!open)}>
           <div className="flex items-center gap-2">
             <Icon name={iconName} className={`text-xs ${iconColor}`} />
-            <span className="text-[10px] font-mono font-bold text-on-surface flex-1 truncate">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</span>
-            {e.adoptionPct > 0 && <span className="text-[9px] font-mono text-on-surface-var">{e.adoptionPct.toFixed(0)}%</span>}
+            <span className="text-xs font-mono font-bold text-on-surface flex-1 truncate">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</span>
+            {e.adoptionPct > 0 && <span className="text-[12px] font-mono text-on-surface-var">{e.adoptionPct.toFixed(0)}%</span>}
           </div>
-          {open && <p className="text-[9px] font-mono text-on-surface-var mt-1 leading-relaxed pl-5">{e.text}</p>}
+          {open && <p className="text-[12px] font-mono text-on-surface-var mt-1 leading-relaxed pl-5">{e.text}</p>}
         </div>
       );
     }
@@ -1384,7 +1384,7 @@
                   <button
                     key={cat.category}
                     onClick={() => setActiveCategory(cat.category)}
-                    className={`px-4 py-2 text-[10px] font-mono uppercase tracking-widest transition-all ${
+                    className={`px-4 py-2 text-xs font-mono uppercase tracking-widest transition-all ${
                       isActive
                         ? `${tabColor.bg} ${tabColor.text} border-b-2 ${tabColor.border}`
                         : "text-on-surface-var hover:text-on-surface"
@@ -1407,10 +1407,10 @@
 
               return (
                 <div className={`mx-auto w-44 bg-surface-container border-2 ${colors.border} flex flex-col items-center justify-center text-center mb-6 py-5 px-4 transition-all`} style={{ boxShadow: `0 0 ${hasProjected ? 35 : 25}px ${colors.glow}` }}>
-                  <span className={`text-[9px] uppercase tracking-[0.2em] ${colors.text} font-mono mb-1`}>{active.label}</span>
+                  <span className={`text-[12px] uppercase tracking-[0.2em] ${colors.text} font-mono mb-1`}>{active.label}</span>
                   {hasProjected ? (
                     <>
-                      <span className="text-lg font-serif text-on-surface-var line-through opacity-40 leading-none">{active.value || "?"}</span>
+                      <span className="text-lg font-serif text-on-surface-var line-through opacity-60 leading-none">{active.value || "?"}</span>
                       <span className="text-3xl font-serif font-bold text-primary-container leading-none">
                         {(() => {
                           // Parse current value and add delta
@@ -1425,14 +1425,14 @@
                           return active.value;
                         })()}
                       </span>
-                      <span className="text-[9px] font-mono text-primary-container mt-1">
+                      <span className="text-[12px] font-mono text-primary-container mt-1">
                         +{toggledDelta >= 1e6 ? `${(toggledDelta/1e6).toFixed(1)}M` : toggledDelta >= 1e3 ? `${(toggledDelta/1e3).toFixed(0)}K` : toggledDelta.toLocaleString()} projected
                       </span>
                     </>
                   ) : (
                     <>
                       <span className="text-3xl font-serif font-bold text-on-surface leading-none">{active.value || "?"}</span>
-                      <span className="text-[9px] uppercase tracking-widest text-on-surface-var mt-2">
+                      <span className="text-[12px] uppercase tracking-widest text-on-surface-var mt-2">
                         {active.contributors.length} active · {active.missing.length} missing
                       </span>
                     </>
@@ -1444,7 +1444,7 @@
             {/* Contributors: what's building into this stat */}
             {active.contributors.length > 0 && (
               <div className="mb-4">
-                <p className="text-[9px] font-mono uppercase tracking-widest text-on-surface-var mb-2 px-2">
+                <p className="text-[12px] font-mono uppercase tracking-widest text-on-surface-var mb-2 px-2">
                   <Icon name="check_circle" className="text-xs text-primary-container mr-1 align-middle" />
                   Active Contributors
                 </p>
@@ -1459,7 +1459,7 @@
             {/* Missing: what could improve this stat */}
             {active.missing.length > 0 && (
               <div className="mb-4">
-                <p className="text-[9px] font-mono uppercase tracking-widest text-on-surface-var mb-2 px-2">
+                <p className="text-[12px] font-mono uppercase tracking-widest text-on-surface-var mb-2 px-2">
                   <Icon name="add_circle" className="text-xs text-error mr-1 align-middle" />
                   Missing — Would Improve {active.label}
                 </p>
@@ -1481,7 +1481,7 @@
             {/* Meta context */}
             {meta?.length > 0 && (
               <div className="p-3 bg-surface-dim/50 border border-outline-variant/10 text-center mt-2">
-                <p className="text-[9px] font-mono text-on-surface-var">{meta[0].text}</p>
+                <p className="text-[12px] font-mono text-on-surface-var">{meta[0].text}</p>
               </div>
             )}
           </div>
@@ -1515,26 +1515,26 @@
                 }`}
                 onClick={(e) => { e.stopPropagation(); onToggle(); }}
               >
-                {isToggled && <Icon name="check" className="text-[10px] text-surface-dim" />}
+                {isToggled && <Icon name="check" className="text-xs text-surface-dim" />}
               </div>
             )}
             {positive && <Icon name={typeIcons[c.sourceType] || "info"} className={`text-xs mt-px ${colors.text}`} />}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className={`text-[10px] font-mono font-bold truncate ${isToggled ? "text-primary-container" : "text-on-surface"}`}>{c.name}</span>
+                <span className={`text-xs font-mono font-bold truncate ${isToggled ? "text-primary-container" : "text-on-surface"}`}>{c.name}</span>
                 {hasEstimate && (
-                  <span className={`text-[9px] font-mono font-bold ${isToggled ? "text-primary-container" : positive ? colors.text : "text-error"}`}>
+                  <span className={`text-[12px] font-mono font-bold ${isToggled ? "text-primary-container" : positive ? colors.text : "text-error"}`}>
                     {c.estimatedPct > 0 ? `${positive ? "" : "+"}${c.estimatedPct.toFixed(0)}%` : ""}
                   </span>
                 )}
-                {c.adoptionPct > 0 && <span className="text-[8px] font-mono text-on-surface-var">{c.adoptionPct.toFixed(0)}% use</span>}
+                {c.adoptionPct > 0 && <span className="text-xs font-mono text-on-surface-var">{c.adoptionPct.toFixed(0)}% use</span>}
               </div>
               {hasEstimate && c.estimatedValue > 0 && (
-                <div className={`text-[10px] font-mono font-bold mb-0.5 ${isToggled ? "text-primary-container" : positive ? "text-on-surface" : "text-error"}`}>
+                <div className={`text-xs font-mono font-bold mb-0.5 ${isToggled ? "text-primary-container" : positive ? "text-on-surface" : "text-error"}`}>
                   {positive ? "" : "+"}{c.estimatedValue >= 1000 ? (c.estimatedValue >= 1e6 ? `${(c.estimatedValue/1e6).toFixed(1)}M` : `${(c.estimatedValue/1e3).toFixed(0)}K`) : c.estimatedValue.toFixed(0)}
                 </div>
               )}
-              <p className={`text-[9px] font-mono ${positive ? "text-on-surface-var" : isToggled ? "text-primary-container/70" : "text-error/80"} ${open ? "" : "truncate"} leading-relaxed`}>
+              <p className={`text-[12px] font-mono ${positive ? "text-on-surface-var" : isToggled ? "text-primary-container/70" : "text-error/80"} ${open ? "" : "truncate"} leading-relaxed`}>
                 {open ? (c.detail || c.contribution) : c.contribution}
               </p>
             </div>
@@ -1552,11 +1552,11 @@
       return (
         <div className={`bg-surface-container p-3 border ${borderColor} hover:border-primary-container/50 transition-all cursor-pointer`} onClick={() => setOpen(!open)}>
           <div className="flex justify-between items-start mb-1">
-            <span className={`text-[8px] font-mono uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
-            {e.adoptionPct > 0 && <span className="text-[8px] font-mono text-on-surface-var">{e.adoptionPct.toFixed(0)}%</span>}
+            <span className={`text-xs font-mono uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
+            {e.adoptionPct > 0 && <span className="text-xs font-mono text-on-surface-var">{e.adoptionPct.toFixed(0)}%</span>}
           </div>
-          <h5 className="text-[11px] font-mono font-bold uppercase tracking-tight text-on-surface">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</h5>
-          {open && <p className="text-[9px] font-mono text-on-surface-var mt-2 leading-relaxed">{e.text}</p>}
+          <h5 className="text-xs font-mono font-bold uppercase tracking-tight text-on-surface">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</h5>
+          {open && <p className="text-[12px] font-mono text-on-surface-var mt-2 leading-relaxed">{e.text}</p>}
         </div>
       );
     }
@@ -1571,7 +1571,7 @@
       return (
         <div className={`p-3 border-l-2 ${borderColor} transition-all cursor-pointer group ${toggled ? "bg-primary-container/10" : "bg-surface-dim/50 hover:bg-surface-bright"}`} onClick={() => setOpen(!open)}>
           <div className="flex justify-between items-start mb-1">
-            <span className={`text-[8px] font-mono uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
+            <span className={`text-xs font-mono uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
             {onToggle && (
               <div
                 className={`w-4 h-4 border flex items-center justify-center cursor-pointer transition-all ${
@@ -1580,15 +1580,15 @@
                 onClick={(ev) => { ev.stopPropagation(); onToggle(); }}
                 title="Toggle to project impact"
               >
-                {toggled && <Icon name="check" className="text-[10px] text-surface-dim" />}
+                {toggled && <Icon name="check" className="text-xs text-surface-dim" />}
               </div>
             )}
           </div>
-          <h6 className={`text-[11px] font-mono font-bold uppercase tracking-tight ${toggled ? "text-primary-container" : "text-on-surface"}`}>{name}</h6>
+          <h6 className={`text-xs font-mono font-bold uppercase tracking-tight ${toggled ? "text-primary-container" : "text-on-surface"}`}>{name}</h6>
           {open ? (
-            <p className={`text-[9px] font-mono mt-1 leading-relaxed ${toggled ? "text-primary-container/70" : "text-on-surface-var"}`}>{e.text}</p>
+            <p className={`text-[12px] font-mono mt-1 leading-relaxed ${toggled ? "text-primary-container/70" : "text-on-surface-var"}`}>{e.text}</p>
           ) : (
-            <p className={`text-[9px] font-mono mt-1 truncate ${toggled ? "text-primary-container/70" : "text-on-surface-var"}`}>{e.text.slice(0, 60)}...</p>
+            <p className={`text-[12px] font-mono mt-1 truncate ${toggled ? "text-primary-container/70" : "text-on-surface-var"}`}>{e.text.slice(0, 60)}...</p>
           )}
         </div>
       );
@@ -1603,9 +1603,9 @@
         <div className={`p-1.5 border-l-2 cursor-pointer ${benefitColor}`} onClick={() => setOpen(!open)}>
           <div className="flex items-center gap-2">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
-            <span className="text-[10px] font-mono text-on-surface truncate flex-1">{name}</span>
-            {tierNum > 0 && <span className="text-[9px] font-mono text-on-surface-var whitespace-nowrap">T{tierNum}/{tierCount}</span>}
-            {value != null && <span className="text-[9px] font-mono text-outline whitespace-nowrap">{value}</span>}
+            <span className="text-xs font-mono text-on-surface truncate flex-1">{name}</span>
+            {tierNum > 0 && <span className="text-[12px] font-mono text-on-surface-var whitespace-nowrap">T{tierNum}/{tierCount}</span>}
+            {value != null && <span className="text-[12px] font-mono text-outline whitespace-nowrap">{value}</span>}
           </div>
           {tierNum > 0 && (
             <div className="mt-0.5 ml-3.5 h-1 bg-surface-container overflow-hidden">
@@ -1615,12 +1615,12 @@
           {open && (
             <div className="mt-1 ml-3.5 space-y-0.5">
               {benefitReason && (
-                <p className={`text-[9px] font-mono ${dotColor === "bg-green-400" ? "text-green-400/70" : dotColor === "bg-red-400" ? "text-red-400/70" : "text-on-surface-var"}`}>
+                <p className={`text-[12px] font-mono ${dotColor === "bg-green-400" ? "text-green-400/70" : dotColor === "bg-red-400" ? "text-red-400/70" : "text-on-surface-var"}`}>
                   {benefitReason}
                 </p>
               )}
               {tierText && (
-                <p className={`text-[9px] font-mono ${tierSeverity === "positive" ? "text-green-400/70" : tierSeverity === "critical" ? "text-red-400/70" : "text-yellow-400/70"}`}>
+                <p className={`text-[12px] font-mono ${tierSeverity === "positive" ? "text-green-400/70" : tierSeverity === "critical" ? "text-red-400/70" : "text-yellow-400/70"}`}>
                   {tierText}
                 </p>
               )}
@@ -1820,11 +1820,11 @@
                     <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-mono text-on-surface flex-1">{cleanText}</span>
-                        {typeLabel && <span className="text-[8px] font-mono text-outline uppercase">{typeLabel}</span>}
+                        <span className="text-xs font-mono text-on-surface flex-1">{cleanText}</span>
+                        {typeLabel && <span className="text-xs font-mono text-outline uppercase">{typeLabel}</span>}
                       </div>
                       {benefit.reason && (
-                        <p className={`text-[9px] font-mono mt-0.5 ${benefit.benefit === "green" ? "text-green-400/70" : benefit.benefit === "red" ? "text-red-400/70" : "text-on-surface-var"}`}>
+                        <p className={`text-[12px] font-mono mt-0.5 ${benefit.benefit === "green" ? "text-green-400/70" : benefit.benefit === "red" ? "text-red-400/70" : "text-on-surface-var"}`}>
                           {benefit.reason}
                         </p>
                       )}
@@ -1833,7 +1833,7 @@
                 );
               })
             ) : (
-              <div className="text-[10px] text-outline font-mono py-2">No mod data available</div>
+              <div className="text-xs text-outline font-mono py-2">No mod data available</div>
             )}
           </div>
 
@@ -1852,13 +1852,13 @@
                 return (
                   <div key={i} className={`px-2.5 py-2 border-l-2 ${isUnique ? "border-primary-container bg-primary-container/5" : "border-secondary/30 bg-surface-container"}`}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className={`text-[10px] font-mono font-bold ${isUnique ? "text-primary-container" : "text-secondary"}`}>
+                      <span className={`text-xs font-mono font-bold ${isUnique ? "text-primary-container" : "text-secondary"}`}>
                         {item.name}
                       </span>
-                      <span className="text-[10px] font-mono text-on-surface-var">{item.percentage?.toFixed(0)}%</span>
+                      <span className="text-xs font-mono text-on-surface-var">{item.percentage?.toFixed(0)}%</span>
                     </div>
                     {isUnique && (
-                      <p className="text-[9px] font-mono text-on-surface-var">
+                      <p className="text-[12px] font-mono text-on-surface-var">
                         Unique item — fixed stats, look up specific rolls
                       </p>
                     )}
@@ -1866,17 +1866,17 @@
                       <div className="flex flex-col gap-0.5 mt-1">
                         {item.topMods.map((mod, j) => (
                           <div key={j} className="flex items-center gap-1.5">
-                            <span className={`text-[9px] font-mono ${mod.hasIt ? "text-primary-container" : "text-on-surface-var"}`}>
+                            <span className={`text-[12px] font-mono ${mod.hasIt ? "text-primary-container" : "text-on-surface-var"}`}>
                               {mod.hasIt ? "✓" : "○"}
                             </span>
-                            <span className="text-[9px] font-mono text-on-surface-var flex-1 truncate">{mod.name}</span>
-                            <span className="text-[9px] font-mono text-on-surface-var">{mod.pct}%</span>
+                            <span className="text-[12px] font-mono text-on-surface-var flex-1 truncate">{mod.name}</span>
+                            <span className="text-[12px] font-mono text-on-surface-var">{mod.pct}%</span>
                           </div>
                         ))}
                       </div>
                     )}
                     {!isUnique && (!item.topMods || item.topMods.length === 0) && (
-                      <p className="text-[9px] font-mono text-on-surface-var">
+                      <p className="text-[12px] font-mono text-on-surface-var">
                         Rare — look for key mods for your build
                       </p>
                     )}
@@ -1936,10 +1936,10 @@
                       {hasDeadMods && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-mono text-on-surface-var">{sl.slotDisplay}</div>
+                      <div className="text-xs font-mono text-on-surface-var">{sl.slotDisplay}</div>
                       <div className="text-xs font-mono text-on-surface truncate">{sl.itemName}</div>
                     </div>
-                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${tierColor(sl.avgTier)}`}>
+                    <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${tierColor(sl.avgTier)}`}>
                       T{sl.avgTier}
                     </span>
                   </div>
@@ -1957,7 +1957,7 @@
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-on-surface-var py-12">
-                  <Icon name="touch_app" className="text-4xl mb-2 opacity-50" />
+                  <Icon name="touch_app" className="text-4xl mb-2 opacity-70" />
                   <span className="text-sm font-mono opacity-70">Select an item to view details</span>
                 </div>
               )}
@@ -2157,7 +2157,7 @@
             <button
               onClick={handleImport}
               disabled={loading}
-              className="px-4 py-2 rounded bg-primary-container text-surface-dim text-sm font-mono font-semibold hover:bg-primary transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded bg-primary-container text-surface-dim text-sm font-mono font-semibold hover:bg-primary transition-colors disabled:opacity-70"
             >
               {loading ? "..." : "Import"}
             </button>
@@ -2441,7 +2441,7 @@
           {/* Connection indicator */}
           <div className="fixed bottom-3 left-3 flex items-center gap-1.5 z-40">
             <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`} />
-            <span className="text-[10px] font-mono text-outline">{connected ? "Connected" : "Disconnected"}</span>
+            <span className="text-xs font-mono text-outline">{connected ? "Connected" : "Disconnected"}</span>
           </div>
 
           {/* Settings Panel */}
