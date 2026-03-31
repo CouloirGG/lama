@@ -1,0 +1,1352 @@
+{
+  "build_count": 409,
+  "classes": {
+    "Warrior": {
+      "class": "Warrior",
+      "total_builds": 63,
+      "dps_builds": 59,
+      "dps_range": [
+        813423,
+        1412
+      ],
+      "top_factors": [
+        [
+          99.0,
+          "spell_dmg",
+          37.0,
+          0.0
+        ],
+        [
+          4.125,
+          "cast_speed",
+          6.947368421052632,
+          1.6842105263157894
+        ],
+        [
+          3.6106060606060604,
+          "evasion_pct",
+          125.42105263157895,
+          34.73684210526316
+        ],
+        [
+          3.3382352941176476,
+          "extra_as",
+          35.8421052631579,
+          10.736842105263158
+        ],
+        [
+          3.2386363636363633,
+          "atk_speed",
+          15.0,
+          4.631578947368421
+        ],
+        [
+          2.6153846153846154,
+          "crit_chance",
+          3.5789473684210527,
+          1.368421052631579
+        ],
+        [
+          2.305555555555556,
+          "crit_multi",
+          4.368421052631579,
+          1.894736842105263
+        ],
+        [
+          1.89686660698299,
+          "armour_pct",
+          557.578947368421,
+          293.94736842105266
+        ]
+      ],
+      "keystones_top": {
+        "Blood Magic": 9,
+        "Giant's Blood": 9,
+        "Sacrifice of Flesh": 8,
+        "Iron Reflexes": 3,
+        "Zealot's Oath": 2,
+        "Blackflame Covenant": 2,
+        "Whispers of Doom": 2
+      },
+      "keystones_bot": {
+        "Blood Magic": 14,
+        "Iron Reflexes": 8,
+        "Avatar of Fire": 5,
+        "Primal Hunger": 5,
+        "Zealot's Oath": 5,
+        "Resolute Technique": 4,
+        "Sacrifice of Flesh": 3,
+        "Giant's Blood": 2
+      },
+      "top_count": 19,
+      "bot_count": 19,
+      "popular_uniques": {
+        "Belt: Headhunter": 36,
+        "Ring2: Kalandra's Touch": 13,
+        "Helm: The Vertex": 12,
+        "BodyArmour: The Brass Dome": 9,
+        "Helm: Constricting Command": 8,
+        "Offhand: Palm of the Dreamer": 7,
+        "Helm: Thrillsteel": 6,
+        "Amulet: Fireflower": 6,
+        "Weapon: Fury of the King": 6,
+        "BodyArmour: Morior Invictus": 5
+      },
+      "supports_top": {
+        "Rapid Attacks II": 11,
+        "Uul-Netol's Embrace": 10,
+        "Atalui's Bloodletting": 8,
+        "Garukhan's Resolve": 7,
+        "Aftershock II": 5,
+        "Rageforged II": 5,
+        "Heavy Swing": 5,
+        "Zerphi's Infamy": 4
+      },
+      "supports_bot": {
+        "Rapid Attacks II": 6,
+        "Elemental Armament II": 6,
+        "Shock": 4,
+        "Payload": 4,
+        "Lightning Attunement": 4,
+        "Cooldown Recovery II": 4,
+        "Ahn's Citadel": 3,
+        "Kaom's Madness": 3
+      },
+      "main_skills": {
+        "Shield Wall": {
+          "count": 18,
+          "avg_dps": 69919.88888888889
+        },
+        "Hammer of the Gods": {
+          "count": 6,
+          "avg_dps": 243773.66666666666
+        },
+        "Earthquake": {
+          "count": 5,
+          "avg_dps": 136471.2
+        },
+        "Whirling Assault": {
+          "count": 4,
+          "avg_dps": 131205.0
+        },
+        "Voltaic Grenade": {
+          "count": 4,
+          "avg_dps": 3226.5
+        },
+        "Comet": {
+          "count": 3,
+          "avg_dps": 118624.0
+        },
+        "Living Bomb": {
+          "count": 3,
+          "avg_dps": 15306.0
+        },
+        "Oil Grenade": {
+          "count": 3,
+          "avg_dps": 6147.333333333333
+        }
+      },
+      "defense_types": {
+        "life": 56,
+        "mom": 5,
+        "es": 2
+      },
+      "avg_jewels_top": 5.052631578947368,
+      "avg_jewels_bot": 4.421052631578948
+    },
+    "Witch": {
+      "class": "Witch",
+      "total_builds": 63,
+      "dps_builds": 58,
+      "dps_range": [
+        300542969,
+        1036
+      ],
+      "top_factors": [
+        [
+          11.730769230769232,
+          "crit_multi",
+          32.10526315789474,
+          2.736842105263158
+        ],
+        [
+          3.4543889845094666,
+          "crit_chance",
+          105.63157894736842,
+          30.57894736842105
+        ],
+        [
+          1.7844374342797054,
+          "extra_as",
+          89.3157894736842,
+          50.05263157894737
+        ],
+        [
+          1.7183235867446394,
+          "evasion_pct",
+          92.78947368421052,
+          54.0
+        ],
+        [
+          1.6153846153846152,
+          "jewel_count",
+          6.631578947368421,
+          4.105263157894737
+        ],
+        [
+          1.5438596491228072,
+          "unique_count",
+          4.631578947368421,
+          3.0
+        ],
+        [
+          1.417589304365991,
+          "es_pct",
+          357.1578947368421,
+          251.94736842105263
+        ],
+        [
+          1.4,
+          "gem_levels",
+          10.68421052631579,
+          7.631578947368421
+        ]
+      ],
+      "keystones_top": {
+        "Eldritch Battery": 6,
+        "Blood Magic": 6,
+        "Mind Over Matter": 5,
+        "Elemental Equilibrium": 3,
+        "Knightly Tenets": 2,
+        "Blackflame Covenant": 2,
+        "Whispers of Doom": 2,
+        "Pain Attunement": 1
+      },
+      "keystones_bot": {
+        "Whispers of Doom": 6,
+        "Knightly Tenets": 3,
+        "Pain Attunement": 3,
+        "Elemental Equilibrium": 2,
+        "Zealot's Oath": 2,
+        "Chaos Inoculation": 2,
+        "Blackflame Covenant": 1,
+        "Mind Over Matter": 1
+      },
+      "top_count": 19,
+      "bot_count": 19,
+      "popular_uniques": {
+        "Helm: The Vertex": 31,
+        "Belt: Headhunter": 25,
+        "Ring2: Kalandra's Touch": 20,
+        "Gloves: Atziri's Acuity": 11,
+        "BodyArmour: Sacrosanctum": 10,
+        "Amulet: Choir of the Storm": 9,
+        "Ring: Kalandra's Touch": 8,
+        "Offhand: Rathpith Globe": 8,
+        "Helm: Alpha's Howl": 8,
+        "BodyArmour: Atziri's Splendour": 7
+      },
+      "supports_top": {
+        "Cast on Critical": 11,
+        "Boundless Energy II": 11,
+        "Spell Cascade": 6,
+        "Efficiency II": 5,
+        "Uhtred's Augury": 5,
+        "Atalui's Bloodletting": 4,
+        "Rakiata's Flow": 4,
+        "Dialla's Desire": 4
+      },
+      "supports_bot": {
+        "Efficiency II": 7,
+        "Zenith II": 6,
+        "Cast on Critical": 4,
+        "Feeding Frenzy II": 4,
+        "Spell Cascade": 3,
+        "Boundless Energy II": 3,
+        "Execute III": 3,
+        "Heft": 3
+      },
+      "main_skills": {
+        "Comet": {
+          "count": 27,
+          "avg_dps": 11959988.777777778
+        },
+        "Unearth": {
+          "count": 5,
+          "avg_dps": 2985.4
+        },
+        "Lightning Warp": {
+          "count": 4,
+          "avg_dps": 1481683.25
+        },
+        "Living Bomb": {
+          "count": 4,
+          "avg_dps": 798784.25
+        },
+        "Reap": {
+          "count": 3,
+          "avg_dps": 685487.3333333334
+        },
+        "Essence Drain": {
+          "count": 3,
+          "avg_dps": 215070.33333333334
+        },
+        "Detonate Dead": {
+          "count": 3,
+          "avg_dps": 40808.666666666664
+        },
+        "Arc": {
+          "count": 2,
+          "avg_dps": 603473.5
+        }
+      },
+      "defense_types": {
+        "hybrid": 15,
+        "life": 8,
+        "mom": 10,
+        "es": 30
+      },
+      "avg_jewels_top": 6.631578947368421,
+      "avg_jewels_bot": 4.105263157894737
+    },
+    "Ranger": {
+      "class": "Ranger",
+      "total_builds": 49,
+      "dps_builds": 49,
+      "dps_range": [
+        27828388,
+        43882
+      ],
+      "top_factors": [
+        [
+          99.0,
+          "spell_dmg",
+          33.1875,
+          0.0
+        ],
+        [
+          3.01010101010101,
+          "cast_speed",
+          18.625,
+          6.1875
+        ],
+        [
+          2.5789473684210527,
+          "armour_pct",
+          6.125,
+          2.375
+        ],
+        [
+          2.5509708737864076,
+          "crit_chance",
+          65.6875,
+          25.75
+        ],
+        [
+          1.5529411764705883,
+          "gem_levels",
+          8.25,
+          5.3125
+        ],
+        [
+          1.5069444444444444,
+          "crit_multi",
+          27.125,
+          18.0
+        ],
+        [
+          1.2203874245792314,
+          "evasion_pct",
+          240.1875,
+          196.8125
+        ],
+        [
+          1.2012158054711246,
+          "es_pct",
+          247.0,
+          205.625
+        ]
+      ],
+      "keystones_top": {
+        "Blood Magic": 2,
+        "Elemental Equilibrium": 1
+      },
+      "keystones_bot": {
+        "Dance with Death": 2,
+        "Blood Magic": 1,
+        "Chaos Inoculation": 1
+      },
+      "top_count": 16,
+      "bot_count": 16,
+      "popular_uniques": {
+        "Belt: Headhunter": 45,
+        "BodyArmour: Hyrri's Ire": 22,
+        "Gloves: Plaguefinger": 21,
+        "Ring2: Kalandra's Touch": 19,
+        "Helm: The Vertex": 10,
+        "Offhand2: Cadiro's Gambit": 8,
+        "Ring: Kalandra's Touch": 6,
+        "BodyArmour: The Covenant": 6,
+        "Offhand: Cadiro's Gambit": 5,
+        "Weapon: The Sentry": 4
+      },
+      "supports_top": {
+        "Garukhan's Resolve": 11,
+        "Deadly Poison II": 7,
+        "Rakiata's Flow": 6,
+        "Overextend": 5,
+        "Elemental Armament II": 5,
+        "Bursting Plague": 5,
+        "Projectile Acceleration III": 4,
+        "Rigwald's Ferocity": 4
+      },
+      "supports_bot": {
+        "Poison III": 8,
+        "Deadly Poison II": 8,
+        "Bursting Plague": 8,
+        "Bleed III": 8,
+        "Fork": 8,
+        "Rakiata's Flow": 6,
+        "Elemental Armament II": 5,
+        "Rapid Attacks II": 3
+      },
+      "main_skills": {
+        "Poisonburst Arrow": {
+          "count": 21,
+          "avg_dps": 4452279.619047619
+        },
+        "Ice Shot": {
+          "count": 10,
+          "avg_dps": 1593047.3
+        },
+        "Lightning Arrow": {
+          "count": 8,
+          "avg_dps": 445687.875
+        },
+        "Comet": {
+          "count": 7,
+          "avg_dps": 723377.1428571428
+        },
+        "Twister": {
+          "count": 2,
+          "avg_dps": 244505.5
+        },
+        "Spear Throw": {
+          "count": 1,
+          "avg_dps": 113319.0
+        }
+      },
+      "defense_types": {
+        "es": 20,
+        "hybrid": 19,
+        "life": 10
+      },
+      "avg_jewels_top": 4.5625,
+      "avg_jewels_bot": 4.125
+    },
+    "Sorceress": {
+      "class": "Sorceress",
+      "total_builds": 56,
+      "dps_builds": 55,
+      "dps_range": [
+        5028480,
+        2743
+      ],
+      "top_factors": [
+        [
+          3.6499999999999995,
+          "phys_dmg",
+          4.055555555555555,
+          1.1111111111111112
+        ],
+        [
+          1.54,
+          "crit_multi",
+          12.833333333333334,
+          8.333333333333334
+        ],
+        [
+          1.4721428571428572,
+          "extra_as",
+          114.5,
+          77.77777777777777
+        ],
+        [
+          1.4090217942219971,
+          "es_flat",
+          154.44444444444446,
+          109.61111111111111
+        ],
+        [
+          1.335135135135135,
+          "crit_chance",
+          82.33333333333333,
+          61.666666666666664
+        ],
+        [
+          1.3098591549295775,
+          "gem_levels",
+          10.333333333333334,
+          7.888888888888889
+        ],
+        [
+          1.230641132389675,
+          "cast_speed",
+          82.11111111111111,
+          66.72222222222223
+        ],
+        [
+          1.1919441019317716,
+          "spell_dmg",
+          161.11111111111111,
+          135.16666666666666
+        ]
+      ],
+      "keystones_top": {
+        "Chaos Inoculation": 11,
+        "Elemental Equilibrium": 7,
+        "Blood Magic": 2,
+        "Mind Over Matter": 1,
+        "Eldritch Battery": 1
+      },
+      "keystones_bot": {
+        "Chaos Inoculation": 9,
+        "Elemental Equilibrium": 7,
+        "Mind Over Matter": 6,
+        "Eldritch Battery": 6,
+        "Whispers of Doom": 4,
+        "Wildsurge Incantation": 3,
+        "Blood Magic": 1,
+        "Blackflame Covenant": 1
+      },
+      "top_count": 18,
+      "bot_count": 18,
+      "popular_uniques": {
+        "Belt: Headhunter": 49,
+        "Helm: The Vertex": 38,
+        "Gloves: Maligaro's Virtuosity": 30,
+        "BodyArmour: The Covenant": 18,
+        "Ring: Snakepit": 16,
+        "Ring2: Kalandra's Touch": 10,
+        "Weapon2: Sire of Shards": 9,
+        "Ring: Call of the Brotherhood": 5,
+        "Weapon: Adonia's Ego": 5,
+        "Offhand: Rathpith Globe": 4
+      },
+      "supports_top": {
+        "Cast on Critical": 15,
+        "Efficiency II": 8,
+        "Pinpoint Critical": 8,
+        "Dialla's Desire": 7,
+        "Rakiata's Flow": 7,
+        "Concentrated Area": 5,
+        "Boundless Energy II": 5,
+        "Spell Cascade": 4
+      },
+      "supports_bot": {
+        "Pinpoint Critical": 7,
+        "Efficiency II": 6,
+        "Zenith II": 6,
+        "Considered Casting": 5,
+        "Cast on Critical": 5,
+        "Spell Cascade": 4,
+        "Lifetap": 4,
+        "Cast on Elemental Ailment": 4
+      },
+      "main_skills": {
+        "Comet": {
+          "count": 41,
+          "avg_dps": 876432.2195121951
+        },
+        "Living Bomb": {
+          "count": 3,
+          "avg_dps": 193589.33333333334
+        },
+        "Orb of Storms": {
+          "count": 3,
+          "avg_dps": 105045.66666666667
+        },
+        "Reap": {
+          "count": 2,
+          "avg_dps": 1461989.5
+        },
+        "Arc": {
+          "count": 2,
+          "avg_dps": 125373.0
+        },
+        "Frostbolt": {
+          "count": 1,
+          "avg_dps": 196072.0
+        },
+        "Snap": {
+          "count": 1,
+          "avg_dps": 157478.0
+        },
+        "Power Siphon": {
+          "count": 1,
+          "avg_dps": 66713.0
+        }
+      },
+      "defense_types": {
+        "mom": 12,
+        "es": 42,
+        "hybrid": 2
+      },
+      "avg_jewels_top": 5.0,
+      "avg_jewels_bot": 4.388888888888889
+    },
+    "Monk": {
+      "class": "Monk",
+      "total_builds": 49,
+      "dps_builds": 49,
+      "dps_range": [
+        5731869,
+        15845
+      ],
+      "top_factors": [
+        [
+          5.184210526315789,
+          "armour_pct",
+          12.3125,
+          2.375
+        ],
+        [
+          5.0,
+          "cast_speed",
+          3.75,
+          0.75
+        ],
+        [
+          2.7450980392156863,
+          "extra_as",
+          8.75,
+          3.1875
+        ],
+        [
+          2.7251908396946565,
+          "crit_multi",
+          22.3125,
+          8.1875
+        ],
+        [
+          1.7209908735332464,
+          "phys_dmg",
+          82.5,
+          47.9375
+        ],
+        [
+          1.596774193548387,
+          "crit_chance",
+          18.5625,
+          11.625
+        ],
+        [
+          1.510204081632653,
+          "jewel_count",
+          4.625,
+          3.0625
+        ],
+        [
+          1.2571428571428571,
+          "unique_count",
+          2.75,
+          2.1875
+        ]
+      ],
+      "keystones_top": {
+        "Chaos Inoculation": 6,
+        "Resonance": 2,
+        "Mind Over Matter": 1,
+        "Eldritch Battery": 1,
+        "Black Scythe Training": 1
+      },
+      "keystones_bot": {
+        "Chaos Inoculation": 6,
+        "Hollow Palm Technique": 2,
+        "Resonance": 1,
+        "Dance with Death": 1
+      },
+      "top_count": 16,
+      "bot_count": 16,
+      "popular_uniques": {
+        "Belt: Headhunter": 34,
+        "Helm: The Vertex": 12,
+        "BodyArmour: Atziri's Splendour": 10,
+        "Gloves: Essentia Sanguis": 9,
+        "Ring2: Kalandra's Touch": 5,
+        "Belt: Soul Tether": 5,
+        "Ring2: Original Sin": 4,
+        "Ring: Original Sin": 4,
+        "Ring: Kalandra's Touch": 3,
+        "Gloves: Thunderfist": 3
+      },
+      "supports_top": {
+        "Elemental Armament II": 12,
+        "Overextend": 11,
+        "Concentrated Area": 9,
+        "Rapid Attacks II": 9,
+        "Garukhan's Resolve": 7,
+        "Rage III": 4,
+        "Rakiata's Flow": 3,
+        "Elemental Focus": 2
+      },
+      "supports_bot": {
+        "Concentrated Area": 6,
+        "Close Combat II": 6,
+        "Rapid Attacks II": 5,
+        "Elemental Armament II": 4,
+        "Rage III": 4,
+        "Pinpoint Critical": 4,
+        "Overextend": 3,
+        "Magnified Area II": 3
+      },
+      "main_skills": {
+        "Ice Strike": {
+          "count": 14,
+          "avg_dps": 804270.5
+        },
+        "Flicker Strike": {
+          "count": 13,
+          "avg_dps": 722958.4615384615
+        },
+        "Quarterstaff Strike": {
+          "count": 6,
+          "avg_dps": 797364.3333333334
+        },
+        "Whirling Assault": {
+          "count": 4,
+          "avg_dps": 104786.25
+        },
+        "Comet": {
+          "count": 3,
+          "avg_dps": 1050444.3333333333
+        },
+        "Falling Thunder": {
+          "count": 3,
+          "avg_dps": 157025.0
+        },
+        "Storm Wave": {
+          "count": 2,
+          "avg_dps": 540519.5
+        },
+        "Twister": {
+          "count": 2,
+          "avg_dps": 232341.5
+        }
+      },
+      "defense_types": {
+        "hybrid": 6,
+        "es": 38,
+        "life": 2,
+        "mom": 3
+      },
+      "avg_jewels_top": 4.625,
+      "avg_jewels_bot": 3.0625
+    },
+    "Mercenary": {
+      "class": "Mercenary",
+      "total_builds": 38,
+      "dps_builds": 34,
+      "dps_range": [
+        3118388,
+        2155
+      ],
+      "top_factors": [
+        [
+          3.561855670103093,
+          "crit_chance",
+          62.81818181818182,
+          17.636363636363637
+        ],
+        [
+          2.907563025210084,
+          "crit_multi",
+          31.454545454545453,
+          10.818181818181818
+        ],
+        [
+          2.650537634408602,
+          "cast_speed",
+          44.81818181818182,
+          16.90909090909091
+        ],
+        [
+          2.5328467153284673,
+          "extra_as",
+          63.09090909090909,
+          24.90909090909091
+        ],
+        [
+          2.428571428571429,
+          "jewel_count",
+          7.7272727272727275,
+          3.1818181818181817
+        ],
+        [
+          1.9484029484029484,
+          "es_flat",
+          72.0909090909091,
+          37.0
+        ],
+        [
+          1.4385964912280702,
+          "gem_levels",
+          7.454545454545454,
+          5.181818181818182
+        ],
+        [
+          1.4323284156510585,
+          "es_pct",
+          203.0,
+          141.72727272727272
+        ]
+      ],
+      "keystones_top": {
+        "Mind Over Matter": 4,
+        "Eldritch Battery": 4,
+        "Blood Magic": 3,
+        "Black Scythe Training": 1,
+        "Chaos Inoculation": 1,
+        "Wildsurge Incantation": 1
+      },
+      "keystones_bot": {
+        "Eldritch Battery": 2,
+        "Chaos Inoculation": 1,
+        "Giant's Blood": 1,
+        "Iron Reflexes": 1
+      },
+      "top_count": 11,
+      "bot_count": 11,
+      "popular_uniques": {
+        "Belt: Headhunter": 22,
+        "BodyArmour: Hyrri's Ire": 14,
+        "Ring2: Kalandra's Touch": 13,
+        "Helm: The Vertex": 11,
+        "BodyArmour: The Covenant": 8,
+        "Helm: Alpha's Howl": 7,
+        "Offhand: Rathpith Globe": 6,
+        "Amulet: Fixation of Yix": 5,
+        "BodyArmour: Morior Invictus": 4,
+        "Helm: Constricting Command": 3
+      },
+      "supports_top": {
+        "Cast on Critical": 8,
+        "Boundless Energy II": 8,
+        "Rakiata's Flow": 7,
+        "Atalui's Bloodletting": 4,
+        "Uhtred's Augury": 4,
+        "Energy Retention": 4,
+        "Garukhan's Resolve": 3,
+        "Elemental Armament II": 3
+      },
+      "supports_bot": {
+        "Elemental Armament II": 5,
+        "Projectile Acceleration III": 4,
+        "Rapid Attacks II": 3,
+        "Zenith II": 2,
+        "Ricochet II": 2,
+        "Cold Attunement": 2,
+        "Elemental Focus": 2,
+        "Encroaching Ground": 2
+      },
+      "main_skills": {
+        "Comet": {
+          "count": 10,
+          "avg_dps": 1115882.7
+        },
+        "Ice Shot": {
+          "count": 6,
+          "avg_dps": 823633.5
+        },
+        "Poisonburst Arrow": {
+          "count": 2,
+          "avg_dps": 451632.0
+        },
+        "Explosive Grenade": {
+          "count": 2,
+          "avg_dps": 140594.5
+        },
+        "Crossbow Shot": {
+          "count": 2,
+          "avg_dps": 42883.5
+        },
+        "Spark": {
+          "count": 2,
+          "avg_dps": 27446.5
+        },
+        "Lightning Spear": {
+          "count": 1,
+          "avg_dps": 1271820.0
+        },
+        "Armour Piercing Rounds": {
+          "count": 1,
+          "avg_dps": 116031.0
+        }
+      },
+      "defense_types": {
+        "es": 4,
+        "life": 25,
+        "mom": 6,
+        "hybrid": 3
+      },
+      "avg_jewels_top": 7.7272727272727275,
+      "avg_jewels_bot": 3.1818181818181817
+    },
+    "Huntress": {
+      "class": "Huntress",
+      "total_builds": 49,
+      "dps_builds": 41,
+      "dps_range": [
+        10840013,
+        1325
+      ],
+      "top_factors": [
+        [
+          5.414012738853503,
+          "spell_dmg",
+          65.38461538461539,
+          12.076923076923077
+        ],
+        [
+          3.830645161290323,
+          "crit_multi",
+          36.53846153846154,
+          9.538461538461538
+        ],
+        [
+          3.6395348837209305,
+          "cast_speed",
+          24.076923076923077,
+          6.615384615384615
+        ],
+        [
+          2.372093023255814,
+          "gem_levels",
+          7.846153846153846,
+          3.3076923076923075
+        ],
+        [
+          1.840449438202247,
+          "extra_as",
+          63.0,
+          34.23076923076923
+        ],
+        [
+          1.630774697938877,
+          "es_pct",
+          353.0,
+          216.46153846153845
+        ],
+        [
+          1.4727272727272727,
+          "jewel_count",
+          6.230769230769231,
+          4.230769230769231
+        ],
+        [
+          1.377431906614786,
+          "es_flat",
+          108.92307692307692,
+          79.07692307692308
+        ]
+      ],
+      "keystones_top": {
+        "Mind Over Matter": 5,
+        "Eldritch Battery": 5,
+        "Chaos Inoculation": 5,
+        "Elemental Equilibrium": 3,
+        "Blood Magic": 2
+      },
+      "keystones_bot": {
+        "Dance with Death": 3,
+        "Chaos Inoculation": 2,
+        "Mind Over Matter": 1,
+        "Eldritch Battery": 1
+      },
+      "top_count": 13,
+      "bot_count": 13,
+      "popular_uniques": {
+        "Belt: Headhunter": 37,
+        "Ring2: Kalandra's Touch": 24,
+        "Gloves: Essentia Sanguis": 14,
+        "Helm: The Vertex": 13,
+        "BodyArmour: Morior Invictus": 9,
+        "BodyArmour: The Covenant": 8,
+        "Belt: Ingenuity": 8,
+        "Offhand: Cadiro's Gambit": 6,
+        "Helm: Alpha's Howl": 6,
+        "Gloves: Plaguefinger": 6
+      },
+      "supports_top": {
+        "Rakiata's Flow": 9,
+        "Garukhan's Resolve": 6,
+        "Minion Pact II": 5,
+        "Cast on Critical": 5,
+        "Boundless Energy II": 4,
+        "Elemental Armament II": 4,
+        "Overextend": 3,
+        "Concentrated Area": 3
+      },
+      "supports_bot": {
+        "Elemental Armament II": 6,
+        "Rakiata's Flow": 5,
+        "Deliberation": 4,
+        "Rapid Attacks II": 3,
+        "Bursting Plague": 3,
+        "Deadly Poison II": 3,
+        "Bleed III": 3,
+        "Poison III": 3
+      },
+      "main_skills": {
+        "Comet": {
+          "count": 11,
+          "avg_dps": 1666128.5454545454
+        },
+        "Lightning Arrow": {
+          "count": 9,
+          "avg_dps": 443543.6666666667
+        },
+        "Poisonburst Arrow": {
+          "count": 8,
+          "avg_dps": 279197.125
+        },
+        "Ice Shot": {
+          "count": 6,
+          "avg_dps": 2617218.3333333335
+        },
+        "Spear Throw": {
+          "count": 2,
+          "avg_dps": 113123.0
+        },
+        "Lightning Spear": {
+          "count": 1,
+          "avg_dps": 1974527.0
+        },
+        "Quarterstaff Strike": {
+          "count": 1,
+          "avg_dps": 656763.0
+        },
+        "Falling Thunder": {
+          "count": 1,
+          "avg_dps": 220795.0
+        }
+      },
+      "defense_types": {
+        "hybrid": 5,
+        "es": 21,
+        "life": 14,
+        "mom": 9
+      },
+      "avg_jewels_top": 6.230769230769231,
+      "avg_jewels_bot": 4.230769230769231
+    },
+    "Druid": {
+      "class": "Druid",
+      "total_builds": 42,
+      "dps_builds": 42,
+      "dps_range": [
+        7456370,
+        4183
+      ],
+      "top_factors": [
+        [
+          10.696969696969697,
+          "crit_multi",
+          25.214285714285715,
+          2.357142857142857
+        ],
+        [
+          2.7889908256880735,
+          "cast_speed",
+          43.42857142857143,
+          15.571428571428571
+        ],
+        [
+          1.765536723163842,
+          "es_flat",
+          89.28571428571429,
+          50.57142857142857
+        ],
+        [
+          1.5599999999999998,
+          "atk_speed",
+          5.571428571428571,
+          3.5714285714285716
+        ],
+        [
+          1.5568,
+          "extra_as",
+          69.5,
+          44.642857142857146
+        ],
+        [
+          1.4662921348314606,
+          "crit_chance",
+          55.92857142857143,
+          38.142857142857146
+        ],
+        [
+          1.4307931570762051,
+          "evasion_pct",
+          65.71428571428571,
+          45.92857142857143
+        ],
+        [
+          1.4,
+          "jewel_count",
+          5.0,
+          3.5714285714285716
+        ]
+      ],
+      "keystones_top": {
+        "Mind Over Matter": 11,
+        "Wildsurge Incantation": 10,
+        "Eldritch Battery": 9,
+        "Conduit": 9,
+        "Resonance": 8,
+        "Blackflame Covenant": 6,
+        "Hollow Palm Technique": 6,
+        "Scarred Faith": 5
+      },
+      "keystones_bot": {
+        "Wildsurge Incantation": 6,
+        "Mind Over Matter": 6,
+        "Lord of the Wilds": 2,
+        "Chaos Inoculation": 1,
+        "Primal Hunger": 1,
+        "Zealot's Oath": 1
+      },
+      "top_count": 14,
+      "bot_count": 14,
+      "popular_uniques": {
+        "Belt: Headhunter": 28,
+        "BodyArmour: The Covenant": 23,
+        "Ring2: Kalandra's Touch": 14,
+        "Helm: The Vertex": 11,
+        "Amulet: Choir of the Storm": 10,
+        "Offhand: Palm of the Dreamer": 6,
+        "Gloves: Painter's Servant": 5,
+        "Helm: Alpha's Howl": 5,
+        "Ring: Kalandra's Touch": 4,
+        "Boots: Wake of Destruction": 4
+      },
+      "supports_top": {
+        "Rakiata's Flow": 6,
+        "Atalui's Bloodletting": 6,
+        "Heft": 4,
+        "Physical Mastery": 4,
+        "Uul-Netol's Embrace": 4,
+        "Concentrated Area": 3,
+        "Garukhan's Resolve": 3,
+        "Rigwald's Ferocity": 3
+      },
+      "supports_bot": {
+        "Spell Cascade": 5,
+        "Cast on Critical": 4,
+        "Atalui's Bloodletting": 3,
+        "Ixchel's Torment": 3,
+        "Accelerated Growth II": 3,
+        "Rapid Attacks II": 2,
+        "Magnified Area II": 2,
+        "Rapid Casting III": 2
+      },
+      "main_skills": {
+        "Comet": {
+          "count": 14,
+          "avg_dps": 701748.1428571428
+        },
+        "Rend": {
+          "count": 5,
+          "avg_dps": 926858.0
+        },
+        "Thrashing Vines": {
+          "count": 5,
+          "avg_dps": 152721.0
+        },
+        "Shred": {
+          "count": 3,
+          "avg_dps": 107219.66666666667
+        },
+        "Ember Fusillade": {
+          "count": 3,
+          "avg_dps": 112872.0
+        },
+        "Living Bomb": {
+          "count": 2,
+          "avg_dps": 691788.0
+        },
+        "Lightning Warp": {
+          "count": 2,
+          "avg_dps": 739972.0
+        },
+        "Entangle": {
+          "count": 2,
+          "avg_dps": 310952.0
+        }
+      },
+      "defense_types": {
+        "mom": 25,
+        "es": 9,
+        "hybrid": 1,
+        "life": 7
+      },
+      "avg_jewels_top": 5.0,
+      "avg_jewels_bot": 3.5714285714285716
+    },
+    "GLOBAL": {
+      "class": "ALL CLASSES (GLOBAL)",
+      "total_builds": 409,
+      "dps_builds": 387,
+      "dps_range": [
+        300542969,
+        1036
+      ],
+      "top_factors": [
+        [
+          4.8877721943048575,
+          "crit_multi",
+          22.62015503875969,
+          4.627906976744186
+        ],
+        [
+          3.224260576563085,
+          "crit_chance",
+          66.75968992248062,
+          20.705426356589147
+        ],
+        [
+          2.16221985058698,
+          "extra_as",
+          62.82170542635659,
+          29.05426356589147
+        ],
+        [
+          2.1288566243194196,
+          "cast_speed",
+          36.372093023255815,
+          17.085271317829456
+        ],
+        [
+          1.5805735745988392,
+          "spell_dmg",
+          71.7751937984496,
+          45.41085271317829
+        ],
+        [
+          1.4120000000000001,
+          "jewel_count",
+          5.4728682170542635,
+          3.875968992248062
+        ],
+        [
+          1.4062713685650092,
+          "es_flat",
+          111.59689922480621,
+          79.35658914728683
+        ],
+        [
+          1.3867037677671656,
+          "es_pct",
+          285.8759689922481,
+          206.15503875968992
+        ]
+      ],
+      "keystones_top": {
+        "Chaos Inoculation": 32,
+        "Eldritch Battery": 26,
+        "Mind Over Matter": 25,
+        "Blood Magic": 20,
+        "Elemental Equilibrium": 16,
+        "Resonance": 6,
+        "Wildsurge Incantation": 6,
+        "Blackflame Covenant": 4
+      },
+      "keystones_bot": {
+        "Blood Magic": 19,
+        "Mind Over Matter": 18,
+        "Chaos Inoculation": 14,
+        "Eldritch Battery": 12,
+        "Wildsurge Incantation": 10,
+        "Whispers of Doom": 10,
+        "Giant's Blood": 10,
+        "Zealot's Oath": 9
+      },
+      "top_count": 129,
+      "bot_count": 129,
+      "popular_uniques": {
+        "Belt: Headhunter": 276,
+        "Helm: The Vertex": 138,
+        "Ring2: Kalandra's Touch": 118,
+        "BodyArmour: The Covenant": 74,
+        "BodyArmour: Hyrri's Ire": 43,
+        "Gloves: Maligaro's Virtuosity": 38,
+        "Ring: Kalandra's Touch": 31,
+        "Helm: Alpha's Howl": 29,
+        "Gloves: Plaguefinger": 29,
+        "Offhand: Rathpith Globe": 26
+      },
+      "supports_top": {
+        "Cast on Critical": 57,
+        "Rakiata's Flow": 54,
+        "Boundless Energy II": 39,
+        "Garukhan's Resolve": 37,
+        "Elemental Armament II": 31,
+        "Efficiency II": 27,
+        "Dialla's Desire": 26,
+        "Overextend": 23
+      },
+      "supports_bot": {
+        "Rapid Attacks II": 35,
+        "Elemental Armament II": 23,
+        "Heft": 18,
+        "Zenith II": 16,
+        "Ahn's Citadel": 14,
+        "Kaom's Madness": 14,
+        "Magnified Area II": 13,
+        "Cast on Critical": 13
+      },
+      "main_skills": {
+        "Comet": {
+          "count": 116,
+          "avg_dps": 3506336.0172413792
+        },
+        "Poisonburst Arrow": {
+          "count": 31,
+          "avg_dps": 3117248.806451613
+        },
+        "Ice Shot": {
+          "count": 22,
+          "avg_dps": 1662526.5454545454
+        },
+        "Shield Wall": {
+          "count": 18,
+          "avg_dps": 69919.88888888889
+        },
+        "Lightning Arrow": {
+          "count": 17,
+          "avg_dps": 444552.70588235295
+        },
+        "Ice Strike": {
+          "count": 14,
+          "avg_dps": 804270.5
+        },
+        "Living Bomb": {
+          "count": 14,
+          "avg_dps": 404773.28571428574
+        },
+        "Flicker Strike": {
+          "count": 13,
+          "avg_dps": 722958.4615384615
+        }
+      },
+      "defense_types": {
+        "life": 122,
+        "mom": 70,
+        "es": 166,
+        "hybrid": 51
+      },
+      "avg_jewels_top": 5.4728682170542635,
+      "avg_jewels_bot": 3.875968992248062
+    }
+  }
+}
