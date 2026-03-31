@@ -234,7 +234,8 @@ class WhyEngine:
         # Generate explanations by category
         result.stats = self._explain_stats(pob, profile, char_data)
         result.keystones = self._explain_keystones(
-            char_data.keystones, popular_keystones, archetype, pob, profile
+            char_data.keystones, popular_keystones, archetype, pob, profile,
+            ascendancy_points=getattr(char_data, 'ascendancy_points', 0),
         )
         result.actions = self._generate_actions(
             char_data, archetype, pob, profile, popular_keystones
@@ -424,9 +425,13 @@ class WhyEngine:
         archetype: BuildArchetype,
         pob: Optional[PobData],
         profile: Optional[dict],
+        ascendancy_points: int = 0,
     ) -> List[Explanation]:
         explanations = []
         player_ks_set = set(player_keystones)
+        # If player has allocated ascendancy points, they likely have the
+        # major ascendancy passives — don't flag those as missing
+        has_ascendancy_allocated = ascendancy_points >= 4
 
         # Explain keystones the player HAS
         for ks_name in player_keystones:
@@ -463,6 +468,12 @@ class WhyEngine:
             pct = pk["percentage"]
             node_type = pk.get("type", "")  # "Ascendancy" or "Keystone"
             is_ascendancy = node_type == "Ascendancy"
+
+            # CRITICAL: If player has ascendancy points allocated, they likely
+            # already have the major ascendancy passives. Don't tell them to
+            # get something they already have.
+            if is_ascendancy and has_ascendancy_allocated:
+                continue  # Skip — player has ascendancy points, likely has this
 
             # Build the explanation text
             if info:
@@ -577,6 +588,7 @@ class WhyEngine:
 
         # Missing high-adoption keystones — lead with impact, distinguish type
         player_ks = set(char_data.keystones)
+        has_asc = getattr(char_data, 'ascendancy_points', 0) >= 4
         for pk in popular_keystones:
             if pk["name"] in player_ks or pk["percentage"] < 70:
                 continue
@@ -584,6 +596,10 @@ class WhyEngine:
             pct = pk["percentage"]
             node_type = pk.get("type", "")
             is_ascendancy = node_type == "Ascendancy"
+
+            # Skip ascendancy passives if player has ascendancy points allocated
+            if is_ascendancy and has_asc:
+                continue
 
             if info:
                 text = f"{info.impact} ({pct:.0f}% of this build uses it.)"
@@ -1120,9 +1136,12 @@ class WhyEngine:
                         estimated_value=total_dps * len(missing_popular) * 0.05,
                     ))
 
-        # Missing DPS keystones
+        # Missing DPS keystones (skip ascendancy passives if player has them allocated)
+        has_asc_points = getattr(char_data, 'ascendancy_points', 0) >= 4
         for pk in popular_keystones:
             if pk["name"] in player_ks or pk["percentage"] < 50:
+                continue
+            if pk.get("type") == "Ascendancy" and has_asc_points:
                 continue
             if pk["name"] in DPS_KEYSTONES:
                 info = KEYSTONES.get(pk["name"])
@@ -1210,6 +1229,8 @@ class WhyEngine:
 
         for pk in popular_keystones:
             if pk["name"] in player_ks or pk["percentage"] < 50:
+                continue
+            if pk.get("type") == "Ascendancy" and has_asc_points:
                 continue
             if pk["name"] in SURV_KEYSTONES:
                 info = KEYSTONES.get(pk["name"])
@@ -1358,6 +1379,8 @@ class WhyEngine:
 
         for pk in popular_keystones:
             if pk["name"] in player_ks or pk["percentage"] < 50:
+                continue
+            if pk.get("type") == "Ascendancy" and has_asc_points:
                 continue
             if pk["name"] in CLEAR_KEYSTONES:
                 info = KEYSTONES.get(pk["name"])

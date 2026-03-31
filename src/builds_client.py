@@ -253,6 +253,7 @@ class CharacterData:
     keystones: list = field(default_factory=list)    # List[str]
     pob_code: str = ""
     defensive_stats: Optional[dict] = None           # poe.ninja pre-calculated defenses
+    ascendancy_points: int = 0                       # number of ascendancy points allocated
 
 
 @dataclass
@@ -530,6 +531,10 @@ class BuildsClient:
                     "intelligence": _n(raw_ds.get("intelligence")),
                 }
 
+            # Extract ascendancy point count from passiveCounts
+            passive_counts = data.get("passiveCounts", {})
+            ascendancy_points = passive_counts.get("ascendancy", 0) if isinstance(passive_counts, dict) else 0
+
             return CharacterData(
                 account=data.get("account", account),
                 name=data.get("name", char_name),
@@ -541,6 +546,7 @@ class BuildsClient:
                 keystones=keystones,
                 pob_code=data.get("pathOfBuildingExport", "") or "",
                 defensive_stats=defensive_stats,
+                ascendancy_points=ascendancy_points,
             )
 
         except Exception as e:
