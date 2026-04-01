@@ -30,6 +30,16 @@ except ImportError:
 
 logger = logging.getLogger("why_engine")
 
+# Meta loader — provides live data from harvested shards when available.
+# Falls back to hardcoded game_knowledge.py when no shard exists.
+_meta = None
+try:
+    from meta_loader import MetaData
+    _meta = MetaData.load()
+    logger.info(f"Meta data loaded: source={_meta.source}, league={_meta.league}")
+except Exception as _e:
+    logger.debug(f"Meta loader not available: {_e}")
+
 
 # ---------------------------------------------------------------------------
 # Explanation data structures
