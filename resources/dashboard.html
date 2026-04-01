@@ -5,11 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LAMA</title>
   <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;600;700&family=Work+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="/vendor/fonts.css" rel="stylesheet" />
+  <script src="/vendor/tailwind.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -63,9 +60,9 @@
   <div class="grunge-overlay"></div>
   <div id="root"></div>
 
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <script src="/vendor/react.min.js"></script>
+  <script src="/vendor/react-dom.min.js"></script>
+  <script src="/vendor/babel.min.js"></script>
 
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback, useMemo } = React;

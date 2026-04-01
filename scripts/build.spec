@@ -38,6 +38,10 @@ a = Analysis(
         # Include image assets
         *((str(f), 'resources/img') for f in (project_dir / 'resources' / 'img').glob('*.png') if (project_dir / 'resources' / 'img').exists()),
         *((str(f), 'resources/img') for f in (project_dir / 'resources' / 'img').glob('*.ico') if (project_dir / 'resources' / 'img').exists()),
+        # Include vendor JS/CSS/fonts (bundled locally, no CDN needed)
+        *((str(f), 'resources/vendor') for f in (project_dir / 'resources' / 'vendor').glob('*.js') if (project_dir / 'resources' / 'vendor').exists()),
+        *((str(f), 'resources/vendor') for f in (project_dir / 'resources' / 'vendor').glob('*.css') if (project_dir / 'resources' / 'vendor').exists()),
+        *((str(f), 'resources/vendor/fonts') for f in (project_dir / 'resources' / 'vendor' / 'fonts').glob('*.ttf') if (project_dir / 'resources' / 'vendor' / 'fonts').exists()),
     ],
     hiddenimports=[
         # FastAPI + uvicorn

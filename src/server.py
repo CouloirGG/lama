@@ -2909,6 +2909,25 @@ async def serve_image(filename: str):
     return FileResponse(img_path, media_type="image/png")
 
 
+@app.get("/vendor/{filepath:path}")
+async def serve_vendor(filepath: str):
+    """Serve bundled vendor files (JS, CSS, fonts)."""
+    from fastapi.responses import FileResponse
+    vendor_path = get_resource(f"resources/vendor/{filepath}")
+    if not vendor_path.exists():
+        return HTMLResponse("Not found", status_code=404)
+    media_types = {
+        ".js": "application/javascript",
+        ".css": "text/css",
+        ".ttf": "font/ttf",
+        ".woff2": "font/woff2",
+        ".woff": "font/woff",
+    }
+    ext = "." + filepath.rsplit(".", 1)[-1] if "." in filepath else ""
+    mt = media_types.get(ext, "application/octet-stream")
+    return FileResponse(vendor_path, media_type=mt)
+
+
 # ---------------------------------------------------------------------------
 # Companion mode endpoints (mobile app pairing)
 # ---------------------------------------------------------------------------

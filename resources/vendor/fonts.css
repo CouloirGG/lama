@@ -1,0 +1,77 @@
+/* Local font definitions — replaces Google Fonts CDN */
+
+@font-face {
+  font-family: 'Noto Serif';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/vendor/fonts/noto-serif-400.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Noto Serif';
+  font-style: normal;
+  font-weight: 600;
+  src: url('/vendor/fonts/noto-serif-600.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Noto Serif';
+  font-style: normal;
+  font-weight: 700;
+  src: url('/vendor/fonts/noto-serif-700.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Work Sans';
+  font-style: normal;
+  font-weight: 300;
+  src: url('/vendor/fonts/worksans-QGY_z_wNahGAdqQ43RhVcIgYT2Xz5u32K0nXNig.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Work Sans';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/vendor/fonts/worksans-QGY_z_wNahGAdqQ43RhVcIgYT2Xz5u32KxfXNig.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Work Sans';
+  font-style: normal;
+  font-weight: 500;
+  src: url('/vendor/fonts/worksans-QGY_z_wNahGAdqQ43RhVcIgYT2Xz5u32K3vXNig.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Work Sans';
+  font-style: normal;
+  font-weight: 600;
+  src: url('/vendor/fonts/worksans-QGY_z_wNahGAdqQ43RhVcIgYT2Xz5u32K5fQNig.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/vendor/fonts/space-grotesk-400.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500;
+  src: url('/vendor/fonts/space-grotesk-500.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  src: url('/vendor/fonts/space-grotesk-400.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  src: url('/vendor/fonts/space-grotesk-500.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/vendor/fonts/material-symbols.ttf') format('truetype');
+}
