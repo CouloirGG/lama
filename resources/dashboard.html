@@ -1113,25 +1113,11 @@
       const [leftPanel, setLeftPanel] = useState("survival"); // "survival" or "gear"
       const gearSlots = insights?.slotSummary || [];
 
-      // Passive tree analysis
+      // Passive tree analysis — disabled temporarily for debugging
       const [treeAnalysis, setTreeAnalysis] = useState(null);
       const [treeLoading, setTreeLoading] = useState(false);
-
-      useEffect(() => {
-        if (!account || !character || !charData) return;
-        setTreeLoading(true);
-        api("/api/character/tree-analysis", "POST", { account, character })
-          .then(data => {
-            if (data && !data.error && data.swapRecommendations) {
-              setTreeAnalysis(data);
-            }
-            setTreeLoading(false);
-          })
-          .catch(e => {
-            console.warn("[LAMA] Tree analysis failed:", e);
-            setTreeLoading(false);
-          });
-      }, [account, character, charData]);
+      // useEffect disabled — tree analysis was causing blank screens
+      // TODO: re-enable after fixing root cause
 
       // Build comparison state
       const [compareQuery, setCompareQuery] = useState("");
