@@ -1613,63 +1613,66 @@ class TreeAnalysisRequest(BaseModel):
 @app.post("/api/character/tree-analysis")
 async def character_tree_analysis(req: TreeAnalysisRequest):
     """Analyze passive tree and recommend swaps vs a target build."""
-    if not req.account.strip() or not req.character.strip():
-        return JSONResponse(status_code=400, content={"error": "Account and character required"})
-    loop = asyncio.get_running_loop()
-
-    player = await loop.run_in_executor(
-        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
-    )
-    if not player:
-        return JSONResponse(status_code=404, content={"error": "Player not found"})
-
-    from pob_decoder import decode_pob_code
-    from tree_analyzer import TreeAnalyzer
-
-    player_pob = decode_pob_code(player.pob_code) if player.pob_code else None
-    if not player_pob or not player_pob.passive_nodes:
-        return JSONResponse(status_code=400, content={"error": "No passive tree data available"})
-
-    # Get target build (optional)
-    top_nodes = None
-    target_name = ""
-    if req.target_query and "poe.ninja" in req.target_query:
-        acct, char_name = _parse_ninja_url(req.target_query)
-        if acct and char_name:
-            target = await loop.run_in_executor(
-                None, _lookup_character_with_fallback, acct, char_name
-            )
-            if target and target.pob_code:
-                top_pob = decode_pob_code(target.pob_code)
-                top_nodes = top_pob.passive_nodes if top_pob else None
-                target_name = target.name
-    elif req.target_account and req.target_character:
-        target = await loop.run_in_executor(
-            None, _lookup_character_with_fallback, req.target_account.strip(), req.target_character.strip()
-        )
-        if target and target.pob_code:
-            top_pob = decode_pob_code(target.pob_code)
-            top_nodes = top_pob.passive_nodes if top_pob else None
-            target_name = target.name
-
-    # If no target specified, use the top featured character for this class
-    if not top_nodes:
-        archetype = classify_build(player)
-        char_class = player.ascendancy or player.char_class
-        profile = await loop.run_in_executor(
-            None, builds_client.fetch_archetype_profile, char_class, archetype.main_skill
-        )
-        if profile and profile.get("featuredCharacters"):
-            top_ch = profile["featuredCharacters"][0]
-            top_char = await loop.run_in_executor(
-                None, _lookup_character_with_fallback, top_ch.get("account", ""), top_ch.get("name", "")
-            )
-            if top_char and top_char.pob_code:
-                top_pob = decode_pob_code(top_char.pob_code)
-                top_nodes = top_pob.passive_nodes if top_pob else None
-                target_name = top_char.name
-
     try:
+        if not req.account.strip() or not req.character.strip():
+            return {"swapRecommendations": [], "error": "Account and character required"}
+        loop = asyncio.get_running_loop()
+
+        player = await loop.run_in_executor(
+            None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
+        )
+        if not player:
+            return {"swapRecommendations": [], "error": "Player not found"}
+
+        from pob_decoder import decode_pob_code
+        from tree_analyzer import TreeAnalyzer
+
+        player_pob = decode_pob_code(player.pob_code) if player.pob_code else None
+        if not player_pob or not player_pob.passive_nodes:
+            return {"swapRecommendations": [], "totalAllocated": 0}
+
+        # Get target build (optional) — all wrapped in try/except
+        top_nodes = None
+        target_name = ""
+        try:
+            if req.target_query and "poe.ninja" in req.target_query:
+                acct, char_name = _parse_ninja_url(req.target_query)
+                if acct and char_name:
+                    target = await loop.run_in_executor(
+                        None, _lookup_character_with_fallback, acct, char_name
+                    )
+                    if target and target.pob_code:
+                        top_pob = decode_pob_code(target.pob_code)
+                        top_nodes = top_pob.passive_nodes if top_pob else None
+                        target_name = target.name or ""
+            elif req.target_account and req.target_character:
+                target = await loop.run_in_executor(
+                    None, _lookup_character_with_fallback, req.target_account.strip(), req.target_character.strip()
+                )
+                if target and target.pob_code:
+                    top_pob = decode_pob_code(target.pob_code)
+                    top_nodes = top_pob.passive_nodes if top_pob else None
+                    target_name = target.name or ""
+
+            # If no target specified, use the top featured character for this class
+            if not top_nodes:
+                archetype = classify_build(player)
+                char_class = player.ascendancy or player.char_class
+                profile = await loop.run_in_executor(
+                    None, builds_client.fetch_archetype_profile, char_class, archetype.main_skill
+                )
+                if profile and profile.get("featuredCharacters"):
+                    top_ch = profile["featuredCharacters"][0]
+                    top_char = await loop.run_in_executor(
+                        None, _lookup_character_with_fallback, top_ch.get("account", ""), top_ch.get("name", "")
+                    )
+                    if top_char and top_char.pob_code:
+                        top_pob = decode_pob_code(top_char.pob_code)
+                        top_nodes = top_pob.passive_nodes if top_pob else None
+                        target_name = top_char.name or ""
+        except Exception as e:
+            logger.debug(f"Target lookup failed (non-fatal): {e}")
+
         analyzer = TreeAnalyzer()
         analysis = await loop.run_in_executor(
             None, analyzer.analyze, player_pob.passive_nodes, top_nodes
@@ -1679,7 +1682,7 @@ async def character_tree_analysis(req: TreeAnalysisRequest):
         return result
     except Exception as e:
         logger.error(f"Tree analysis failed: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        return {"swapRecommendations": [], "error": str(e)}
 
 
 class BuildCompareRequest2(BaseModel):
