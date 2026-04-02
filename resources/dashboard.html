@@ -1343,13 +1343,13 @@
                         <div className="w-3 h-3 border-2 border-tertiary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
                         <span className="text-xs font-mono text-on-surface-var">Analyzing passive tree...</span>
                       </div>
-                    ) : (
+                    ) : treeAnalysis?.swapRecommendations?.length > 0 ? (
                       <div className="space-y-2">
                         {treeAnalysis.swapRecommendations.slice(0, 5).map((swap, i) => (
                           <SwapCard key={i} swap={swap} rank={i + 1} />
                         ))}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 )}
 
