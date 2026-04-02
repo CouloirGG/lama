@@ -1122,10 +1122,15 @@
         setTreeLoading(true);
         api("/api/character/tree-analysis", "POST", { account, character })
           .then(data => {
-            if (!data.error) setTreeAnalysis(data);
+            if (data && !data.error && data.swapRecommendations) {
+              setTreeAnalysis(data);
+            }
             setTreeLoading(false);
           })
-          .catch(() => setTreeLoading(false));
+          .catch(e => {
+            console.warn("[LAMA] Tree analysis failed:", e);
+            setTreeLoading(false);
+          });
       }, [account, character, charData]);
 
       // Build comparison state
@@ -1329,27 +1334,28 @@
                 <NextBigUpgradeCard improvement={improvement} />
 
                 {/* ── Perk Tree Swaps ── */}
-                {(treeAnalysis?.swapRecommendations?.length > 0 || treeLoading) && (
+                {treeLoading && (
+                  <div className="mt-4 pt-4 border-t border-outline-variant/20">
+                    <div className="flex items-center gap-2 py-2">
+                      <div className="w-3 h-3 border-2 border-tertiary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+                      <span className="text-xs font-mono text-on-surface-var">Analyzing passive tree...</span>
+                    </div>
+                  </div>
+                )}
+                {!treeLoading && treeAnalysis && Array.isArray(treeAnalysis.swapRecommendations) && treeAnalysis.swapRecommendations.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-outline-variant/20">
                     <h4 className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-tertiary mb-3">
                       <Icon name="swap_horiz" className="text-base" />
                       Perk Swaps
-                      {treeAnalysis?.targetName && (
+                      {treeAnalysis.targetName && (
                         <span className="text-on-surface-var font-normal">vs {treeAnalysis.targetName}</span>
                       )}
                     </h4>
-                    {treeLoading ? (
-                      <div className="flex items-center gap-2 py-2">
-                        <div className="w-3 h-3 border-2 border-tertiary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-                        <span className="text-xs font-mono text-on-surface-var">Analyzing passive tree...</span>
-                      </div>
-                    ) : treeAnalysis?.swapRecommendations?.length > 0 ? (
-                      <div className="space-y-2">
-                        {treeAnalysis.swapRecommendations.slice(0, 5).map((swap, i) => (
-                          <SwapCard key={i} swap={swap} rank={i + 1} />
-                        ))}
-                      </div>
-                    ) : null}
+                    <div className="space-y-2">
+                      {treeAnalysis.swapRecommendations.slice(0, 5).map((swap, i) => (
+                        <SwapCard key={i} swap={swap} rank={i + 1} />
+                      ))}
+                    </div>
                   </div>
                 )}
 
