@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,24 +9,56 @@
   <script src="/vendor/tailwind.js"></script>
   <script>
     tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            surface: { DEFAULT: '#1e1b18', dim: '#151310', bright: '#221f1c', container: '#2c2a26' },
-            primary: { DEFAULT: '#e5c371', container: '#c4a456' },
-            secondary: { DEFAULT: '#ffb3ae' },
-            tertiary: { DEFAULT: '#91cdff' },
-            on: { surface: '#ede8e2', 'surface-var': '#dbd3c5' },
-            outline: { DEFAULT: '#99907f', variant: '#4d4638' },
-            error: { DEFAULT: '#ffb4ab' },
-          },
-          fontFamily: {
-            serif: ['Noto Serif', 'serif'],
-            sans: ['Work Sans', 'sans-serif'],
-            mono: ['Space Grotesk', 'monospace'],
-          },
+        darkMode: "class",
+        theme: {
+            extend: {
+                colors: {
+                    "surface-bright": "#3a3939",
+                    "secondary": "#e9c176",
+                    "tertiary": "#b5eaff",
+                    "on-tertiary": "#003543",
+                    "inverse-on-surface": "#313030",
+                    "on-surface-variant": "#d7c3b5",
+                    "on-primary": "#4d2700",
+                    "surface-container": "#201f1f",
+                    "surface-container-highest": "#353534",
+                    "background": "#131313",
+                    "on-surface": "#e5e2e1",
+                    "surface-container-high": "#2a2a2a",
+                    "primary": "#ffdcc2",
+                    "on-secondary": "#412d00",
+                    "surface-container-lowest": "#0e0e0e",
+                    "outline": "#9f8d81",
+                    "surface-container-low": "#1c1b1b",
+                    "surface-dim": "#131313",
+                    "surface": "#131313",
+                    "error": "#ffb4ab",
+                    "error-container": "#93000a",
+                    "on-primary-container": "#794614",
+                    "primary-container": "#ffb77b",
+                    "primary-fixed": "#ffdcc2",
+                    "primary-fixed-dim": "#ffb77c",
+                    "outline-variant": "#52443a",
+                    "on-error": "#690005",
+                    "secondary-container": "#5d4200",
+                    "on-secondary-container": "#d6b066",
+                    "on-primary-fixed": "#2e1500",
+                    "tertiary-container": "#89d0ea",
+                    "on-error-container": "#ffdad6",
+                    "surface-variant": "#353534",
+                    "surface-tint": "#ffb77c",
+                },
+                borderRadius: {"DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px"},
+                fontFamily: {
+                    "headline": ["Noto Serif"],
+                    "body": ["Space Grotesk"],
+                    "label": ["Space Grotesk"],
+                    "serif": ["Noto Serif", "serif"],
+                    "sans": ["Space Grotesk", "sans-serif"],
+                    "mono": ["Space Grotesk", "monospace"],
+                },
+            },
         },
-      },
     };
   </script>
   <style>
@@ -37,27 +69,23 @@
     @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; margin: 0; padding: 0; }
-    body { background: #151310; color: #e8e1db; font-family: 'Work Sans', 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    body { background-color: #0e0e0e; color: #e5e2e1; font-family: 'Space Grotesk', sans-serif; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    .font-serif, .font-headline { font-family: 'Noto Serif', serif; }
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
     #root { width: 100%; height: 100%; }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #4d4638; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: #52443a; border-radius: 3px; }
     input:focus, select:focus { outline: none; }
-    select option { background: #1e1b18; color: #e8e1db; }
-    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
-    .grunge-overlay {
-      position: fixed; inset: 0; pointer-events: none; z-index: 9999; opacity: 0.03;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    }
+    select option { background: #201f1f; color: #e5e2e1; }
     .tier-bar { transition: width 0.4s ease; }
-    .tab-active { border-bottom: 2px solid #e5c371; color: #e5c371; }
     .card-hover { transition: background 0.15s ease, border-color 0.15s ease; }
-    .card-hover:hover { background: #2c2a26; border-color: #99907f; }
+    .card-hover:hover { background: #2a2a2a; border-color: #9f8d81; }
     .fade-in { animation: fadeIn 0.25s ease both; }
+    .nav-item-active { color: #ffb77b; border-right: 3px solid #ffb77b; background: rgba(255, 183, 123, 0.08); }
   </style>
 </head>
 <body>
-  <div class="grunge-overlay"></div>
   <div id="root"></div>
 
   <script src="/vendor/react.min.js"></script>
@@ -110,7 +138,6 @@
         try { data = raw ? JSON.parse(raw) : {}; } catch { data = { raw }; }
         if (!res.ok) {
           let msg = data?.error || `HTTP ${res.status}`;
-          // FastAPI 422 returns detail as array of {msg, loc, ...} objects
           if (!data?.error && Array.isArray(data?.detail)) {
             msg = data.detail.map(d => d.msg || JSON.stringify(d)).join("; ");
           } else if (!data?.error && typeof data?.detail === "string") {
@@ -172,18 +199,18 @@
       critical: "border-red-500/50 bg-red-500/10 text-red-300",
       warning: "border-yellow-500/50 bg-yellow-500/10 text-yellow-200",
       positive: "border-green-500/50 bg-green-500/10 text-green-300",
-      info: "border-outline-variant bg-surface-container text-on-surface-var",
+      info: "border-outline-variant bg-surface-container text-on-surface-variant",
     };
     const SEV_ICONS = { critical: "error", warning: "warning", positive: "check_circle", info: "info" };
 
     function WhyCard({ explanation, neutral }) {
       const e = explanation;
       const icon = SEV_ICONS[e.severity] || "info";
-      const iconColor = { critical: "text-red-400", warning: "text-yellow-400", positive: "text-green-400", info: "text-on-surface-var" }[e.severity] || "";
+      const iconColor = { critical: "text-red-400", warning: "text-yellow-400", positive: "text-green-400", info: "text-on-surface-variant" }[e.severity] || "";
       const [open, setOpen] = useState(false);
       return (
         <div
-          className={`flex gap-2 px-3 py-1.5 rounded cursor-pointer transition-colors ${neutral ? "bg-surface/50 hover:bg-surface-container" : SEV_COLORS[e.severity] || SEV_COLORS.info}`}
+          className={`flex gap-2 px-3 py-1.5 cursor-pointer transition-colors ${neutral ? "bg-surface-container-lowest hover:bg-surface-container" : SEV_COLORS[e.severity] || SEV_COLORS.info}`}
           onClick={() => setOpen(!open)}
         >
           <Icon name={icon} className={`text-sm mt-px shrink-0 ${neutral ? iconColor : ""}`} />
@@ -211,7 +238,7 @@
           <div className="flex items-center gap-2">
             {icon && <Icon name={icon} className="text-base text-primary-container" />}
             <h3 className="font-serif text-base text-on-surface">{title}</h3>
-            <span className="text-xs font-mono text-on-surface-var">({explanations.length})</span>
+            <span className="text-xs font-mono text-on-surface-variant">({explanations.length})</span>
           </div>
           <div className="flex flex-col gap-2">
             {shown.map((e, i) => <WhyCard key={i} explanation={e} />)}
@@ -226,33 +253,30 @@
     }
 
     // -----------------------------------------------------------------------
-    // Scorecard — big numbers at the top of the Pulse tab
+    // Scorecard severity backgrounds
     // -----------------------------------------------------------------------
     const STATUS_BG = {
       critical: "bg-red-500/15 border-red-500/40 text-red-300",
       warning: "bg-yellow-500/15 border-yellow-500/40 text-yellow-200",
       positive: "bg-green-500/15 border-green-500/40 text-green-300",
-      info: "bg-surface-container border-outline-variant text-on-surface-var",
+      info: "bg-surface-container border-outline-variant text-on-surface-variant",
     };
 
     function ScorecardPanel({ scorecard }) {
       const sc = scorecard;
       return (
         <div className="grid grid-cols-3 gap-3">
-          {/* EHP */}
-          <div className={`flex flex-col items-center p-4 rounded-lg border ${STATUS_BG[sc.ehpStatus] || STATUS_BG.info}`}>
+          <div className={`flex flex-col items-center p-4 border ${STATUS_BG[sc.ehpStatus] || STATUS_BG.info}`}>
             <span className="text-xs font-mono tracking-widest opacity-60 mb-1">EFFECTIVE HP</span>
             <span className="text-2xl font-mono font-bold">{sc.ehp?.toLocaleString() || "?"}</span>
             <span className="text-xs font-mono opacity-70 mt-1">{sc.ehpContext}</span>
           </div>
-          {/* DPS */}
-          <div className={`flex flex-col items-center p-4 rounded-lg border ${STATUS_BG[sc.dpsStatus] || STATUS_BG.info}`}>
+          <div className={`flex flex-col items-center p-4 border ${STATUS_BG[sc.dpsStatus] || STATUS_BG.info}`}>
             <span className="text-xs font-mono tracking-widest opacity-60 mb-1">DPS</span>
             <span className="text-2xl font-mono font-bold">{sc.dpsLabel || "?"}</span>
             <span className="text-xs font-mono opacity-70 mt-1">Primary skill</span>
           </div>
-          {/* Resists */}
-          <div className={`flex flex-col items-center p-4 rounded-lg border ${STATUS_BG[sc.resistStatus] || STATUS_BG.info}`}>
+          <div className={`flex flex-col items-center p-4 border ${STATUS_BG[sc.resistStatus] || STATUS_BG.info}`}>
             <span className="text-xs font-mono tracking-widest opacity-60 mb-1">RESISTANCES</span>
             <span className="text-lg font-mono font-bold">{sc.resistStatus === "positive" ? "Capped" : "Gaps"}</span>
             <span className="text-xs font-mono opacity-70 mt-1 text-center">{sc.resistSummary}</span>
@@ -275,10 +299,10 @@
       }[g.severity] || "border-l-outline bg-surface-container";
       const labelColor = {
         critical: "text-red-400", warning: "text-yellow-400",
-        positive: "text-green-400", info: "text-on-surface-var"
+        positive: "text-green-400", info: "text-on-surface-variant"
       }[g.severity] || "";
       return (
-        <div className={`rounded-lg border border-outline-variant overflow-hidden`}>
+        <div className="border border-outline-variant overflow-hidden">
           <div
             className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-l-4 ${headerColor}`}
             onClick={() => setOpen(!open)}
@@ -288,18 +312,18 @@
               <div className="flex items-center gap-2">
                 <span className={`text-sm font-mono font-semibold ${labelColor}`}>{g.label}</span>
                 {g.statValue && (
-                  <span className="text-xs font-mono text-on-surface px-2 py-0.5 rounded bg-surface-container border border-outline-variant">
+                  <span className="text-xs font-mono text-on-surface px-2 py-0.5 bg-surface-container border border-outline-variant">
                     {g.statValue}
                   </span>
                 )}
-                <span className="text-xs font-mono text-on-surface-var">{g.items?.length || 0} items</span>
+                <span className="text-xs font-mono text-on-surface-variant">{g.items?.length || 0} items</span>
               </div>
-              <p className="text-xs font-mono text-on-surface-var mt-0.5">{g.summary}</p>
+              <p className="text-xs font-mono text-on-surface-variant mt-0.5">{g.summary}</p>
             </div>
-            <Icon name={open ? "expand_less" : "expand_more"} className="text-base text-on-surface-var shrink-0" />
+            <Icon name={open ? "expand_less" : "expand_more"} className="text-base text-on-surface-variant shrink-0" />
           </div>
           {open && g.items?.length > 0 && (
-            <div className="flex flex-col gap-0.5 px-3 py-2 bg-surface-dim/50">
+            <div className="flex flex-col gap-0.5 px-3 py-2 bg-surface-container-lowest">
               {g.items.map((e, i) => <WhyCard key={i} explanation={e} neutral />)}
             </div>
           )}
@@ -308,34 +332,31 @@
     }
 
     // -----------------------------------------------------------------------
-    // TopBar
+    // Window API
     // -----------------------------------------------------------------------
     const getWindowApi = () => window.pywebview?.api;
 
-    function TopBar({ charData, onSettingsClick }) {
+    // -----------------------------------------------------------------------
+    // NavBar (replaces TopBar) — fixed top, full width
+    // -----------------------------------------------------------------------
+    function NavBar({ onSettingsClick }) {
       return (
         <div
-          className="pywebview-drag-region fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-1.5 bg-surface-dim/95 backdrop-blur border-b border-outline-variant"
+          className="pywebview-drag-region fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 bg-surface-container-lowest border-b border-outline-variant"
+          style={{ height: "64px" }}
         >
-          <div className="font-serif text-base font-bold tracking-widest text-primary">LAMA</div>
-          {charData && (
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant">
-              <span className="text-sm font-mono text-on-surface">{charData.name}</span>
-              <span className="text-xs text-on-surface-var">Lv{charData.level}</span>
-              <span className="text-xs text-primary-container font-mono">{charData.ascendancy || charData.class}</span>
-            </div>
-          )}
+          <div className="font-serif text-xl font-bold tracking-[0.15em] text-primary-container">LAMA</div>
           <div className="flex items-center gap-1">
-            <button onClick={onSettingsClick} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-on-surface" title="Settings">
+            <button onClick={onSettingsClick} className="p-2 hover:bg-surface-container transition-colors text-on-surface-variant hover:text-on-surface" title="Settings">
               <Icon name="settings" />
             </button>
-            <button onClick={() => getWindowApi()?.minimize()} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-on-surface" title="Minimize">
+            <button onClick={() => getWindowApi()?.minimize()} className="p-2 hover:bg-surface-container transition-colors text-on-surface-variant hover:text-on-surface" title="Minimize">
               <Icon name="remove" />
             </button>
-            <button onClick={() => getWindowApi()?.toggle_maximize()} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-on-surface" title="Maximize">
+            <button onClick={() => getWindowApi()?.toggle_maximize()} className="p-2 hover:bg-surface-container transition-colors text-on-surface-variant hover:text-on-surface" title="Maximize">
               <Icon name="crop_square" />
             </button>
-            <button onClick={() => getWindowApi()?.quit()} className="p-2 rounded-lg hover:bg-surface-container transition-colors text-on-surface-var hover:text-error" title="Close">
+            <button onClick={() => getWindowApi()?.quit()} className="p-2 hover:bg-surface-container transition-colors text-on-surface-variant hover:text-error" title="Close">
               <Icon name="close" />
             </button>
           </div>
@@ -344,36 +365,69 @@
     }
 
     // -----------------------------------------------------------------------
-    // TabNav
+    // Sidebar (replaces TabNav) — fixed left, below navbar
     // -----------------------------------------------------------------------
-    const TABS = ["BUILD", "MARKET", "GUIDE"];
+    const NAV_ITEMS = [
+      { id: "BUILD", label: "OVERVIEW", icon: "dashboard" },
+      { id: "GEAR", label: "GEAR", icon: "inventory_2" },
+      { id: "MARKET", label: "MARKET", icon: "storefront" },
+      { id: "GUIDE", label: "GUIDE", icon: "menu_book" },
+    ];
 
-    function TabNav({ activeTab, onTabChange, hasCharacter, onSettingsClick }) {
-      if (!hasCharacter) {
-        return (
-          <div className="fixed top-[42px] left-0 right-0 z-40 flex items-center justify-center px-5 py-1.5 bg-surface/90 backdrop-blur border-b border-outline-variant">
-            <button
-              onClick={onSettingsClick}
-              className="text-sm text-primary-container font-mono hover:text-primary transition-colors underline underline-offset-4"
-            >
-              Open Settings to look up a character
-            </button>
-          </div>
-        );
-      }
+    function Sidebar({ activeTab, onTabChange, charData, hasCharacter, onSettingsClick }) {
       return (
-        <div className="fixed top-[42px] left-0 right-0 z-40 flex items-center gap-0 px-5 bg-surface/90 backdrop-blur border-b border-outline-variant">
-          {TABS.map(tab => (
-            <button
-              key={tab}
-              onClick={() => onTabChange(tab)}
-              className={`px-5 py-3 text-xs font-mono tracking-widest transition-colors ${
-                activeTab === tab ? "tab-active text-primary" : "text-on-surface-var hover:text-on-surface border-b-2 border-transparent"
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
+        <div
+          className="fixed left-0 top-[64px] bottom-0 z-40 flex flex-col bg-surface-container-low border-r border-outline-variant"
+          style={{ width: "256px" }}
+        >
+          {/* Character info */}
+          {charData && (
+            <div className="px-5 py-4 border-b border-outline-variant">
+              <div className="text-sm font-sans font-semibold text-on-surface">{charData.name}</div>
+              <div className="text-xs text-on-surface-variant mt-0.5">
+                {charData.ascendancy || charData.class} — Lv{charData.level}
+              </div>
+            </div>
+          )}
+
+          {/* Navigation */}
+          <nav className="flex-1 flex flex-col py-2">
+            {!hasCharacter ? (
+              <button
+                onClick={onSettingsClick}
+                className="mx-3 my-1 px-4 py-3 text-left text-sm text-primary-container font-sans hover:bg-surface-container transition-colors"
+              >
+                Open Settings to look up a character
+              </button>
+            ) : (
+              NAV_ITEMS.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => onTabChange(item.id)}
+                  className={`flex items-center gap-3 mx-2 px-4 py-3 text-left transition-colors ${
+                    activeTab === item.id
+                      ? "nav-item-active"
+                      : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
+                  }`}
+                >
+                  <Icon name={item.icon} className="text-xl" />
+                  <span className="text-xs font-sans tracking-[0.15em] font-semibold">{item.label}</span>
+                </button>
+              ))
+            )}
+          </nav>
+
+          {/* Export button */}
+          {hasCharacter && (
+            <div className="px-4 py-4 border-t border-outline-variant">
+              <button className="w-full py-2.5 text-xs font-sans font-bold tracking-widest uppercase text-on-primary bg-gradient-to-r from-primary-container to-secondary hover:opacity-90 transition-opacity">
+                <Icon name="download" className="text-sm mr-2 align-middle" />
+                EXPORT
+              </button>
+            </div>
+          )}
+
+          {/* Connection status */}
         </div>
       );
     }
@@ -404,7 +458,6 @@
         setOverlayMode(settings?.overlay_mode || "standard");
       }, [settings]);
 
-      // Fuzzy filter saved chars as user types
       const filteredSaved = useMemo(() => {
         const q = query.trim().toLowerCase();
         if (!q || q.includes("poe.ninja")) return [];
@@ -482,37 +535,37 @@
         <div className="fixed inset-0 z-[60]" onClick={onClose}>
           <div className="absolute inset-0 bg-black/30" />
           <div
-            className="absolute top-0 right-0 bottom-0 w-[380px] max-w-[90vw] bg-surface border-l border-outline-variant overflow-y-auto"
+            className="absolute top-0 right-0 bottom-0 w-[380px] max-w-[90vw] bg-surface-container-low border-l border-outline-variant overflow-y-auto"
             style={{ animation: "slideIn 0.2s ease" }}
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant">
-              <h2 className="font-serif text-lg text-primary">Settings</h2>
-              <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-container text-on-surface-var hover:text-on-surface transition-colors" title="Close settings">
+              <h2 className="font-serif text-lg text-primary-container">Settings</h2>
+              <button onClick={onClose} className="p-2 hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors" title="Close settings">
                 <Icon name="close" />
               </button>
             </div>
 
             {/* Character Lookup */}
             <div className="p-5 border-b border-outline-variant">
-              <h3 className="text-xs font-mono tracking-widest text-on-surface-var mb-3">CHARACTER LOOKUP</h3>
+              <h3 className="text-xs font-sans tracking-widest text-on-surface-variant mb-3 uppercase">CHARACTER LOOKUP</h3>
               <input
                 value={query}
                 onChange={e => { setQuery(e.target.value); setSuggestions([]); setLookupError(""); }}
                 placeholder="Name, account/character, or poe.ninja URL"
-                className="w-full px-3 py-2 mb-2 rounded bg-surface-container border border-outline-variant text-sm text-on-surface placeholder-outline font-mono focus:border-primary-container"
+                className="w-full px-3 py-2 mb-2 bg-surface-container border border-outline-variant text-sm text-on-surface placeholder-outline font-sans focus:border-primary-container"
                 onKeyDown={e => { if (e.key === "Enter") handleSmartLookup(); }}
               />
               {filteredSaved.length > 0 && !lookupLoading && (
-                <div className="mb-2 rounded border border-outline-variant bg-surface-container overflow-hidden">
+                <div className="mb-2 border border-outline-variant bg-surface-container overflow-hidden">
                   {filteredSaved.slice(0, 5).map((m, i) => (
                     <div
                       key={i}
                       onClick={() => handleSavedClick(m.account, m.name)}
-                      className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-surface-dim transition-colors border-b border-outline-variant last:border-0"
+                      className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-surface-container-lowest transition-colors border-b border-outline-variant last:border-0"
                     >
-                      <span className="text-sm text-on-surface font-mono">{m.name}</span>
-                      <span className="text-xs text-on-surface-var">Lv{m.level} {m.class}</span>
+                      <span className="text-sm text-on-surface font-sans">{m.name}</span>
+                      <span className="text-xs text-on-surface-variant">Lv{m.level} {m.class}</span>
                     </div>
                   ))}
                 </div>
@@ -520,24 +573,24 @@
               <button
                 onClick={() => handleSmartLookup()}
                 disabled={lookupLoading || !query.trim()}
-                className="w-full py-2 rounded bg-primary-container text-surface-dim text-sm font-mono font-semibold hover:bg-primary transition-colors disabled:opacity-70"
+                className="w-full py-2 bg-primary-container text-on-primary text-sm font-sans font-semibold hover:bg-primary transition-colors disabled:opacity-70"
               >
                 {lookupLoading ? "Looking up..." : "Look Up"}
               </button>
               {lookupError && <p className="mt-2 text-xs text-error">{lookupError}</p>}
               {suggestions.length > 0 && (
-                <div className="mt-2 rounded border border-outline-variant bg-surface-container overflow-hidden">
+                <div className="mt-2 border border-outline-variant bg-surface-container overflow-hidden">
                   {suggestions.map((s, i) => (
                     <div
                       key={i}
                       onClick={() => handleSuggestionClick(s.account, s.name)}
-                      className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-surface-dim transition-colors border-b border-outline-variant last:border-0"
+                      className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-surface-container-lowest transition-colors border-b border-outline-variant last:border-0"
                     >
                       <div>
-                        <span className="text-sm text-on-surface font-mono">{s.name}</span>
-                        <span className="ml-2 text-xs text-outline font-mono">{s.account}</span>
+                        <span className="text-sm text-on-surface font-sans">{s.name}</span>
+                        <span className="ml-2 text-xs text-outline font-sans">{s.account}</span>
                       </div>
-                      <span className="text-xs text-on-surface-var">Lv{s.level} {s.class}</span>
+                      <span className="text-xs text-on-surface-variant">Lv{s.level} {s.class}</span>
                     </div>
                   ))}
                 </div>
@@ -547,19 +600,19 @@
             {/* Saved Characters */}
             {savedChars.length > 0 && (
               <div className="p-5 border-b border-outline-variant">
-                <h3 className="text-xs font-mono tracking-widest text-on-surface-var mb-3">SAVED CHARACTERS</h3>
+                <h3 className="text-xs font-sans tracking-widest text-on-surface-variant mb-3 uppercase">SAVED CHARACTERS</h3>
                 <div className="flex flex-col gap-2">
                   {savedChars.map((acctGroup, i) => (
                     <div key={i}>
-                      <div className="text-xs text-outline mb-1 font-mono">{acctGroup.accountName}</div>
+                      <div className="text-xs text-outline mb-1 font-sans">{acctGroup.accountName}</div>
                       {(acctGroup.characters || []).map((ch, j) => (
                         <div
                           key={j}
-                          className="flex items-center justify-between px-3 py-2 rounded bg-surface-container border border-outline-variant card-hover cursor-pointer"
+                          className="flex items-center justify-between px-3 py-2 bg-surface-container border border-outline-variant card-hover cursor-pointer"
                         >
                           <div onClick={() => handleSavedClick(acctGroup.accountName, ch.name)} className="flex-1">
-                            <span className="text-sm text-on-surface font-mono">{ch.name}</span>
-                            <span className="ml-2 text-xs text-on-surface-var">Lv{ch.level} {ch.class}</span>
+                            <span className="text-sm text-on-surface font-sans">{ch.name}</span>
+                            <span className="ml-2 text-xs text-on-surface-variant">Lv{ch.level} {ch.class}</span>
                           </div>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDeleteSaved(acctGroup.accountName, ch.name); }}
@@ -577,23 +630,23 @@
 
             {/* Overlay Controls */}
             <div className="p-5 border-b border-outline-variant">
-              <h3 className="text-xs font-mono tracking-widest text-on-surface-var mb-3">OVERLAY</h3>
+              <h3 className="text-xs font-sans tracking-widest text-on-surface-variant mb-3 uppercase">OVERLAY</h3>
               <div className="flex items-center gap-2 mb-3">
-                <button onClick={() => handleOverlayAction("start")} className="flex-1 py-2 rounded bg-surface-container border border-outline-variant text-xs font-mono text-on-surface-var hover:border-primary-container hover:text-on-surface transition-colors">Start</button>
-                <button onClick={() => handleOverlayAction("stop")} className="flex-1 py-2 rounded bg-surface-container border border-outline-variant text-xs font-mono text-on-surface-var hover:border-secondary hover:text-on-surface transition-colors">Stop</button>
-                <button onClick={() => handleOverlayAction("restart")} className="flex-1 py-2 rounded bg-surface-container border border-outline-variant text-xs font-mono text-on-surface-var hover:border-tertiary hover:text-on-surface transition-colors">Restart</button>
+                <button onClick={() => handleOverlayAction("start")} className="flex-1 py-2 bg-surface-container border border-outline-variant text-xs font-sans text-on-surface-variant hover:border-primary-container hover:text-on-surface transition-colors">Start</button>
+                <button onClick={() => handleOverlayAction("stop")} className="flex-1 py-2 bg-surface-container border border-outline-variant text-xs font-sans text-on-surface-variant hover:border-secondary hover:text-on-surface transition-colors">Stop</button>
+                <button onClick={() => handleOverlayAction("restart")} className="flex-1 py-2 bg-surface-container border border-outline-variant text-xs font-sans text-on-surface-variant hover:border-tertiary hover:text-on-surface transition-colors">Restart</button>
               </div>
               {status?.state && (
                 <div className="flex items-center gap-2 mb-3">
                   <span className={`w-2 h-2 rounded-full ${status.state === "running" ? "bg-green-400" : status.state === "stopped" ? "bg-red-400" : "bg-yellow-400"}`} />
-                  <span className="text-xs font-mono text-on-surface-var capitalize">{status.state}</span>
+                  <span className="text-xs font-sans text-on-surface-variant capitalize">{status.state}</span>
                 </div>
               )}
-              <label className="block text-xs font-mono text-on-surface-var mb-1">Mode</label>
+              <label className="block text-xs font-sans text-on-surface-variant mb-1">Mode</label>
               <select
                 value={overlayMode}
                 onChange={e => setOverlayMode(e.target.value)}
-                className="w-full px-3 py-2 mb-3 rounded bg-surface-container border border-outline-variant text-sm text-on-surface font-mono focus:border-primary-container"
+                className="w-full px-3 py-2 mb-3 bg-surface-container border border-outline-variant text-sm text-on-surface font-sans focus:border-primary-container"
               >
                 <option value="stars_only">Stars Only</option>
                 <option value="minimal">Minimal</option>
@@ -605,11 +658,11 @@
             {/* League Selector */}
             {leagues.length > 0 && (
               <div className="p-5 border-b border-outline-variant">
-                <h3 className="text-xs font-mono tracking-widest text-on-surface-var mb-3">LEAGUE</h3>
+                <h3 className="text-xs font-sans tracking-widest text-on-surface-variant mb-3 uppercase">LEAGUE</h3>
                 <select
                   value={settings?.league || ""}
                   onChange={e => setSettings({ ...settings, league: e.target.value })}
-                  className="w-full px-3 py-2 rounded bg-surface-container border border-outline-variant text-sm text-on-surface font-mono focus:border-primary-container"
+                  className="w-full px-3 py-2 bg-surface-container border border-outline-variant text-sm text-on-surface font-sans focus:border-primary-container"
                 >
                   {leagues.map(l => typeof l === "string"
                     ? <option key={l} value={l}>{l}</option>
@@ -621,8 +674,8 @@
 
             {/* Detection Settings */}
             <div className="p-5 border-b border-outline-variant">
-              <h3 className="text-xs font-mono tracking-widest text-on-surface-var mb-3">DETECTION</h3>
-              <label className="flex items-center justify-between text-xs font-mono text-on-surface-var mb-1">
+              <h3 className="text-xs font-sans tracking-widest text-on-surface-variant mb-3 uppercase">DETECTION</h3>
+              <label className="flex items-center justify-between text-xs font-sans text-on-surface-variant mb-1">
                 <span>Scan FPS</span>
                 <span className="text-on-surface">{scanFps}</span>
               </label>
@@ -632,7 +685,7 @@
                 onChange={e => setScanFps(Number(e.target.value))}
                 className="w-full mb-4 accent-primary-container"
               />
-              <label className="flex items-center justify-between text-xs font-mono text-on-surface-var mb-1">
+              <label className="flex items-center justify-between text-xs font-sans text-on-surface-variant mb-1">
                 <span>Detection Cooldown (s)</span>
                 <span className="text-on-surface">{detectionCooldown}</span>
               </label>
@@ -644,17 +697,17 @@
               />
               <button
                 onClick={saveSettings}
-                className="w-full py-2 rounded bg-surface-container border border-primary-container text-xs font-mono text-primary-container hover:bg-primary-container hover:text-surface-dim transition-colors"
+                className="w-full py-2 bg-surface-container border border-primary-container text-xs font-sans text-primary-container hover:bg-primary-container hover:text-on-primary transition-colors"
               >
                 Save Settings
               </button>
             </div>
 
-            {/* Bottom close button — always visible */}
+            {/* Bottom close button */}
             <div className="p-5">
               <button
                 onClick={onClose}
-                className="w-full py-3 rounded-lg bg-surface-container border border-outline-variant text-sm font-mono text-on-surface-var hover:text-on-surface hover:border-primary-container transition-colors"
+                className="w-full py-3 bg-surface-container border border-outline-variant text-sm font-sans text-on-surface-variant hover:text-on-surface hover:border-primary-container transition-colors"
               >
                 Close Settings
               </button>
@@ -691,18 +744,18 @@
       return (
         <div className="flex flex-col items-center gap-3">
           <svg width="200" height="200" viewBox="0 0 200 200" className="drop-shadow-lg">
-            <circle cx="100" cy="100" r={radius} fill="none" stroke="#2c2a26" strokeWidth="10" />
+            <circle cx="100" cy="100" r={radius} fill="none" stroke="#353534" strokeWidth="10" />
             <circle
               cx="100" cy="100" r={radius}
-              fill="none" stroke="#e5c371" strokeWidth="10"
+              fill="none" stroke="#ffb77b" strokeWidth="10"
               strokeLinecap="round"
               strokeDasharray={circumference}
               strokeDashoffset={dashOffset}
               transform="rotate(-90 100 100)"
               className="transition-all duration-1000"
             />
-            <text x="100" y="92" textAnchor="middle" className="fill-on-surface font-mono text-4xl font-bold" style={{ fontSize: "42px" }}>{score}</text>
-            <text x="100" y="118" textAnchor="middle" className="fill-on-surface-var font-mono" style={{ fontSize: "12px" }}>Build Health</text>
+            <text x="100" y="92" textAnchor="middle" className="fill-on-surface font-sans text-4xl font-bold" style={{ fontSize: "42px" }}>{score}</text>
+            <text x="100" y="118" textAnchor="middle" className="fill-on-surface-variant font-sans" style={{ fontSize: "12px" }}>Build Health</text>
           </svg>
           <StatusBadge score={score} />
         </div>
@@ -721,7 +774,7 @@
       return (
         <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant">
           <span className={`w-2 h-2 rounded-full ${color}`} />
-          <span className="text-xs font-mono tracking-widest text-on-surface-var">{label}</span>
+          <span className="text-xs font-sans tracking-widest text-on-surface-variant">{label}</span>
         </div>
       );
     }
@@ -743,10 +796,10 @@
       return (
         <div className="grid grid-cols-3 gap-3">
           {cards.map(c => (
-            <div key={c.label} className="flex flex-col items-center gap-1 p-4 rounded-lg bg-surface border border-outline-variant">
+            <div key={c.label} className="flex flex-col items-center gap-1 p-4 bg-surface-container-low border border-outline-variant">
               <Icon name={c.icon} className="text-primary-container text-xl" />
-              <span className="text-lg font-mono font-semibold text-on-surface capitalize">{c.value}</span>
-              <span className="text-xs font-mono text-on-surface-var">{c.label}</span>
+              <span className="text-lg font-sans font-semibold text-on-surface capitalize">{c.value}</span>
+              <span className="text-xs font-sans text-on-surface-variant">{c.label}</span>
             </div>
           ))}
         </div>
@@ -807,11 +860,11 @@
         <div className="flex flex-col gap-2">
           <h3 className="font-serif text-base text-on-surface mb-1">Critical Actions</h3>
           {actions.map((a, i) => (
-            <div key={i} className={`flex items-start gap-3 p-3 rounded-lg bg-surface border border-outline-variant border-l-4 ${a.border} fade-in`} style={{ animationDelay: `${i * 50}ms` }}>
+            <div key={i} className={`flex items-start gap-3 p-3 bg-surface-container-low border border-outline-variant border-l-4 ${a.border} fade-in`} style={{ animationDelay: `${i * 50}ms` }}>
               <Icon name={a.icon} className={`${a.iconColor} text-xl mt-0.5`} />
               <div className="flex-1 min-w-0">
-                <div className="text-sm text-on-surface font-mono">{a.title}</div>
-                <div className="text-xs text-on-surface-var mt-0.5">{a.subtitle}</div>
+                <div className="text-sm text-on-surface font-sans">{a.title}</div>
+                <div className="text-xs text-on-surface-variant mt-0.5">{a.subtitle}</div>
               </div>
             </div>
           ))}
@@ -829,22 +882,22 @@
       return (
         <div className="flex flex-col gap-2">
           <h3 className="font-serif text-base text-on-surface">Next Big Upgrade</h3>
-          <div className="p-4 rounded-lg bg-surface-bright border border-primary-container/30">
+          <div className="p-4 bg-surface-container-high border border-primary-container/30">
             <div className="flex items-start gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary-container/20">
+              <div className="flex items-center justify-center w-10 h-10 bg-primary-container/20">
                 <Icon name="upgrade" className="text-primary text-2xl" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-mono font-semibold text-primary">{item.action}</div>
+                <div className="text-sm font-sans font-semibold text-primary">{item.action}</div>
                 <div className="text-sm text-on-surface mt-1">{item.detail}</div>
                 <div className="flex items-center gap-4 mt-2">
                   {item.cost && (
-                    <span className="text-xs font-mono text-primary-container">
+                    <span className="text-xs font-sans text-primary-container">
                       <Icon name="paid" className="text-sm align-middle mr-1" />
                       {item.cost}
                     </span>
                   )}
-                  {item.impact && <span className="text-xs font-mono text-on-surface-var">{item.impact}</span>}
+                  {item.impact && <span className="text-xs font-sans text-on-surface-variant">{item.impact}</span>}
                 </div>
               </div>
             </div>
@@ -867,23 +920,23 @@
         <div className="flex flex-col gap-2">
           <h3 className="font-serif text-base text-on-surface">Keystones vs Meta</h3>
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-lg bg-surface border border-outline-variant">
-              <div className="text-xs font-mono text-on-surface-var mb-2 tracking-widest">YOUR KEYSTONES</div>
+            <div className="p-3 bg-surface-container-low border border-outline-variant">
+              <div className="text-xs font-sans text-on-surface-variant mb-2 tracking-widest uppercase">YOUR KEYSTONES</div>
               <div className="flex flex-col gap-1">
                 {userKs.length > 0 ? userKs.map(k => (
-                  <div key={k} className="flex items-center gap-2 text-sm font-mono text-on-surface">
+                  <div key={k} className="flex items-center gap-2 text-sm font-sans text-on-surface">
                     <Icon name="check_circle" className="text-green-400 text-base" />{k}
                   </div>
                 )) : <span className="text-xs text-outline">None detected</span>}
               </div>
             </div>
-            <div className="p-3 rounded-lg bg-surface border border-outline-variant">
-              <div className="text-xs font-mono text-on-surface-var mb-2 tracking-widest">POPULAR FOR {charClass.toUpperCase()}</div>
+            <div className="p-3 bg-surface-container-low border border-outline-variant">
+              <div className="text-xs font-sans text-on-surface-variant mb-2 tracking-widest uppercase">POPULAR FOR {charClass.toUpperCase()}</div>
               <div className="flex flex-col gap-1">
                 {popular.map(k => (
-                  <div key={k.name} className="flex items-center gap-2 text-sm font-mono">
+                  <div key={k.name} className="flex items-center gap-2 text-sm font-sans">
                     <Icon name={k.hasIt ? "check_circle" : "cancel"} className={`text-base ${k.hasIt ? "text-green-400" : "text-red-400"}`} />
-                    <span className={k.hasIt ? "text-on-surface" : "text-on-surface-var"}>{k.name}</span>
+                    <span className={k.hasIt ? "text-on-surface" : "text-on-surface-variant"}>{k.name}</span>
                     <span className="text-xs text-outline ml-auto">{k.percentage}%</span>
                   </div>
                 ))}
@@ -908,7 +961,6 @@
         api("/api/character/saved").then(data => { if (Array.isArray(data)) setSavedChars(data); });
       }, []);
 
-      // Fuzzy filter saved chars as user types
       const filteredSaved = useMemo(() => {
         const q = query.trim().toLowerCase();
         if (!q || q.includes("poe.ninja")) return [];
@@ -968,7 +1020,7 @@
         <div className="flex flex-col items-center justify-center h-full gap-6 px-8">
           <div className="w-full max-w-sm">
             <h2 className="font-serif text-xl text-on-surface mb-1 text-center">Welcome to LAMA</h2>
-            <p className="text-on-surface-var font-mono text-sm mb-6 text-center">
+            <p className="text-on-surface-variant font-sans text-sm mb-6 text-center">
               Look up your character to begin build analysis
             </p>
 
@@ -976,19 +1028,19 @@
               value={query}
               onChange={e => { setQuery(e.target.value); setSuggestions([]); setError(""); }}
               placeholder="Name, account/character, or poe.ninja URL"
-              className="w-full px-3 py-2 mb-2 rounded bg-surface-container border border-outline-variant text-sm text-on-surface placeholder-outline font-mono focus:border-primary-container focus:outline-none"
+              className="w-full px-3 py-2 mb-2 bg-surface-container border border-outline-variant text-sm text-on-surface placeholder-outline font-sans focus:border-primary-container focus:outline-none"
               onKeyDown={e => { if (e.key === "Enter") handleSmartLookup(); }}
             />
             {filteredSaved.length > 0 && !loading && (
-              <div className="mb-2 rounded border border-outline-variant bg-surface-container overflow-hidden">
+              <div className="mb-2 border border-outline-variant bg-surface-container overflow-hidden">
                 {filteredSaved.slice(0, 5).map((m, i) => (
                   <div
                     key={i}
                     onClick={() => handleSavedClick(m.account, m.name)}
-                    className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-surface-dim transition-colors border-b border-outline-variant last:border-0"
+                    className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-surface-container-lowest transition-colors border-b border-outline-variant last:border-0"
                   >
-                    <span className="text-sm text-on-surface font-mono">{m.name}</span>
-                    <span className="text-xs text-on-surface-var">Lv{m.level} {m.class}</span>
+                    <span className="text-sm text-on-surface font-sans">{m.name}</span>
+                    <span className="text-xs text-on-surface-variant">Lv{m.level} {m.class}</span>
                   </div>
                 ))}
               </div>
@@ -996,24 +1048,24 @@
             <button
               onClick={() => handleSmartLookup()}
               disabled={loading || !query.trim()}
-              className="w-full py-3 rounded-lg bg-primary-container text-surface-dim text-sm font-mono font-semibold hover:bg-primary transition-colors disabled:opacity-70"
+              className="w-full py-3 bg-primary-container text-on-primary text-sm font-sans font-semibold hover:bg-primary transition-colors disabled:opacity-70"
             >
               {loading ? "Looking up..." : "Look Up Character"}
             </button>
-            {error && <p className="mt-2 text-xs text-error font-mono">{error}</p>}
+            {error && <p className="mt-2 text-xs text-error font-sans">{error}</p>}
             {suggestions.length > 0 && (
-              <div className="mt-2 rounded border border-outline-variant bg-surface-container overflow-hidden">
+              <div className="mt-2 border border-outline-variant bg-surface-container overflow-hidden">
                 {suggestions.map((s, i) => (
                   <div
                     key={i}
                     onClick={() => handleSuggestionClick(s.account, s.name)}
-                    className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-surface-dim transition-colors border-b border-outline-variant last:border-0"
+                    className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-surface-container-lowest transition-colors border-b border-outline-variant last:border-0"
                   >
                     <div>
-                      <span className="text-sm text-on-surface font-mono">{s.name}</span>
-                      <span className="ml-2 text-xs text-outline font-mono">{s.account}</span>
+                      <span className="text-sm text-on-surface font-sans">{s.name}</span>
+                      <span className="ml-2 text-xs text-outline font-sans">{s.account}</span>
                     </div>
-                    <span className="text-xs text-on-surface-var">Lv{s.level} {s.class}</span>
+                    <span className="text-xs text-on-surface-variant">Lv{s.level} {s.class}</span>
                   </div>
                 ))}
               </div>
@@ -1022,19 +1074,19 @@
 
           {savedChars.length > 0 && !query.trim() && (
             <div className="w-full max-w-sm">
-              <h3 className="text-xs font-mono tracking-widest text-on-surface-var mb-3">SAVED CHARACTERS</h3>
+              <h3 className="text-xs font-sans tracking-widest text-on-surface-variant mb-3 uppercase">SAVED CHARACTERS</h3>
               <div className="flex flex-col gap-2">
                 {savedChars.map((acctGroup, i) => (
                   <div key={i}>
-                    <div className="text-xs text-outline mb-1 font-mono">{acctGroup.accountName}</div>
+                    <div className="text-xs text-outline mb-1 font-sans">{acctGroup.accountName}</div>
                     {(acctGroup.characters || []).map((ch, j) => (
                       <div
                         key={j}
                         onClick={() => handleSavedClick(acctGroup.accountName, ch.name)}
-                        className="flex items-center justify-between px-3 py-2 rounded bg-surface-container border border-outline-variant cursor-pointer hover:border-primary-container transition-colors"
+                        className="flex items-center justify-between px-3 py-2 bg-surface-container border border-outline-variant cursor-pointer hover:border-primary-container transition-colors"
                       >
-                        <span className="text-sm text-on-surface font-mono">{ch.name}</span>
-                        <span className="text-xs text-on-surface-var">Lv{ch.level} {ch.class}</span>
+                        <span className="text-sm text-on-surface font-sans">{ch.name}</span>
+                        <span className="text-xs text-on-surface-variant">Lv{ch.level} {ch.class}</span>
                       </div>
                     ))}
                   </div>
@@ -1047,7 +1099,7 @@
     }
 
     // -----------------------------------------------------------------------
-    // PULSE Tab
+    // PULSE Tab (Overview)
     // -----------------------------------------------------------------------
     function PulseTab({ charData, insights, improvement, comparison, whyInsights, onLookup }) {
       if (!charData) {
@@ -1058,7 +1110,7 @@
         return (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-            <span className="text-sm text-on-surface-var font-mono">Analyzing build...</span>
+            <span className="text-sm text-on-surface-variant font-sans">Analyzing build...</span>
           </div>
         );
       }
@@ -1071,17 +1123,15 @@
       const qualityGroup = groups.find(g => g.category === "quality");
       const allStats = whyInsights?.stats || [];
 
-      // Extract resist data from stats
       const resists = allStats.filter(s => s.title.includes("Resistance"));
       const nonResistStats = allStats.filter(s => !s.title.includes("Resistance"));
 
-      // Projection state: toggled improvements
-      const [projections, setProjections] = useState({});  // { itemName: true/false }
+      // Projection state
+      const [projections, setProjections] = useState({});
       const toggleProjection = useCallback((name) => {
         setProjections(prev => ({ ...prev, [name]: !prev[name] }));
       }, []);
 
-      // Calculate projected stat deltas from toggled items
       const projectedDeltas = useMemo(() => {
         const deltas = { dps: 0, ehp: 0 };
         const synergyMap = whyInsights?.synergyMap || [];
@@ -1093,11 +1143,10 @@
             }
           }
         }
-        // Also check improvement path items
         for (const g of groups) {
           for (const item of g.items) {
             if (projections[item.title?.replace("Allocate ", "").replace("Missing: ", "")] && item.estimatedValue > 0) {
-              // Avoid double-counting — synergy map already has these
+              // Avoid double-counting
             }
           }
         }
@@ -1108,12 +1157,12 @@
       const projectedDps = (sc?.dps || 0) + projectedDeltas.dps;
       const hasProjections = projectedDeltas.dps > 0 || projectedDeltas.ehp > 0;
 
-      // Gear state — integrated into Build tab
+      // Gear state
       const [selectedGearSlot, setSelectedGearSlot] = useState(null);
-      const [leftPanel, setLeftPanel] = useState("survival"); // "survival" or "gear"
+      const [leftPanel, setLeftPanel] = useState("survival");
       const gearSlots = insights?.slotSummary || [];
 
-      // Passive tree analysis — disabled temporarily for debugging
+      // Passive tree analysis
       const [treeAnalysis, setTreeAnalysis] = useState(null);
       const [treeLoading, setTreeLoading] = useState(false);
       // useEffect disabled — tree analysis was causing blank screens
@@ -1141,9 +1190,9 @@
 
       return (
         <div className="flex flex-col gap-0 p-6">
-          {/* ── Scorecard Bar ─────────────────────────────── */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <ScoreStatCard
+          {/* Stat Cards Row */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <StitchStatCard
               label="Effective HP"
               value={sc ? sc.ehp?.toLocaleString() : "..."}
               context={sc?.ehpContext || ""}
@@ -1152,7 +1201,7 @@
               projected={hasProjections && projectedDeltas.ehp > 0 ? projectedEhp : null}
               projectedDelta={projectedDeltas.ehp}
             />
-            <ScoreStatCard
+            <StitchStatCard
               label="Primary DPS"
               value={sc?.dpsLabel || "..."}
               context="Main skill damage"
@@ -1161,7 +1210,7 @@
               projected={hasProjections && projectedDeltas.dps > 0 ? projectedDps : null}
               projectedDelta={projectedDeltas.dps}
             />
-            <ScoreStatCard
+            <StitchStatCard
               label="Resistances"
               value={sc?.resistStatus === "positive" ? "Capped" : "Gaps"}
               context={sc?.resistSummary || ""}
@@ -1170,25 +1219,25 @@
             />
           </div>
 
-          {/* ── 3-Column Layout ───────────────────────────── */}
+          {/* 3-Column Layout */}
           <div className="grid grid-cols-12 gap-6" style={{ minHeight: "calc(100vh - 300px)" }}>
 
-            {/* ── LEFT: Survival / Gear Panel ──────────── */}
+            {/* LEFT: Defense / Gear Panel */}
             <div className="col-span-3 flex flex-col gap-0">
-              {/* Panel toggle tabs */}
+              {/* Panel toggle */}
               <div className="flex border-b border-outline-variant/20">
                 <button
                   onClick={() => { setLeftPanel("survival"); setSelectedGearSlot(null); }}
-                  className={`flex-1 py-1.5 text-[12px] font-mono uppercase tracking-widest transition-all ${
-                    leftPanel === "survival" ? "text-primary-container border-b-2 border-primary-container" : "text-on-surface-var hover:text-on-surface"
+                  className={`flex-1 py-1.5 text-[12px] font-sans uppercase tracking-widest transition-all ${
+                    leftPanel === "survival" ? "text-primary-container border-b-2 border-primary-container" : "text-on-surface-variant hover:text-on-surface"
                   }`}
                 >
                   <Icon name="shield" className="text-xs mr-1 align-middle" />Survival
                 </button>
                 <button
                   onClick={() => setLeftPanel("gear")}
-                  className={`flex-1 py-1.5 text-[12px] font-mono uppercase tracking-widest transition-all ${
-                    leftPanel === "gear" ? "text-secondary border-b-2 border-secondary" : "text-on-surface-var hover:text-on-surface"
+                  className={`flex-1 py-1.5 text-[12px] font-sans uppercase tracking-widest transition-all ${
+                    leftPanel === "gear" ? "text-secondary border-b-2 border-secondary" : "text-on-surface-variant hover:text-on-surface"
                   }`}
                 >
                   <Icon name="inventory_2" className="text-xs mr-1 align-middle" />Gear
@@ -1196,8 +1245,8 @@
               </div>
 
               {leftPanel === "survival" ? (
-                <div className="bg-surface-container p-4 border-l-2 border-primary-container/40 flex-1 overflow-y-auto">
-                  {/* Resist bars — compact */}
+                <div className="bg-surface-container-low p-4 border-l-2 border-primary-container/40 flex-1 overflow-y-auto">
+                  {/* Resist bars */}
                   <div className="space-y-2 mb-4">
                     {[
                       { name: "Fire", key: "Fire Resistance", color: "bg-red-400" },
@@ -1212,13 +1261,13 @@
                       const pct = Math.max(0, Math.min(100, val));
                       return (
                         <div key={r.name} className="space-y-0.5">
-                          <div className="flex justify-between text-[12px] uppercase tracking-widest font-mono">
-                            <span className="text-on-surface-var">{r.name}</span>
+                          <div className="flex justify-between text-[12px] uppercase tracking-widest font-sans">
+                            <span className="text-on-surface-variant">{r.name}</span>
                             <span className={capped ? "text-primary-container" : "text-error"}>
                               {val > 0 ? `${Math.min(val, 75)}%` : "?"}
                             </span>
                           </div>
-                          <div className="h-1 bg-surface-dim w-full">
+                          <div className="h-1 bg-surface-container-lowest w-full">
                             <div className={`h-full ${capped ? r.color : "bg-error"}`} style={{ width: `${pct}%` }} />
                           </div>
                         </div>
@@ -1229,7 +1278,7 @@
                   {/* Survival issues */}
                   {survivalGroup && survivalGroup.items.length > 0 && (
                     <div className="space-y-1.5">
-                      <p className="text-[12px] font-mono uppercase tracking-widest text-on-surface-var">Issues ({survivalGroup.items.length})</p>
+                      <p className="text-[12px] font-sans uppercase tracking-widest text-on-surface-variant">Issues ({survivalGroup.items.length})</p>
                       {survivalGroup.items.slice(0, 5).map((e, i) => (
                         <SurvivalItem key={i} explanation={e} />
                       ))}
@@ -1237,13 +1286,13 @@
                   )}
                 </div>
               ) : (
-                <div className="bg-surface-container p-4 border-l-2 border-secondary/40 flex-1 overflow-y-auto">
+                <div className="bg-surface-container-low p-4 border-l-2 border-secondary/40 flex-1 overflow-y-auto">
                   {/* Gear slot list */}
                   {selectedGearSlot ? (
                     <div>
                       <button
                         onClick={() => setSelectedGearSlot(null)}
-                        className="flex items-center gap-1 text-[12px] font-mono text-on-surface-var hover:text-on-surface mb-3"
+                        className="flex items-center gap-1 text-[12px] font-sans text-on-surface-variant hover:text-on-surface mb-3"
                       >
                         <Icon name="arrow_back" className="text-xs" /> All Gear
                       </button>
@@ -1261,16 +1310,16 @@
                         return (
                           <div
                             key={sl.slot}
-                            className="flex items-center gap-2 p-2 cursor-pointer hover:bg-surface-bright transition-colors"
+                            className="flex items-center gap-2 p-2 cursor-pointer hover:bg-surface-container-high transition-colors"
                             onClick={() => setSelectedGearSlot(sl.slot)}
                           >
-                            <Icon name={slotIcon(sl.slot)} className="text-on-surface-var text-sm" />
+                            <Icon name={slotIcon(sl.slot)} className="text-on-surface-variant text-sm" />
                             <div className="flex-1 min-w-0">
-                              <div className="text-[12px] font-mono text-on-surface-var">{sl.slotDisplay}</div>
-                              <div className="text-xs font-mono text-on-surface truncate">{sl.itemName}</div>
+                              <div className="text-[12px] font-sans text-on-surface-variant">{sl.slotDisplay}</div>
+                              <div className="text-xs font-sans text-on-surface truncate">{sl.itemName}</div>
                             </div>
                             {hasDeadMods && <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />}
-                            <span className={`text-[12px] font-mono px-1 py-0.5 ${tierColor(sl.avgTier)}`}>
+                            <span className={`text-[12px] font-sans px-1 py-0.5 ${tierColor(sl.avgTier)}`}>
                               T{sl.avgTier}
                             </span>
                           </div>
@@ -1282,7 +1331,7 @@
               )}
             </div>
 
-            {/* ── CENTER: Interactive Synergy Map ────────── */}
+            {/* CENTER: Synergy Map */}
             <SynergyMapPanel
               synergyMap={whyInsights?.synergyMap}
               meta={whyInsights?.meta}
@@ -1290,16 +1339,15 @@
               onToggle={toggleProjection}
             />
 
-            {/* ── RIGHT: Improvement Path ──────────────── */}
+            {/* RIGHT: Improvement Path */}
             <div className="col-span-3 flex flex-col gap-4">
-              <div className="bg-surface-container p-5 border-l-2 border-secondary/40 flex-1">
-                <h4 className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-secondary mb-4">
+              <div className="bg-surface-container-low p-5 border-l-2 border-secondary/40 flex-1">
+                <h4 className="flex items-center gap-2 text-xs font-sans uppercase tracking-widest text-secondary mb-4">
                   <Icon name="trending_up" className="text-base" />
                   Improvement Path
                 </h4>
 
                 <div className="space-y-3">
-                  {/* Merge all action items from groups, sorted by severity */}
                   {groups.flatMap(g => g.items.filter(e => e.severity === "critical" || e.context === "action"))
                     .filter((e, i, arr) => arr.findIndex(x => x.title === e.title) === i)
                     .slice(0, 6)
@@ -1319,22 +1367,22 @@
 
                 <NextBigUpgradeCard improvement={improvement} />
 
-                {/* ── Perk Tree Swaps ── */}
+                {/* Perk Tree Swaps */}
                 {treeLoading && (
                   <div className="mt-4 pt-4 border-t border-outline-variant/20">
                     <div className="flex items-center gap-2 py-2">
                       <div className="w-3 h-3 border-2 border-tertiary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-                      <span className="text-xs font-mono text-on-surface-var">Analyzing passive tree...</span>
+                      <span className="text-xs font-sans text-on-surface-variant">Analyzing passive tree...</span>
                     </div>
                   </div>
                 )}
                 {!treeLoading && treeAnalysis && Array.isArray(treeAnalysis.swapRecommendations) && treeAnalysis.swapRecommendations.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-outline-variant/20">
-                    <h4 className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-tertiary mb-3">
+                    <h4 className="flex items-center gap-2 text-xs font-sans uppercase tracking-widest text-tertiary mb-3">
                       <Icon name="swap_horiz" className="text-base" />
                       Perk Swaps
                       {treeAnalysis.targetName && (
-                        <span className="text-on-surface-var font-normal">vs {treeAnalysis.targetName}</span>
+                        <span className="text-on-surface-variant font-normal">vs {treeAnalysis.targetName}</span>
                       )}
                     </h4>
                     <div className="space-y-2">
@@ -1345,9 +1393,9 @@
                   </div>
                 )}
 
-                {/* ── Compare to Build ── */}
+                {/* Compare to Build */}
                 <div className="mt-4 pt-4 border-t border-outline-variant/20">
-                  <h4 className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-primary-container mb-3">
+                  <h4 className="flex items-center gap-2 text-xs font-sans uppercase tracking-widest text-primary-container mb-3">
                     <Icon name="compare_arrows" className="text-base" />
                     Compare to Build
                   </h4>
@@ -1356,21 +1404,21 @@
                       value={compareQuery}
                       onChange={e => { setCompareQuery(e.target.value); setCompareError(""); }}
                       placeholder="poe.ninja URL or account/char"
-                      className="flex-1 px-2 py-1.5 bg-surface-dim border border-outline-variant text-xs font-mono text-on-surface placeholder-outline focus:border-primary-container focus:outline-none"
+                      className="flex-1 px-2 py-1.5 bg-surface-container-lowest border border-outline-variant text-xs font-sans text-on-surface placeholder-outline focus:border-primary-container focus:outline-none"
                       onKeyDown={e => { if (e.key === "Enter") handleCompare(); }}
                     />
                     <button
                       onClick={handleCompare}
                       disabled={compareLoading || !compareQuery.trim()}
-                      className="px-3 py-1.5 bg-primary-container text-surface-dim text-xs font-mono hover:bg-primary transition-colors disabled:opacity-50"
+                      className="px-3 py-1.5 bg-primary-container text-on-primary text-xs font-sans hover:bg-primary transition-colors disabled:opacity-50"
                     >
                       {compareLoading ? "..." : "Diff"}
                     </button>
                   </div>
-                  {compareError && <p className="text-xs text-error font-mono mb-2">{compareError}</p>}
+                  {compareError && <p className="text-xs text-error font-sans mb-2">{compareError}</p>}
                   {compareResult && (
                     <div className="space-y-1.5">
-                      <div className="text-xs font-mono text-on-surface-var mb-2">
+                      <div className="text-xs font-sans text-on-surface-variant mb-2">
                         vs <span className="text-primary-container">{compareResult.target?.name}</span>
                         {" "}({compareResult.target?.ascendancy} Lv{compareResult.target?.level})
                         {" — "}{compareResult.player_dps} vs {compareResult.target_dps} DPS
@@ -1379,7 +1427,7 @@
                         <ComparisonDiffCard key={i} diff={d} />
                       ))}
                       {compareResult.total_diffs > 10 && (
-                        <p className="text-xs font-mono text-on-surface-var">+{compareResult.total_diffs - 10} more differences</p>
+                        <p className="text-xs font-sans text-on-surface-variant">+{compareResult.total_diffs - 10} more differences</p>
                       )}
                     </div>
                   )}
@@ -1391,49 +1439,59 @@
       );
     }
 
-    // ── Pulse sub-components ──────────────────────────────
+    // -- Stitch Stat Card (new design) ------------------------------------
 
-    function ScoreStatCard({ label, value, context, status, icon, projected, projectedDelta }) {
-      const borderColor = { critical: "border-error/40", warning: "border-yellow-500/40", positive: "border-primary-container/40", info: "border-outline-variant/30" }[status] || "border-outline-variant/30";
-      const textColor = { critical: "text-error", warning: "text-yellow-400", positive: "text-primary-container", info: "text-on-surface" }[status] || "";
+    function StitchStatCard({ label, value, context, status, icon, projected, projectedDelta }) {
       const hasProjection = projected != null && projectedDelta > 0;
       const fmtProjected = projected != null ? (projected >= 1e6 ? `${(projected/1e6).toFixed(1)}M` : projected >= 1e3 ? `${(projected/1e3).toFixed(0)}K` : projected.toLocaleString()) : "";
       const fmtDelta = projectedDelta > 0 ? (projectedDelta >= 1e6 ? `+${(projectedDelta/1e6).toFixed(1)}M` : projectedDelta >= 1e3 ? `+${(projectedDelta/1e3).toFixed(0)}K` : `+${projectedDelta.toLocaleString()}`) : "";
+
+      // Progress bar percentage based on status
+      const barPct = { critical: 25, warning: 55, positive: 100, info: 50 }[status] || 50;
+
       return (
-        <div className={`bg-surface-container px-4 py-3 border-l-4 ${hasProjection ? "border-primary-container" : borderColor} transition-all`}>
-          <p className="text-[12px] uppercase tracking-widest text-on-surface-var font-mono mb-1">{label}</p>
-          <div className="flex items-baseline gap-2">
-            {hasProjection ? (
-              <>
-                <span className="text-xl font-serif text-on-surface-var line-through opacity-70">{value}</span>
-                <span className="text-2xl font-serif font-bold tracking-tight text-primary-container">{fmtProjected}</span>
-              </>
-            ) : (
-              <span className={`text-2xl font-serif font-bold tracking-tight ${textColor}`}>{value}</span>
-            )}
+        <div className="bg-surface-container-low p-6">
+          <div className="flex justify-between items-start mb-4">
+            <span className="uppercase text-[10px] tracking-widest text-on-surface/60 font-bold">{label}</span>
+            <Icon name={icon} className="text-primary-container" />
           </div>
           {hasProjection ? (
-            <p className="text-xs font-mono text-primary-container mt-2">{fmtDelta} with selected improvements</p>
+            <>
+              <div className="flex items-baseline gap-2 mb-2">
+                <span className="font-serif text-3xl text-on-surface-variant line-through opacity-70 tracking-tighter">{value}</span>
+                <span className="font-serif text-5xl text-primary-container tracking-tighter">{fmtProjected}</span>
+              </div>
+            </>
           ) : (
-            <p className="text-xs font-mono text-on-surface-var mt-2">{context}</p>
+            <div className="font-serif text-5xl text-primary-container mb-2 tracking-tighter">{value}</div>
+          )}
+          <div className="w-full h-1 bg-surface-container-lowest mb-3">
+            <div className="h-full bg-primary-container transition-all duration-500" style={{ width: `${barPct}%` }} />
+          </div>
+          {hasProjection ? (
+            <p className="text-[11px] text-primary-container uppercase tracking-wider">{fmtDelta} with selected improvements</p>
+          ) : (
+            <p className="text-[11px] text-on-surface/40 uppercase tracking-wider">{context}</p>
           )}
         </div>
       );
     }
 
+    // -- Pulse sub-components ------------------------------------------------
+
     function SurvivalItem({ explanation }) {
       const e = explanation;
       const iconName = { critical: "error", warning: "warning", positive: "check_circle", info: "info" }[e.severity] || "info";
-      const iconColor = { critical: "text-error", warning: "text-yellow-400", positive: "text-primary-container", info: "text-on-surface-var" }[e.severity] || "";
+      const iconColor = { critical: "text-error", warning: "text-yellow-400", positive: "text-primary-container", info: "text-on-surface-variant" }[e.severity] || "";
       const [open, setOpen] = useState(false);
       return (
-        <div className="bg-surface-dim/50 p-2 cursor-pointer hover:bg-surface-dim transition-colors" onClick={() => setOpen(!open)}>
+        <div className="bg-surface-container-lowest p-2 cursor-pointer hover:bg-surface-container transition-colors" onClick={() => setOpen(!open)}>
           <div className="flex items-center gap-2">
             <Icon name={iconName} className={`text-xs ${iconColor}`} />
-            <span className="text-xs font-mono font-bold text-on-surface flex-1 truncate">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</span>
-            {e.adoptionPct > 0 && <span className="text-[12px] font-mono text-on-surface-var">{e.adoptionPct.toFixed(0)}%</span>}
+            <span className="text-xs font-sans font-bold text-on-surface flex-1 truncate">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</span>
+            {e.adoptionPct > 0 && <span className="text-[12px] font-sans text-on-surface-variant">{e.adoptionPct.toFixed(0)}%</span>}
           </div>
-          {open && <p className="text-[12px] font-mono text-on-surface-var mt-1 leading-relaxed pl-5">{e.text}</p>}
+          {open && <p className="text-[12px] font-sans text-on-surface-variant mt-1 leading-relaxed pl-5">{e.text}</p>}
         </div>
       );
     }
@@ -1453,15 +1511,15 @@
 
       const catColors = {
         dps: { border: "border-secondary", text: "text-secondary", bg: "bg-secondary/10", glow: "rgba(233, 193, 118, 0.25)" },
-        survival: { border: "border-primary-container", text: "text-primary-container", bg: "bg-primary-container/10", glow: "rgba(229, 195, 113, 0.25)" },
-        clear_speed: { border: "border-tertiary", text: "text-tertiary", bg: "bg-tertiary/10", glow: "rgba(145, 205, 255, 0.25)" },
+        survival: { border: "border-primary-container", text: "text-primary-container", bg: "bg-primary-container/10", glow: "rgba(255, 183, 123, 0.25)" },
+        clear_speed: { border: "border-tertiary", text: "text-tertiary", bg: "bg-tertiary/10", glow: "rgba(181, 234, 255, 0.25)" },
       };
       const colors = catColors[active.category] || catColors.dps;
 
       return (
         <div className="col-span-6 relative flex flex-col">
           {/* Grid backdrop */}
-          <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "radial-gradient(circle, #99907f 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
+          <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "radial-gradient(circle, #9f8d81 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
 
           <div className="relative z-10">
             {/* Category tabs */}
@@ -1473,10 +1531,10 @@
                   <button
                     key={cat.category}
                     onClick={() => setActiveCategory(cat.category)}
-                    className={`px-4 py-2 text-xs font-mono uppercase tracking-widest transition-all ${
+                    className={`px-4 py-2 text-xs font-sans uppercase tracking-widest transition-all ${
                       isActive
                         ? `${tabColor.bg} ${tabColor.text} border-b-2 ${tabColor.border}`
-                        : "text-on-surface-var hover:text-on-surface"
+                        : "text-on-surface-variant hover:text-on-surface"
                     }`}
                   >
                     <Icon name={cat.icon} className="text-sm mr-1 align-middle" />
@@ -1488,7 +1546,6 @@
 
             {/* Central output node */}
             {(() => {
-              // Calculate projected value for this category
               const toggledDelta = active.missing
                 .filter(m => projections[m.name] && m.estimatedValue > 0)
                 .reduce((sum, m) => sum + m.estimatedValue, 0);
@@ -1496,13 +1553,12 @@
 
               return (
                 <div className={`mx-auto w-44 bg-surface-container border-2 ${colors.border} flex flex-col items-center justify-center text-center mb-6 py-5 px-4 transition-all`} style={{ boxShadow: `0 0 ${hasProjected ? 35 : 25}px ${colors.glow}` }}>
-                  <span className={`text-[12px] uppercase tracking-[0.2em] ${colors.text} font-mono mb-1`}>{active.label}</span>
+                  <span className={`text-[12px] uppercase tracking-[0.2em] ${colors.text} font-sans mb-1`}>{active.label}</span>
                   {hasProjected ? (
                     <>
-                      <span className="text-lg font-serif text-on-surface-var line-through opacity-60 leading-none">{active.value || "?"}</span>
+                      <span className="text-lg font-serif text-on-surface-variant line-through opacity-60 leading-none">{active.value || "?"}</span>
                       <span className="text-3xl font-serif font-bold text-primary-container leading-none">
                         {(() => {
-                          // Parse current value and add delta
                           const curMatch = (active.value || "").match(/([\d,.]+)\s*([KkMm]?)/);
                           if (curMatch) {
                             let cur = parseFloat(curMatch[1].replace(",",""));
@@ -1514,14 +1570,14 @@
                           return active.value;
                         })()}
                       </span>
-                      <span className="text-[12px] font-mono text-primary-container mt-1">
+                      <span className="text-[12px] font-sans text-primary-container mt-1">
                         +{toggledDelta >= 1e6 ? `${(toggledDelta/1e6).toFixed(1)}M` : toggledDelta >= 1e3 ? `${(toggledDelta/1e3).toFixed(0)}K` : toggledDelta.toLocaleString()} projected
                       </span>
                     </>
                   ) : (
                     <>
                       <span className="text-3xl font-serif font-bold text-on-surface leading-none">{active.value || "?"}</span>
-                      <span className="text-[12px] uppercase tracking-widest text-on-surface-var mt-2">
+                      <span className="text-[12px] uppercase tracking-widest text-on-surface-variant mt-2">
                         {active.contributors.length} active · {active.missing.length} missing
                       </span>
                     </>
@@ -1530,10 +1586,10 @@
               );
             })()}
 
-            {/* Contributors: what's building into this stat */}
+            {/* Contributors */}
             {active.contributors.length > 0 && (
               <div className="mb-4">
-                <p className="text-[12px] font-mono uppercase tracking-widest text-on-surface-var mb-2 px-2">
+                <p className="text-[12px] font-sans uppercase tracking-widest text-on-surface-variant mb-2 px-2">
                   <Icon name="check_circle" className="text-xs text-primary-container mr-1 align-middle" />
                   Active Contributors
                 </p>
@@ -1545,10 +1601,10 @@
               </div>
             )}
 
-            {/* Missing: what could improve this stat */}
+            {/* Missing */}
             {active.missing.length > 0 && (
               <div className="mb-4">
-                <p className="text-[12px] font-mono uppercase tracking-widest text-on-surface-var mb-2 px-2">
+                <p className="text-[12px] font-sans uppercase tracking-widest text-on-surface-variant mb-2 px-2">
                   <Icon name="add_circle" className="text-xs text-error mr-1 align-middle" />
                   Missing — Would Improve {active.label}
                 </p>
@@ -1569,8 +1625,8 @@
 
             {/* Meta context */}
             {meta?.length > 0 && (
-              <div className="p-3 bg-surface-dim/50 border border-outline-variant/10 text-center mt-2">
-                <p className="text-[12px] font-mono text-on-surface-var">{meta[0].text}</p>
+              <div className="p-3 bg-surface-container-lowest border border-outline-variant/10 text-center mt-2">
+                <p className="text-[12px] font-sans text-on-surface-variant">{meta[0].text}</p>
               </div>
             )}
           </div>
@@ -1591,12 +1647,11 @@
               ? "bg-primary-container/10 border-primary-container/40"
               : positive
                 ? "bg-surface-container border-outline-variant/20 hover:border-outline"
-                : "bg-surface-dim border-error/20 hover:border-error/40"
+                : "bg-surface-container-lowest border-error/20 hover:border-error/40"
           }`}
           onClick={() => setOpen(!open)}
         >
           <div className="flex items-start gap-2">
-            {/* Toggle checkbox for missing items */}
             {!positive && onToggle && (
               <div
                 className={`w-4 h-4 mt-px shrink-0 border flex items-center justify-center cursor-pointer transition-all ${
@@ -1604,26 +1659,26 @@
                 }`}
                 onClick={(e) => { e.stopPropagation(); onToggle(); }}
               >
-                {isToggled && <Icon name="check" className="text-xs text-surface-dim" />}
+                {isToggled && <Icon name="check" className="text-xs text-surface-container-lowest" />}
               </div>
             )}
             {positive && <Icon name={typeIcons[c.sourceType] || "info"} className={`text-xs mt-px ${colors.text}`} />}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className={`text-xs font-mono font-bold truncate ${isToggled ? "text-primary-container" : "text-on-surface"}`}>{c.name}</span>
+                <span className={`text-xs font-sans font-bold truncate ${isToggled ? "text-primary-container" : "text-on-surface"}`}>{c.name}</span>
                 {hasEstimate && (
-                  <span className={`text-[12px] font-mono font-bold ${isToggled ? "text-primary-container" : positive ? colors.text : "text-error"}`}>
+                  <span className={`text-[12px] font-sans font-bold ${isToggled ? "text-primary-container" : positive ? colors.text : "text-error"}`}>
                     {c.estimatedPct > 0 ? `${positive ? "" : "+"}${c.estimatedPct.toFixed(0)}%` : ""}
                   </span>
                 )}
-                {c.adoptionPct > 0 && <span className="text-xs font-mono text-on-surface-var">{c.adoptionPct.toFixed(0)}% use</span>}
+                {c.adoptionPct > 0 && <span className="text-xs font-sans text-on-surface-variant">{c.adoptionPct.toFixed(0)}% use</span>}
               </div>
               {hasEstimate && c.estimatedValue > 0 && (
-                <div className={`text-xs font-mono font-bold mb-0.5 ${isToggled ? "text-primary-container" : positive ? "text-on-surface" : "text-error"}`}>
+                <div className={`text-xs font-sans font-bold mb-0.5 ${isToggled ? "text-primary-container" : positive ? "text-on-surface" : "text-error"}`}>
                   {positive ? "" : "+"}{c.estimatedValue >= 1000 ? (c.estimatedValue >= 1e6 ? `${(c.estimatedValue/1e6).toFixed(1)}M` : `${(c.estimatedValue/1e3).toFixed(0)}K`) : c.estimatedValue.toFixed(0)}
                 </div>
               )}
-              <p className={`text-[12px] font-mono ${positive ? "text-on-surface-var" : isToggled ? "text-primary-container/70" : "text-error/80"} ${open ? "" : "truncate"} leading-relaxed`}>
+              <p className={`text-[12px] font-sans ${positive ? "text-on-surface-variant" : isToggled ? "text-primary-container/70" : "text-error/80"} ${open ? "" : "truncate"} leading-relaxed`}>
                 {open ? (c.detail || c.contribution) : c.contribution}
               </p>
             </div>
@@ -1635,17 +1690,17 @@
     function SynergyNode({ explanation, type }) {
       const e = explanation;
       const borderColor = { damage: "border-secondary/30", clear: "border-tertiary/30", quality: "border-outline-variant/20" }[type] || "border-outline-variant/20";
-      const labelColor = { damage: "text-secondary", clear: "text-tertiary", quality: "text-on-surface-var" }[type] || "";
+      const labelColor = { damage: "text-secondary", clear: "text-tertiary", quality: "text-on-surface-variant" }[type] || "";
       const typeLabel = { damage: "Damage", clear: "Clear Speed", quality: "Quality" }[type] || "";
       const [open, setOpen] = useState(false);
       return (
         <div className={`bg-surface-container p-3 border ${borderColor} hover:border-primary-container/50 transition-all cursor-pointer`} onClick={() => setOpen(!open)}>
           <div className="flex justify-between items-start mb-1">
-            <span className={`text-xs font-mono uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
-            {e.adoptionPct > 0 && <span className="text-xs font-mono text-on-surface-var">{e.adoptionPct.toFixed(0)}%</span>}
+            <span className={`text-xs font-sans uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
+            {e.adoptionPct > 0 && <span className="text-xs font-sans text-on-surface-variant">{e.adoptionPct.toFixed(0)}%</span>}
           </div>
-          <h5 className="text-xs font-mono font-bold uppercase tracking-tight text-on-surface">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</h5>
-          {open && <p className="text-[12px] font-mono text-on-surface-var mt-2 leading-relaxed">{e.text}</p>}
+          <h5 className="text-xs font-sans font-bold uppercase tracking-tight text-on-surface">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</h5>
+          {open && <p className="text-[12px] font-sans text-on-surface-variant mt-2 leading-relaxed">{e.text}</p>}
         </div>
       );
     }
@@ -1656,33 +1711,33 @@
       const saves = s.netPoints > 0;
       const costs = s.netPoints < 0;
       const pointText = saves ? `saves ${s.netPoints} pts` : costs ? `costs ${-s.netPoints} extra` : "same cost";
-      const pointColor = saves ? "text-primary-container" : costs ? "text-error" : "text-on-surface-var";
+      const pointColor = saves ? "text-primary-container" : costs ? "text-error" : "text-on-surface-variant";
 
       return (
-        <div className="bg-surface-dim/50 border-l-2 border-tertiary cursor-pointer hover:bg-surface-bright transition-colors" onClick={() => setOpen(!open)}>
+        <div className="bg-surface-container-lowest border-l-2 border-tertiary cursor-pointer hover:bg-surface-container-high transition-colors" onClick={() => setOpen(!open)}>
           <div className="p-2.5">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-mono text-on-surface-var">#{rank}</span>
-              <span className={`text-xs font-mono ${pointColor} font-bold`}>{pointText}</span>
+              <span className="text-xs font-sans text-on-surface-variant">#{rank}</span>
+              <span className={`text-xs font-sans ${pointColor} font-bold`}>{pointText}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-mono">
+            <div className="flex items-center gap-1.5 text-xs font-sans">
               <span className="text-error">- {s.refund}</span>
-              <Icon name="arrow_forward" className="text-xs text-on-surface-var" />
+              <Icon name="arrow_forward" className="text-xs text-on-surface-variant" />
               <span className="text-primary-container">+ {s.take}</span>
             </div>
           </div>
           {open && (
             <div className="px-2.5 pb-2.5 space-y-1.5">
               <div className="p-2 bg-error/10 border border-error/20">
-                <p className="text-xs font-mono text-error mb-0.5 font-bold">Lose ({s.refundPoints} pts):</p>
+                <p className="text-xs font-sans text-error mb-0.5 font-bold">Lose ({s.refundPoints} pts):</p>
                 {s.refundStats?.map((st, i) => (
-                  <p key={i} className="text-xs font-mono text-on-surface-var">{st}</p>
+                  <p key={i} className="text-xs font-sans text-on-surface-variant">{st}</p>
                 ))}
               </div>
               <div className="p-2 bg-primary-container/10 border border-primary-container/20">
-                <p className="text-xs font-mono text-primary-container mb-0.5 font-bold">Gain ({s.takePoints} pts):</p>
+                <p className="text-xs font-sans text-primary-container mb-0.5 font-bold">Gain ({s.takePoints} pts):</p>
                 {s.takeStats?.map((st, i) => (
-                  <p key={i} className="text-xs font-mono text-on-surface-var">{st}</p>
+                  <p key={i} className="text-xs font-sans text-on-surface-variant">{st}</p>
                 ))}
               </div>
             </div>
@@ -1697,14 +1752,14 @@
       const borderColor = { critical: "border-error", warning: "border-secondary", info: "border-outline-variant", positive: "border-primary-container" }[d.severity] || "border-outline-variant";
       const catIcons = { dps: "bolt", survival: "shield", gear: "inventory_2", jewels: "diamond", keystones: "key", supports: "link" };
       return (
-        <div className={`p-2 border-l-2 ${borderColor} bg-surface-dim/50 cursor-pointer`} onClick={() => setOpen(!open)}>
+        <div className={`p-2 border-l-2 ${borderColor} bg-surface-container-lowest cursor-pointer`} onClick={() => setOpen(!open)}>
           <div className="flex items-center gap-2">
-            <Icon name={catIcons[d.category] || "compare_arrows"} className="text-xs text-on-surface-var" />
-            <span className="text-xs font-mono font-bold text-on-surface flex-1 truncate">{d.title}</span>
-            {d.dps_diff_pct > 0 && <span className="text-xs font-mono text-secondary">+{d.dps_diff_pct}%</span>}
+            <Icon name={catIcons[d.category] || "compare_arrows"} className="text-xs text-on-surface-variant" />
+            <span className="text-xs font-sans font-bold text-on-surface flex-1 truncate">{d.title}</span>
+            {d.dps_diff_pct > 0 && <span className="text-xs font-sans text-secondary">+{d.dps_diff_pct}%</span>}
           </div>
-          {open && <p className="text-xs font-mono text-on-surface-var mt-1 ml-5">{d.text}</p>}
-          {!open && <p className="text-xs font-mono text-on-surface-var mt-0.5 ml-5 truncate opacity-70">{d.text.slice(0, 60)}</p>}
+          {open && <p className="text-xs font-sans text-on-surface-variant mt-1 ml-5">{d.text}</p>}
+          {!open && <p className="text-xs font-sans text-on-surface-variant mt-0.5 ml-5 truncate opacity-70">{d.text.slice(0, 60)}</p>}
         </div>
       );
     }
@@ -1717,9 +1772,9 @@
       const [open, setOpen] = useState(false);
       const name = e.title?.replace("Allocate ", "").replace("Missing: ", "");
       return (
-        <div className={`p-3 border-l-2 ${borderColor} transition-all cursor-pointer group ${toggled ? "bg-primary-container/10" : "bg-surface-dim/50 hover:bg-surface-bright"}`} onClick={() => setOpen(!open)}>
+        <div className={`p-3 border-l-2 ${borderColor} transition-all cursor-pointer group ${toggled ? "bg-primary-container/10" : "bg-surface-container-lowest hover:bg-surface-container-high"}`} onClick={() => setOpen(!open)}>
           <div className="flex justify-between items-start mb-1">
-            <span className={`text-xs font-mono uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
+            <span className={`text-xs font-sans uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
             {onToggle && (
               <div
                 className={`w-4 h-4 border flex items-center justify-center cursor-pointer transition-all ${
@@ -1728,15 +1783,15 @@
                 onClick={(ev) => { ev.stopPropagation(); onToggle(); }}
                 title="Toggle to project impact"
               >
-                {toggled && <Icon name="check" className="text-xs text-surface-dim" />}
+                {toggled && <Icon name="check" className="text-xs text-surface-container-lowest" />}
               </div>
             )}
           </div>
-          <h6 className={`text-xs font-mono font-bold uppercase tracking-tight ${toggled ? "text-primary-container" : "text-on-surface"}`}>{name}</h6>
+          <h6 className={`text-xs font-sans font-bold uppercase tracking-tight ${toggled ? "text-primary-container" : "text-on-surface"}`}>{name}</h6>
           {open ? (
-            <p className={`text-[12px] font-mono mt-1 leading-relaxed ${toggled ? "text-primary-container/70" : "text-on-surface-var"}`}>{e.text}</p>
+            <p className={`text-[12px] font-sans mt-1 leading-relaxed ${toggled ? "text-primary-container/70" : "text-on-surface-variant"}`}>{e.text}</p>
           ) : (
-            <p className={`text-[12px] font-mono mt-1 truncate ${toggled ? "text-primary-container/70" : "text-on-surface-var"}`}>{e.text.slice(0, 60)}...</p>
+            <p className={`text-[12px] font-sans mt-1 truncate ${toggled ? "text-primary-container/70" : "text-on-surface-variant"}`}>{e.text.slice(0, 60)}...</p>
           )}
         </div>
       );
@@ -1751,9 +1806,9 @@
         <div className={`p-1.5 border-l-2 cursor-pointer ${benefitColor}`} onClick={() => setOpen(!open)}>
           <div className="flex items-center gap-2">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
-            <span className="text-xs font-mono text-on-surface truncate flex-1">{name}</span>
-            {tierNum > 0 && <span className="text-[12px] font-mono text-on-surface-var whitespace-nowrap">T{tierNum}/{tierCount}</span>}
-            {value != null && <span className="text-[12px] font-mono text-outline whitespace-nowrap">{value}</span>}
+            <span className="text-xs font-sans text-on-surface truncate flex-1">{name}</span>
+            {tierNum > 0 && <span className="text-[12px] font-sans text-on-surface-variant whitespace-nowrap">T{tierNum}/{tierCount}</span>}
+            {value != null && <span className="text-[12px] font-sans text-outline whitespace-nowrap">{value}</span>}
           </div>
           {tierNum > 0 && (
             <div className="mt-0.5 ml-3.5 h-1 bg-surface-container overflow-hidden">
@@ -1763,18 +1818,18 @@
           {open && (
             <div className="mt-1 ml-3.5 space-y-1">
               {benefitReason && (
-                <p className={`text-[12px] font-mono ${dotColor === "bg-green-400" ? "text-green-400/80" : dotColor === "bg-red-400" ? "text-red-400/80" : "text-on-surface-var"}`}>
+                <p className={`text-[12px] font-sans ${dotColor === "bg-green-400" ? "text-green-400/80" : dotColor === "bg-red-400" ? "text-red-400/80" : "text-on-surface-variant"}`}>
                   {benefitReason}
                 </p>
               )}
               {tierText && (
-                <p className={`text-[12px] font-mono ${tierSeverity === "positive" ? "text-green-400/80" : tierSeverity === "critical" ? "text-red-400/80" : "text-yellow-400/80"}`}>
+                <p className={`text-[12px] font-sans ${tierSeverity === "positive" ? "text-green-400/80" : tierSeverity === "critical" ? "text-red-400/80" : "text-yellow-400/80"}`}>
                   {tierText}
                 </p>
               )}
               {replaceText && (
-                <p className="text-[12px] font-mono text-secondary">
-                  <span className="font-bold">→</span> {replaceText}
+                <p className="text-[12px] font-sans text-secondary">
+                  <span className="font-bold">{'\u2192'}</span> {replaceText}
                 </p>
               )}
             </div>
@@ -1800,7 +1855,6 @@
       const isAttack = dmgType === "attack";
       const isMinion = dmgType === "minion";
 
-      // GREEN: directly benefits the build
       if (isSpell) {
         if (/spell.*damage|cast speed|gem level|level of all.*spell|level of all.*skill/.test(ml))
           return { benefit: "green", reason: "Scales your spell damage directly" };
@@ -1824,7 +1878,6 @@
       if (/spirit/.test(ml))
         return { benefit: "green", reason: "Enables more skill reservations" };
 
-      // RED: wasted on this build — include replacement suggestion
       if (isSpell && /attack speed|local.*physical|added.*damage to attack/.test(ml))
         return { benefit: "red", reason: "Attack mod on a spell build — wasted",
           replace: "Replace with: % spell damage, % cast speed, or +gem levels" };
@@ -1838,7 +1891,6 @@
         return { benefit: "red", reason: "Life/armour mod on an ES build",
           replace: "Replace with: +ES, % increased ES, or ES recharge" };
 
-      // NEUTRAL: not helping much — suggest better options
       if (/mana.*regeneration/.test(ml) && defType !== "mom")
         return { benefit: "neutral", reason: "Mana regen — minor utility for this build",
           replace: isSpell ? "Could be: % spell damage, cast speed, or resistance" : "Could be: attack speed, flat damage, or resistance" };
@@ -1853,7 +1905,7 @@
           replace: isSpell ? "Better as: spell damage, cast speed, or resistance" : "Better as: damage, attack speed, or resistance" };
       if (/intelligence|dexterity|strength/.test(ml) && !/damage/.test(ml))
         return { benefit: "neutral", reason: "Attribute — may be needed for gem requirements",
-          replace: "" };  // don't suggest replacing attributes, they might be required
+          replace: "" };
 
       return { benefit: "neutral", reason: "", replace: "" };
     }
@@ -1907,10 +1959,8 @@
         return result;
       }, [modTiers]);
 
-      // Build archetype from insights for mod classification
       const archetype = insights?.archetype || {};
 
-      // Raw mods from equipment (fallback when tier data unavailable)
       const rawMods = useMemo(() => {
         if (!equipment) return [];
         const mods = [];
@@ -1943,10 +1993,9 @@
       };
 
       return (
-        <div className="p-3 bg-surface-bright border border-outline-variant fade-in">
-          <div className="text-xs font-mono font-semibold text-on-surface mb-2">{slot.itemName || "Unknown Item"}</div>
+        <div className="p-3 bg-surface-container-high border border-outline-variant fade-in">
+          <div className="text-xs font-sans font-semibold text-on-surface mb-2">{slot.itemName || "Unknown Item"}</div>
 
-          {/* Mod list — with tier data if available, raw mods as fallback */}
           <div className="flex flex-col gap-1 mb-3">
             {allMods.length > 0 ? (
               allMods.map((mod, i) => {
@@ -1976,7 +2025,6 @@
               })
             ) : rawMods.length > 0 ? (
               rawMods.map((mod, i) => {
-                // Strip poe.ninja bracket formatting for display
                 const cleanText = (mod.text || "").replace(/\[([^|\]]*\|)?([^\]]*)\]/g, "$2");
                 const benefit = classifyMod(cleanText, archetype);
                 const dotColor = benefit.benefit === "green" ? "bg-green-400" : benefit.benefit === "red" ? "bg-red-400" : "bg-outline";
@@ -1989,17 +2037,17 @@
                     <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-mono text-on-surface flex-1">{cleanText}</span>
-                        {typeLabel && <span className="text-xs font-mono text-outline uppercase">{typeLabel}</span>}
+                        <span className="text-xs font-sans text-on-surface flex-1">{cleanText}</span>
+                        {typeLabel && <span className="text-xs font-sans text-outline uppercase">{typeLabel}</span>}
                       </div>
                       {benefit.reason && (
-                        <p className={`text-[12px] font-mono mt-0.5 ${benefit.benefit === "green" ? "text-green-400/80" : benefit.benefit === "red" ? "text-red-400/80" : "text-on-surface-var"}`}>
+                        <p className={`text-[12px] font-sans mt-0.5 ${benefit.benefit === "green" ? "text-green-400/80" : benefit.benefit === "red" ? "text-red-400/80" : "text-on-surface-variant"}`}>
                           {benefit.reason}
                         </p>
                       )}
                       {benefit.replace && (
-                        <p className="text-[12px] font-mono mt-0.5 text-secondary">
-                          <span className="font-bold">→</span> {benefit.replace}
+                        <p className="text-[12px] font-sans mt-0.5 text-secondary">
+                          <span className="font-bold">{'\u2192'}</span> {benefit.replace}
                         </p>
                       )}
                     </div>
@@ -2007,14 +2055,13 @@
                 );
               })
             ) : (
-              <div className="text-xs text-outline font-mono py-2">No mod data available</div>
+              <div className="text-xs text-outline font-sans py-2">No mod data available</div>
             )}
           </div>
 
-          {/* Popular Items + Rare Mod Breakdown */}
           <button
             onClick={fetchPopular}
-            className="px-3 py-1.5 bg-surface-container border border-outline-variant text-xs font-mono text-on-surface-var hover:border-primary-container hover:text-on-surface transition-colors"
+            className="px-3 py-1.5 bg-surface-container border border-outline-variant text-xs font-sans text-on-surface-variant hover:border-primary-container hover:text-on-surface transition-colors"
           >
             {loadingPopular ? "Loading..." : "What Top Players Use"}
           </button>
@@ -2026,13 +2073,13 @@
                 return (
                   <div key={i} className={`px-2.5 py-2 border-l-2 ${isUnique ? "border-primary-container bg-primary-container/5" : "border-secondary/30 bg-surface-container"}`}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className={`text-xs font-mono font-bold ${isUnique ? "text-primary-container" : "text-secondary"}`}>
+                      <span className={`text-xs font-sans font-bold ${isUnique ? "text-primary-container" : "text-secondary"}`}>
                         {item.name}
                       </span>
-                      <span className="text-xs font-mono text-on-surface-var">{item.percentage?.toFixed(0)}%</span>
+                      <span className="text-xs font-sans text-on-surface-variant">{item.percentage?.toFixed(0)}%</span>
                     </div>
                     {isUnique && (
-                      <p className="text-[12px] font-mono text-on-surface-var">
+                      <p className="text-[12px] font-sans text-on-surface-variant">
                         Unique item — fixed stats, look up specific rolls
                       </p>
                     )}
@@ -2040,17 +2087,17 @@
                       <div className="flex flex-col gap-0.5 mt-1">
                         {item.topMods.map((mod, j) => (
                           <div key={j} className="flex items-center gap-1.5">
-                            <span className={`text-[12px] font-mono ${mod.hasIt ? "text-primary-container" : "text-on-surface-var"}`}>
-                              {mod.hasIt ? "✓" : "○"}
+                            <span className={`text-[12px] font-sans ${mod.hasIt ? "text-primary-container" : "text-on-surface-variant"}`}>
+                              {mod.hasIt ? "\u2713" : "\u25CB"}
                             </span>
-                            <span className="text-[12px] font-mono text-on-surface-var flex-1 truncate">{mod.name}</span>
-                            <span className="text-[12px] font-mono text-on-surface-var">{mod.pct}%</span>
+                            <span className="text-[12px] font-sans text-on-surface-variant flex-1 truncate">{mod.name}</span>
+                            <span className="text-[12px] font-sans text-on-surface-variant">{mod.pct}%</span>
                           </div>
                         ))}
                       </div>
                     )}
                     {!isUnique && (!item.topMods || item.topMods.length === 0) && (
-                      <p className="text-[12px] font-mono text-on-surface-var">
+                      <p className="text-[12px] font-sans text-on-surface-variant">
                         Rare — look for key mods for your build
                       </p>
                     )}
@@ -2070,7 +2117,7 @@
         return (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Icon name="inventory_2" className="text-6xl text-outline" />
-            <p className="text-on-surface-var font-mono text-sm">Load a character to view gear</p>
+            <p className="text-on-surface-variant font-sans text-sm">Load a character to view gear</p>
           </div>
         );
       }
@@ -2079,20 +2126,18 @@
         return (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-            <span className="text-sm text-on-surface-var font-mono">Loading gear data...</span>
+            <span className="text-sm text-on-surface-variant font-sans">Loading gear data...</span>
           </div>
         );
       }
 
       const slots = insights.slotSummary || [];
-
       const selectedSlot = slots.find(s => s.slot === expandedSlot);
 
       return (
         <div className="p-5 max-w-4xl mx-auto">
           <h2 className="font-serif text-lg text-on-surface mb-4">Equipment</h2>
           <div className="flex gap-4">
-            {/* Slot list — left side */}
             <div className="flex flex-col gap-2 w-64 shrink-0">
               {slots.map(sl => {
                 const isSelected = expandedSlot === sl.slot;
@@ -2100,27 +2145,26 @@
                 return (
                   <div
                     key={sl.slot}
-                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      isSelected ? "bg-surface-bright border-primary-container/40" : "bg-surface border-outline-variant hover:border-outline"
+                    className={`flex items-center gap-3 p-3 border cursor-pointer transition-colors ${
+                      isSelected ? "bg-surface-container-high border-primary-container/40" : "bg-surface-container-low border-outline-variant hover:border-outline"
                     }`}
                     onClick={() => setExpandedSlot(isSelected ? null : sl.slot)}
                   >
                     <div className="relative">
-                      <Icon name={slotIcon(sl.slot)} className="text-on-surface-var text-lg" />
+                      <Icon name={slotIcon(sl.slot)} className="text-on-surface-variant text-lg" />
                       {hasDeadMods && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-mono text-on-surface-var">{sl.slotDisplay}</div>
-                      <div className="text-xs font-mono text-on-surface truncate">{sl.itemName}</div>
+                      <div className="text-xs font-sans text-on-surface-variant">{sl.slotDisplay}</div>
+                      <div className="text-xs font-sans text-on-surface truncate">{sl.itemName}</div>
                     </div>
-                    <span className={`text-xs font-mono px-1.5 py-0.5 rounded border ${tierColor(sl.avgTier)}`}>
+                    <span className={`text-xs font-sans px-1.5 py-0.5 border ${tierColor(sl.avgTier)}`}>
                       T{sl.avgTier}
                     </span>
                   </div>
                 );
               })}
             </div>
-            {/* Detail panel — right side */}
             <div className="flex-1 min-w-0">
               {selectedSlot ? (
                 <SlotDetailPanel
@@ -2130,9 +2174,9 @@
                   account={charData._account || ""}
                 />
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-on-surface-var py-12">
+                <div className="flex flex-col items-center justify-center h-full text-on-surface-variant py-12">
                   <Icon name="touch_app" className="text-4xl mb-2 opacity-70" />
-                  <span className="text-sm font-mono opacity-70">Select an item to view details</span>
+                  <span className="text-sm font-sans opacity-70">Select an item to view details</span>
                 </div>
               )}
             </div>
@@ -2157,13 +2201,13 @@
       return (
         <div className="flex flex-col gap-3">
           <h3 className="font-serif text-base text-on-surface">Investment Tiers</h3>
-          <div className="h-3 rounded-full bg-surface-container overflow-hidden flex">
+          <div className="h-3 bg-surface-container overflow-hidden flex">
             {costTiers.map((tier, i) => {
               const w = ((tier.items?.length || 0) / total) * 100;
               return <div key={i} className={`h-full ${tierColors[i] || "bg-outline"} cursor-pointer hover:opacity-80 transition-opacity`} style={{ width: `${Math.max(w, 2)}%` }} onClick={() => setExpanded(expanded === i ? null : i)} />;
             })}
           </div>
-          <div className="flex justify-between text-xs font-mono text-on-surface-var">
+          <div className="flex justify-between text-xs font-sans text-on-surface-variant">
             {costTiers.map((tier, i) => (
               <span key={i} className="cursor-pointer hover:text-on-surface" onClick={() => setExpanded(expanded === i ? null : i)}>
                 {tierLabels[i] || `Tier ${i + 1}`} ({tier.items?.length || 0})
@@ -2173,12 +2217,12 @@
           {expanded !== null && costTiers[expanded]?.items && (
             <div className="flex flex-col gap-2 fade-in">
               {costTiers[expanded].items.map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-2 rounded bg-surface-container">
+                <div key={i} className="flex items-center justify-between p-2 bg-surface-container">
                   <div className="flex-1 min-w-0">
-                    <span className="text-xs font-mono text-on-surface">{item.name || item.item}</span>
-                    {item.slot && <span className="ml-2 text-xs text-on-surface-var">{item.slot}</span>}
+                    <span className="text-xs font-sans text-on-surface">{item.name || item.item}</span>
+                    {item.slot && <span className="ml-2 text-xs text-on-surface-variant">{item.slot}</span>}
                   </div>
-                  {item.price && <span className="text-xs font-mono text-primary-container">{item.price}</span>}
+                  {item.price && <span className="text-xs font-sans text-primary-container">{item.price}</span>}
                 </div>
               ))}
             </div>
@@ -2195,20 +2239,20 @@
         <div className="flex flex-col gap-3">
           <h3 className="font-serif text-base text-on-surface">Upgrade Priority</h3>
           {upgrades.map((u, i) => (
-            <div key={i} className="p-3 rounded-lg bg-surface border border-outline-variant fade-in" style={{ animationDelay: `${i * 50}ms` }}>
+            <div key={i} className="p-3 bg-surface-container-low border border-outline-variant fade-in" style={{ animationDelay: `${i * 50}ms` }}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-mono font-semibold text-on-surface">{u.slotDisplay || u.slot}</span>
-                <span className={`text-xs font-mono px-2 py-0.5 rounded border ${tierColor(u.currentTier || u.avgTier || 3)}`}>
+                <span className="text-sm font-sans font-semibold text-on-surface">{u.slotDisplay || u.slot}</span>
+                <span className={`text-xs font-sans px-2 py-0.5 border ${tierColor(u.currentTier || u.avgTier || 3)}`}>
                   T{u.currentTier || u.avgTier} avg
                 </span>
               </div>
               {u.topItem && (
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs font-mono text-on-surface-var">{u.topItem}</span>
-                  {u.topItemPrice && <span className="text-xs font-mono text-primary-container">{u.topItemPrice}</span>}
+                  <span className="text-xs font-sans text-on-surface-variant">{u.topItem}</span>
+                  {u.topItemPrice && <span className="text-xs font-sans text-primary-container">{u.topItemPrice}</span>}
                 </div>
               )}
-              {u.reason && <div className="text-xs text-on-surface-var mt-1">{u.reason}</div>}
+              {u.reason && <div className="text-xs text-on-surface-variant mt-1">{u.reason}</div>}
             </div>
           ))}
         </div>
@@ -2244,10 +2288,10 @@
               value={budget}
               onChange={e => setBudget(e.target.value)}
               placeholder="Budget (divines)"
-              className="flex-1 px-3 py-2 rounded bg-surface-container border border-outline-variant text-sm text-on-surface placeholder-outline font-mono focus:border-primary-container"
+              className="flex-1 px-3 py-2 bg-surface-container border border-outline-variant text-sm text-on-surface placeholder-outline font-sans focus:border-primary-container"
             />
             {budget && (
-              <div className="text-xs font-mono text-on-surface-var">
+              <div className="text-xs font-sans text-on-surface-variant">
                 {filteredUpgrades.length} items | ~{totalCost.toFixed(1)}d total
               </div>
             )}
@@ -2255,15 +2299,15 @@
           {budget && filteredUpgrades.length > 0 && (
             <div className="flex flex-col gap-2">
               {filteredUpgrades.map((u, i) => (
-                <div key={i} className="flex items-center justify-between p-2 rounded bg-surface-container">
-                  <span className="text-xs font-mono text-on-surface">{u.slotDisplay || u.slot}: {u.topItem || "upgrade"}</span>
-                  <span className="text-xs font-mono text-primary-container">{u.topItemPrice || "?"}</span>
+                <div key={i} className="flex items-center justify-between p-2 bg-surface-container">
+                  <span className="text-xs font-sans text-on-surface">{u.slotDisplay || u.slot}: {u.topItem || "upgrade"}</span>
+                  <span className="text-xs font-sans text-primary-container">{u.topItemPrice || "?"}</span>
                 </div>
               ))}
             </div>
           )}
           {budget && filteredUpgrades.length === 0 && (
-            <div className="text-xs text-on-surface-var font-mono">No upgrades found within budget</div>
+            <div className="text-xs text-on-surface-variant font-sans">No upgrades found within budget</div>
           )}
         </div>
       );
@@ -2274,7 +2318,7 @@
         return (
           <div className="flex flex-col items-center justify-center h-full gap-4">
             <Icon name="storefront" className="text-6xl text-outline" />
-            <p className="text-on-surface-var font-mono text-sm">Load a character to view market data</p>
+            <p className="text-on-surface-variant font-sans text-sm">Load a character to view market data</p>
           </div>
         );
       }
@@ -2283,12 +2327,11 @@
         return (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-            <span className="text-sm text-on-surface-var font-mono">Loading market data...</span>
+            <span className="text-sm text-on-surface-variant font-sans">Loading market data...</span>
           </div>
         );
       }
 
-      // Build upgrade paths from synergy map missing items
       const upgradePaths = useMemo(() => {
         if (!whyInsights?.synergyMap) return [];
         const paths = [];
@@ -2308,21 +2351,19 @@
             });
           }
         }
-        // Sort by estimated value descending
         paths.sort((a, b) => b.estimatedValue - a.estimatedValue);
         return paths;
       }, [whyInsights]);
 
       return (
         <div className="flex flex-col gap-6 p-5 max-w-4xl mx-auto">
-          {/* Build Path Recommendations — sorted by impact */}
           {upgradePaths.length > 0 && (
             <div>
               <h3 className="font-serif text-lg text-on-surface mb-3">
                 <Icon name="route" className="text-base mr-2 align-middle text-primary-container" />
                 Upgrade Priority
               </h3>
-              <p className="text-xs font-mono text-on-surface-var mb-4">
+              <p className="text-xs font-sans text-on-surface-variant mb-4">
                 Sorted by estimated DPS/survival impact. Click to expand details.
               </p>
               <div className="space-y-2">
@@ -2348,25 +2389,25 @@
                          p.estimatedValue >= 1e3 ? `+${(p.estimatedValue/1e3).toFixed(0)}K` :
                          p.estimatedValue > 0 ? `+${p.estimatedValue.toFixed(0)}` : "";
       return (
-        <div className={`p-3 border-l-2 ${borderColor} bg-surface-container cursor-pointer hover:bg-surface-bright transition-colors`} onClick={() => setOpen(!open)}>
+        <div className={`p-3 border-l-2 ${borderColor} bg-surface-container cursor-pointer hover:bg-surface-container-high transition-colors`} onClick={() => setOpen(!open)}>
           <div className="flex items-center gap-3">
-            <span className="text-xs font-mono text-on-surface-var w-6">#{rank}</span>
-            <Icon name={p.categoryIcon || "trending_up"} className="text-sm text-on-surface-var" />
+            <span className="text-xs font-sans text-on-surface-variant w-6">#{rank}</span>
+            <Icon name={p.categoryIcon || "trending_up"} className="text-sm text-on-surface-variant" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold text-on-surface truncate">{p.name}</span>
-                {p.estimatedPct > 0 && <span className="text-xs font-mono text-secondary">+{p.estimatedPct.toFixed(0)}%</span>}
-                {valueLabel && <span className="text-xs font-mono text-primary-container">{valueLabel}</span>}
+                <span className="text-xs font-sans font-bold text-on-surface truncate">{p.name}</span>
+                {p.estimatedPct > 0 && <span className="text-xs font-sans text-secondary">+{p.estimatedPct.toFixed(0)}%</span>}
+                {valueLabel && <span className="text-xs font-sans text-primary-container">{valueLabel}</span>}
               </div>
-              {!open && <p className="text-xs font-mono text-on-surface-var truncate mt-0.5">{p.contribution}</p>}
+              {!open && <p className="text-xs font-sans text-on-surface-variant truncate mt-0.5">{p.contribution}</p>}
             </div>
-            <span className="text-xs font-mono text-on-surface-var uppercase">{p.category}</span>
+            <span className="text-xs font-sans text-on-surface-variant uppercase">{p.category}</span>
           </div>
           {open && (
             <div className="mt-2 ml-9">
-              <p className="text-xs font-mono text-on-surface-var leading-relaxed">{p.detail || p.contribution}</p>
-              {p.slot && <p className="text-xs font-mono text-outline mt-1">Slot: {p.slot}</p>}
-              {p.adoptionPct > 0 && <p className="text-xs font-mono text-outline mt-1">{p.adoptionPct.toFixed(0)}% of top players use this</p>}
+              <p className="text-xs font-sans text-on-surface-variant leading-relaxed">{p.detail || p.contribution}</p>
+              {p.slot && <p className="text-xs font-sans text-outline mt-1">Slot: {p.slot}</p>}
+              {p.adoptionPct > 0 && <p className="text-xs font-sans text-outline mt-1">{p.adoptionPct.toFixed(0)}% of top players use this</p>}
             </div>
           )}
         </div>
@@ -2401,13 +2442,13 @@
               value={url}
               onChange={e => setUrl(e.target.value)}
               placeholder="Paste build guide URL"
-              className="flex-1 px-3 py-2 rounded bg-surface-container border border-outline-variant text-sm text-on-surface placeholder-outline font-mono focus:border-primary-container"
+              className="flex-1 px-3 py-2 bg-surface-container border border-outline-variant text-sm text-on-surface placeholder-outline font-sans focus:border-primary-container"
               onKeyDown={e => { if (e.key === "Enter") handleImport(); }}
             />
             <button
               onClick={handleImport}
               disabled={loading}
-              className="px-4 py-2 rounded bg-primary-container text-surface-dim text-sm font-mono font-semibold hover:bg-primary transition-colors disabled:opacity-70"
+              className="px-4 py-2 bg-primary-container text-on-primary text-sm font-sans font-semibold hover:bg-primary transition-colors disabled:opacity-70"
             >
               {loading ? "..." : "Import"}
             </button>
@@ -2418,21 +2459,21 @@
     }
 
     function GuideList({ guides, selectedId, onSelect, onDelete }) {
-      if (!guides.length) return <div className="text-xs text-on-surface-var font-mono mt-2">No guides imported yet</div>;
+      if (!guides.length) return <div className="text-xs text-on-surface-variant font-sans mt-2">No guides imported yet</div>;
 
       return (
         <div className="flex flex-col gap-2 mt-3">
           {guides.map(g => (
             <div
               key={g.id}
-              className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer card-hover ${
-                selectedId === g.id ? "bg-surface-bright border-primary-container/40" : "bg-surface border-outline-variant"
+              className={`flex items-center justify-between p-3 border cursor-pointer card-hover ${
+                selectedId === g.id ? "bg-surface-container-high border-primary-container/40" : "bg-surface-container-low border-outline-variant"
               }`}
               onClick={() => onSelect(g.id)}
             >
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-mono text-on-surface truncate">{g.title}</div>
-                <div className="text-xs text-on-surface-var mt-0.5">{g.char_class} {g.ascendancy ? `- ${g.ascendancy}` : ""} | {g.stages || 0} stages</div>
+                <div className="text-sm font-sans text-on-surface truncate">{g.title}</div>
+                <div className="text-xs text-on-surface-variant mt-0.5">{g.char_class} {g.ascendancy ? `- ${g.ascendancy}` : ""} | {g.stages || 0} stages</div>
               </div>
               <button
                 onClick={e => { e.stopPropagation(); onDelete(g.id); }}
@@ -2482,7 +2523,6 @@
 
       return (
         <div className="mt-4 flex flex-col gap-3 fade-in">
-          {/* Stage tabs */}
           {stages.length > 1 && (
             <div className="flex gap-1 overflow-x-auto">
               {stages.map((st, i) => {
@@ -2491,10 +2531,10 @@
                   <button
                     key={i}
                     onClick={() => setActiveStage(stageName)}
-                    className={`px-3 py-1.5 rounded text-xs font-mono whitespace-nowrap transition-colors ${
+                    className={`px-3 py-1.5 text-xs font-sans whitespace-nowrap transition-colors ${
                       activeStage === stageName
-                        ? "bg-primary-container text-surface-dim"
-                        : "bg-surface-container text-on-surface-var hover:text-on-surface"
+                        ? "bg-primary-container text-on-primary"
+                        : "bg-surface-container text-on-surface-variant hover:text-on-surface"
                     }`}
                   >
                     {stageName}
@@ -2510,7 +2550,7 @@
             </div>
           ) : slotComparisons.length > 0 ? (
             <div className="flex flex-col gap-2">
-              <div className="grid grid-cols-3 gap-2 px-2 text-xs font-mono text-on-surface-var">
+              <div className="grid grid-cols-3 gap-2 px-2 text-xs font-sans text-on-surface-variant">
                 <span>Slot</span>
                 <span>Guide</span>
                 <span>Yours</span>
@@ -2519,19 +2559,19 @@
                 const matchClass = sc.match === "exact" ? "text-green-400" : sc.match === "partial" ? "text-yellow-400" : "text-red-400";
                 const matchIcon = sc.match === "exact" ? "check_circle" : sc.match === "partial" ? "change_circle" : "cancel";
                 return (
-                  <div key={i} className="grid grid-cols-3 gap-2 p-2 rounded bg-surface-container items-center">
-                    <span className="text-xs font-mono text-on-surface-var">{sc.slotDisplay || sc.slot}</span>
-                    <span className="text-xs font-mono text-on-surface truncate">{sc.guideItem || sc.guide_item || "--"}</span>
+                  <div key={i} className="grid grid-cols-3 gap-2 p-2 bg-surface-container items-center">
+                    <span className="text-xs font-sans text-on-surface-variant">{sc.slotDisplay || sc.slot}</span>
+                    <span className="text-xs font-sans text-on-surface truncate">{sc.guideItem || sc.guide_item || "--"}</span>
                     <div className="flex items-center gap-1">
                       <Icon name={matchIcon} className={`text-sm ${matchClass}`} />
-                      <span className="text-xs font-mono text-on-surface truncate">{sc.yourItem || sc.your_item || "--"}</span>
+                      <span className="text-xs font-sans text-on-surface truncate">{sc.yourItem || sc.your_item || "--"}</span>
                     </div>
                   </div>
                 );
               })}
             </div>
           ) : (
-            <div className="text-xs text-on-surface-var font-mono text-center py-4">
+            <div className="text-xs text-on-surface-variant font-sans text-center py-4">
               {charData ? "No comparison data available" : "Load a character to compare against this guide"}
             </div>
           )}
@@ -2608,7 +2648,6 @@
 
         const body = { account, character };
 
-        // Core analysis — fast, blocks the loading spinner
         Promise.all([
           api("/api/character/build-insights", "POST", body),
           api("/api/character/improvement-package", "POST", body),
@@ -2622,7 +2661,6 @@
           setAnalysisLoading(false);
         }).catch(() => setAnalysisLoading(false));
 
-        // Why-engine — runs independently, populates when ready
         api("/api/character/why-insights", "POST", body).then(why => {
           if (why && !why.error) {
             console.log("[LAMA] Why-insights received:", Object.keys(why).map(k => `${k}:${Array.isArray(why[k]) ? why[k].length : Object.keys(why[k] || {}).length}`).join(", "));
@@ -2633,7 +2671,7 @@
         }).catch(e => console.warn("[LAMA] Why-insights error:", e));
       }, [charData, account, character]);
 
-      // Character lookup handler — accepts optional pre-fetched data from smart-lookup
+      // Character lookup handler
       const handleLookup = useCallback(async (acct, charName, prefetchedData) => {
         const data = prefetchedData || await api("/api/character/lookup", "POST", { account: acct, character: charName });
         if (data.error) return data;
@@ -2658,7 +2696,6 @@
             setStatus(prev => ({ ...prev, state: msg.state }));
             break;
           case "log":
-            // Could store logs if needed
             break;
         }
       }, []);
@@ -2669,6 +2706,8 @@
         switch (activeTab) {
           case "BUILD":
             return <PulseTab charData={charData} insights={insights} improvement={improvement} comparison={comparison} whyInsights={whyInsights} onLookup={handleLookup} />;
+          case "GEAR":
+            return <GearTab charData={charData} insights={insights} account={account} />;
           case "MARKET":
             return <MarketTab charData={charData} efficiency={efficiency} whyInsights={whyInsights} />;
           case "GUIDE":
@@ -2680,18 +2719,24 @@
 
       return (
         <div className="flex flex-col h-full">
-          <TopBar charData={charData} onSettingsClick={() => setSettingsOpen(true)} />
-          <TabNav activeTab={activeTab} onTabChange={setActiveTab} hasCharacter={!!charData} onSettingsClick={() => setSettingsOpen(true)} />
+          <NavBar onSettingsClick={() => setSettingsOpen(true)} />
+          <Sidebar
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            charData={charData}
+            hasCharacter={!!charData}
+            onSettingsClick={() => setSettingsOpen(true)}
+          />
 
-          {/* Main content area */}
-          <div className="flex-1 overflow-y-auto" style={{ marginTop: "76px" }}>
+          {/* Main content area — offset for navbar + sidebar */}
+          <div className="flex-1 overflow-y-auto" style={{ marginLeft: "256px", paddingTop: "80px" }}>
             {tabContent}
           </div>
 
           {/* Connection indicator */}
-          <div className="fixed bottom-3 left-3 flex items-center gap-1.5 z-40">
+          <div className="fixed bottom-3 left-[268px] flex items-center gap-1.5 z-40">
             <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`} />
-            <span className="text-xs font-mono text-outline">{connected ? "Connected" : "Disconnected"}</span>
+            <span className="text-xs font-sans text-outline">{connected ? "Connected" : "Disconnected"}</span>
           </div>
 
           {/* Settings Panel */}
