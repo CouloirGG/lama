@@ -1934,7 +1934,10 @@
       };
     }
 
-    function SlotDetailPanel({ slot, charData, insights, account }) {
+    // Gear Detail Slide-In Panel (Stitch Eldritch Forge design)
+    function GearSlideInPanel({ slot, charData, insights, account, onClose }) {
+      if (!slot || !charData) return null;
+
       const [popularItems, setPopularItems] = useState(null);
       const [loadingPopular, setLoadingPopular] = useState(false);
 
@@ -1979,139 +1982,216 @@
       const deadMods = slotData?.deadMods || [];
       const weakMods = slotData?.weakMods || [];
 
-      const fetchPopular = async () => {
-        if (popularItems || loadingPopular) return;
+      // Auto-load popular items when panel opens
+      useEffect(() => {
+        if (!account || !charData?.name || !slot?.slot) return;
         setLoadingPopular(true);
-        const data = await api("/api/character/popular-items", "POST", {
-          account: account,
-          character: charData.name,
-          slot: slot.slot,
-        });
-        setLoadingPopular(false);
-        if (!data.error && Array.isArray(data)) setPopularItems(data);
-        else if (data.items) setPopularItems(data.items);
-      };
+        api("/api/character/popular-items", "POST", {
+          account, character: charData.name, slot: slot.slot,
+        }).then(data => {
+          setLoadingPopular(false);
+          if (!data.error && Array.isArray(data)) setPopularItems(data);
+          else if (data?.items) setPopularItems(data.items);
+        }).catch(() => setLoadingPopular(false));
+      }, [slot?.slot, account, charData?.name]);
+
+      const itemName = slot.itemName || equipment?.name || equipment?.type_line || "Unknown Item";
+      const itemRarity = equipment?.rarity || "Rare";
+      const slotLabel = slot.slotDisplay || slot.slot;
+
+      const isSpell = archetype.damageType === "spell" || archetype.damage_type === "spell";
+      const isAttack = archetype.damageType === "attack" || archetype.damage_type === "attack";
 
       return (
-        <div className="p-3 bg-surface-container-high border border-outline-variant fade-in">
-          <div className="text-xs font-sans font-semibold text-on-surface mb-2">{slot.itemName || "Unknown Item"}</div>
+        <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={onClose}>
+          <div
+            className="absolute right-0 top-0 h-full w-[500px] max-w-[90vw] bg-surface-container-lowest border-l border-outline-variant/20 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-y-auto"
+            style={{ animation: "slideIn 0.25s ease" }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button className="absolute top-6 right-6 text-outline hover:text-primary transition-colors z-10" onClick={onClose}>
+              <Icon name="close" className="text-2xl" />
+            </button>
 
-          <div className="flex flex-col gap-1 mb-3">
-            {allMods.length > 0 ? (
-              allMods.map((mod, i) => {
+            {/* Header */}
+            <div className="p-10 pb-6">
+              <span className="font-label uppercase tracking-[0.3em] text-xs text-secondary mb-2 block">{itemRarity} {slotLabel}</span>
+              <h1 className="font-headline text-3xl text-primary leading-tight italic">{itemName}</h1>
+              <div className="mt-4 h-[2px] w-full bg-gradient-to-r from-primary/50 to-transparent" />
+            </div>
+
+            {/* Mod List */}
+            <div className="px-10 space-y-6">
+              {(allMods.length > 0 ? allMods : []).map((mod, i) => {
                 const isDead = deadMods.some(dm => mod.display_name?.includes(dm.mod) || dm.mod?.includes(mod.display_name));
                 const benefit = classifyMod(mod.display_name, archetype);
                 const tierExp = tierExplanation(mod.tier_num, mod.tier_count, mod.value, mod.tier_range, mod.display_name);
                 const barWidth = mod.tier_count > 0 ? Math.max(5, ((mod.tier_count - mod.tier_num + 1) / mod.tier_count) * 100) : 50;
-                const benefitColor = isDead ? "border-red-500/30 bg-red-500/5" :
-                  benefit.benefit === "green" ? "border-green-500/20 bg-green-500/5" :
-                  benefit.benefit === "red" ? "border-red-500/20 bg-red-500/5" :
-                  "border-outline-variant/20";
-                const dotColor = isDead ? "bg-red-400" : benefit.benefit === "green" ? "bg-green-400" : benefit.benefit === "red" ? "bg-red-400" : "bg-outline";
-                const barColor = mod.tier_num <= 2 ? "bg-green-400" : mod.tier_num <= 3 ? "bg-yellow-400" : "bg-red-400";
+                const dotColor = isDead ? "bg-error" : benefit.benefit === "green" ? "bg-tertiary" : benefit.benefit === "red" ? "bg-error" : "bg-outline";
+                const dotShadow = isDead ? "shadow-[0_0_8px_#ffb4ab]" : benefit.benefit === "green" ? "shadow-[0_0_8px_#b5eaff]" : "";
+                const tierColor = mod.tier_num <= 2 ? "text-tertiary" : mod.tier_num <= 3 ? "text-secondary" : "text-error";
 
-                return (
-                  <ModRow key={i}
-                    name={mod.display_name}
-                    tierNum={mod.tier_num} tierCount={mod.tier_count} value={mod.value}
-                    barWidth={barWidth} barColor={barColor}
-                    dotColor={dotColor} benefitColor={benefitColor}
-                    benefitReason={isDead ? (deadMods.find(dm => mod.display_name?.includes(dm.mod))?.reason || "Dead mod — wasted on this build") : benefit.reason}
-                    replaceText={isDead ? (isSpell ? "Replace with: % spell damage, cast speed, or +gem levels" : isAttack ? "Replace with: attack speed, flat damage, or resistance" : "Replace with a build-relevant mod") : benefit.replace}
-                    tierText={tierExp?.text}
-                    tierSeverity={tierExp?.severity}
-                  />
-                );
-              })
-            ) : rawMods.length > 0 ? (
-              rawMods.map((mod, i) => {
-                const cleanText = (mod.text || "").replace(/\[([^|\]]*\|)?([^\]]*)\]/g, "$2");
-                const benefit = classifyMod(cleanText, archetype);
-                const dotColor = benefit.benefit === "green" ? "bg-green-400" : benefit.benefit === "red" ? "bg-red-400" : "bg-outline";
-                const benefitColor = benefit.benefit === "green" ? "border-green-500/20 bg-green-500/5" :
-                  benefit.benefit === "red" ? "border-red-500/20 bg-red-500/5" : "border-outline-variant/20";
-                const typeLabel = mod.type === "implicit" ? "implicit" : mod.type === "crafted" ? "crafted" : "";
-
-                return (
-                  <div key={i} className={`flex items-start gap-2 p-1.5 border-l-2 ${benefitColor}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-sans text-on-surface flex-1">{cleanText}</span>
-                        {typeLabel && <span className="text-xs font-sans text-outline uppercase">{typeLabel}</span>}
+                if (isDead || benefit.benefit === "red") {
+                  return (
+                    <div key={i} className="p-5 bg-error-container/10 border border-error/10">
+                      <div className="flex items-center gap-3 mb-1">
+                        <div className={`w-2 h-2 rounded-full ${dotColor} ${dotShadow}`} />
+                        <span className="font-label uppercase tracking-widest text-[10px] text-error">
+                          {isDead ? (deadMods.find(dm => mod.display_name?.includes(dm.mod))?.reason || "Wasted on this build") : benefit.reason}
+                        </span>
                       </div>
-                      {benefit.reason && (
-                        <p className={`text-[12px] font-sans mt-0.5 ${benefit.benefit === "green" ? "text-green-400/80" : benefit.benefit === "red" ? "text-red-400/80" : "text-on-surface-variant"}`}>
-                          {benefit.reason}
-                        </p>
-                      )}
-                      {benefit.replace && (
-                        <p className="text-[12px] font-sans mt-0.5 text-secondary">
-                          <span className="font-bold">{'\u2192'}</span> {benefit.replace}
-                        </p>
+                      <div className="font-headline text-xl text-on-surface/60 mb-2">{mod.display_name}</div>
+                      {(benefit.replace || isDead) && (
+                        <div className="flex items-center gap-2 mt-3 text-secondary cursor-pointer">
+                          <Icon name="trending_flat" className="text-sm" />
+                          <span className="font-label uppercase tracking-widest text-[10px]">
+                            {benefit.replace || (isSpell ? "Replace with: % spell damage, cast speed, or +gem levels" : "Replace with a build-relevant mod")}
+                          </span>
+                        </div>
                       )}
                     </div>
+                  );
+                }
+
+                return (
+                  <div key={i} className="group">
+                    <div className="flex items-center gap-3 mb-1">
+                      <div className={`w-2 h-2 rounded-full ${dotColor} ${dotShadow}`} />
+                      <span className="font-label uppercase tracking-widest text-[10px] text-outline">{benefit.reason || "Modifier"}</span>
+                    </div>
+                    <div className="flex justify-between items-end mb-2">
+                      <span className="font-headline text-xl text-on-surface">{mod.display_name}</span>
+                      {mod.tier_num > 0 && (
+                        <span className={`font-headline ${tierColor} text-sm`}>TIER {mod.tier_num} / {mod.tier_count}</span>
+                      )}
+                    </div>
+                    {mod.tier_count > 0 && (
+                      <div className="h-1 w-full bg-surface-container-high">
+                        <div className={`h-full ${mod.tier_num <= 2 ? "bg-tertiary" : mod.tier_num <= 3 ? "bg-secondary" : "bg-error"}`} style={{ width: `${barWidth}%` }} />
+                      </div>
+                    )}
+                    {tierExp && (
+                      <p className="mt-2 text-sm text-on-surface-variant font-light italic leading-relaxed">{tierExp.text}</p>
+                    )}
                   </div>
                 );
-              })
-            ) : (
-              <div className="text-xs text-outline font-sans py-2">No mod data available</div>
-            )}
-          </div>
+              })}
 
-          <button
-            onClick={fetchPopular}
-            className="px-3 py-1.5 bg-surface-container border border-outline-variant text-xs font-sans text-on-surface-variant hover:border-primary-container hover:text-on-surface transition-colors"
-          >
-            {loadingPopular ? "Loading..." : "What Top Players Use"}
-          </button>
+              {/* Raw mods fallback */}
+              {allMods.length === 0 && rawMods.length > 0 && rawMods.map((mod, i) => {
+                const cleanText = (mod.text || "").replace(/\[([^|\]]*\|)?([^\]]*)\]/g, "$2");
+                const benefit = classifyMod(cleanText, archetype);
+                const dotColor = benefit.benefit === "green" ? "bg-tertiary" : benefit.benefit === "red" ? "bg-error" : "bg-outline";
+                const dotShadow = benefit.benefit === "green" ? "shadow-[0_0_8px_#b5eaff]" : benefit.benefit === "red" ? "shadow-[0_0_8px_#ffb4ab]" : "";
 
-          {popularItems && (
-            <div className="mt-3 flex flex-col gap-2">
-              {popularItems.slice(0, 5).map((item, i) => {
-                const isUnique = item.rarity === "unique";
-                return (
-                  <div key={i} className={`px-2.5 py-2 border-l-2 ${isUnique ? "border-primary-container bg-primary-container/5" : "border-secondary/30 bg-surface-container"}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`text-xs font-sans font-bold ${isUnique ? "text-primary-container" : "text-secondary"}`}>
-                        {item.name}
-                      </span>
-                      <span className="text-xs font-sans text-on-surface-variant">{item.percentage?.toFixed(0)}%</span>
-                    </div>
-                    {isUnique && (
-                      <p className="text-[12px] font-sans text-on-surface-variant">
-                        Unique item — fixed stats, look up specific rolls
-                      </p>
-                    )}
-                    {!isUnique && item.topMods && item.topMods.length > 0 && (
-                      <div className="flex flex-col gap-0.5 mt-1">
-                        {item.topMods.map((mod, j) => (
-                          <div key={j} className="flex items-center gap-1.5">
-                            <span className={`text-[12px] font-sans ${mod.hasIt ? "text-primary-container" : "text-on-surface-variant"}`}>
-                              {mod.hasIt ? "\u2713" : "\u25CB"}
-                            </span>
-                            <span className="text-[12px] font-sans text-on-surface-variant flex-1 truncate">{mod.name}</span>
-                            <span className="text-[12px] font-sans text-on-surface-variant">{mod.pct}%</span>
-                          </div>
-                        ))}
+                if (benefit.benefit === "red") {
+                  return (
+                    <div key={i} className="p-5 bg-error-container/10 border border-error/10">
+                      <div className="flex items-center gap-3 mb-1">
+                        <div className={`w-2 h-2 rounded-full ${dotColor} ${dotShadow}`} />
+                        <span className="font-label uppercase tracking-widest text-[10px] text-error">{benefit.reason}</span>
                       </div>
-                    )}
-                    {!isUnique && (!item.topMods || item.topMods.length === 0) && (
-                      <p className="text-[12px] font-sans text-on-surface-variant">
-                        Rare — look for key mods for your build
+                      <div className="font-headline text-xl text-on-surface/60">{cleanText}</div>
+                      {benefit.replace && (
+                        <div className="flex items-center gap-2 mt-3 text-secondary">
+                          <Icon name="trending_flat" className="text-sm" />
+                          <span className="font-label uppercase tracking-widest text-[10px]">{benefit.replace}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={i} className="group">
+                    <div className="flex items-center gap-3 mb-1">
+                      <div className={`w-2 h-2 rounded-full ${dotColor} ${dotShadow}`} />
+                      <span className="font-label uppercase tracking-widest text-[10px] text-outline">{benefit.reason || "Modifier"}</span>
+                    </div>
+                    <div className="font-headline text-xl text-on-surface">{cleanText}</div>
+                    {benefit.replace && (
+                      <p className="mt-2 text-sm text-secondary font-light">
+                        <Icon name="trending_flat" className="text-sm mr-1 align-middle" />{benefit.replace}
                       </p>
                     )}
                   </div>
                 );
               })}
+
+              {allMods.length === 0 && rawMods.length === 0 && (
+                <p className="text-sm text-outline italic">No mod data available for this item.</p>
+              )}
             </div>
-          )}
+
+            {/* What Top Players Use */}
+            <div className="mt-12 p-10 bg-surface-container-low">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="font-label uppercase tracking-[0.2em] text-sm text-secondary">What Top Players Use</h2>
+                <Icon name="analytics" className="text-outline" />
+              </div>
+              {loadingPopular ? (
+                <div className="flex items-center gap-2 py-4">
+                  <div className="w-4 h-4 border-2 border-secondary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+                  <span className="text-xs font-label text-outline uppercase tracking-widest">Loading meta data...</span>
+                </div>
+              ) : popularItems ? (
+                <div className="space-y-5">
+                  {popularItems.slice(0, 6).map((item, i) => {
+                    const isUnique = item.rarity === "unique";
+                    return (
+                      <div key={i}>
+                        {isUnique ? (
+                          <div className="flex gap-4">
+                            <Icon name="check_circle" className="text-tertiary" style={{ fontVariationSettings: "'FILL' 1" }} />
+                            <div>
+                              <p className="text-sm text-on-surface font-medium">{item.name}</p>
+                              <p className="text-[10px] font-label uppercase tracking-widest text-outline mt-1">{item.percentage?.toFixed(0)}% adoption</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-sm text-secondary font-medium mb-2">{item.name} ({item.percentage?.toFixed(0)}%)</p>
+                            {item.topMods && item.topMods.length > 0 && (
+                              <div className="space-y-2 ml-1">
+                                {item.topMods.map((mod, j) => (
+                                  <div key={j} className="flex gap-4">
+                                    <Icon
+                                      name={mod.hasIt ? "check_circle" : "radio_button_unchecked"}
+                                      className={mod.hasIt ? "text-tertiary" : "text-error"}
+                                      style={mod.hasIt ? { fontVariationSettings: "'FILL' 1" } : {}}
+                                    />
+                                    <div>
+                                      <p className={`text-sm ${mod.hasIt ? "text-on-surface" : "text-error"} font-medium`}>{mod.name}</p>
+                                      <p className="text-[10px] font-label uppercase tracking-widest text-outline mt-1">Found on {mod.pct}% of builds</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-outline italic">No popularity data available.</p>
+              )}
+            </div>
+          </div>
         </div>
       );
     }
 
+    // Legacy SlotDetailPanel — now forwards to GearSlideInPanel
+    function SlotDetailPanel({ slot, charData, insights, account }) {
+      // This is kept for backward compatibility with embedded gear views
+      return null; // GearSlideInPanel is used instead
+    }
+
     function GearTab({ charData, insights, account }) {
-      const [expandedSlot, setExpandedSlot] = useState(null);
+      const [inspectSlot, setInspectSlot] = useState(null);
 
       if (!charData) {
         return (
@@ -2132,55 +2212,58 @@
       }
 
       const slots = insights.slotSummary || [];
-      const selectedSlot = slots.find(s => s.slot === expandedSlot);
-
+      const selectedSlotData = inspectSlot ? slots.find(s => s.slot === inspectSlot) : null;
       return (
-        <div className="p-5 max-w-4xl mx-auto">
-          <h2 className="font-serif text-lg text-on-surface mb-4">Equipment</h2>
-          <div className="flex gap-4">
-            <div className="flex flex-col gap-2 w-64 shrink-0">
-              {slots.map(sl => {
-                const isSelected = expandedSlot === sl.slot;
-                const hasDeadMods = (sl.deadMods?.length || 0) > 0;
-                return (
-                  <div
-                    key={sl.slot}
-                    className={`flex items-center gap-3 p-3 border cursor-pointer transition-colors ${
-                      isSelected ? "bg-surface-container-high border-primary-container/40" : "bg-surface-container-low border-outline-variant hover:border-outline"
-                    }`}
-                    onClick={() => setExpandedSlot(isSelected ? null : sl.slot)}
-                  >
-                    <div className="relative">
-                      <Icon name={slotIcon(sl.slot)} className="text-on-surface-variant text-lg" />
-                      {hasDeadMods && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-400" />}
+        <div className="p-8">
+          <h2 className="font-headline text-2xl text-on-surface mb-6">Equipment</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {slots.map(sl => {
+              const hasDeadMods = (sl.deadMods?.length || 0) > 0;
+              const equipment = (charData?.equipment || []).find(e => e.slot === sl.slot);
+              const isUnique = equipment?.rarity === "Unique";
+              return (
+                <div
+                  key={sl.slot}
+                  className="bg-surface-container-low p-4 border border-outline-variant/10 hover:bg-surface-container transition-all cursor-pointer group"
+                  onClick={() => setInspectSlot(sl.slot)}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-surface-container-lowest border border-outline-variant/20 flex items-center justify-center">
+                        <Icon name={slotIcon(sl.slot)} className={`text-sm ${isUnique ? "text-secondary" : "text-on-surface-variant"}`} />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-label uppercase tracking-widest text-on-surface-variant">{sl.slotDisplay}</div>
+                        <div className="text-sm font-sans text-on-surface truncate">{sl.itemName}</div>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-sans text-on-surface-variant">{sl.slotDisplay}</div>
-                      <div className="text-xs font-sans text-on-surface truncate">{sl.itemName}</div>
+                    <div className="flex items-center gap-2">
+                      {hasDeadMods && <div className="w-2 h-2 rounded-full bg-error shadow-[0_0_8px_rgba(255,180,171,0.6)]" />}
+                      <div className={`w-2 h-2 rounded-full ${
+                        sl.avgTier <= 2 ? "bg-tertiary shadow-[0_0_8px_rgba(181,234,255,0.6)]" :
+                        sl.avgTier <= 3.5 ? "bg-secondary shadow-[0_0_8px_rgba(233,193,118,0.6)]" :
+                        "bg-on-surface-variant"
+                      }`} />
                     </div>
-                    <span className={`text-xs font-sans px-1.5 py-0.5 border ${tierColor(sl.avgTier)}`}>
-                      T{sl.avgTier}
-                    </span>
                   </div>
-                );
-              })}
-            </div>
-            <div className="flex-1 min-w-0">
-              {selectedSlot ? (
-                <SlotDetailPanel
-                  slot={selectedSlot}
-                  charData={charData}
-                  insights={insights}
-                  account={charData._account || ""}
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-on-surface-variant py-12">
-                  <Icon name="touch_app" className="text-4xl mb-2 opacity-70" />
-                  <span className="text-sm font-sans opacity-70">Select an item to view details</span>
+                  <div className="text-[10px] font-label uppercase tracking-widest text-outline group-hover:text-secondary transition-colors">
+                    Click to inspect <Icon name="arrow_forward" className="text-xs ml-1 align-middle" />
+                  </div>
                 </div>
-              )}
-            </div>
+              );
+            })}
           </div>
+
+          {/* Gear Slide-In Panel */}
+          {selectedSlotData && (
+            <GearSlideInPanel
+              slot={selectedSlotData}
+              charData={charData}
+              insights={insights}
+              account={charData._account || ""}
+              onClose={() => setInspectSlot(null)}
+            />
+          )}
         </div>
       );
     }
