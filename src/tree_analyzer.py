@@ -103,6 +103,7 @@ class TreeAnalyzer:
     def __init__(self):
         self._nodes: Dict[str, TreeNode] = {}
         self._graph: Dict[str, Set[str]] = {}
+        self._groups: Dict[int, Tuple[float, float]] = {}  # group_id -> (x, y)
         self._loaded = False
 
     def _ensure_loaded(self):
@@ -155,6 +156,12 @@ class TreeAnalyzer:
                 connections=[str(c["id"]) for c in raw.get("connections", [])],
             )
             self._nodes[nid] = node
+
+        # Parse groups for positions
+        raw_groups = tree_data.get("groups", [])
+        for gid, grp in enumerate(raw_groups):
+            if grp and isinstance(grp, dict):
+                self._groups[gid] = (grp.get("x", 0), grp.get("y", 0))
 
         # Build bidirectional graph
         for nid, node in self._nodes.items():
@@ -387,3 +394,69 @@ class TreeAnalyzer:
         lose_summary = "; ".join(refund_stats[:2])
 
         return f"{' '.join(parts)}. Gain: {gain_summary}. Lose: {lose_summary}."
+
+    def get_tree_visual(self, player_node_ids: List[int],
+                        top_node_ids: Optional[List[int]] = None,
+                        swaps: Optional[List[SwapRecommendation]] = None) -> dict:
+        """Return position data for an SVG tree mini-map.
+
+        Returns notables/keystones only (not small passives) with group x,y positions.
+        Nodes are categorized as: allocated, shared, missing (top has, you don't),
+        extra (you have, top doesn't), swap_take, swap_refund.
+        """
+        self._ensure_loaded()
+
+        allocated = set(str(n) for n in player_node_ids) if player_node_ids else set()
+        top_allocated = set(str(n) for n in top_node_ids) if top_node_ids else set()
+
+        # Build swap node name sets for highlighting
+        swap_take_names = set()
+        swap_refund_names = set()
+        if swaps:
+            for s in swaps:
+                swap_take_names.add(s.take_notable)
+                swap_refund_names.add(s.refund_notable)
+
+        nodes_out = []
+        for nid, node in self._nodes.items():
+            # Only show notables and keystones (skip small passives)
+            if not node.is_notable and not node.is_keystone:
+                continue
+            # Skip ascendancy nodes
+            if node.ascendancy:
+                continue
+
+            pos = self._groups.get(node.group)
+            if not pos:
+                continue
+
+            # Categorize
+            in_player = nid in allocated
+            in_top = nid in top_allocated
+
+            if node.name in swap_take_names:
+                cat = "swap_take"
+            elif node.name in swap_refund_names:
+                cat = "swap_refund"
+            elif in_player and in_top:
+                cat = "shared"
+            elif in_player and not in_top:
+                cat = "extra"
+            elif not in_player and in_top:
+                cat = "missing"
+            elif in_player:
+                cat = "allocated"
+            else:
+                cat = "unallocated"
+
+            nodes_out.append({
+                "id": nid,
+                "name": node.name,
+                "x": pos[0],
+                "y": pos[1],
+                "category": cat,
+                "isKeystone": node.is_keystone,
+                "stats": node.stats[:2],
+            })
+
+        return {"nodes": nodes_out}

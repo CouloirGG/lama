@@ -1675,6 +1675,17 @@ async def character_tree_analysis(req: TreeAnalysisRequest):
         )
         result = analysis.to_dict()
         result["targetName"] = target_name
+
+        # Add tree visualization data
+        try:
+            tree_visual = await loop.run_in_executor(
+                None, analyzer.get_tree_visual,
+                player_pob.passive_nodes, top_nodes, analysis.swap_recommendations
+            )
+            result["treeVisual"] = tree_visual
+        except Exception as e:
+            logger.debug(f"Tree visual generation failed (non-fatal): {e}")
+
         return result
     except Exception as e:
         logger.error(f"Tree analysis failed: {e}")
@@ -1725,6 +1736,75 @@ async def character_compare(req: BuildCompareRequest2):
         result = await loop.run_in_executor(
             None, why_engine_instance.compare_builds, player, target
         )
+
+        # Enrich shopping list with prices from price_cache
+        if price_cache and result.get("shoppingList"):
+            for item in result["shoppingList"]:
+                target_name = item.get("targetItem", "")
+                target_rarity = item.get("targetRarity", "")
+                if target_rarity in ("Unique", "unique") and target_name:
+                    try:
+                        price_data = price_cache.lookup(target_name, "", 0)
+                        if price_data:
+                            item["price"] = price_data.get("display", "")
+                            item["priceTier"] = price_data.get("tier", "")
+                            item["priceValue"] = price_data.get("divine_value", 0) or price_data.get("chaos_value", 0)
+                    except Exception:
+                        pass
+
+        # Enrich gear diffs with prices too
+        if price_cache and result.get("diffs"):
+            for diff in result["diffs"]:
+                if diff.get("category") != "gear":
+                    continue
+                target_name = diff.get("target", "")
+                target_rarity = diff.get("targetRarity", "")
+                if target_rarity in ("Unique", "unique") and target_name:
+                    try:
+                        price_data = price_cache.lookup(target_name, "", 0)
+                        if price_data:
+                            diff["price"] = price_data.get("display", "")
+                            diff["priceTier"] = price_data.get("tier", "")
+                    except Exception:
+                        pass
+
+        # Enrich shopping list with popular alternatives per slot
+        # (what top players actually use, with prices)
+        if result.get("shoppingList"):
+            try:
+                for item in result["shoppingList"]:
+                    slot = item.get("slot", "")
+                    if not slot:
+                        continue
+                    popular_data = await loop.run_in_executor(
+                        None, builds_client.get_popular_items_for_slot, player, slot
+                    )
+                    alternatives = []
+                    current_name = item.get("currentItem", "").lower()
+                    for pi in (popular_data.get("items") or [])[:8]:
+                        pi_name = pi.get("name", "")
+                        if pi_name.lower() == current_name:
+                            continue  # skip what they already have
+                        alt = {
+                            "name": pi_name,
+                            "usage": pi.get("percentage", 0),
+                            "rarity": pi.get("rarity", ""),
+                        }
+                        # Add price if available
+                        if pi.get("priceText"):
+                            alt["price"] = pi["priceText"]
+                        elif price_cache and pi.get("rarity") == "unique":
+                            try:
+                                pd = price_cache.lookup(pi_name, "", 0)
+                                if pd:
+                                    alt["price"] = pd.get("display", "")
+                            except Exception:
+                                pass
+                        alternatives.append(alt)
+                    item["alternatives"] = alternatives[:5]
+            except Exception as e:
+                logger.debug(f"Popular items enrichment failed (non-fatal): {e}")
+
         return result
     except Exception as e:
         logger.error(f"Build comparison failed: {e}")

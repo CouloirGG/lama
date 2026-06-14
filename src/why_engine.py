@@ -106,6 +106,10 @@ class Scorecard:
     dps: float = 0.0
     dps_label: str = ""             # "4.5M Poisonburst Arrow"
     dps_status: str = "info"
+    dps_ceiling: float = 0.0        # top player DPS for this build
+    dps_median: float = 0.0         # median DPS for this build
+    dps_percentile: int = -1        # player's percentile (0-100), -1 = unknown
+    dps_skill: str = ""             # main skill name
     resist_summary: str = ""        # "All capped" or "Fire 45% / Cold 75% / Light 75% / Chaos -12%"
     resist_status: str = "info"
     critical_count: int = 0         # number of critical issues
@@ -143,6 +147,10 @@ class CharacterExplanations:
                 "dps": self.scorecard.dps,
                 "dpsLabel": self.scorecard.dps_label,
                 "dpsStatus": self.scorecard.dps_status,
+                "dpsCeiling": self.scorecard.dps_ceiling,
+                "dpsMedian": self.scorecard.dps_median,
+                "dpsPercentile": self.scorecard.dps_percentile,
+                "dpsSkill": self.scorecard.dps_skill,
                 "resistSummary": self.scorecard.resist_summary,
                 "resistStatus": self.scorecard.resist_status,
                 "criticalCount": self.scorecard.critical_count,
@@ -884,6 +892,7 @@ class WhyEngine:
 
             if best_dps > 0:
                 sc.dps = best_dps
+                sc.dps_skill = best_skill
                 if best_dps >= 1_000_000:
                     label = f"{best_dps / 1_000_000:.1f}M"
                 elif best_dps >= 1_000:
@@ -918,16 +927,15 @@ class WhyEngine:
                         pop_dps_values.sort()
                         dps_max = max(pop_dps_values)
                         dps_median = pop_dps_values[len(pop_dps_values) // 2]
-                        # Percentile: what % of population is below this player
                         below = sum(1 for v in pop_dps_values if v <= best_dps)
                         dps_pct = int(below / len(pop_dps_values) * 100)
 
-                        top_label = _format_number(dps_max)
-                        median_label = _format_number(dps_median)
+                        sc.dps_ceiling = dps_max
+                        sc.dps_median = dps_median
+                        sc.dps_percentile = dps_pct
 
                         if dps_pct < 25:
                             sc.dps_status = "warning"
-                            sc.dps_label += f" (top players hit {top_label})"
                         elif dps_pct > 75:
                             sc.dps_status = "positive"
 
@@ -1227,16 +1235,9 @@ class WhyEngine:
 
             if top_chars and total_dps > 0:
                 best = max(top_chars, key=lambda x: x["dps"])
-                ratio = best["dps"] / total_dps
-                dps_missing.append(SynergyContributor(
-                    name=f"DPS Ceiling: {_format_number(best['dps'])}",
-                    source_type="missing",
-                    contribution=f"Top player ({best['name']}) achieves {_format_number(best['dps'])} DPS — {ratio:.1f}x your current {_format_number(total_dps)}",
-                    severity="info",
-                    detail=f"Look up {best['name']} on poe.ninja to see their full gear and gem setup. The gap comes from gear quality, gem levels, jewels, and support gems.",
-                    estimated_value=best["dps"] - total_dps,
-                    estimated_pct=round((ratio - 1) * 100, 0),
-                ))
+                # DPS ceiling stored in scorecard (shown in health bar) — not as a missing item.
+                # The individual missing items below (supports, keystones, jewels, gear mods)
+                # explain the gap. A generic "ceiling" card doesn't tell anyone what to DO.
 
         # Check for missing top-tier support gems
         if main_skill_group and profile:
@@ -1761,10 +1762,38 @@ class WhyEngine:
 
         if target_dps > 0 and player_dps > 0:
             ratio = target_dps / player_dps
+            gap = target_dps - player_dps
+            # Explain what's driving the gap
+            dps_reasons = []
+            # Check keystones
+            t_ks_only = set(target.keystones) - set(player.keystones)
+            if t_ks_only:
+                dps_reasons.append(f"keystones ({', '.join(list(t_ks_only)[:2])})")
+            # Check gem levels
+            if player_pob and target_pob:
+                p_gem = getattr(player_pob.stats, 'gem_level_bonus', 0) or 0
+                t_gem = getattr(target_pob.stats, 'gem_level_bonus', 0) or 0
+                if t_gem > p_gem:
+                    dps_reasons.append(f"+{t_gem - p_gem} higher gem levels")
+            # Check support count
+            p_sup = sum(len(sg.gems) for sg in player.skill_groups[:1]) if player.skill_groups else 0
+            t_sup = sum(len(sg.gems) for sg in target.skill_groups[:1]) if target.skill_groups else 0
+            if t_sup > p_sup + 1:
+                dps_reasons.append(f"{t_sup - p_sup} more support gems")
+
+            if ratio > 1.5 and dps_reasons:
+                text = f"Target does {ratio:.1f}x your DPS ({_format_number(gap)} more). Likely from: {', '.join(dps_reasons)}. Check their gear in the diffs below."
+            elif ratio > 1.5:
+                text = f"Target does {ratio:.1f}x your DPS ({_format_number(gap)} more). The gap comes from gear quality, gem levels, and jewels — check the gear diffs below for specifics."
+            elif ratio < 1:
+                text = f"You're ahead — {1/ratio:.1f}x their DPS."
+            else:
+                text = f"Similar DPS range ({_format_number(player_dps)} vs {_format_number(target_dps)})."
+
             diffs.append({
                 "category": "dps", "priority": 0,
                 "title": f"DPS: {_format_number(player_dps)} vs {_format_number(target_dps)}",
-                "text": f"Target build does {ratio:.1f}x your DPS.",
+                "text": text,
                 "severity": "critical" if ratio > 3 else "warning" if ratio > 1.5 else "positive" if ratio < 1 else "info",
                 "player": _format_number(player_dps),
                 "target": _format_number(target_dps),
@@ -1774,15 +1803,16 @@ class WhyEngine:
         p_ehp = int(player_pob.stats.total_ehp) if player_pob else 0
         t_ehp = int(target_pob.stats.total_ehp) if target_pob else 0
         if p_ehp > 0 and t_ehp > 0:
+            ehp_text = f"Target has {t_ehp/max(p_ehp,1):.1f}x your EHP." if t_ehp > p_ehp * 1.2 else f"Similar survivability ({p_ehp:,} vs {t_ehp:,})."
             diffs.append({
                 "category": "survival", "priority": 1,
                 "title": f"EHP: {p_ehp:,} vs {t_ehp:,}",
-                "text": f"Target has {t_ehp/max(p_ehp,1):.1f}x your effective HP.",
+                "text": ehp_text,
                 "severity": "warning" if t_ehp > p_ehp * 1.5 else "info",
                 "player": f"{p_ehp:,}", "target": f"{t_ehp:,}",
             })
 
-        # ── Gear slot-by-slot comparison ──
+        # ── Gear slot-by-slot comparison with mod-level analysis ──
         target_items = {eq.slot: eq for eq in target.equipment if eq.slot not in ("Flask", "Flask2")}
         player_items = {eq.slot: eq for eq in player.equipment if eq.slot not in ("Flask", "Flask2")}
         base_class = ASCENDANCY_MAP.get(player.ascendancy or "", "")
@@ -1796,39 +1826,75 @@ class WhyEngine:
             if t_name == p_name and t_item.rarity == (p_item.rarity if p_item else ""):
                 continue  # same item
 
-            # Calculate DPS contribution difference
-            t_dps_pct = 0
-            p_dps_pct = 0
-            for item, pct_var in [(t_item, "t"), (p_item, "p")]:
+            # Analyze every mod on both items
+            def _analyze_item_mods(item):
+                results = []
                 if not item:
-                    continue
-                total = 0
+                    return results
                 for mod in (item.explicit_mods or []) + (item.implicit_mods or []) + (item.crafted_mods or []):
                     mc = _strip_ninja_brackets(mod)
                     a = _analyze_mod_contribution(mc, player_arch, base_class)
-                    if a and a[0] == "dps":
-                        total += a[2]
-                if pct_var == "t":
-                    t_dps_pct = total
-                else:
-                    p_dps_pct = total
+                    cat = a[0] if a else "other"
+                    desc = a[1] if a else mc
+                    pct = a[2] if a else 0
+                    results.append({"mod": mc, "category": cat, "desc": desc, "pct": pct})
+                return results
 
+            t_mods = _analyze_item_mods(t_item)
+            p_mods = _analyze_item_mods(p_item)
+
+            t_dps_pct = sum(m["pct"] for m in t_mods if m["category"] == "dps")
+            p_dps_pct = sum(m["pct"] for m in p_mods if m["category"] == "dps")
             diff_pct = t_dps_pct - p_dps_pct
+
+            # Find mods target has that player doesn't (normalized comparison)
+            p_mod_texts = set(m["mod"].lower().strip() for m in p_mods)
+            t_mod_texts = set(m["mod"].lower().strip() for m in t_mods)
+
+            # Key mods the target has that contribute to DPS/survival
+            target_advantages = []
+            for m in t_mods:
+                if m["pct"] > 0 and m["mod"].lower().strip() not in p_mod_texts:
+                    target_advantages.append(m)
+            target_advantages.sort(key=lambda x: x["pct"], reverse=True)
+
+            # Mods the player has that the target doesn't (potential dead mods)
+            player_only = []
+            for m in p_mods:
+                if m["mod"].lower().strip() not in t_mod_texts:
+                    player_only.append(m)
+
             severity = "critical" if diff_pct > 30 else "warning" if diff_pct > 10 else "info"
 
-            # Describe what's different
+            # Build explanation text
             if t_item.rarity == "Unique" and (not p_item or p_item.rarity != "Unique" or p_item.name != t_item.name):
                 text = f"Target uses {t_name} ({t_item.rarity}). "
                 unique_info = POPULAR_UNIQUES.get(t_name)
                 if unique_info:
-                    text += unique_info.impact[:80]
+                    text += unique_info.impact[:120]
                 elif diff_pct > 5:
                     text += f"Estimated +{diff_pct:.0f}% DPS vs your current gear."
             elif diff_pct > 5:
-                text = f"Target's {slot} has ~{diff_pct:.0f}% more DPS contribution than yours."
+                top_adv = target_advantages[:2]
+                if top_adv:
+                    reasons = ", ".join(f"{a['desc']}" for a in top_adv)
+                    text = f"Target's {slot} gains ~{diff_pct:.0f}% more DPS from: {reasons}."
+                else:
+                    text = f"Target's {slot} has ~{diff_pct:.0f}% more DPS contribution."
             else:
                 text = f"Different item in {slot} — similar DPS contribution."
                 severity = "info"
+
+            # Build search guidance for rare items
+            search_tips = []
+            if t_item.rarity in ("Rare", "rare") or (p_item and p_item.rarity in ("Rare", "rare")):
+                # What mods to search for
+                key_mods = [a for a in target_advantages if a["pct"] >= 3]
+                if key_mods:
+                    search_tips.append(f"Search trade for {t_item.type_line or slot} with: {', '.join(m['desc'] for m in key_mods[:4])}")
+                # What to prioritize
+                if diff_pct > 15 and key_mods:
+                    search_tips.append(f"Priority: {key_mods[0]['desc']} alone is worth ~{key_mods[0]['pct']:.0f}% DPS")
 
             diffs.append({
                 "category": "gear", "priority": 2 if diff_pct > 10 else 5,
@@ -1838,6 +1904,15 @@ class WhyEngine:
                 "player": p_name, "target": t_name,
                 "dps_diff_pct": round(diff_pct, 1),
                 "slot": slot,
+                # Mod-level breakdown
+                "playerMods": [{"mod": m["mod"], "desc": m["desc"], "pct": round(m["pct"], 1), "cat": m["category"]} for m in p_mods if m["pct"] > 0],
+                "targetMods": [{"mod": m["mod"], "desc": m["desc"], "pct": round(m["pct"], 1), "cat": m["category"]} for m in t_mods if m["pct"] > 0],
+                "targetAdvantages": [{"mod": m["mod"], "desc": m["desc"], "pct": round(m["pct"], 1)} for m in target_advantages[:5]],
+                "playerOnly": [{"mod": m["mod"], "desc": m["desc"], "pct": round(m["pct"], 1)} for m in player_only if m["category"] != "other"],
+                "searchTips": search_tips,
+                "playerRarity": p_item.rarity if p_item else "",
+                "targetRarity": t_item.rarity or "",
+                "targetBase": t_item.type_line or "",
             })
 
         # ── Jewel comparison ──
@@ -1909,6 +1984,25 @@ class WhyEngine:
         sev_order = {"critical": 0, "warning": 1, "info": 2, "positive": 3}
         diffs.sort(key=lambda d: (d.get("priority", 9), sev_order.get(d.get("severity", "info"), 9)))
 
+        # Build upgrade shopping list — gear diffs sorted by impact
+        shopping_list = []
+        for d in diffs:
+            if d.get("category") != "gear" or d.get("dps_diff_pct", 0) <= 0:
+                continue
+            entry = {
+                "slot": d["slot"],
+                "currentItem": d.get("player", ""),
+                "targetItem": d.get("target", ""),
+                "targetRarity": d.get("targetRarity", ""),
+                "targetBase": d.get("targetBase", ""),
+                "dpsDiffPct": d.get("dps_diff_pct", 0),
+                "severity": d.get("severity", "info"),
+                "searchTips": d.get("searchTips", []),
+                "keyMods": [a["desc"] for a in d.get("targetAdvantages", [])[:3]],
+            }
+            shopping_list.append(entry)
+        shopping_list.sort(key=lambda x: x["dpsDiffPct"], reverse=True)
+
         return {
             "player": {"name": player.name, "ascendancy": player.ascendancy, "level": player.level},
             "target": {"name": target.name, "ascendancy": target.ascendancy, "level": target.level},
@@ -1916,6 +2010,7 @@ class WhyEngine:
             "target_dps": _format_number(target_dps) if target_dps > 0 else "?",
             "diffs": diffs,
             "total_diffs": len(diffs),
+            "shoppingList": shopping_list,
         }
 
 
@@ -2178,14 +2273,14 @@ def _analyze_mod_contribution(mod_text: str, archetype, base_class: str = "") ->
     if m:
         levels = int(m.group(1))
         est = levels * gem_level_weight  # ~6% per gem level (was 11%, data shows less impact)
-        return ("dps", f"+{levels} gem levels (~{est}% DPS)", est)
+        return ("dps", f"+{levels} gem levels (~{round(est, 1)}% DPS)", est)
 
     # +N to level of specific skill gems
     m = _re.search(r"\+(\d+) to level of all .*(cold|fire|lightning|chaos|physical)", ml)
     if m:
         levels = int(m.group(1))
         est = levels * 8
-        return ("dps", f"+{levels} element gem levels (~{est}% DPS)", est)
+        return ("dps", f"+{levels} element gem levels (~{round(est, 1)}% DPS)", est)
 
     # % increased spell damage
     m = _re.search(r"(\d+)% increased .*spell.*damage", ml)

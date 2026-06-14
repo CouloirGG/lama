@@ -203,54 +203,6 @@
     };
     const SEV_ICONS = { critical: "error", warning: "warning", positive: "check_circle", info: "info" };
 
-    function WhyCard({ explanation, neutral }) {
-      const e = explanation;
-      const icon = SEV_ICONS[e.severity] || "info";
-      const iconColor = { critical: "text-red-400", warning: "text-yellow-400", positive: "text-green-400", info: "text-on-surface-variant" }[e.severity] || "";
-      const [open, setOpen] = useState(false);
-      return (
-        <div
-          className={`flex gap-2 px-3 py-1.5 cursor-pointer transition-colors ${neutral ? "bg-surface-container-lowest hover:bg-surface-container" : SEV_COLORS[e.severity] || SEV_COLORS.info}`}
-          onClick={() => setOpen(!open)}
-        >
-          <Icon name={icon} className={`text-sm mt-px shrink-0 ${neutral ? iconColor : ""}`} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono font-semibold text-on-surface">{e.title}</span>
-              {e.adoptionPct > 0 && (
-                <span className="text-xs font-mono opacity-70">{e.adoptionPct.toFixed(0)}%</span>
-              )}
-              {!open && <span className="text-xs font-mono opacity-60 truncate flex-1">{e.text.slice(0, 60)}...</span>}
-            </div>
-            {open && <p className="text-xs font-mono leading-relaxed opacity-80 mt-1">{e.text}</p>}
-          </div>
-          <Icon name={open ? "expand_less" : "expand_more"} className="text-xs opacity-30 shrink-0 mt-0.5" />
-        </div>
-      );
-    }
-
-    function WhySection({ title, explanations, icon, maxItems = 10 }) {
-      if (!explanations || explanations.length === 0) return null;
-      const [expanded, setExpanded] = useState(false);
-      const shown = expanded ? explanations : explanations.slice(0, maxItems);
-      return (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            {icon && <Icon name={icon} className="text-base text-primary-container" />}
-            <h3 className="font-serif text-base text-on-surface">{title}</h3>
-            <span className="text-xs font-mono text-on-surface-variant">({explanations.length})</span>
-          </div>
-          <div className="flex flex-col gap-2">
-            {shown.map((e, i) => <WhyCard key={i} explanation={e} />)}
-          </div>
-          {explanations.length > maxItems && !expanded && (
-            <button onClick={() => setExpanded(true)} className="text-xs font-mono text-primary-container hover:text-primary">
-              Show {explanations.length - maxItems} more...
-            </button>
-          )}
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // Scorecard severity backgrounds
@@ -262,74 +214,10 @@
       info: "bg-surface-container border-outline-variant text-on-surface-variant",
     };
 
-    function ScorecardPanel({ scorecard }) {
-      const sc = scorecard;
-      return (
-        <div className="grid grid-cols-3 gap-3">
-          <div className={`flex flex-col items-center p-4 border ${STATUS_BG[sc.ehpStatus] || STATUS_BG.info}`}>
-            <span className="text-xs font-mono tracking-widest opacity-60 mb-1">EFFECTIVE HP</span>
-            <span className="text-2xl font-mono font-bold">{sc.ehp?.toLocaleString() || "?"}</span>
-            <span className="text-xs font-mono opacity-70 mt-1">{sc.ehpContext}</span>
-          </div>
-          <div className={`flex flex-col items-center p-4 border ${STATUS_BG[sc.dpsStatus] || STATUS_BG.info}`}>
-            <span className="text-xs font-mono tracking-widest opacity-60 mb-1">DPS</span>
-            <span className="text-2xl font-mono font-bold">{sc.dpsLabel || "?"}</span>
-            <span className="text-xs font-mono opacity-70 mt-1">Primary skill</span>
-          </div>
-          <div className={`flex flex-col items-center p-4 border ${STATUS_BG[sc.resistStatus] || STATUS_BG.info}`}>
-            <span className="text-xs font-mono tracking-widest opacity-60 mb-1">RESISTANCES</span>
-            <span className="text-lg font-mono font-bold">{sc.resistStatus === "positive" ? "Capped" : "Gaps"}</span>
-            <span className="text-xs font-mono opacity-70 mt-1 text-center">{sc.resistSummary}</span>
-          </div>
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // InsightGroupCard — collapsible group of related explanations
     // -----------------------------------------------------------------------
-    function InsightGroupCard({ group }) {
-      const [open, setOpen] = useState(false);
-      const g = group;
-      const headerColor = {
-        critical: "border-l-red-500 bg-red-500/8",
-        warning: "border-l-yellow-500 bg-yellow-500/8",
-        positive: "border-l-green-500 bg-green-500/8",
-        info: "border-l-outline bg-surface-container",
-      }[g.severity] || "border-l-outline bg-surface-container";
-      const labelColor = {
-        critical: "text-red-400", warning: "text-yellow-400",
-        positive: "text-green-400", info: "text-on-surface-variant"
-      }[g.severity] || "";
-      return (
-        <div className="border border-outline-variant overflow-hidden">
-          <div
-            className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-l-4 ${headerColor}`}
-            onClick={() => setOpen(!open)}
-          >
-            <Icon name={g.icon} className={`text-xl shrink-0 ${labelColor}`} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className={`text-sm font-mono font-semibold ${labelColor}`}>{g.label}</span>
-                {g.statValue && (
-                  <span className="text-xs font-mono text-on-surface px-2 py-0.5 bg-surface-container border border-outline-variant">
-                    {g.statValue}
-                  </span>
-                )}
-                <span className="text-xs font-mono text-on-surface-variant">{g.items?.length || 0} items</span>
-              </div>
-              <p className="text-xs font-mono text-on-surface-variant mt-0.5">{g.summary}</p>
-            </div>
-            <Icon name={open ? "expand_less" : "expand_more"} className="text-base text-on-surface-variant shrink-0" />
-          </div>
-          {open && g.items?.length > 0 && (
-            <div className="flex flex-col gap-0.5 px-3 py-2 bg-surface-container-lowest">
-              {g.items.map((e, i) => <WhyCard key={i} explanation={e} neutral />)}
-            </div>
-          )}
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // Window API
@@ -364,73 +252,6 @@
       );
     }
 
-    // -----------------------------------------------------------------------
-    // Sidebar (replaces TabNav) — fixed left, below navbar
-    // -----------------------------------------------------------------------
-    const NAV_ITEMS = [
-      { id: "BUILD", label: "OVERVIEW", icon: "dashboard" },
-      { id: "GEAR", label: "GEAR", icon: "inventory_2" },
-      { id: "MARKET", label: "MARKET", icon: "storefront" },
-      { id: "GUIDE", label: "GUIDE", icon: "menu_book" },
-    ];
-
-    function Sidebar({ activeTab, onTabChange, charData, hasCharacter, onSettingsClick }) {
-      return (
-        <div
-          className="fixed left-0 top-[64px] bottom-0 z-40 flex flex-col bg-surface-container-low border-r border-outline-variant"
-          style={{ width: "256px" }}
-        >
-          {/* Character info */}
-          {charData && (
-            <div className="px-5 py-4 border-b border-outline-variant">
-              <div className="text-sm font-sans font-semibold text-on-surface">{charData.name}</div>
-              <div className="text-xs text-on-surface-variant mt-0.5">
-                {charData.ascendancy || charData.class} — Lv{charData.level}
-              </div>
-            </div>
-          )}
-
-          {/* Navigation */}
-          <nav className="flex-1 flex flex-col py-2">
-            {!hasCharacter ? (
-              <button
-                onClick={onSettingsClick}
-                className="mx-3 my-1 px-4 py-3 text-left text-sm text-primary-container font-sans hover:bg-surface-container transition-colors"
-              >
-                Open Settings to look up a character
-              </button>
-            ) : (
-              NAV_ITEMS.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => onTabChange(item.id)}
-                  className={`flex items-center gap-3 mx-2 px-4 py-3 text-left transition-colors ${
-                    activeTab === item.id
-                      ? "nav-item-active"
-                      : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
-                  }`}
-                >
-                  <Icon name={item.icon} className="text-xl" />
-                  <span className="text-xs font-sans tracking-[0.15em] font-semibold">{item.label}</span>
-                </button>
-              ))
-            )}
-          </nav>
-
-          {/* Export button */}
-          {hasCharacter && (
-            <div className="px-4 py-4 border-t border-outline-variant">
-              <button className="w-full py-2.5 text-xs font-sans font-bold tracking-widest uppercase text-on-primary bg-gradient-to-r from-primary-container to-secondary hover:opacity-90 transition-opacity">
-                <Icon name="download" className="text-sm mr-2 align-middle" />
-                EXPORT
-              </button>
-            </div>
-          )}
-
-          {/* Connection status */}
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // Settings Panel
@@ -720,232 +541,26 @@
     // -----------------------------------------------------------------------
     // Build Health Gauge (SVG circular gauge)
     // -----------------------------------------------------------------------
-    function BuildHealthGauge({ insights, comparison }) {
-      const score = useMemo(() => {
-        if (!insights) return 0;
-        let s = 100;
-        const slots = insights.slotSummary || [];
-        if (slots.length > 0) {
-          const avgPenalty = slots.reduce((sum, sl) => sum + Math.max(0, (sl.avgTier - 1) * 10), 0) / slots.length;
-          s -= avgPenalty;
-        }
-        const deadCount = slots.reduce((sum, sl) => sum + (sl.deadMods?.length || 0), 0);
-        s -= deadCount * 5;
-        const popular = (insights.keystoneGaps?.popular || []);
-        const missingKs = popular.filter(k => k.percentage > 30 && !k.hasIt).length;
-        s -= missingKs * 3;
-        return Math.max(0, Math.min(100, Math.round(s)));
-      }, [insights]);
-
-      const radius = 80;
-      const circumference = 2 * Math.PI * radius;
-      const dashOffset = circumference - (score / 100) * circumference;
-
-      return (
-        <div className="flex flex-col items-center gap-3">
-          <svg width="200" height="200" viewBox="0 0 200 200" className="drop-shadow-lg">
-            <circle cx="100" cy="100" r={radius} fill="none" stroke="#353534" strokeWidth="10" />
-            <circle
-              cx="100" cy="100" r={radius}
-              fill="none" stroke="#ffb77b" strokeWidth="10"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-              transform="rotate(-90 100 100)"
-              className="transition-all duration-1000"
-            />
-            <text x="100" y="92" textAnchor="middle" className="fill-on-surface font-sans text-4xl font-bold" style={{ fontSize: "42px" }}>{score}</text>
-            <text x="100" y="118" textAnchor="middle" className="fill-on-surface-variant font-sans" style={{ fontSize: "12px" }}>Build Health</text>
-          </svg>
-          <StatusBadge score={score} />
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // Status Badge
     // -----------------------------------------------------------------------
-    function StatusBadge({ score }) {
-      let color, label;
-      if (score >= 75) { color = "bg-green-400"; label = "ON TRACK"; }
-      else if (score >= 40) { color = "bg-yellow-400"; label = "NEEDS WORK"; }
-      else { color = "bg-red-400"; label = "CRITICAL"; }
-
-      return (
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant">
-          <span className={`w-2 h-2 rounded-full ${color}`} />
-          <span className="text-xs font-sans tracking-widest text-on-surface-variant">{label}</span>
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // KPI Row
     // -----------------------------------------------------------------------
-    function KPIRow({ insights, comparison }) {
-      const defType = insights?.archetype?.defenseType || "unknown";
-      const mainSkill = insights?.archetype?.mainSkill || "unknown";
-      const metaScore = comparison?.overallScore ?? "--";
-
-      const cards = [
-        { label: "Survivability", value: defType, icon: "shield" },
-        { label: "DPS Source", value: mainSkill, icon: "bolt" },
-        { label: "Meta Match", value: typeof metaScore === "number" ? `${metaScore}%` : metaScore, icon: "analytics" },
-      ];
-
-      return (
-        <div className="grid grid-cols-3 gap-3">
-          {cards.map(c => (
-            <div key={c.label} className="flex flex-col items-center gap-1 p-4 bg-surface-container-low border border-outline-variant">
-              <Icon name={c.icon} className="text-primary-container text-xl" />
-              <span className="text-lg font-sans font-semibold text-on-surface capitalize">{c.value}</span>
-              <span className="text-xs font-sans text-on-surface-variant">{c.label}</span>
-            </div>
-          ))}
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // Critical Actions Checklist
     // -----------------------------------------------------------------------
-    function CriticalActionsChecklist({ insights }) {
-      const actions = useMemo(() => {
-        if (!insights) return [];
-        const items = [];
-        const slots = insights.slotSummary || [];
-        for (const sl of slots) {
-          for (const dm of (sl.deadMods || [])) {
-            items.push({
-              type: "dead",
-              border: "border-l-secondary",
-              icon: "local_fire_department",
-              iconColor: "text-secondary",
-              title: `Remove "${dm.mod}" on ${sl.slotDisplay}`,
-              subtitle: dm.reason,
-            });
-          }
-        }
-        const popular = insights.keystoneGaps?.popular || [];
-        for (const k of popular) {
-          if (k.percentage > 30 && !k.hasIt) {
-            items.push({
-              type: "keystone",
-              border: "border-l-yellow-400",
-              icon: "diamond",
-              iconColor: "text-yellow-400",
-              title: `Consider ${k.name}`,
-              subtitle: `${k.percentage}% of players use this`,
-            });
-          }
-        }
-        for (const sl of slots) {
-          if (sl.avgTier >= 3.5) {
-            items.push({
-              type: "weak",
-              border: "border-l-tertiary",
-              icon: "trending_up",
-              iconColor: "text-tertiary",
-              title: `Upgrade ${sl.slotDisplay}`,
-              subtitle: `Average Tier: T${sl.avgTier}`,
-            });
-          }
-        }
-        return items;
-      }, [insights]);
-
-      if (actions.length === 0) return null;
-
-      return (
-        <div className="flex flex-col gap-2">
-          <h3 className="font-serif text-base text-on-surface mb-1">Critical Actions</h3>
-          {actions.map((a, i) => (
-            <div key={i} className={`flex items-start gap-3 p-3 bg-surface-container-low border border-outline-variant border-l-4 ${a.border} fade-in`} style={{ animationDelay: `${i * 50}ms` }}>
-              <Icon name={a.icon} className={`${a.iconColor} text-xl mt-0.5`} />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-on-surface font-sans">{a.title}</div>
-                <div className="text-xs text-on-surface-variant mt-0.5">{a.subtitle}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // Next Big Upgrade Card
     // -----------------------------------------------------------------------
-    function NextBigUpgradeCard({ improvement }) {
-      const item = improvement?.spend?.[0];
-      if (!item) return null;
-
-      return (
-        <div className="flex flex-col gap-2">
-          <h3 className="font-serif text-base text-on-surface">Next Big Upgrade</h3>
-          <div className="p-4 bg-surface-container-high border border-primary-container/30">
-            <div className="flex items-start gap-3">
-              <div className="flex items-center justify-center w-10 h-10 bg-primary-container/20">
-                <Icon name="upgrade" className="text-primary text-2xl" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-sans font-semibold text-primary">{item.action}</div>
-                <div className="text-sm text-on-surface mt-1">{item.detail}</div>
-                <div className="flex items-center gap-4 mt-2">
-                  {item.cost && (
-                    <span className="text-xs font-sans text-primary-container">
-                      <Icon name="paid" className="text-sm align-middle mr-1" />
-                      {item.cost}
-                    </span>
-                  )}
-                  {item.impact && <span className="text-xs font-sans text-on-surface-variant">{item.impact}</span>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // Keystone Gaps Card
     // -----------------------------------------------------------------------
-    function KeystoneGapsCard({ insights, charData }) {
-      const userKs = insights?.keystoneGaps?.user || [];
-      const popular = insights?.keystoneGaps?.popular || [];
-      const charClass = charData?.ascendancy || charData?.class || "your class";
-
-      if (popular.length === 0 && userKs.length === 0) return null;
-
-      return (
-        <div className="flex flex-col gap-2">
-          <h3 className="font-serif text-base text-on-surface">Keystones vs Meta</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 bg-surface-container-low border border-outline-variant">
-              <div className="text-xs font-sans text-on-surface-variant mb-2 tracking-widest uppercase">YOUR KEYSTONES</div>
-              <div className="flex flex-col gap-1">
-                {userKs.length > 0 ? userKs.map(k => (
-                  <div key={k} className="flex items-center gap-2 text-sm font-sans text-on-surface">
-                    <Icon name="check_circle" className="text-green-400 text-base" />{k}
-                  </div>
-                )) : <span className="text-xs text-outline">None detected</span>}
-              </div>
-            </div>
-            <div className="p-3 bg-surface-container-low border border-outline-variant">
-              <div className="text-xs font-sans text-on-surface-variant mb-2 tracking-widest uppercase">POPULAR FOR {charClass.toUpperCase()}</div>
-              <div className="flex flex-col gap-1">
-                {popular.map(k => (
-                  <div key={k.name} className="flex items-center gap-2 text-sm font-sans">
-                    <Icon name={k.hasIt ? "check_circle" : "cancel"} className={`text-base ${k.hasIt ? "text-green-400" : "text-red-400"}`} />
-                    <span className={k.hasIt ? "text-on-surface" : "text-on-surface-variant"}>{k.name}</span>
-                    <span className="text-xs text-outline ml-auto">{k.percentage}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // Inline Character Lookup (shown when no character is loaded)
@@ -1098,361 +713,393 @@
       );
     }
 
-    // -----------------------------------------------------------------------
-    // PULSE Tab (Overview)
-    // -----------------------------------------------------------------------
-    function PulseTab({ charData, insights, improvement, comparison, whyInsights, onLookup }) {
-      if (!charData) {
-        return <InlineCharacterLookup onLookup={onLookup} />;
-      }
 
-      if (!insights && !whyInsights) {
-        return (
-          <div className="flex flex-col items-center justify-center h-full gap-3">
-            <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-            <span className="text-sm text-on-surface-variant font-sans">Analyzing build...</span>
-          </div>
-        );
-      }
+    // -- Build Diff View (Stitch Prompt 5) ----------------------------------
 
-      const sc = whyInsights?.scorecard;
-      const groups = whyInsights?.insightGroups || [];
-      const survivalGroup = groups.find(g => g.category === "survival");
-      const damageGroup = groups.find(g => g.category === "damage");
-      const clearGroup = groups.find(g => g.category === "clear_speed");
-      const qualityGroup = groups.find(g => g.category === "quality");
-      const allStats = whyInsights?.stats || [];
+    function BuildDiffView({ result }) {
+      const r = result;
+      const player = r.player || {};
+      const target = r.target || {};
+      const diffs = r.diffs || [];
+      const shoppingList = r.shoppingList || [];
 
-      const resists = allStats.filter(s => s.title.includes("Resistance"));
-      const nonResistStats = allStats.filter(s => !s.title.includes("Resistance"));
+      // Cost summary from priced items
+      const pricedItems = shoppingList.filter(i => i.price);
+      const unpricedItems = shoppingList.filter(i => !i.price && i.dpsDiffPct > 0);
 
-      // Projection state
-      const [projections, setProjections] = useState({});
-      const toggleProjection = useCallback((name) => {
-        setProjections(prev => ({ ...prev, [name]: !prev[name] }));
-      }, []);
-
-      const projectedDeltas = useMemo(() => {
-        const deltas = { dps: 0, ehp: 0 };
-        const synergyMap = whyInsights?.synergyMap || [];
-        for (const cat of synergyMap) {
-          for (const item of cat.missing) {
-            if (projections[item.name] && item.estimatedValue > 0) {
-              if (cat.category === "dps") deltas.dps += item.estimatedValue;
-              if (cat.category === "survival") deltas.ehp += item.estimatedValue;
-            }
-          }
+      // Group diffs by category
+      const grouped = useMemo(() => {
+        const groups = {};
+        for (const d of diffs) {
+          const cat = d.category || "other";
+          if (!groups[cat]) groups[cat] = [];
+          groups[cat].push(d);
         }
-        for (const g of groups) {
-          for (const item of g.items) {
-            if (projections[item.title?.replace("Allocate ", "").replace("Missing: ", "")] && item.estimatedValue > 0) {
-              // Avoid double-counting
-            }
-          }
-        }
-        return deltas;
-      }, [projections, whyInsights, groups]);
+        return groups;
+      }, [diffs]);
 
-      const projectedEhp = (sc?.ehp || 0) + projectedDeltas.ehp;
-      const projectedDps = (sc?.dps || 0) + projectedDeltas.dps;
-      const hasProjections = projectedDeltas.dps > 0 || projectedDeltas.ehp > 0;
-
-      // Gear state
-      const [selectedGearSlot, setSelectedGearSlot] = useState(null);
-      const [leftPanel, setLeftPanel] = useState("survival");
-      const gearSlots = insights?.slotSummary || [];
-
-      // Passive tree analysis
-      const [treeAnalysis, setTreeAnalysis] = useState(null);
-      const [treeLoading, setTreeLoading] = useState(false);
-
-      useEffect(() => {
-        if (!account || !character || !charData) return;
-        setTreeLoading(true);
-        api("/api/character/tree-analysis", "POST", { account, character })
-          .then(data => {
-            try {
-              if (data && !data.error && Array.isArray(data.swapRecommendations)) {
-                setTreeAnalysis(data);
-              }
-            } catch (e) { console.warn("[LAMA] Tree parse error:", e); }
-            setTreeLoading(false);
-          })
-          .catch(() => setTreeLoading(false));
-      }, [account, character, charData]);
-
-      // Build comparison state
-      const [compareQuery, setCompareQuery] = useState("");
-      const [compareResult, setCompareResult] = useState(null);
-      const [compareLoading, setCompareLoading] = useState(false);
-      const [compareError, setCompareError] = useState("");
-
-      const handleCompare = async () => {
-        if (!compareQuery.trim() || !account || !character) return;
-        setCompareLoading(true);
-        setCompareError("");
-        const data = await api("/api/character/compare", "POST", {
-          player_account: account,
-          player_character: character,
-          target_query: compareQuery.trim(),
-        });
-        setCompareLoading(false);
-        if (data.error) setCompareError(data.error);
-        else setCompareResult(data);
+      const catMeta = {
+        dps: { label: "DPS", icon: "bolt", order: 0 },
+        survival: { label: "Survival", icon: "shield", order: 1 },
+        gear: { label: "Gear", icon: "inventory_2", order: 2 },
+        keystones: { label: "Keystones", icon: "key", order: 3 },
+        jewels: { label: "Jewels", icon: "diamond", order: 4 },
+        supports: { label: "Supports", icon: "link", order: 5 },
+        other: { label: "Other", icon: "more_horiz", order: 6 },
       };
 
+      const sortedCats = Object.keys(grouped).sort((a, b) => (catMeta[a]?.order ?? 9) - (catMeta[b]?.order ?? 9));
+      const critCount = diffs.filter(d => d.severity === "critical").length;
+      const warnCount = diffs.filter(d => d.severity === "warning").length;
+
       return (
-        <div className="flex flex-col gap-0 p-6">
-          {/* Stat Cards Row */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <StitchStatCard
-              label="Effective HP"
-              value={sc ? sc.ehp?.toLocaleString() : "..."}
-              context={sc?.ehpContext || ""}
-              status={sc?.ehpStatus || "info"}
-              icon="shield"
-              projected={hasProjections && projectedDeltas.ehp > 0 ? projectedEhp : null}
-              projectedDelta={projectedDeltas.ehp}
-            />
-            <StitchStatCard
-              label="Primary DPS"
-              value={sc?.dpsLabel || "..."}
-              context="Main skill damage"
-              status={sc?.dpsStatus || "info"}
-              icon="bolt"
-              projected={hasProjections && projectedDeltas.dps > 0 ? projectedDps : null}
-              projectedDelta={projectedDeltas.dps}
-            />
-            <StitchStatCard
-              label="Resistances"
-              value={sc?.resistStatus === "positive" ? "Capped" : "Gaps"}
-              context={sc?.resistSummary || ""}
-              status={sc?.resistStatus || "info"}
-              icon="verified"
-            />
+        <div>
+          {/* Header: player vs target — compact */}
+          <div className="border-l-2 border-tertiary p-3 bg-surface-container-low mb-3">
+            <div className="flex items-center gap-2 text-xs mb-1">
+              <span className="text-on-surface font-bold">{player.name}</span>
+              <Icon name="compare_arrows" className="text-tertiary text-sm" />
+              <span className="text-tertiary font-bold">{target.name}</span>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] text-outline">
+              <span>{r.player_dps} vs {r.target_dps} DPS</span>
+              {critCount > 0 && <span className="text-error">{critCount} critical</span>}
+              {warnCount > 0 && <span className="text-secondary">{warnCount} warnings</span>}
+            </div>
           </div>
 
-          {/* 3-Column Layout */}
-          <div className="grid grid-cols-12 gap-6" style={{ minHeight: "calc(100vh - 300px)" }}>
-
-            {/* LEFT: Defense / Gear Panel */}
-            <div className="col-span-3 flex flex-col gap-0">
-              {/* Panel toggle */}
-              <div className="flex border-b border-outline-variant/20">
-                <button
-                  onClick={() => { setLeftPanel("survival"); setSelectedGearSlot(null); }}
-                  className={`flex-1 py-1.5 text-[12px] font-sans uppercase tracking-widest transition-all ${
-                    leftPanel === "survival" ? "text-primary-container border-b-2 border-primary-container" : "text-on-surface-variant hover:text-on-surface"
-                  }`}
-                >
-                  <Icon name="shield" className="text-xs mr-1 align-middle" />Survival
-                </button>
-                <button
-                  onClick={() => setLeftPanel("gear")}
-                  className={`flex-1 py-1.5 text-[12px] font-sans uppercase tracking-widest transition-all ${
-                    leftPanel === "gear" ? "text-secondary border-b-2 border-secondary" : "text-on-surface-variant hover:text-on-surface"
-                  }`}
-                >
-                  <Icon name="inventory_2" className="text-xs mr-1 align-middle" />Gear
-                </button>
+          {/* Shopping List — gear upgrades sorted by bang-for-buck */}
+          {shoppingList.length > 0 && (
+            <div className="mb-6">
+              <div className="border-l-2 border-secondary p-3 bg-surface-container-low mb-3">
+                <span className="font-headline text-sm font-bold text-on-surface">
+                  <Icon name="shopping_cart" className="text-xs mr-1 align-middle text-secondary" />
+                  Gear Upgrades
+                </span>
+                <p className="font-label text-[11px] text-outline uppercase tracking-widest">
+                  {shoppingList.length} gear upgrade{shoppingList.length !== 1 ? "s" : ""} sorted by impact
+                  {pricedItems.length > 0 && (
+                    <span className="text-primary-container ml-2">| {pricedItems.length} priced</span>
+                  )}
+                  {unpricedItems.length > 0 && (
+                    <span className="text-on-surface-variant ml-2">| {unpricedItems.length} check trade</span>
+                  )}
+                </p>
               </div>
 
-              {leftPanel === "survival" ? (
-                <div className="bg-surface-container-low p-4 border-l-2 border-primary-container/40 flex-1 overflow-y-auto">
-                  {/* Resist bars */}
-                  <div className="space-y-2 mb-4">
-                    {[
-                      { name: "Fire", key: "Fire Resistance", color: "bg-red-400" },
-                      { name: "Cold", key: "Cold Resistance", color: "bg-blue-400" },
-                      { name: "Lightning", key: "Lightning Resistance", color: "bg-yellow-300" },
-                      { name: "Chaos", key: "Chaos Resistance", color: "bg-purple-400" },
-                    ].map(r => {
-                      const stat = resists.find(s => s.title === r.key);
-                      const valMatch = stat?.text?.match(/(\d+)%/);
-                      const val = valMatch ? parseInt(valMatch[1]) : 0;
-                      const capped = stat?.severity === "positive";
-                      const pct = Math.max(0, Math.min(100, val));
-                      return (
-                        <div key={r.name} className="space-y-0.5">
-                          <div className="flex justify-between text-[12px] uppercase tracking-widest font-sans">
-                            <span className="text-on-surface-variant">{r.name}</span>
-                            <span className={capped ? "text-primary-container" : "text-error"}>
-                              {val > 0 ? `${Math.min(val, 75)}%` : "?"}
+              {/* Budget summary — cheapest upgrade path */}
+              {pricedItems.length > 0 && (() => {
+                // Sort by bang-for-buck (DPS per divine)
+                const withValue = pricedItems.filter(i => i.priceValue > 0);
+                const bangForBuck = [...withValue].sort((a, b) => (b.dpsDiffPct / (b.priceValue || 1)) - (a.dpsDiffPct / (a.priceValue || 1)));
+                const cheapest = [...withValue].sort((a, b) => (a.priceValue || 999) - (b.priceValue || 999));
+                return (
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="bg-surface-container-lowest p-4 border-l-2 border-primary-container/40">
+                      <span className="font-label text-[10px] text-primary-container uppercase tracking-widest block mb-2">Best Bang for Buck</span>
+                      {bangForBuck.slice(0, 3).map((item, i) => (
+                        <div key={i} className="flex justify-between text-xs py-0.5">
+                          <span className="font-body text-on-surface-variant">{item.slot}: {item.targetItem}</span>
+                          <span className="font-label text-primary-container">{item.price} <span className="text-secondary ml-1">+{item.dpsDiffPct}%</span></span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="bg-surface-container-lowest p-4 border-l-2 border-tertiary/40">
+                      <span className="font-label text-[10px] text-tertiary uppercase tracking-widest block mb-2">Cheapest First</span>
+                      {cheapest.slice(0, 3).map((item, i) => (
+                        <div key={i} className="flex justify-between text-xs py-0.5">
+                          <span className="font-body text-on-surface-variant">{item.slot}: {item.targetItem}</span>
+                          <span className="font-label text-tertiary">{item.price} <span className="text-secondary ml-1">+{item.dpsDiffPct}%</span></span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="space-y-2">
+                {shoppingList.map((item, i) => {
+                  const sevColor = { critical: "border-error", warning: "border-secondary", info: "border-outline-variant" }[item.severity] || "border-outline-variant";
+                  return (
+                    <div key={i} className={`bg-surface-container-low p-4 border-l-2 ${sevColor} flex items-start gap-4`}>
+                      <div className="w-8 text-center shrink-0">
+                        <span className={`font-headline text-lg font-bold ${i < 3 ? "text-secondary" : "text-outline"}`}>{i + 1}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="font-headline text-sm font-bold text-on-surface">{item.slot}</span>
+                          <div className="flex items-center gap-2">
+                            {item.price && (
+                              <span className="px-2 py-0.5 bg-primary-container/10 border border-primary-container/20 text-primary-container font-label text-[10px] font-bold uppercase">
+                                {item.price}
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 bg-secondary/10 border border-secondary/20 text-secondary font-label text-[10px] font-bold uppercase">
+                              +{item.dpsDiffPct}% DPS
                             </span>
-                          </div>
-                          <div className="h-1 bg-surface-container-lowest w-full">
-                            <div className={`h-full ${capped ? r.color : "bg-error"}`} style={{ width: `${pct}%` }} />
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Survival issues */}
-                  {survivalGroup && survivalGroup.items.length > 0 && (
-                    <div className="space-y-1.5">
-                      <p className="text-[12px] font-sans uppercase tracking-widest text-on-surface-variant">Issues ({survivalGroup.items.length})</p>
-                      {survivalGroup.items.slice(0, 5).map((e, i) => (
-                        <SurvivalItem key={i} explanation={e} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-surface-container-low p-4 border-l-2 border-secondary/40 flex-1 overflow-y-auto">
-                  {/* Gear slot list */}
-                  {selectedGearSlot ? (
-                    <div>
-                      <button
-                        onClick={() => setSelectedGearSlot(null)}
-                        className="flex items-center gap-1 text-[12px] font-sans text-on-surface-variant hover:text-on-surface mb-3"
-                      >
-                        <Icon name="arrow_back" className="text-xs" /> All Gear
-                      </button>
-                      <SlotDetailPanel
-                        slot={gearSlots.find(s => s.slot === selectedGearSlot) || { slot: selectedGearSlot }}
-                        charData={charData}
-                        insights={insights}
-                        account={charData?._account || ""}
-                      />
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {gearSlots.map(sl => {
-                        const hasDeadMods = (sl.deadMods?.length || 0) > 0;
-                        return (
-                          <div
-                            key={sl.slot}
-                            className="flex items-center gap-2 p-2 cursor-pointer hover:bg-surface-container-high transition-colors"
-                            onClick={() => setSelectedGearSlot(sl.slot)}
-                          >
-                            <Icon name={slotIcon(sl.slot)} className="text-on-surface-variant text-sm" />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-[12px] font-sans text-on-surface-variant">{sl.slotDisplay}</div>
-                              <div className="text-xs font-sans text-on-surface truncate">{sl.itemName}</div>
-                            </div>
-                            {hasDeadMods && <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />}
-                            <span className={`text-[12px] font-sans px-1 py-0.5 ${tierColor(sl.avgTier)}`}>
-                              T{sl.avgTier}
-                            </span>
+                        <div className="text-xs font-body text-on-surface-variant mb-1">
+                          <span className="text-error line-through mr-2">{item.currentItem}</span>
+                          <Icon name="arrow_forward" className="text-[10px] text-outline mx-1 align-middle" />
+                          <span className="text-tertiary ml-2">{item.targetItem}</span>
+                          {item.targetRarity && <span className="ml-1 text-outline">({item.targetRarity})</span>}
+                          {!item.price && item.targetRarity !== "Unique" && (
+                            <span className="ml-2 text-[10px] text-outline italic">search trade for price</span>
+                          )}
+                        </div>
+                        {item.keyMods.length > 0 && (
+                          <div className="flex gap-1.5 flex-wrap mt-1">
+                            <span className="text-[10px] font-label text-outline uppercase tracking-wider">Look for:</span>
+                            {item.keyMods.map((mod, j) => (
+                              <span key={j} className="text-[10px] font-label text-tertiary bg-tertiary/5 px-1.5 py-0.5 border border-tertiary/15">{mod}</span>
+                            ))}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* CENTER: Synergy Map */}
-            <SynergyMapPanel
-              synergyMap={whyInsights?.synergyMap}
-              meta={whyInsights?.meta}
-              projections={projections}
-              onToggle={toggleProjection}
-            />
-
-            {/* RIGHT: Improvement Path */}
-            <div className="col-span-3 flex flex-col gap-4">
-              <div className="bg-surface-container-low p-5 border-l-2 border-secondary/40 flex-1">
-                <h4 className="flex items-center gap-2 text-xs font-sans uppercase tracking-widest text-secondary mb-4">
-                  <Icon name="trending_up" className="text-base" />
-                  Improvement Path
-                </h4>
-
-                <div className="space-y-3">
-                  {groups.flatMap(g => g.items.filter(e => e.severity === "critical" || e.context === "action"))
-                    .filter((e, i, arr) => arr.findIndex(x => x.title === e.title) === i)
-                    .slice(0, 6)
-                    .map((e, i) => {
-                      const name = e.title?.replace("Allocate ", "").replace("Missing: ", "");
-                      return (
-                        <ImprovementCard
-                          key={i}
-                          explanation={e}
-                          toggled={!!projections[name]}
-                          onToggle={() => toggleProjection(name)}
-                        />
-                      );
-                    })
-                  }
-                </div>
-
-                <NextBigUpgradeCard improvement={improvement} />
-
-                {/* Perk Tree Swaps */}
-                {treeLoading && (
-                  <div className="mt-6 pt-6 border-t border-outline-variant/20">
-                    <div className="flex items-center gap-3 py-4">
-                      <div className="w-4 h-4 border-2 border-tertiary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-                      <span className="font-label text-xs text-outline uppercase tracking-widest">Analyzing passive tree...</span>
-                    </div>
-                  </div>
-                )}
-                {!treeLoading && treeAnalysis && Array.isArray(treeAnalysis.swapRecommendations) && treeAnalysis.swapRecommendations.length > 0 && (
-                  <div className="mt-6 pt-6 border-t border-outline-variant/20">
-                    {/* Context header */}
-                    <div className="border-l-4 border-secondary p-4 bg-surface-container-low mb-6">
-                      <h3 className="font-headline text-lg font-bold text-on-surface mb-1">Perk Swap Recommendations</h3>
-                      <p className="font-label text-outline uppercase tracking-widest text-xs flex items-center gap-2">
-                        <Icon name="compare_arrows" className="text-secondary text-sm" />
-                        {treeAnalysis.targetName ? (
-                          <span>vs <span className="text-secondary font-bold">{treeAnalysis.targetName}</span>
-                          {" \u2014 "}they have {treeAnalysis.totalNotables || "?"} notables, you have {treeAnalysis.totalNotables || "?"}</span>
-                        ) : (
-                          <span>vs top player for your build</span>
                         )}
-                      </p>
-                    </div>
-                    <div className="flex flex-col gap-4">
-                      {treeAnalysis.swapRecommendations.slice(0, 5).map((swap, i) => (
-                        <SwapCard key={i} swap={swap} rank={i + 1} />
-                      ))}
-                    </div>
-                  </div>
-                )}
+                        {item.searchTips.length > 0 && (
+                          <div className="mt-2">
+                            {item.searchTips.map((tip, j) => (
+                              <p key={j} className="text-xs font-body text-on-surface-variant leading-relaxed">
+                                <Icon name="search" className="text-[10px] text-tertiary mr-1 align-middle" />
+                                {tip}
+                              </p>
+                            ))}
+                          </div>
+                        )}
 
-                {/* Compare to Build */}
-                <div className="mt-4 pt-4 border-t border-outline-variant/20">
-                  <h4 className="flex items-center gap-2 text-xs font-sans uppercase tracking-widest text-primary-container mb-3">
-                    <Icon name="compare_arrows" className="text-base" />
-                    Compare to Build
-                  </h4>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      value={compareQuery}
-                      onChange={e => { setCompareQuery(e.target.value); setCompareError(""); }}
-                      placeholder="poe.ninja URL or account/char"
-                      className="flex-1 px-2 py-1.5 bg-surface-container-lowest border border-outline-variant text-xs font-sans text-on-surface placeholder-outline focus:border-primary-container focus:outline-none"
-                      onKeyDown={e => { if (e.key === "Enter") handleCompare(); }}
-                    />
-                    <button
-                      onClick={handleCompare}
-                      disabled={compareLoading || !compareQuery.trim()}
-                      className="px-3 py-1.5 bg-primary-container text-on-primary text-xs font-sans hover:bg-primary transition-colors disabled:opacity-50"
-                    >
-                      {compareLoading ? "..." : "Diff"}
-                    </button>
-                  </div>
-                  {compareError && <p className="text-xs text-error font-sans mb-2">{compareError}</p>}
-                  {compareResult && (
-                    <div className="space-y-1.5">
-                      <div className="text-xs font-sans text-on-surface-variant mb-2">
-                        vs <span className="text-primary-container">{compareResult.target?.name}</span>
-                        {" "}({compareResult.target?.ascendancy} Lv{compareResult.target?.level})
-                        {" — "}{compareResult.player_dps} vs {compareResult.target_dps} DPS
+                        {/* Alternative items top players use */}
+                        {item.alternatives?.length > 0 && (
+                          <div className="mt-3 pt-2 border-t border-outline-variant/15">
+                            <span className="font-label text-[10px] text-outline uppercase tracking-widest block mb-2">
+                              <Icon name="storefront" className="text-xs mr-1 align-middle" />
+                              What top players use in this slot
+                            </span>
+                            <div className="space-y-1">
+                              {item.alternatives.map((alt, j) => (
+                                <div key={j} className="flex items-center justify-between py-1 px-2 bg-surface-container-lowest">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className={`text-xs font-body truncate ${alt.rarity === "unique" ? "text-secondary" : "text-on-surface"}`}>
+                                      {alt.name}
+                                    </span>
+                                    <span className="text-[9px] font-label text-outline uppercase shrink-0">{alt.rarity}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-[10px] font-label text-on-surface-variant">{alt.usage.toFixed(0)}% use</span>
+                                    {alt.price ? (
+                                      <span className="text-[10px] font-label text-primary-container font-bold bg-primary-container/10 px-1.5 py-0.5">
+                                        {alt.price}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] text-outline italic">check trade</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      {compareResult.diffs?.slice(0, 10).map((d, i) => (
-                        <ComparisonDiffCard key={i} diff={d} />
-                      ))}
-                      {compareResult.total_diffs > 10 && (
-                        <p className="text-xs font-sans text-on-surface-variant">+{compareResult.total_diffs - 10} more differences</p>
-                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })}
               </div>
             </div>
+          )}
+
+          {/* Category sections */}
+          <div className="flex flex-col gap-5">
+            {sortedCats.map(cat => {
+              const meta = catMeta[cat] || catMeta.other;
+              const items = grouped[cat];
+              return (
+                <div key={cat}>
+                  {/* Category header */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <Icon name={meta.icon} className="text-sm text-on-surface-variant" />
+                    <span className="font-label text-[11px] text-outline uppercase tracking-widest">{meta.label}</span>
+                    <span className="text-[10px] text-outline/60">({items.length})</span>
+                    <div className="flex-1 h-px bg-outline-variant/20" />
+                  </div>
+
+                  {/* Diff cards */}
+                  <div className="flex flex-col gap-2">
+                    {items.map((d, i) => (
+                      <DiffCard key={i} diff={d} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function DiffCard({ diff }) {
+      const d = diff;
+      const [open, setOpen] = useState(false);
+      const borderColor = { critical: "border-error", warning: "border-secondary", info: "border-outline-variant", positive: "border-primary-container" }[d.severity] || "border-outline-variant";
+      const severityBg = { critical: "bg-error/5", warning: "bg-secondary/5", positive: "bg-primary-container/5" }[d.severity] || "";
+      const severityLabel = { critical: "Critical", warning: "Warning", positive: "Ahead", info: "" }[d.severity] || "";
+      const severityColor = { critical: "text-error", warning: "text-secondary", positive: "text-primary-container", info: "text-outline" }[d.severity] || "text-outline";
+
+      const isGear = d.category === "gear";
+      const hasModData = isGear && (d.targetMods?.length > 0 || d.playerMods?.length > 0);
+      const advantages = d.targetAdvantages || [];
+      const searchTips = d.searchTips || [];
+
+      return (
+        <div className={`border-l-2 ${borderColor} ${severityBg} bg-surface-container-low cursor-pointer transition-all hover:bg-surface-container group`}
+             onClick={() => setOpen(!open)}>
+          <div className="p-4">
+            {/* Title row */}
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex-1 min-w-0">
+                <span className="font-headline text-sm font-bold text-on-surface leading-tight">{d.title}</span>
+                {isGear && d.targetRarity && (
+                  <span className={`ml-2 text-[10px] font-label uppercase tracking-wider ${d.targetRarity === "Unique" ? "text-secondary" : "text-outline"}`}>
+                    {d.targetRarity}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {d.price && (
+                  <span className="px-2 py-0.5 bg-primary-container/10 border border-primary-container/20 text-primary-container font-label text-[10px] font-bold uppercase tracking-wider">
+                    {d.price}
+                  </span>
+                )}
+                {d.dps_diff_pct > 0 && (
+                  <span className="px-2 py-0.5 bg-secondary/10 border border-secondary/20 text-secondary font-label text-[10px] font-bold uppercase tracking-wider">
+                    +{d.dps_diff_pct}%
+                  </span>
+                )}
+                {severityLabel && (
+                  <span className={`font-label text-[10px] uppercase tracking-widest ${severityColor}`}>{severityLabel}</span>
+                )}
+                <Icon name={open ? "expand_less" : "expand_more"} className="text-outline text-sm" />
+              </div>
+            </div>
+
+            {/* Explanation text */}
+            <p className={`text-sm font-body text-on-surface-variant leading-relaxed ${open ? "" : "line-clamp-2"}`}>{d.text}</p>
+
+            {/* Key advantages preview (always visible for gear) */}
+            {!open && advantages.length > 0 && (
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {advantages.slice(0, 3).map((a, i) => (
+                  <span key={i} className="text-[10px] font-label text-tertiary bg-tertiary/5 px-2 py-0.5 border border-tertiary/15">
+                    {a.desc} (+{Math.round(a.pct)}%)
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Expanded content */}
+            {open && (
+              <div className="mt-3 pt-3 border-t border-outline-variant/15 space-y-3">
+
+                {/* Mod-by-mod comparison for gear items */}
+                {hasModData && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Player mods */}
+                    <div className="bg-surface-container-lowest p-3">
+                      <span className="font-label text-[9px] text-outline uppercase tracking-widest block mb-2">Your Mods</span>
+                      <span className="font-headline text-xs text-on-surface block mb-2">{d.player || "—"}</span>
+                      {d.playerMods?.length > 0 ? d.playerMods.map((m, i) => (
+                        <div key={i} className="flex justify-between items-start py-1 border-b border-outline-variant/10 last:border-0">
+                          <span className="text-xs font-body text-on-surface-variant leading-tight flex-1">{m.mod}</span>
+                          <span className={`text-[10px] font-label ml-2 shrink-0 ${m.cat === "dps" ? "text-secondary" : "text-primary-container"}`}>
+                            {m.pct > 0 ? `+${Math.round(m.pct)}%` : ""}
+                          </span>
+                        </div>
+                      )) : (
+                        <span className="text-xs text-outline">No significant mods</span>
+                      )}
+                    </div>
+
+                    {/* Target mods */}
+                    <div className="bg-tertiary/5 p-3 border-l-2 border-tertiary/40">
+                      <span className="font-label text-[9px] text-tertiary uppercase tracking-widest block mb-2">Target Mods</span>
+                      <span className="font-headline text-xs text-tertiary block mb-2">{d.target || "—"}</span>
+                      {d.targetMods?.length > 0 ? d.targetMods.map((m, i) => (
+                        <div key={i} className="flex justify-between items-start py-1 border-b border-tertiary/10 last:border-0">
+                          <span className="text-xs font-body text-on-surface-variant leading-tight flex-1">{m.mod}</span>
+                          <span className={`text-[10px] font-label ml-2 shrink-0 ${m.cat === "dps" ? "text-secondary" : "text-primary-container"}`}>
+                            {m.pct > 0 ? `+${Math.round(m.pct)}%` : ""}
+                          </span>
+                        </div>
+                      )) : (
+                        <span className="text-xs text-outline">No significant mods</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* What the target has that you don't */}
+                {advantages.length > 0 && (
+                  <div className="bg-secondary/5 p-3 border-l-2 border-secondary/40">
+                    <span className="font-label text-[10px] text-secondary uppercase tracking-widest block mb-2">
+                      <Icon name="arrow_upward" className="text-xs mr-1 align-middle" />
+                      What makes their {d.slot || "gear"} better
+                    </span>
+                    {advantages.map((a, i) => (
+                      <div key={i} className="flex justify-between py-1">
+                        <span className="text-sm font-body text-on-surface-variant">{a.desc}</span>
+                        <span className="text-sm font-label text-secondary font-bold ml-2">+{Math.round(a.pct)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Dead/wasted mods on player's gear */}
+                {d.playerOnly?.length > 0 && (
+                  <div className="bg-error/5 p-3 border-l-2 border-error/40">
+                    <span className="font-label text-[10px] text-error uppercase tracking-widest block mb-2">
+                      <Icon name="warning" className="text-xs mr-1 align-middle" />
+                      Mods target doesn't need
+                    </span>
+                    {d.playerOnly.map((m, i) => (
+                      <div key={i} className="text-xs font-body text-on-surface-variant py-0.5">{m.mod}</div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Search guidance */}
+                {searchTips.length > 0 && (
+                  <div className="bg-tertiary/5 p-3 border-l-2 border-tertiary/40">
+                    <span className="font-label text-[10px] text-tertiary uppercase tracking-widest block mb-2">
+                      <Icon name="search" className="text-xs mr-1 align-middle" />
+                      How to find this upgrade
+                    </span>
+                    {searchTips.map((tip, i) => (
+                      <p key={i} className="text-sm font-body text-on-surface-variant leading-relaxed">{tip}</p>
+                    ))}
+                  </div>
+                )}
+
+                {/* Non-gear items: simple player vs target */}
+                {!hasModData && (d.player || d.target) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-surface-container-lowest p-3">
+                      <span className="font-label text-[9px] text-outline uppercase tracking-widest block mb-1">You</span>
+                      <span className="font-headline text-base text-on-surface">{d.player || "—"}</span>
+                    </div>
+                    <div className="bg-tertiary/5 p-3 border-l-2 border-tertiary/40">
+                      <span className="font-label text-[9px] text-tertiary uppercase tracking-widest block mb-1">Target</span>
+                      <span className="font-headline text-base text-tertiary">{d.target || "—"}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Slot tag (collapsed) */}
+            {!open && d.slot && (
+              <div className="mt-2 flex items-center gap-1">
+                <Icon name="inventory_2" className="text-xs text-outline" />
+                <span className="text-[10px] font-label uppercase tracking-widest text-outline">{d.slot}</span>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -1460,413 +1107,13 @@
 
     // -- Stitch Stat Card (new design) ------------------------------------
 
-    function StitchStatCard({ label, value, context, status, icon, projected, projectedDelta }) {
-      const hasProjection = projected != null && projectedDelta > 0;
-      const fmtProjected = projected != null ? (projected >= 1e6 ? `${(projected/1e6).toFixed(1)}M` : projected >= 1e3 ? `${(projected/1e3).toFixed(0)}K` : projected.toLocaleString()) : "";
-      const fmtDelta = projectedDelta > 0 ? (projectedDelta >= 1e6 ? `+${(projectedDelta/1e6).toFixed(1)}M` : projectedDelta >= 1e3 ? `+${(projectedDelta/1e3).toFixed(0)}K` : `+${projectedDelta.toLocaleString()}`) : "";
-
-      // Progress bar percentage based on status
-      const barPct = { critical: 25, warning: 55, positive: 100, info: 50 }[status] || 50;
-
-      return (
-        <div className="bg-surface-container-low p-6">
-          <div className="flex justify-between items-start mb-4">
-            <span className="uppercase text-[10px] tracking-widest text-on-surface/60 font-bold">{label}</span>
-            <Icon name={icon} className="text-primary-container" />
-          </div>
-          {hasProjection ? (
-            <>
-              <div className="flex items-baseline gap-2 mb-2">
-                <span className="font-serif text-3xl text-on-surface-variant line-through opacity-70 tracking-tighter">{value}</span>
-                <span className="font-serif text-5xl text-primary-container tracking-tighter">{fmtProjected}</span>
-              </div>
-            </>
-          ) : (
-            <div className="font-serif text-5xl text-primary-container mb-2 tracking-tighter">{value}</div>
-          )}
-          <div className="w-full h-1 bg-surface-container-lowest mb-3">
-            <div className="h-full bg-primary-container transition-all duration-500" style={{ width: `${barPct}%` }} />
-          </div>
-          {hasProjection ? (
-            <p className="text-[11px] text-primary-container uppercase tracking-wider">{fmtDelta} with selected improvements</p>
-          ) : (
-            <p className="text-[11px] text-on-surface/40 uppercase tracking-wider">{context}</p>
-          )}
-        </div>
-      );
-    }
 
     // -- Pulse sub-components ------------------------------------------------
 
-    function SurvivalItem({ explanation }) {
-      const e = explanation;
-      const iconName = { critical: "error", warning: "warning", positive: "check_circle", info: "info" }[e.severity] || "info";
-      const iconColor = { critical: "text-error", warning: "text-yellow-400", positive: "text-primary-container", info: "text-on-surface-variant" }[e.severity] || "";
-      const [open, setOpen] = useState(false);
-      return (
-        <div className="bg-surface-container-lowest p-2 cursor-pointer hover:bg-surface-container transition-colors" onClick={() => setOpen(!open)}>
-          <div className="flex items-center gap-2">
-            <Icon name={iconName} className={`text-xs ${iconColor}`} />
-            <span className="text-xs font-sans font-bold text-on-surface flex-1 truncate">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</span>
-            {e.adoptionPct > 0 && <span className="text-[12px] font-sans text-on-surface-variant">{e.adoptionPct.toFixed(0)}%</span>}
-          </div>
-          {open && <p className="text-[12px] font-sans text-on-surface-variant mt-1 leading-relaxed pl-5">{e.text}</p>}
-        </div>
-      );
-    }
-
-    function SynergyMapPanel({ synergyMap, meta, projections = {}, onToggle }) {
-      const categories = synergyMap || [];
-      const [activeCategory, setActiveCategory] = useState(categories[0]?.category || "dps");
-      const active = categories.find(c => c.category === activeCategory) || categories[0];
-
-      if (!active) {
-        return (
-          <div className="col-span-6 flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-          </div>
-        );
-      }
-
-      const catColors = {
-        dps: { border: "border-secondary", text: "text-secondary", bg: "bg-secondary/10", glow: "rgba(233, 193, 118, 0.25)" },
-        survival: { border: "border-primary-container", text: "text-primary-container", bg: "bg-primary-container/10", glow: "rgba(255, 183, 123, 0.25)" },
-        clear_speed: { border: "border-tertiary", text: "text-tertiary", bg: "bg-tertiary/10", glow: "rgba(181, 234, 255, 0.25)" },
-      };
-      const colors = catColors[active.category] || catColors.dps;
-
-      return (
-        <div className="col-span-6 relative flex flex-col">
-          {/* Grid backdrop */}
-          <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "radial-gradient(circle, #9f8d81 1px, transparent 1px)", backgroundSize: "40px 40px" }} />
-
-          <div className="relative z-10">
-            {/* Category tabs */}
-            <div className="flex items-center justify-center gap-1 mb-6">
-              {categories.map(cat => {
-                const isActive = cat.category === activeCategory;
-                const tabColor = catColors[cat.category] || catColors.dps;
-                return (
-                  <button
-                    key={cat.category}
-                    onClick={() => setActiveCategory(cat.category)}
-                    className={`px-4 py-2 text-xs font-sans uppercase tracking-widest transition-all ${
-                      isActive
-                        ? `${tabColor.bg} ${tabColor.text} border-b-2 ${tabColor.border}`
-                        : "text-on-surface-variant hover:text-on-surface"
-                    }`}
-                  >
-                    <Icon name={cat.icon} className="text-sm mr-1 align-middle" />
-                    {cat.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Central output node */}
-            {(() => {
-              const toggledDelta = active.missing
-                .filter(m => projections[m.name] && m.estimatedValue > 0)
-                .reduce((sum, m) => sum + m.estimatedValue, 0);
-              const hasProjected = toggledDelta > 0;
-
-              return (
-                <div className={`mx-auto w-44 bg-surface-container border-2 ${colors.border} flex flex-col items-center justify-center text-center mb-6 py-5 px-4 transition-all`} style={{ boxShadow: `0 0 ${hasProjected ? 35 : 25}px ${colors.glow}` }}>
-                  <span className={`text-[12px] uppercase tracking-[0.2em] ${colors.text} font-sans mb-1`}>{active.label}</span>
-                  {hasProjected ? (
-                    <>
-                      <span className="text-lg font-serif text-on-surface-variant line-through opacity-60 leading-none">{active.value || "?"}</span>
-                      <span className="text-3xl font-serif font-bold text-primary-container leading-none">
-                        {(() => {
-                          const curMatch = (active.value || "").match(/([\d,.]+)\s*([KkMm]?)/);
-                          if (curMatch) {
-                            let cur = parseFloat(curMatch[1].replace(",",""));
-                            if ((curMatch[2] || "").toUpperCase() === "K") cur *= 1000;
-                            if ((curMatch[2] || "").toUpperCase() === "M") cur *= 1e6;
-                            const proj = cur + toggledDelta;
-                            return proj >= 1e6 ? `${(proj/1e6).toFixed(1)}M` : proj >= 1e3 ? `${(proj/1e3).toFixed(0)}K` : proj.toLocaleString();
-                          }
-                          return active.value;
-                        })()}
-                      </span>
-                      <span className="text-[12px] font-sans text-primary-container mt-1">
-                        +{toggledDelta >= 1e6 ? `${(toggledDelta/1e6).toFixed(1)}M` : toggledDelta >= 1e3 ? `${(toggledDelta/1e3).toFixed(0)}K` : toggledDelta.toLocaleString()} projected
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-3xl font-serif font-bold text-on-surface leading-none">{active.value || "?"}</span>
-                      <span className="text-[12px] uppercase tracking-widest text-on-surface-variant mt-2">
-                        {active.contributors.length} active · {active.missing.length} missing
-                      </span>
-                    </>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Contributors */}
-            {active.contributors.length > 0 && (
-              <div className="mb-4">
-                <p className="text-[12px] font-sans uppercase tracking-widest text-on-surface-variant mb-2 px-2">
-                  <Icon name="check_circle" className="text-xs text-primary-container mr-1 align-middle" />
-                  Active Contributors
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {active.contributors.map((c, i) => (
-                    <ContributorNode key={i} contributor={c} colors={colors} positive />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Missing */}
-            {active.missing.length > 0 && (
-              <div className="mb-4">
-                <p className="text-[12px] font-sans uppercase tracking-widest text-on-surface-variant mb-2 px-2">
-                  <Icon name="add_circle" className="text-xs text-error mr-1 align-middle" />
-                  Missing — Would Improve {active.label}
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {active.missing.map((c, i) => (
-                    <ContributorNode
-                      key={i}
-                      contributor={c}
-                      colors={colors}
-                      positive={false}
-                      toggled={!!projections[c.name]}
-                      onToggle={onToggle ? () => onToggle(c.name) : null}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Meta context */}
-            {meta?.length > 0 && (
-              <div className="p-3 bg-surface-container-lowest border border-outline-variant/10 text-center mt-2">
-                <p className="text-[12px] font-sans text-on-surface-variant">{meta[0].text}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    function ContributorNode({ contributor, colors, positive, toggled, onToggle }) {
-      const c = contributor;
-      const [open, setOpen] = useState(false);
-      const typeIcons = { skill: "auto_awesome", support: "link", keystone: "diamond", gear: "inventory_2", stat: "bar_chart", missing: "add" };
-      const hasEstimate = c.estimatedValue > 0 || c.estimatedPct > 0;
-      const isToggled = toggled && !positive;
-      return (
-        <div
-          className={`p-2.5 border cursor-pointer transition-all ${
-            isToggled
-              ? "bg-primary-container/10 border-primary-container/40"
-              : positive
-                ? "bg-surface-container border-outline-variant/20 hover:border-outline"
-                : "bg-surface-container-lowest border-error/20 hover:border-error/40"
-          }`}
-          onClick={() => setOpen(!open)}
-        >
-          <div className="flex items-start gap-2">
-            {!positive && onToggle && (
-              <div
-                className={`w-4 h-4 mt-px shrink-0 border flex items-center justify-center cursor-pointer transition-all ${
-                  isToggled ? "bg-primary-container border-primary-container" : "border-outline-variant hover:border-outline"
-                }`}
-                onClick={(e) => { e.stopPropagation(); onToggle(); }}
-              >
-                {isToggled && <Icon name="check" className="text-xs text-surface-container-lowest" />}
-              </div>
-            )}
-            {positive && <Icon name={typeIcons[c.sourceType] || "info"} className={`text-xs mt-px ${colors.text}`} />}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className={`text-xs font-sans font-bold truncate ${isToggled ? "text-primary-container" : "text-on-surface"}`}>{c.name}</span>
-                {hasEstimate && (
-                  <span className={`text-[12px] font-sans font-bold ${isToggled ? "text-primary-container" : positive ? colors.text : "text-error"}`}>
-                    {c.estimatedPct > 0 ? `${positive ? "" : "+"}${c.estimatedPct.toFixed(0)}%` : ""}
-                  </span>
-                )}
-                {c.adoptionPct > 0 && <span className="text-xs font-sans text-on-surface-variant">{c.adoptionPct.toFixed(0)}% use</span>}
-              </div>
-              {hasEstimate && c.estimatedValue > 0 && (
-                <div className={`text-xs font-sans font-bold mb-0.5 ${isToggled ? "text-primary-container" : positive ? "text-on-surface" : "text-error"}`}>
-                  {positive ? "" : "+"}{c.estimatedValue >= 1000 ? (c.estimatedValue >= 1e6 ? `${(c.estimatedValue/1e6).toFixed(1)}M` : `${(c.estimatedValue/1e3).toFixed(0)}K`) : c.estimatedValue.toFixed(0)}
-                </div>
-              )}
-              <p className={`text-[12px] font-sans ${positive ? "text-on-surface-variant" : isToggled ? "text-primary-container/70" : "text-error/80"} ${open ? "" : "truncate"} leading-relaxed`}>
-                {open ? (c.detail || c.contribution) : c.contribution}
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    function SynergyNode({ explanation, type }) {
-      const e = explanation;
-      const borderColor = { damage: "border-secondary/30", clear: "border-tertiary/30", quality: "border-outline-variant/20" }[type] || "border-outline-variant/20";
-      const labelColor = { damage: "text-secondary", clear: "text-tertiary", quality: "text-on-surface-variant" }[type] || "";
-      const typeLabel = { damage: "Damage", clear: "Clear Speed", quality: "Quality" }[type] || "";
-      const [open, setOpen] = useState(false);
-      return (
-        <div className={`bg-surface-container p-3 border ${borderColor} hover:border-primary-container/50 transition-all cursor-pointer`} onClick={() => setOpen(!open)}>
-          <div className="flex justify-between items-start mb-1">
-            <span className={`text-xs font-sans uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
-            {e.adoptionPct > 0 && <span className="text-xs font-sans text-on-surface-variant">{e.adoptionPct.toFixed(0)}%</span>}
-          </div>
-          <h5 className="text-xs font-sans font-bold uppercase tracking-tight text-on-surface">{e.title.replace("Allocate ", "").replace("Missing: ", "")}</h5>
-          {open && <p className="text-[12px] font-sans text-on-surface-variant mt-2 leading-relaxed">{e.text}</p>}
-        </div>
-      );
-    }
-
-    function SwapCard({ swap, rank }) {
-      const s = swap;
-      const [open, setOpen] = useState(false);
-      const saves = s.netPoints > 0;
-      const costs = s.netPoints < 0;
-      const pointText = saves ? `saves ${s.netPoints} pts` : costs ? `costs ${-s.netPoints} extra` : "same cost";
-      const badgeColor = saves ? "bg-secondary-container/30 border-secondary/20 text-secondary" :
-                          costs ? "bg-error-container/20 border-error/20 text-error" :
-                          "bg-surface-container-highest border-outline/20 text-outline";
-
-      return (
-        <div className="bg-surface-container-low flex flex-col md:flex-row border border-outline-variant/10 group" onClick={() => setOpen(!open)}>
-          {/* Rank */}
-          <div className="w-full md:w-20 bg-surface-container-high flex md:flex-col items-center justify-center p-4 border-b md:border-b-0 md:border-r border-outline-variant/10">
-            <span className={`font-headline text-3xl font-bold ${rank <= 1 ? "text-secondary" : "text-outline"}`}>{rank}</span>
-          </div>
-          {/* Content */}
-          <div className="flex-1 p-5 cursor-pointer">
-            <div className="flex flex-wrap justify-between items-start gap-3 mb-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                <span className="text-error line-through font-headline text-lg decoration-2">{"\u2014"} {s.refund}</span>
-                <Icon name="trending_flat" className="text-outline hidden sm:block" />
-                <span className="text-tertiary font-headline text-lg font-bold bg-tertiary/10 px-2">+ {s.take}</span>
-              </div>
-              <div className={`px-3 py-1 border ${badgeColor}`}>
-                <span className="font-label text-[11px] font-bold uppercase tracking-[0.2em]">{pointText}</span>
-              </div>
-            </div>
-
-            <p className="text-on-surface-variant font-body mb-4 border-l border-outline/30 pl-4 py-1 italic text-sm">{s.summary}</p>
-
-            {open && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="bg-error-container/10 p-4 border-l-2 border-error">
-                  <div className="font-label text-[10px] text-error uppercase mb-2 tracking-widest">Losses</div>
-                  {s.refundStats?.map((st, i) => (
-                    <div key={i} className="font-headline text-base text-on-surface">{st}</div>
-                  ))}
-                </div>
-                <div className="bg-tertiary-container/10 p-4 border-l-2 border-tertiary">
-                  <div className="font-label text-[10px] text-tertiary uppercase mb-2 tracking-widest">Gains</div>
-                  {s.takeStats?.map((st, i) => (
-                    <div key={i} className="font-headline text-base text-on-surface">{st}</div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    function ComparisonDiffCard({ diff }) {
-      const d = diff;
-      const [open, setOpen] = useState(false);
-      const borderColor = { critical: "border-error", warning: "border-secondary", info: "border-outline-variant", positive: "border-primary-container" }[d.severity] || "border-outline-variant";
-      const catIcons = { dps: "bolt", survival: "shield", gear: "inventory_2", jewels: "diamond", keystones: "key", supports: "link" };
-      return (
-        <div className={`p-2 border-l-2 ${borderColor} bg-surface-container-lowest cursor-pointer`} onClick={() => setOpen(!open)}>
-          <div className="flex items-center gap-2">
-            <Icon name={catIcons[d.category] || "compare_arrows"} className="text-xs text-on-surface-variant" />
-            <span className="text-xs font-sans font-bold text-on-surface flex-1 truncate">{d.title}</span>
-            {d.dps_diff_pct > 0 && <span className="text-xs font-sans text-secondary">+{d.dps_diff_pct}%</span>}
-          </div>
-          {open && <p className="text-xs font-sans text-on-surface-variant mt-1 ml-5">{d.text}</p>}
-          {!open && <p className="text-xs font-sans text-on-surface-variant mt-0.5 ml-5 truncate opacity-70">{d.text.slice(0, 60)}</p>}
-        </div>
-      );
-    }
-
-    function ImprovementCard({ explanation, toggled, onToggle }) {
-      const e = explanation;
-      const borderColor = toggled ? "border-primary-container" : ({ critical: "border-error", warning: "border-secondary", info: "border-primary-container" }[e.severity] || "border-outline-variant");
-      const labelColor = toggled ? "text-primary-container" : ({ critical: "text-error", warning: "text-secondary", info: "text-primary-container" }[e.severity] || "");
-      const typeLabel = toggled ? "Projected" : ({ critical: "Urgent", warning: "Recommended", info: "Optional" }[e.severity] || "");
-      const [open, setOpen] = useState(false);
-      const name = e.title?.replace("Allocate ", "").replace("Missing: ", "");
-      return (
-        <div className={`p-3 border-l-2 ${borderColor} transition-all cursor-pointer group ${toggled ? "bg-primary-container/10" : "bg-surface-container-lowest hover:bg-surface-container-high"}`} onClick={() => setOpen(!open)}>
-          <div className="flex justify-between items-start mb-1">
-            <span className={`text-xs font-sans uppercase tracking-widest ${labelColor}`}>{typeLabel}</span>
-            {onToggle && (
-              <div
-                className={`w-4 h-4 border flex items-center justify-center cursor-pointer transition-all ${
-                  toggled ? "bg-primary-container border-primary-container" : "border-outline-variant hover:border-outline"
-                }`}
-                onClick={(ev) => { ev.stopPropagation(); onToggle(); }}
-                title="Toggle to project impact"
-              >
-                {toggled && <Icon name="check" className="text-xs text-surface-container-lowest" />}
-              </div>
-            )}
-          </div>
-          <h6 className={`text-xs font-sans font-bold uppercase tracking-tight ${toggled ? "text-primary-container" : "text-on-surface"}`}>{name}</h6>
-          {open ? (
-            <p className={`text-[12px] font-sans mt-1 leading-relaxed ${toggled ? "text-primary-container/70" : "text-on-surface-variant"}`}>{e.text}</p>
-          ) : (
-            <p className={`text-[12px] font-sans mt-1 truncate ${toggled ? "text-primary-container/70" : "text-on-surface-variant"}`}>{e.text.slice(0, 60)}...</p>
-          )}
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // Equipment Grid + Slot Detail
     // -----------------------------------------------------------------------
-    function ModRow({ name, tierNum, tierCount, value, barWidth, barColor, dotColor, benefitColor, benefitReason, replaceText, tierText, tierSeverity }) {
-      const [open, setOpen] = useState(false);
-      return (
-        <div className={`p-1.5 border-l-2 cursor-pointer ${benefitColor}`} onClick={() => setOpen(!open)}>
-          <div className="flex items-center gap-2">
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
-            <span className="text-xs font-sans text-on-surface truncate flex-1">{name}</span>
-            {tierNum > 0 && <span className="text-[12px] font-sans text-on-surface-variant whitespace-nowrap">T{tierNum}/{tierCount}</span>}
-            {value != null && <span className="text-[12px] font-sans text-outline whitespace-nowrap">{value}</span>}
-          </div>
-          {tierNum > 0 && (
-            <div className="mt-0.5 ml-3.5 h-1 bg-surface-container overflow-hidden">
-              <div className={`h-full tier-bar ${barColor}`} style={{ width: `${barWidth}%` }} />
-            </div>
-          )}
-          {open && (
-            <div className="mt-1 ml-3.5 space-y-1">
-              {benefitReason && (
-                <p className={`text-[12px] font-sans ${dotColor === "bg-green-400" ? "text-green-400/80" : dotColor === "bg-red-400" ? "text-red-400/80" : "text-on-surface-variant"}`}>
-                  {benefitReason}
-                </p>
-              )}
-              {tierText && (
-                <p className={`text-[12px] font-sans ${tierSeverity === "positive" ? "text-green-400/80" : tierSeverity === "critical" ? "text-red-400/80" : "text-yellow-400/80"}`}>
-                  {tierText}
-                </p>
-              )}
-              {replaceText && (
-                <p className="text-[12px] font-sans text-secondary">
-                  <span className="font-bold">{'\u2192'}</span> {replaceText}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    }
 
     function tierColor(avg) {
       if (avg <= 2) return "bg-green-400/20 text-green-400 border-green-400/30";
@@ -1964,772 +1211,320 @@
       };
     }
 
-    // Gear Detail Slide-In Panel (Stitch Eldritch Forge design)
-    function GearSlideInPanel({ slot, charData, insights, account, onClose }) {
-      if (!slot || !charData) return null;
 
-      const [popularItems, setPopularItems] = useState(null);
-      const [loadingPopular, setLoadingPopular] = useState(false);
+    function SinglePageView({ charData, insights, whyInsights, account, character }) {
+      const [treeAnalysis, setTreeAnalysis] = useState(null);
+      const [expandedSlot, setExpandedSlot] = useState(null);
+      const [slotPopular, setSlotPopular] = useState({});
 
-      const slotData = useMemo(() => {
-        return (insights?.slotSummary || []).find(s => s.slot === slot.slot);
-      }, [insights, slot]);
+      // Compare-vs-another-build overlay (reconnected from the old Compare tab)
+      const [compareOpen, setCompareOpen] = useState(false);
+      const [compareQuery, setCompareQuery] = useState("");
+      const [compareResult, setCompareResult] = useState(null);
+      const [compareLoading, setCompareLoading] = useState(false);
+      const [compareError, setCompareError] = useState("");
 
-      const equipment = useMemo(() => {
-        return (charData?.equipment || []).find(e => e.slot === slot.slot);
-      }, [charData, slot]);
+      const runCompare = async () => {
+        if (!compareQuery.trim() || !account || !character) return;
+        setCompareLoading(true); setCompareError(""); setCompareResult(null);
+        const data = await api("/api/character/compare", "POST", {
+          player_account: account,
+          player_character: character,
+          target_query: compareQuery.trim(),
+        });
+        setCompareLoading(false);
+        if (data.error) setCompareError(data.error); else setCompareResult(data);
+      };
 
-      const modTiers = equipment?.modTiers || {};
+      const sc = whyInsights?.scorecard;
+      const synergy = whyInsights?.synergyMap || [];
+      const slots = insights?.slotSummary || [];
 
-      const allMods = useMemo(() => {
-        const result = [];
-        for (const [modType, tiers] of Object.entries(modTiers)) {
-          if (!tiers) continue;
-          for (const t of tiers) {
-            if (t) result.push({ ...t, modType });
-          }
-        }
-        return result;
-      }, [modTiers]);
-
-      const archetype = insights?.archetype || {};
-
-      const rawMods = useMemo(() => {
-        if (!equipment) return [];
-        const mods = [];
-        for (const mod of (equipment.explicitMods || equipment.explicit_mods || [])) {
-          mods.push({ text: mod, type: "explicit" });
-        }
-        for (const mod of (equipment.implicitMods || equipment.implicit_mods || [])) {
-          mods.push({ text: mod, type: "implicit" });
-        }
-        for (const mod of (equipment.craftedMods || equipment.crafted_mods || [])) {
-          mods.push({ text: mod, type: "crafted" });
-        }
-        return mods;
-      }, [equipment]);
-
-      const deadMods = slotData?.deadMods || [];
-      const weakMods = slotData?.weakMods || [];
-
-      // Auto-load popular items when panel opens
       useEffect(() => {
-        if (!account || !charData?.name || !slot?.slot) return;
-        setLoadingPopular(true);
-        api("/api/character/popular-items", "POST", {
-          account, character: charData.name, slot: slot.slot,
-        }).then(data => {
-          setLoadingPopular(false);
-          if (!data.error && Array.isArray(data)) setPopularItems(data);
-          else if (data?.items) setPopularItems(data.items);
-        }).catch(() => setLoadingPopular(false));
-      }, [slot?.slot, account, charData?.name]);
+        if (!account || !character || !charData) return;
+        api("/api/character/tree-analysis", "POST", { account, character })
+          .then(data => {
+            if (data && !data.error && Array.isArray(data.swapRecommendations)) setTreeAnalysis(data);
+          }).catch(() => {});
+      }, [account, character, charData]);
 
-      const itemName = slot.itemName || equipment?.name || equipment?.type_line || "Unknown Item";
-      const itemRarity = equipment?.rarity || "Rare";
-      const slotLabel = slot.slotDisplay || slot.slot;
+      // When a gear slot is expanded, fetch popular items for it
+      useEffect(() => {
+        if (!expandedSlot || !account || !charData?.name) return;
+        if (slotPopular[expandedSlot]) return; // cached
+        api("/api/character/popular-items", "POST", { account, character: charData.name, slot: expandedSlot })
+          .then(data => {
+            const items = data?.items || (Array.isArray(data) ? data : []);
+            setSlotPopular(prev => ({ ...prev, [expandedSlot]: items }));
+          }).catch(() => {});
+      }, [expandedSlot, account, charData?.name]);
 
-      const isSpell = archetype.damageType === "spell" || archetype.damage_type === "spell";
-      const isAttack = archetype.damageType === "attack" || archetype.damage_type === "attack";
+      // Health status helpers
+      const dpsOk = sc?.dpsStatus === "positive";
+      const ehpOk = sc?.ehpStatus !== "critical";
+      const resistOk = sc?.resistStatus === "positive";
 
       return (
-        <div className="fixed inset-0 bg-black/60 z-[60] backdrop-blur-sm" onClick={onClose}>
-          <div
-            className="absolute right-0 top-0 h-full w-[500px] max-w-[90vw] bg-surface-container-lowest border-l border-outline-variant/20 shadow-[0_0_100px_rgba(0,0,0,0.8)] overflow-y-auto"
-            style={{ animation: "slideIn 0.25s ease" }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Close button */}
-            <button className="absolute top-6 right-6 text-outline hover:text-primary transition-colors z-10" onClick={onClose}>
-              <Icon name="close" className="text-2xl" />
+        <div className="h-full flex flex-col overflow-hidden relative">
+
+          {/* ── TOP BAR: Character + Health ── */}
+          <div className="flex items-center gap-6 px-6 py-3 border-b border-outline-variant/20 shrink-0">
+            <div className="flex items-center gap-3">
+              <span className="font-headline text-lg text-on-surface">{charData.name}</span>
+              <span className="text-xs text-on-surface-variant">{charData.ascendancy || charData.class} Lv{charData.level}</span>
+            </div>
+            <div className="flex-1" />
+            <button
+              onClick={() => setCompareOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface hover:border-tertiary transition-colors"
+              title="Compare against another build"
+            >
+              <Icon name="compare_arrows" className="text-xs text-tertiary" />
+              <span className="text-xs font-label">Compare</span>
             </button>
-
-            {/* Header */}
-            <div className="p-10 pb-6">
-              <span className="font-label uppercase tracking-[0.3em] text-xs text-secondary mb-2 block">{itemRarity} {slotLabel}</span>
-              <h1 className="font-headline text-3xl text-primary leading-tight italic">{itemName}</h1>
-              <div className="mt-4 h-[2px] w-full bg-gradient-to-r from-primary/50 to-transparent" />
+            {/* Health pills */}
+            <div className={`flex items-center gap-1.5 px-3 py-1 ${dpsOk ? "bg-primary-container/10" : "bg-error/10"}`}>
+              <Icon name="bolt" className={`text-xs ${dpsOk ? "text-primary-container" : "text-error"}`} />
+              <span className={`text-xs font-label ${dpsOk ? "text-primary-container" : "text-error"}`}>{sc?.dpsLabel || "..."}</span>
+              {sc?.dpsCeiling > 0 && <span className="text-[9px] text-outline">/ {sc.dpsCeiling >= 1e6 ? `${(sc.dpsCeiling/1e6).toFixed(1)}M` : `${(sc.dpsCeiling/1e3).toFixed(0)}K`}</span>}
             </div>
+            <div className={`flex items-center gap-1.5 px-3 py-1 ${ehpOk ? "bg-primary-container/10" : "bg-error/10"}`}>
+              <Icon name="shield" className={`text-xs ${ehpOk ? "text-primary-container" : "text-error"}`} />
+              <span className={`text-xs font-label ${ehpOk ? "text-primary-container" : "text-error"}`}>{sc ? sc.ehp?.toLocaleString() : "..."} EHP</span>
+            </div>
+            <div className={`flex items-center gap-1.5 px-3 py-1 ${resistOk ? "bg-primary-container/10" : "bg-error/10"}`}>
+              <Icon name={resistOk ? "check_circle" : "warning"} className={`text-xs ${resistOk ? "text-primary-container" : "text-error"}`} />
+              <span className={`text-xs font-label ${resistOk ? "text-primary-container" : "text-error"}`}>{resistOk ? "Resists Capped" : sc?.resistSummary || "Resists?"}</span>
+            </div>
+          </div>
 
-            {/* Mod List */}
-            <div className="px-10 space-y-6">
-              {(allMods.length > 0 ? allMods : []).map((mod, i) => {
-                const isDead = deadMods.some(dm => mod.display_name?.includes(dm.mod) || dm.mod?.includes(mod.display_name));
-                const benefit = classifyMod(mod.display_name, archetype);
-                const tierExp = tierExplanation(mod.tier_num, mod.tier_count, mod.value, mod.tier_range, mod.display_name);
-                const barWidth = mod.tier_count > 0 ? Math.max(5, ((mod.tier_count - mod.tier_num + 1) / mod.tier_count) * 100) : 50;
-                const dotColor = isDead ? "bg-error" : benefit.benefit === "green" ? "bg-tertiary" : benefit.benefit === "red" ? "bg-error" : "bg-outline";
-                const dotShadow = isDead ? "shadow-[0_0_8px_#ffb4ab]" : benefit.benefit === "green" ? "shadow-[0_0_8px_#b5eaff]" : "";
-                const tierColor = mod.tier_num <= 2 ? "text-tertiary" : mod.tier_num <= 3 ? "text-secondary" : "text-error";
+          {/* ── MAIN: Two columns ── */}
+          <div className="flex-1 grid grid-cols-2 gap-0 overflow-hidden">
 
-                if (isDead || benefit.benefit === "red") {
-                  return (
-                    <div key={i} className="p-5 bg-error-container/10 border border-error/10">
-                      <div className="flex items-center gap-3 mb-1">
-                        <div className={`w-2 h-2 rounded-full ${dotColor} ${dotShadow}`} />
-                        <span className="font-label uppercase tracking-widest text-[10px] text-error">
-                          {isDead ? (deadMods.find(dm => mod.display_name?.includes(dm.mod))?.reason || "Wasted on this build") : benefit.reason}
-                        </span>
-                      </div>
-                      <div className="font-headline text-xl text-on-surface/60 mb-2">{mod.display_name}</div>
-                      {(benefit.replace || isDead) && (
-                        <div className="flex items-center gap-2 mt-3 text-secondary cursor-pointer">
-                          <Icon name="trending_flat" className="text-sm" />
-                          <span className="font-label uppercase tracking-widest text-[10px]">
-                            {benefit.replace || (isSpell ? "Replace with: % spell damage, cast speed, or +gem levels" : "Replace with a build-relevant mod")}
+            {/* LEFT: What's working / What's not (synergy categories) */}
+            <div className="border-r border-outline-variant/20 overflow-y-auto p-5">
+              {synergy.map(cat => {
+                const hasIssues = cat.missing?.length > 0;
+                const catIcon = { dps: "bolt", survival: "shield", clear_speed: "speed", quality: "auto_awesome" }[cat.category] || "category";
+                const statusColor = cat.status === "positive" ? "text-primary-container" : cat.status === "critical" ? "text-error" : "text-secondary";
+
+                return (
+                  <div key={cat.category} className="mb-5">
+                    {/* Category header */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon name={catIcon} className={`text-base ${statusColor}`} />
+                      <span className="font-headline text-sm font-bold text-on-surface">{cat.label}</span>
+                      <span className={`font-headline text-sm ${statusColor}`}>{cat.value}</span>
+                      <div className="flex-1 h-px bg-outline-variant/20" />
+                      {hasIssues && <span className="text-[10px] font-label text-error uppercase">{cat.missing.length} to fix</span>}
+                    </div>
+
+                    {/* Working — compact green items */}
+                    {cat.contributors?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {cat.contributors.slice(0, 6).map((c, i) => (
+                          <span key={i} className="text-[11px] font-body text-primary-container/80 bg-primary-container/5 px-2 py-0.5 border border-primary-container/10">
+                            {c.name}
                           </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                return (
-                  <div key={i} className="group">
-                    <div className="flex items-center gap-3 mb-1">
-                      <div className={`w-2 h-2 rounded-full ${dotColor} ${dotShadow}`} />
-                      <span className="font-label uppercase tracking-widest text-[10px] text-outline">{benefit.reason || "Modifier"}</span>
-                    </div>
-                    <div className="flex justify-between items-end mb-2">
-                      <span className="font-headline text-xl text-on-surface">{mod.display_name}</span>
-                      {mod.tier_num > 0 && (
-                        <span className={`font-headline ${tierColor} text-sm`}>TIER {mod.tier_num} / {mod.tier_count}</span>
-                      )}
-                    </div>
-                    {mod.tier_count > 0 && (
-                      <div className="h-1 w-full bg-surface-container-high">
-                        <div className={`h-full ${mod.tier_num <= 2 ? "bg-tertiary" : mod.tier_num <= 3 ? "bg-secondary" : "bg-error"}`} style={{ width: `${barWidth}%` }} />
+                        ))}
+                        {cat.contributors.length > 6 && <span className="text-[10px] text-outline">+{cat.contributors.length - 6} more</span>}
                       </div>
                     )}
-                    {tierExp && (
-                      <p className="mt-2 text-sm text-on-surface-variant font-light italic leading-relaxed">{tierExp.text}</p>
-                    )}
-                  </div>
-                );
-              })}
 
-              {/* Raw mods fallback */}
-              {allMods.length === 0 && rawMods.length > 0 && rawMods.map((mod, i) => {
-                const cleanText = (mod.text || "").replace(/\[([^|\]]*\|)?([^\]]*)\]/g, "$2");
-                const benefit = classifyMod(cleanText, archetype);
-                const dotColor = benefit.benefit === "green" ? "bg-tertiary" : benefit.benefit === "red" ? "bg-error" : "bg-outline";
-                const dotShadow = benefit.benefit === "green" ? "shadow-[0_0_8px_#b5eaff]" : benefit.benefit === "red" ? "shadow-[0_0_8px_#ffb4ab]" : "";
-
-                if (benefit.benefit === "red") {
-                  return (
-                    <div key={i} className="p-5 bg-error-container/10 border border-error/10">
-                      <div className="flex items-center gap-3 mb-1">
-                        <div className={`w-2 h-2 rounded-full ${dotColor} ${dotShadow}`} />
-                        <span className="font-label uppercase tracking-widest text-[10px] text-error">{benefit.reason}</span>
-                      </div>
-                      <div className="font-headline text-xl text-on-surface/60">{cleanText}</div>
-                      {benefit.replace && (
-                        <div className="flex items-center gap-2 mt-3 text-secondary">
-                          <Icon name="trending_flat" className="text-sm" />
-                          <span className="font-label uppercase tracking-widest text-[10px]">{benefit.replace}</span>
+                    {/* Not working — each is an actionable upgrade */}
+                    {cat.missing?.map((m, i) => (
+                      <div key={i} className="bg-surface-container-low border-l-2 border-error/60 p-3 mb-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <span className="font-headline text-sm text-on-surface">{m.name}</span>
+                            {m.slot && <span className="text-[10px] text-outline ml-2">{m.slot}</span>}
+                          </div>
+                          {m.estimatedPct > 0 && (
+                            <span className="text-[10px] font-label text-secondary shrink-0">+{Math.round(m.estimatedPct)}%</span>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                return (
-                  <div key={i} className="group">
-                    <div className="flex items-center gap-3 mb-1">
-                      <div className={`w-2 h-2 rounded-full ${dotColor} ${dotShadow}`} />
-                      <span className="font-label uppercase tracking-widest text-[10px] text-outline">{benefit.reason || "Modifier"}</span>
-                    </div>
-                    <div className="font-headline text-xl text-on-surface">{cleanText}</div>
-                    {benefit.replace && (
-                      <p className="mt-2 text-sm text-secondary font-light">
-                        <Icon name="trending_flat" className="text-sm mr-1 align-middle" />{benefit.replace}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-
-              {allMods.length === 0 && rawMods.length === 0 && (
-                <p className="text-sm text-outline italic">No mod data available for this item.</p>
-              )}
-            </div>
-
-            {/* What Top Players Use */}
-            <div className="mt-12 p-10 bg-surface-container-low">
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="font-label uppercase tracking-[0.2em] text-sm text-secondary">What Top Players Use</h2>
-                <Icon name="analytics" className="text-outline" />
-              </div>
-              {loadingPopular ? (
-                <div className="flex items-center gap-2 py-4">
-                  <div className="w-4 h-4 border-2 border-secondary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-                  <span className="text-xs font-label text-outline uppercase tracking-widest">Loading meta data...</span>
-                </div>
-              ) : popularItems ? (
-                <div className="space-y-5">
-                  {popularItems.slice(0, 6).map((item, i) => {
-                    const isUnique = item.rarity === "unique";
-                    return (
-                      <div key={i}>
-                        {isUnique ? (
-                          <div className="flex gap-4">
-                            <Icon name="check_circle" className="text-tertiary" style={{ fontVariationSettings: "'FILL' 1" }} />
-                            <div>
-                              <p className="text-sm text-on-surface font-medium">{item.name}</p>
-                              <p className="text-[10px] font-label uppercase tracking-widest text-outline mt-1">{item.percentage?.toFixed(0)}% adoption</p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div>
-                            <p className="text-sm text-secondary font-medium mb-2">{item.name} ({item.percentage?.toFixed(0)}%)</p>
-                            {item.topMods && item.topMods.length > 0 && (
-                              <div className="space-y-2 ml-1">
-                                {item.topMods.map((mod, j) => (
-                                  <div key={j} className="flex gap-4">
-                                    <Icon
-                                      name={mod.hasIt ? "check_circle" : "radio_button_unchecked"}
-                                      className={mod.hasIt ? "text-tertiary" : "text-error"}
-                                      style={mod.hasIt ? { fontVariationSettings: "'FILL' 1" } : {}}
-                                    />
-                                    <div>
-                                      <p className={`text-sm ${mod.hasIt ? "text-on-surface" : "text-error"} font-medium`}>{mod.name}</p>
-                                      <p className="text-[10px] font-label uppercase tracking-widest text-outline mt-1">Found on {mod.pct}% of builds</p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                        <p className="text-xs font-body text-on-surface-variant mt-1">{m.contribution}</p>
+                        {m.adoptionPct > 0 && (
+                          <span className="text-[10px] text-outline mt-1 block">{Math.round(m.adoptionPct)}% of top players have this</span>
                         )}
                       </div>
-                    );
-                  })}
+                    ))}
+
+                    {!hasIssues && cat.contributors?.length > 0 && (
+                      <p className="text-xs text-primary-container/60 italic">Looking good</p>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Perk swaps */}
+              {treeAnalysis?.swapRecommendations?.length > 0 && (
+                <div className="mb-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Icon name="account_tree" className="text-base text-secondary" />
+                    <span className="font-headline text-sm font-bold text-on-surface">Passive Tree</span>
+                    <div className="flex-1 h-px bg-outline-variant/20" />
+                    <span className="text-[10px] font-label text-secondary uppercase">{treeAnalysis.swapRecommendations.length} swaps</span>
+                  </div>
+                  {treeAnalysis.swapRecommendations.slice(0, 4).map((s, i) => (
+                    <div key={i} className="bg-surface-container-low border-l-2 border-secondary/60 p-3 mb-1.5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-error line-through text-sm">{s.refund}</span>
+                        <Icon name="arrow_forward" className="text-xs text-outline" />
+                        <span className="text-tertiary text-sm font-bold">{s.take}</span>
+                        <span className="text-[10px] text-outline ml-auto">{s.netPoints > 0 ? `saves ${s.netPoints} pts` : s.netPoints < 0 ? `costs ${-s.netPoints} pts` : "same cost"}</span>
+                      </div>
+                      <p className="text-xs font-body text-on-surface-variant">{s.summary}</p>
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <p className="text-sm text-outline italic">No popularity data available.</p>
               )}
             </div>
-          </div>
-        </div>
-      );
-    }
 
-    // Legacy SlotDetailPanel — now forwards to GearSlideInPanel
-    function SlotDetailPanel({ slot, charData, insights, account }) {
-      // This is kept for backward compatibility with embedded gear views
-      return null; // GearSlideInPanel is used instead
-    }
-
-    function GearTab({ charData, insights, account }) {
-      const [inspectSlot, setInspectSlot] = useState(null);
-
-      if (!charData) {
-        return (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <Icon name="inventory_2" className="text-6xl text-outline" />
-            <p className="text-on-surface-variant font-sans text-sm">Load a character to view gear</p>
-          </div>
-        );
-      }
-
-      if (!insights) {
-        return (
-          <div className="flex flex-col items-center justify-center h-full gap-3">
-            <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-            <span className="text-sm text-on-surface-variant font-sans">Loading gear data...</span>
-          </div>
-        );
-      }
-
-      const slots = insights.slotSummary || [];
-      const selectedSlotData = inspectSlot ? slots.find(s => s.slot === inspectSlot) : null;
-      return (
-        <div className="p-8">
-          <h2 className="font-headline text-2xl text-on-surface mb-6">Equipment</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {slots.map(sl => {
-              const hasDeadMods = (sl.deadMods?.length || 0) > 0;
-              const equipment = (charData?.equipment || []).find(e => e.slot === sl.slot);
-              const isUnique = equipment?.rarity === "Unique";
-              return (
-                <div
-                  key={sl.slot}
-                  className="bg-surface-container-low p-4 border border-outline-variant/10 hover:bg-surface-container transition-all cursor-pointer group"
-                  onClick={() => setInspectSlot(sl.slot)}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-surface-container-lowest border border-outline-variant/20 flex items-center justify-center">
-                        <Icon name={slotIcon(sl.slot)} className={`text-sm ${isUnique ? "text-secondary" : "text-on-surface-variant"}`} />
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-label uppercase tracking-widest text-on-surface-variant">{sl.slotDisplay}</div>
-                        <div className="text-sm font-sans text-on-surface truncate">{sl.itemName}</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {hasDeadMods && <div className="w-2 h-2 rounded-full bg-error shadow-[0_0_8px_rgba(255,180,171,0.6)]" />}
-                      <div className={`w-2 h-2 rounded-full ${
-                        sl.avgTier <= 2 ? "bg-tertiary shadow-[0_0_8px_rgba(181,234,255,0.6)]" :
-                        sl.avgTier <= 3.5 ? "bg-secondary shadow-[0_0_8px_rgba(233,193,118,0.6)]" :
-                        "bg-on-surface-variant"
-                      }`} />
-                    </div>
-                  </div>
-                  <div className="text-[10px] font-label uppercase tracking-widest text-outline group-hover:text-secondary transition-colors">
-                    Click to inspect <Icon name="arrow_forward" className="text-xs ml-1 align-middle" />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Gear Slide-In Panel */}
-          {selectedSlotData && (
-            <GearSlideInPanel
-              slot={selectedSlotData}
-              charData={charData}
-              insights={insights}
-              account={charData._account || ""}
-              onClose={() => setInspectSlot(null)}
-            />
-          )}
-        </div>
-      );
-    }
-
-    // -----------------------------------------------------------------------
-    // MARKET Tab
-    // -----------------------------------------------------------------------
-    function CostTierBreakdown({ efficiency }) {
-      const [expanded, setExpanded] = useState(null);
-      const costTiers = efficiency?.costTiers || [];
-
-      if (!costTiers.length) return null;
-
-      const tierLabels = ["Free", "Budget", "Mid", "High", "Premium"];
-      const tierColors = ["bg-green-400", "bg-tertiary", "bg-primary", "bg-yellow-400", "bg-secondary"];
-      const total = costTiers.reduce((s, t) => s + (t.items?.length || 0), 0) || 1;
-
-      return (
-        <div className="flex flex-col gap-3">
-          <h3 className="font-serif text-base text-on-surface">Investment Tiers</h3>
-          <div className="h-3 bg-surface-container overflow-hidden flex">
-            {costTiers.map((tier, i) => {
-              const w = ((tier.items?.length || 0) / total) * 100;
-              return <div key={i} className={`h-full ${tierColors[i] || "bg-outline"} cursor-pointer hover:opacity-80 transition-opacity`} style={{ width: `${Math.max(w, 2)}%` }} onClick={() => setExpanded(expanded === i ? null : i)} />;
-            })}
-          </div>
-          <div className="flex justify-between text-xs font-sans text-on-surface-variant">
-            {costTiers.map((tier, i) => (
-              <span key={i} className="cursor-pointer hover:text-on-surface" onClick={() => setExpanded(expanded === i ? null : i)}>
-                {tierLabels[i] || `Tier ${i + 1}`} ({tier.items?.length || 0})
-              </span>
-            ))}
-          </div>
-          {expanded !== null && costTiers[expanded]?.items && (
-            <div className="flex flex-col gap-2 fade-in">
-              {costTiers[expanded].items.map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-2 bg-surface-container">
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-sans text-on-surface">{item.name || item.item}</span>
-                    {item.slot && <span className="ml-2 text-xs text-on-surface-variant">{item.slot}</span>}
-                  </div>
-                  {item.price && <span className="text-xs font-sans text-primary-container">{item.price}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    function UpgradeSuggestions({ efficiency }) {
-      const upgrades = efficiency?.upgradePriority || [];
-      if (!upgrades.length) return null;
-
-      return (
-        <div className="flex flex-col gap-3">
-          <h3 className="font-serif text-base text-on-surface">Upgrade Priority</h3>
-          {upgrades.map((u, i) => (
-            <div key={i} className="p-3 bg-surface-container-low border border-outline-variant fade-in" style={{ animationDelay: `${i * 50}ms` }}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-sans font-semibold text-on-surface">{u.slotDisplay || u.slot}</span>
-                <span className={`text-xs font-sans px-2 py-0.5 border ${tierColor(u.currentTier || u.avgTier || 3)}`}>
-                  T{u.currentTier || u.avgTier} avg
-                </span>
+            {/* RIGHT: Gear — each slot with upgrade path */}
+            <div className="overflow-y-auto p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Icon name="inventory_2" className="text-base text-on-surface-variant" />
+                <span className="font-headline text-sm font-bold text-on-surface">Equipment</span>
               </div>
-              {u.topItem && (
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs font-sans text-on-surface-variant">{u.topItem}</span>
-                  {u.topItemPrice && <span className="text-xs font-sans text-primary-container">{u.topItemPrice}</span>}
-                </div>
-              )}
-              {u.reason && <div className="text-xs text-on-surface-variant mt-1">{u.reason}</div>}
-            </div>
-          ))}
-        </div>
-      );
-    }
+              {slots.map(sl => {
+                const hasDeadMods = (sl.deadMods?.length || 0) > 0;
+                const hasGaps = (sl.gapAnalysis?.length || 0) > 0;
+                const needsUpgrade = hasDeadMods || hasGaps || sl.avgTier > 4;
+                const equipment = (charData?.equipment || []).find(e => e.slot === sl.slot);
+                const isUnique = equipment?.rarity === "Unique";
+                const isOpen = expandedSlot === sl.slot;
+                const popular = slotPopular[sl.slot] || [];
 
-    function BudgetPlanner({ efficiency }) {
-      const [budget, setBudget] = useState("");
-      const upgrades = efficiency?.upgradePriority || [];
-
-      const filteredUpgrades = useMemo(() => {
-        const b = parseFloat(budget);
-        if (!b || isNaN(b)) return upgrades;
-        return upgrades.filter(u => {
-          const price = parseFloat(String(u.topItemPrice || "").replace(/[^0-9.]/g, ""));
-          return !isNaN(price) && price <= b;
-        });
-      }, [budget, upgrades]);
-
-      const totalCost = useMemo(() => {
-        return filteredUpgrades.reduce((sum, u) => {
-          const price = parseFloat(String(u.topItemPrice || "").replace(/[^0-9.]/g, ""));
-          return sum + (isNaN(price) ? 0 : price);
-        }, 0);
-      }, [filteredUpgrades]);
-
-      return (
-        <div className="flex flex-col gap-3">
-          <h3 className="font-serif text-base text-on-surface">Budget Planner</h3>
-          <div className="flex items-center gap-3">
-            <input
-              type="number"
-              value={budget}
-              onChange={e => setBudget(e.target.value)}
-              placeholder="Budget (divines)"
-              className="flex-1 px-3 py-2 bg-surface-container border border-outline-variant text-sm text-on-surface placeholder-outline font-sans focus:border-primary-container"
-            />
-            {budget && (
-              <div className="text-xs font-sans text-on-surface-variant">
-                {filteredUpgrades.length} items | ~{totalCost.toFixed(1)}d total
-              </div>
-            )}
-          </div>
-          {budget && filteredUpgrades.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {filteredUpgrades.map((u, i) => (
-                <div key={i} className="flex items-center justify-between p-2 bg-surface-container">
-                  <span className="text-xs font-sans text-on-surface">{u.slotDisplay || u.slot}: {u.topItem || "upgrade"}</span>
-                  <span className="text-xs font-sans text-primary-container">{u.topItemPrice || "?"}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {budget && filteredUpgrades.length === 0 && (
-            <div className="text-xs text-on-surface-variant font-sans">No upgrades found within budget</div>
-          )}
-        </div>
-      );
-    }
-
-    function MarketTab({ charData, efficiency, whyInsights }) {
-      if (!charData) {
-        return (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <Icon name="storefront" className="text-6xl text-outline" />
-            <p className="text-on-surface-variant font-sans text-sm">Load a character to view market data</p>
-          </div>
-        );
-      }
-
-      if (!efficiency && !whyInsights) {
-        return (
-          <div className="flex flex-col items-center justify-center h-full gap-3">
-            <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-            <span className="text-sm text-on-surface-variant font-sans">Loading market data...</span>
-          </div>
-        );
-      }
-
-      const upgradePaths = useMemo(() => {
-        if (!whyInsights?.synergyMap) return [];
-        const paths = [];
-        for (const cat of whyInsights.synergyMap) {
-          for (const m of (cat.missing || [])) {
-            paths.push({
-              category: cat.label,
-              categoryIcon: cat.icon,
-              name: m.name,
-              contribution: m.contribution,
-              detail: m.detail,
-              estimatedPct: m.estimatedPct || 0,
-              estimatedValue: m.estimatedValue || 0,
-              severity: m.severity || "info",
-              slot: m.slot || "",
-              adoptionPct: m.adoptionPct || 0,
-            });
-          }
-        }
-        paths.sort((a, b) => b.estimatedValue - a.estimatedValue);
-        return paths;
-      }, [whyInsights]);
-
-      return (
-        <div className="flex flex-col gap-6 p-5 max-w-4xl mx-auto">
-          {upgradePaths.length > 0 && (
-            <div>
-              <h3 className="font-serif text-lg text-on-surface mb-3">
-                <Icon name="route" className="text-base mr-2 align-middle text-primary-container" />
-                Upgrade Priority
-              </h3>
-              <p className="text-xs font-sans text-on-surface-variant mb-4">
-                Sorted by estimated DPS/survival impact. Click to expand details.
-              </p>
-              <div className="space-y-2">
-                {upgradePaths.slice(0, 15).map((path, i) => (
-                  <UpgradePathCard key={i} path={path} rank={i + 1} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {efficiency && <CostTierBreakdown efficiency={efficiency} />}
-          {efficiency && <UpgradeSuggestions efficiency={efficiency} />}
-          {efficiency && <BudgetPlanner efficiency={efficiency} />}
-        </div>
-      );
-    }
-
-    function UpgradePathCard({ path, rank }) {
-      const [open, setOpen] = useState(false);
-      const p = path;
-      const borderColor = { critical: "border-error", warning: "border-secondary", info: "border-primary-container" }[p.severity] || "border-outline-variant";
-      const valueLabel = p.estimatedValue >= 1e6 ? `+${(p.estimatedValue/1e6).toFixed(1)}M` :
-                         p.estimatedValue >= 1e3 ? `+${(p.estimatedValue/1e3).toFixed(0)}K` :
-                         p.estimatedValue > 0 ? `+${p.estimatedValue.toFixed(0)}` : "";
-      return (
-        <div className={`p-3 border-l-2 ${borderColor} bg-surface-container cursor-pointer hover:bg-surface-container-high transition-colors`} onClick={() => setOpen(!open)}>
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-sans text-on-surface-variant w-6">#{rank}</span>
-            <Icon name={p.categoryIcon || "trending_up"} className="text-sm text-on-surface-variant" />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-sans font-bold text-on-surface truncate">{p.name}</span>
-                {p.estimatedPct > 0 && <span className="text-xs font-sans text-secondary">+{p.estimatedPct.toFixed(0)}%</span>}
-                {valueLabel && <span className="text-xs font-sans text-primary-container">{valueLabel}</span>}
-              </div>
-              {!open && <p className="text-xs font-sans text-on-surface-variant truncate mt-0.5">{p.contribution}</p>}
-            </div>
-            <span className="text-xs font-sans text-on-surface-variant uppercase">{p.category}</span>
-          </div>
-          {open && (
-            <div className="mt-2 ml-9">
-              <p className="text-xs font-sans text-on-surface-variant leading-relaxed">{p.detail || p.contribution}</p>
-              {p.slot && <p className="text-xs font-sans text-outline mt-1">Slot: {p.slot}</p>}
-              {p.adoptionPct > 0 && <p className="text-xs font-sans text-outline mt-1">{p.adoptionPct.toFixed(0)}% of top players use this</p>}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // -----------------------------------------------------------------------
-    // GUIDE Tab
-    // -----------------------------------------------------------------------
-    function GuideImportBar({ onImport }) {
-      const [url, setUrl] = useState("");
-      const [loading, setLoading] = useState(false);
-      const [error, setError] = useState("");
-
-      const handleImport = async () => {
-        if (!url.trim()) return;
-        setLoading(true);
-        setError("");
-        const result = await api("/api/guide/import", "POST", { url: url.trim() });
-        setLoading(false);
-        if (result.error) setError(result.error);
-        else {
-          setUrl("");
-          if (onImport) onImport(result);
-        }
-      };
-
-      return (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <input
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              placeholder="Paste build guide URL"
-              className="flex-1 px-3 py-2 bg-surface-container border border-outline-variant text-sm text-on-surface placeholder-outline font-sans focus:border-primary-container"
-              onKeyDown={e => { if (e.key === "Enter") handleImport(); }}
-            />
-            <button
-              onClick={handleImport}
-              disabled={loading}
-              className="px-4 py-2 bg-primary-container text-on-primary text-sm font-sans font-semibold hover:bg-primary transition-colors disabled:opacity-70"
-            >
-              {loading ? "..." : "Import"}
-            </button>
-          </div>
-          {error && <p className="text-xs text-error">{error}</p>}
-        </div>
-      );
-    }
-
-    function GuideList({ guides, selectedId, onSelect, onDelete }) {
-      if (!guides.length) return <div className="text-xs text-on-surface-variant font-sans mt-2">No guides imported yet</div>;
-
-      return (
-        <div className="flex flex-col gap-2 mt-3">
-          {guides.map(g => (
-            <div
-              key={g.id}
-              className={`flex items-center justify-between p-3 border cursor-pointer card-hover ${
-                selectedId === g.id ? "bg-surface-container-high border-primary-container/40" : "bg-surface-container-low border-outline-variant"
-              }`}
-              onClick={() => onSelect(g.id)}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-sans text-on-surface truncate">{g.title}</div>
-                <div className="text-xs text-on-surface-variant mt-0.5">{g.char_class} {g.ascendancy ? `- ${g.ascendancy}` : ""} | {g.stages || 0} stages</div>
-              </div>
-              <button
-                onClick={e => { e.stopPropagation(); onDelete(g.id); }}
-                className="p-1 text-outline hover:text-error transition-colors ml-2"
-              >
-                <Icon name="delete" className="text-base" />
-              </button>
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    function GuideDetail({ guide, charData }) {
-      const [activeStage, setActiveStage] = useState(null);
-      const [comparison, setComparison] = useState(null);
-      const [compLoading, setCompLoading] = useState(false);
-
-      useEffect(() => {
-        if (!guide) return;
-        if (guide.stages?.length > 0 && !activeStage) {
-          setActiveStage(guide.stages[0].stage || guide.stages[0].name || 0);
-        }
-      }, [guide]);
-
-      useEffect(() => {
-        if (!guide || !charData) return;
-        setCompLoading(true);
-        api(`/api/guide/${guide.id}/compare`, "POST", {
-          account: charData._account,
-          character_name: charData.name,
-        }).then(data => {
-          setCompLoading(false);
-          if (!data.error) setComparison(data);
-        });
-      }, [guide, charData]);
-
-      if (!guide) return null;
-
-      const stages = guide.stages || [];
-      const stageData = comparison?.stages || comparison?.comparison || [];
-      const currentStageComparison = Array.isArray(stageData)
-        ? stageData.find(s => s.stage === activeStage) || stageData[0]
-        : stageData;
-
-      const slotComparisons = currentStageComparison?.slots || currentStageComparison?.gear || [];
-
-      return (
-        <div className="mt-4 flex flex-col gap-3 fade-in">
-          {stages.length > 1 && (
-            <div className="flex gap-1 overflow-x-auto">
-              {stages.map((st, i) => {
-                const stageName = st.stage || st.name || `Stage ${i + 1}`;
                 return (
+                  <div key={sl.slot} className={`mb-1 ${needsUpgrade ? "border-l-2 border-error/40" : "border-l-2 border-primary-container/20"}`}>
+                    <div
+                      className="flex items-center gap-2 py-2 px-3 cursor-pointer hover:bg-surface-container-low transition-all"
+                      onClick={() => setExpandedSlot(isOpen ? null : sl.slot)}
+                    >
+                      <Icon name={slotIcon(sl.slot)} className={`text-sm ${isUnique ? "text-secondary" : "text-on-surface-variant"}`} />
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-sm ${isUnique ? "text-secondary" : "text-on-surface"} block truncate`}>{sl.itemName}</span>
+                        {needsUpgrade && sl.deadMods?.[0] && (
+                          <span className="text-[10px] text-error block">{sl.deadMods[0].reason}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {hasDeadMods && <Icon name="error" className="text-xs text-error" />}
+                        <span className={`text-[10px] font-label ${sl.avgTier <= 2 ? "text-tertiary" : sl.avgTier <= 3.5 ? "text-on-surface-variant" : "text-error"}`}>T{sl.avgTier}</span>
+                      </div>
+                    </div>
+
+                    {/* Expanded: upgrade recommendations */}
+                    {isOpen && (
+                      <div className="px-3 pb-3 space-y-2">
+                        {/* Gap analysis — what mods to add */}
+                        {sl.gapAnalysis?.length > 0 && (
+                          <div className="bg-surface-container-lowest p-3">
+                            <span className="text-[10px] font-label text-secondary uppercase tracking-widest block mb-1">Missing mods for your build</span>
+                            {sl.gapAnalysis.slice(0, 3).map((gap, i) => (
+                              <div key={i} className="text-xs text-on-surface-variant py-0.5">{gap.displayName} <span className="text-outline">({gap.bestTierRange})</span></div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Dead mods */}
+                        {sl.deadMods?.length > 0 && (
+                          <div className="bg-error/5 p-3">
+                            <span className="text-[10px] font-label text-error uppercase tracking-widest block mb-1">Wasted mods</span>
+                            {sl.deadMods.map((dm, i) => (
+                              <div key={i} className="text-xs text-on-surface-variant py-0.5">{dm.mod} — <span className="text-error">{dm.reason}</span></div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Popular items — what to buy */}
+                        {popular.length > 0 ? (
+                          <div className="bg-surface-container-lowest p-3">
+                            <span className="text-[10px] font-label text-tertiary uppercase tracking-widest block mb-2">What top players use</span>
+                            {popular.slice(0, 5).map((pi, i) => (
+                              <div key={i} className="flex items-center justify-between py-1 border-b border-outline-variant/10 last:border-0">
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <span className={`text-sm font-body truncate ${pi.rarity === "unique" ? "text-secondary" : "text-on-surface"}`}>{pi.name}</span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="text-[10px] text-on-surface-variant">{Math.round(pi.percentage || pi.count)}% use</span>
+                                  {pi.priceText ? (
+                                    <span className="text-xs font-label text-primary-container font-bold bg-primary-container/10 px-2 py-0.5">{pi.priceText}</span>
+                                  ) : (
+                                    <span className="text-[10px] text-outline">check trade</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-outline py-2">Loading alternatives...</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── COMPARE vs another build (overlay) ── */}
+          {compareOpen && (
+            <div className="absolute inset-0 z-40 bg-surface flex flex-col overflow-hidden">
+              <div className="flex items-center gap-3 px-6 py-3 border-b border-outline-variant/20 shrink-0">
+                <Icon name="compare_arrows" className="text-base text-tertiary" />
+                <span className="font-headline text-lg text-on-surface">Compare Build</span>
+                <span className="text-xs text-on-surface-variant">{charData.name} vs another player</span>
+                <div className="flex-1" />
+                <button onClick={() => setCompareOpen(false)} className="text-on-surface-variant hover:text-on-surface" title="Close">
+                  <Icon name="close" className="text-lg" />
+                </button>
+              </div>
+              <div className="px-6 py-4 border-b border-outline-variant/20 shrink-0">
+                <div className="flex gap-3">
+                  <input
+                    value={compareQuery}
+                    onChange={e => { setCompareQuery(e.target.value); setCompareError(""); }}
+                    placeholder="poe.ninja URL, or account/character (e.g. Player123/CharName)"
+                    className="flex-1 px-4 py-3 bg-surface-container-lowest border border-outline-variant text-sm font-sans text-on-surface placeholder-outline focus:border-tertiary focus:outline-none"
+                    onKeyDown={e => { if (e.key === "Enter") runCompare(); }}
+                  />
                   <button
-                    key={i}
-                    onClick={() => setActiveStage(stageName)}
-                    className={`px-3 py-1.5 text-xs font-sans whitespace-nowrap transition-colors ${
-                      activeStage === stageName
-                        ? "bg-primary-container text-on-primary"
-                        : "bg-surface-container text-on-surface-variant hover:text-on-surface"
-                    }`}
+                    onClick={runCompare}
+                    disabled={compareLoading || !compareQuery.trim()}
+                    className="px-6 py-3 bg-tertiary text-surface text-sm font-sans font-bold uppercase tracking-wider hover:opacity-90 transition-opacity disabled:opacity-50"
                   >
-                    {stageName}
+                    {compareLoading ? (
+                      <div className="w-4 h-4 border-2 border-surface border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+                    ) : "Compare"}
                   </button>
-                );
-              })}
-            </div>
-          )}
-
-          {compLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-6 h-6 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
-            </div>
-          ) : slotComparisons.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              <div className="grid grid-cols-3 gap-2 px-2 text-xs font-sans text-on-surface-variant">
-                <span>Slot</span>
-                <span>Guide</span>
-                <span>Yours</span>
+                </div>
+                {compareError && <p className="text-sm text-error font-sans mt-3">{compareError}</p>}
               </div>
-              {slotComparisons.map((sc, i) => {
-                const matchClass = sc.match === "exact" ? "text-green-400" : sc.match === "partial" ? "text-yellow-400" : "text-red-400";
-                const matchIcon = sc.match === "exact" ? "check_circle" : sc.match === "partial" ? "change_circle" : "cancel";
-                return (
-                  <div key={i} className="grid grid-cols-3 gap-2 p-2 bg-surface-container items-center">
-                    <span className="text-xs font-sans text-on-surface-variant">{sc.slotDisplay || sc.slot}</span>
-                    <span className="text-xs font-sans text-on-surface truncate">{sc.guideItem || sc.guide_item || "--"}</span>
-                    <div className="flex items-center gap-1">
-                      <Icon name={matchIcon} className={`text-sm ${matchClass}`} />
-                      <span className="text-xs font-sans text-on-surface truncate">{sc.yourItem || sc.your_item || "--"}</span>
-                    </div>
+              <div className="flex-1 overflow-y-auto">
+                {!compareResult && !compareLoading && (
+                  <div className="flex flex-col items-center justify-center py-16 gap-4 px-6">
+                    <Icon name="compare_arrows" className="text-5xl text-outline/30" />
+                    <p className="text-on-surface-variant font-sans text-sm text-center max-w-md">
+                      Paste a poe.ninja profile URL or enter account/character to see a detailed diff of gear, keystones, jewels, supports, DPS and survivability — plus a prioritized upgrade shopping list.
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-xs text-on-surface-variant font-sans text-center py-4">
-              {charData ? "No comparison data available" : "Load a character to compare against this guide"}
+                )}
+                {compareLoading && (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <div className="w-8 h-8 border-2 border-tertiary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+                    <span className="text-sm text-on-surface-variant font-sans">Comparing builds...</span>
+                  </div>
+                )}
+                {compareResult && <BuildDiffView result={compareResult} />}
+              </div>
             </div>
           )}
         </div>
       );
     }
 
-    function GuideTab({ charData }) {
-      const [guides, setGuides] = useState([]);
-      const [selectedGuideId, setSelectedGuideId] = useState(null);
-      const [selectedGuide, setSelectedGuide] = useState(null);
-
-      const fetchGuides = useCallback(async () => {
-        const data = await api("/api/guide/list");
-        if (Array.isArray(data)) setGuides(data);
-      }, []);
-
-      useEffect(() => { fetchGuides(); }, []);
-
-      const handleImport = (result) => {
-        fetchGuides();
-        if (result.id) setSelectedGuideId(result.id);
-      };
-
-      const handleSelect = async (id) => {
-        setSelectedGuideId(id);
-        const data = await api(`/api/guide/${id}`);
-        if (!data.error) setSelectedGuide(data);
-      };
-
-      const handleDelete = async (id) => {
-        await api(`/api/guide/${id}`, "DELETE");
-        fetchGuides();
-        if (selectedGuideId === id) { setSelectedGuideId(null); setSelectedGuide(null); }
-      };
-
-      return (
-        <div className="flex flex-col gap-4 p-5 max-w-4xl mx-auto">
-          <h2 className="font-serif text-lg text-on-surface">Build Guides</h2>
-          <GuideImportBar onImport={handleImport} />
-          <GuideList guides={guides} selectedId={selectedGuideId} onSelect={handleSelect} onDelete={handleDelete} />
-          {selectedGuide && <GuideDetail guide={selectedGuide} charData={charData} />}
-        </div>
-      );
-    }
 
     // -----------------------------------------------------------------------
     // Dashboard (root)
@@ -2815,41 +1610,36 @@
 
       const { connected } = useDashboardSocket(WS_URL, handleWsMessage);
 
-      const tabContent = useMemo(() => {
-        switch (activeTab) {
-          case "BUILD":
-            return <PulseTab charData={charData} insights={insights} improvement={improvement} comparison={comparison} whyInsights={whyInsights} onLookup={handleLookup} />;
-          case "GEAR":
-            return <GearTab charData={charData} insights={insights} account={account} />;
-          case "MARKET":
-            return <MarketTab charData={charData} efficiency={efficiency} whyInsights={whyInsights} />;
-          case "GUIDE":
-            return <GuideTab charData={charData} />;
-          default:
-            return null;
-        }
-      }, [activeTab, charData, insights, improvement, comparison, efficiency, whyInsights, account]);
-
       return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-screen overflow-hidden">
           <NavBar onSettingsClick={() => setSettingsOpen(true)} />
-          <Sidebar
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            charData={charData}
-            hasCharacter={!!charData}
-            onSettingsClick={() => setSettingsOpen(true)}
-          />
 
-          {/* Main content area — offset for navbar + sidebar */}
-          <div className="flex-1 overflow-y-auto" style={{ marginLeft: "256px", paddingTop: "80px" }}>
-            {tabContent}
+          {/* Single-page layout — no tabs, no sidebar, no scroll */}
+          <div className="flex-1 overflow-hidden" style={{ paddingTop: "64px" }}>
+            {!charData ? (
+              <div className="h-full flex items-center justify-center">
+                <InlineCharacterLookup onLookup={handleLookup} />
+              </div>
+            ) : !whyInsights && !insights ? (
+              <div className="h-full flex flex-col items-center justify-center gap-3">
+                <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+                <span className="text-sm text-on-surface-variant font-sans">Analyzing build...</span>
+              </div>
+            ) : (
+              <SinglePageView
+                charData={charData}
+                insights={insights}
+                whyInsights={whyInsights}
+                account={account}
+                character={character}
+              />
+            )}
           </div>
 
           {/* Connection indicator */}
-          <div className="fixed bottom-3 left-[268px] flex items-center gap-1.5 z-40">
+          <div className="fixed bottom-3 right-4 flex items-center gap-1.5 z-40">
             <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`} />
-            <span className="text-xs font-sans text-outline">{connected ? "Connected" : "Disconnected"}</span>
+            <span className="text-xs font-sans text-outline">{connected ? "" : "Disconnected"}</span>
           </div>
 
           {/* Settings Panel */}
@@ -2867,10 +1657,34 @@
     }
 
     // -----------------------------------------------------------------------
+    // Error Boundary — catches render crashes, shows message instead of blank screen
+    // -----------------------------------------------------------------------
+    class ErrorBoundary extends React.Component {
+      constructor(props) { super(props); this.state = { error: null }; }
+      static getDerivedStateFromError(error) { return { error }; }
+      componentDidCatch(error, info) { console.error("[LAMA] React crash:", error, info); }
+      render() {
+        if (this.state.error) {
+          return React.createElement("div", {
+            style: { padding: "40px", textAlign: "center", color: "#FFB77B", fontFamily: "Space Grotesk, sans-serif" }
+          },
+            React.createElement("h2", null, "Something went wrong"),
+            React.createElement("p", { style: { color: "#999", marginTop: "8px", fontSize: "14px" } }, String(this.state.error)),
+            React.createElement("button", {
+              onClick: () => this.setState({ error: null }),
+              style: { marginTop: "16px", padding: "8px 24px", background: "#FFB77B", color: "#0e0e0e", border: "none", cursor: "pointer" }
+            }, "Retry")
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // Mount
     // -----------------------------------------------------------------------
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<Dashboard />);
+    root.render(<ErrorBoundary><Dashboard /></ErrorBoundary>);
   </script>
 </body>
 </html>
