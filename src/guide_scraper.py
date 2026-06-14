@@ -411,13 +411,15 @@ _MAXROLL_ASC_MAP = {
     "Mercenary2": ("Mercenary", "Gemling Legionnaire"),
     "Monk1": ("Monk", "Acolyte of Chayula"),
     "Monk2": ("Monk", "Invoker"),
+    "Monk3": ("Monk", "Martial Artist"),         # 0.5.0; verify Maxroll numbering
     "Sorceress1": ("Sorceress", "Chronomancer"),
     "Sorceress2": ("Sorceress", "Stormweaver"),
     # Last of the Druids expansion classes
     "Druid1": ("Druid", "Oracle"),
     "Druid2": ("Druid", "Shaman"),
     "Huntress1": ("Huntress", "Amazon"),
-    "Huntress2": ("Huntress", "Beastmaster"),
+    "Huntress2": ("Huntress", "Ritualist"),      # was wrongly "Beastmaster"
+    "Huntress3": ("Huntress", "Spirit Walker"),  # 0.5.0; verify Maxroll numbering
 }
 
 # Fallback: class code prefix → base class name

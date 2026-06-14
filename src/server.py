@@ -97,6 +97,7 @@ from bundle_paths import IS_FROZEN, APP_DIR, get_resource
 from item_lookup import ItemLookup
 from oauth import OAuthManager
 from price_cache import PriceCache
+from config import DEFAULT_LEAGUE, LEAGUE_OPTIONS
 from game_commands import GameCommander
 from character_client import CharacterClient
 from stash_client import StashClient
@@ -144,7 +145,7 @@ STATUS_RE = re.compile(
 # Settings manager
 # ---------------------------------------------------------------------------
 DEFAULT_SETTINGS = {
-    "league": "Fate of the Vaal",
+    "league": DEFAULT_LEAGUE,
     "no_filter_update": False,
     "auto_start": True,
     "font_size": 14,
@@ -634,7 +635,7 @@ async def lifespan(app: FastAPI):
     status_task = asyncio.create_task(status_broadcast_loop())
 
     settings = load_settings()
-    league = settings.get("league", "Fate of the Vaal")
+    league = settings.get("league", DEFAULT_LEAGUE)
 
     # Configure cloud push notifications
     cloud_notify.configure(
@@ -857,7 +858,7 @@ async def get_status():
 @app.post("/api/start")
 async def start_overlay(req: StartRequest = StartRequest()):
     settings = load_settings()
-    league = req.league or settings.get("league", "Fate of the Vaal")
+    league = req.league or settings.get("league", DEFAULT_LEAGUE)
     no_filter = req.no_filter_update if req.no_filter_update is not None else settings.get("no_filter_update", False)
 
     result = overlay.start(league, no_filter_update=no_filter)
@@ -890,7 +891,7 @@ async def restart_overlay(req: StartRequest = StartRequest()):
     await asyncio.sleep(0.5)
 
     settings = load_settings()
-    league = req.league or settings.get("league", "Fate of the Vaal")
+    league = req.league or settings.get("league", DEFAULT_LEAGUE)
     no_filter = req.no_filter_update if req.no_filter_update is not None else settings.get("no_filter_update", False)
 
     result = overlay.start(league, no_filter_update=no_filter)
@@ -933,7 +934,7 @@ async def update_settings(req: SettingsRequest):
 
     # Update server-side price cache if league changed
     if "league" in updates and price_cache:
-        new_league = settings.get("league", "Fate of the Vaal")
+        new_league = settings.get("league", DEFAULT_LEAGUE)
         price_cache.league = new_league
 
     return settings
@@ -976,14 +977,9 @@ async def get_leagues():
         return {"leagues": [], "error": f"HTTP {resp.status_code}"}
     except Exception as e:
         logger.warning(f"Failed to fetch leagues: {e}")
-        # Fallback
+        # Fallback (used only when the poe2scout league fetch fails)
         return {
-            "leagues": [
-                {"value": "Fate of the Vaal", "label": "Fate of the Vaal"},
-                {"value": "Standard", "label": "Standard"},
-                {"value": "Hardcore Fate of the Vaal", "label": "Hardcore Fate of the Vaal"},
-                {"value": "Hardcore", "label": "Hardcore"},
-            ],
+            "leagues": LEAGUE_OPTIONS,
             "error": str(e),
         }
 
@@ -2331,7 +2327,7 @@ async def refresh_stash():
         return {"status": "already_refreshing"}
 
     settings = load_settings()
-    league = settings.get("league", "Fate of the Vaal")
+    league = settings.get("league", DEFAULT_LEAGUE)
     loop = asyncio.get_running_loop()
 
     stash_data["refreshing"] = True
@@ -2687,7 +2683,7 @@ _CHAOS_THRESHOLDS = {
 async def get_filter_items():
     """Return items grouped by economy section and tier based on current prices."""
     settings = load_settings()
-    league = settings.get("league", "Fate of the Vaal")
+    league = settings.get("league", DEFAULT_LEAGUE)
     cache_file = SETTINGS_DIR / "cache" / f"prices_{league.lower().replace(' ', '_')}.json"
 
     if not cache_file.exists():
@@ -2752,7 +2748,7 @@ async def get_filter_items():
 async def update_filter():
     """Trigger a loot filter update by spawning a subprocess."""
     settings = load_settings()
-    league = settings.get("league", "Fate of the Vaal")
+    league = settings.get("league", DEFAULT_LEAGUE)
 
     # Pass filter preferences via environment variable so the subprocess
     # can read them and forward to FilterUpdater.update_now()

@@ -17,7 +17,7 @@ class GameConfig:
 
     # ── Identity ────────────────────────────────────────────
     game_id: str                          # e.g. "poe2", "last_epoch"
-    default_league: str                   # e.g. "Fate of the Vaal"
+    default_league: str                   # current challenge league, e.g. "Runes of Aldur"
     cache_dir: Path                       # base cache directory
 
     # ── Mod Database (RePoE) ────────────────────────────────

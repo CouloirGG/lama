@@ -54,8 +54,25 @@ IS_DEV_BUILD = GIT_BRANCH not in (None, "main")
 POE2_WINDOW_TITLE = "Path of Exile 2"
 POE2_PROCESS_NAME = "PathOfExile2.exe"
 
-# Default league - user can change this
-DEFAULT_LEAGUE = "Fate of the Vaal"
+# ─────────────────────────────────────────────
+# Current League — SINGLE SOURCE OF TRUTH
+# When a new POE2 season launches, update DEFAULT_LEAGUE / DEFAULT_LEAGUE_HC
+# below and re-run the meta harvester. Everything else (server fallbacks,
+# price cache, diagnostics, league selector) reads from these constants, so a
+# season migration should only need to touch this block + the harvest.
+# Full runbook: docs/season-migration.md
+# ─────────────────────────────────────────────
+DEFAULT_LEAGUE = "Runes of Aldur"          # poe.ninja/poe2scout name; slug "runesofaldur"
+DEFAULT_LEAGUE_HC = "Hardcore Runes of Aldur"
+
+# League options shown in the dashboard selector / used as the API-call fallback.
+# value == the league name poe.ninja / poe2scout expect as an API parameter.
+LEAGUE_OPTIONS = [
+    {"value": DEFAULT_LEAGUE, "label": DEFAULT_LEAGUE},
+    {"value": "Standard", "label": "Standard"},
+    {"value": DEFAULT_LEAGUE_HC, "label": DEFAULT_LEAGUE_HC},
+    {"value": "Hardcore", "label": "Hardcore"},
+]
 
 # ─────────────────────────────────────────────
 # Item Detection

@@ -56,17 +56,19 @@ ASCENDANCY_MAP = {
     "Stormweaver": "Sorceress",
     "Chronomancer": "Sorceress",
     "Disciple of Varashta": "Sorceress",
-    # Monk (2/3 — 3rd unrevealed)
+    # Monk (3/3)
     "Invoker": "Monk",
     "Acolyte of Chayula": "Monk",
+    "Martial Artist": "Monk",         # added 0.5.0 Runes of Aldur
     # Mercenary (3/3)
     "Tactician": "Mercenary",
     "Witchhunter": "Mercenary",       # poe.ninja spells it without space
     "Witch Hunter": "Mercenary",      # alternate spelling
     "Gemling Legionnaire": "Mercenary",
-    # Huntress (2/3 — 3rd unrevealed)
+    # Huntress (3/3)
     "Amazon": "Huntress",
     "Ritualist": "Huntress",
+    "Spirit Walker": "Huntress",      # added 0.5.0 Runes of Aldur
     # Druid (2/3 — 3rd unrevealed)
     "Oracle": "Druid",
     "Shaman": "Druid",
@@ -279,6 +281,32 @@ class BuildsClient:
         self._snapshot_name: Optional[str] = None
         self._snapshot_league_url: Optional[str] = None
 
+    def _get_with_retry(self, url: str, timeout: int = 15, max_retries: int = 4):
+        """GET with backoff on rate-limit (429) / unavailable (503).
+
+        Honors the Retry-After header, otherwise exponential backoff. Returns the
+        final Response so existing 200/404/status handling at call sites is
+        unchanged. Without this a single 429 silently drops a character, and a
+        whole class can harvest to 0 builds when poe.ninja is throttling (common
+        early in a league). See docs/season-migration.md.
+        """
+        backoff = 1.0
+        resp = self._session.get(url, timeout=timeout)
+        for attempt in range(max_retries):
+            if resp.status_code not in (429, 503):
+                return resp
+            retry_after = resp.headers.get("Retry-After")
+            try:
+                wait = float(retry_after) if retry_after else backoff
+            except (TypeError, ValueError):
+                wait = backoff
+            wait = min(max(wait, backoff), 30.0)
+            logger.info(f"poe.ninja HTTP {resp.status_code}; retry {attempt + 1}/{max_retries} in {wait:.0f}s")
+            time.sleep(wait)
+            backoff = min(backoff * 2, 30.0)
+            resp = self._session.get(url, timeout=timeout)
+        return resp
+
     def _get_cached(self, key: str, ttl: int) -> Optional[Any]:
         """Check cache. Returns data or None if expired/missing."""
         with self._lock:
@@ -390,7 +418,7 @@ class BuildsClient:
                 f"&name={character}"
                 f"&overview={self._snapshot_name}"
             )
-            resp = self._session.get(url, timeout=15)
+            resp = self._get_with_retry(url, timeout=15)
 
             if resp.status_code == 404:
                 logger.info(f"Character not on ladder: {account}/{character}")
@@ -418,7 +446,7 @@ class BuildsClient:
                 f"{BASE_URL}/profile/characters"
                 f"/{account}/{league_url}/{character}/model/{profile_ver}"
             )
-            resp = self._session.get(url, timeout=15)
+            resp = self._get_with_retry(url, timeout=15)
 
             if resp.status_code == 404:
                 logger.info(f"Character not found via profile API: {account}/{character}")
@@ -870,7 +898,7 @@ class BuildsClient:
                 f"&class={quote(str(char_class))}"
                 f"&skills={quote(str(skill))}"
             )
-            resp = self._session.get(url, timeout=15)
+            resp = self._get_with_retry(url, timeout=15)
             if resp.status_code != 200:
                 logger.warning(f"poe.ninja search: HTTP {resp.status_code}")
                 return None
@@ -1004,7 +1032,7 @@ class BuildsClient:
 
         try:
             url = f"{BASE_URL}/builds/dictionary/{quote(str(hash_val))}"
-            resp = self._session.get(url, timeout=15)
+            resp = self._get_with_retry(url, timeout=15)
             if resp.status_code != 200:
                 logger.warning(f"poe.ninja dictionary: HTTP {resp.status_code}")
                 return None

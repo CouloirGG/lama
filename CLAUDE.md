@@ -52,4 +52,4 @@ Test fixtures use real clipboard captures in `tests/fixtures/`.
 ## Launching
 - **Normal:** `LAMA.bat` (uses exe if built, falls back to pythonw)
 - **Debug:** `LAMA-debug.bat` (console output + WebView2 DevTools via right-click → Inspect)
-- **CLI overlay only:** `python src/main.py --league "Fate of the Vaal" --debug`
+- **CLI overlay only:** `python src/main.py --league "Runes of Aldur" --debug`

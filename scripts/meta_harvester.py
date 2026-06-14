@@ -7,7 +7,7 @@ that the LAMA app loads at runtime to drive data-driven analysis.
 
 Usage:
     python scripts/meta_harvester.py
-    python scripts/meta_harvester.py --league "Fate of the Vaal" --output shard.json.gz
+    python scripts/meta_harvester.py --league "Runes of Aldur" --output shard.json.gz
     python scripts/meta_harvester.py --dry-run
 """
 import sys, os, json, gzip, time, re, argparse, statistics
@@ -58,6 +58,9 @@ CLASS_SKILLS = {
         ('Invoker', 'Ice Strike'),
         ('Acolyte of Chayula', 'Bell'), ('Acolyte of Chayula', 'Ice Strike'),
         ('Acolyte of Chayula', 'Flicker Strike'),
+        # 0.5.0 Runes of Aldur — probe skills best-effort, refine once meta observed
+        ('Martial Artist', 'Tempest Bell'), ('Martial Artist', 'Ice Strike'),
+        ('Martial Artist', 'Flicker Strike'),
     ],
     'Mercenary': [
         ('Tactician', 'Power Shot'), ('Tactician', 'Lightning Arrow'),
@@ -69,6 +72,8 @@ CLASS_SKILLS = {
         ('Amazon', 'Poisonburst Arrow'), ('Amazon', 'Cyclone'),
         ('Ritualist', 'Bone Storm'), ('Ritualist', 'Comet'),
         ('Ritualist', 'Unearth'),
+        # 0.5.0 Runes of Aldur — probe skills best-effort, refine once meta observed
+        ('Spirit Walker', 'Lightning Arrow'), ('Spirit Walker', 'Barrage'),
     ],
     'Druid': [
         ('Oracle', 'Bone Storm'), ('Oracle', 'Storm Call'), ('Oracle', 'Comet'),

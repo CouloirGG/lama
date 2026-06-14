@@ -809,7 +809,7 @@ class PriceCache:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
-    cache = PriceCache(league="Fate of the Vaal")
+    cache = PriceCache(league=DEFAULT_LEAGUE)
     print("Fetching prices (poe2scout + poe.ninja)...")
     cache._fetch_all()
     stats = cache.get_stats()
