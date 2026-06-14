@@ -456,11 +456,13 @@ class BuildsClient:
                 return None
 
             data = resp.json()
-            if not data.get("hasData"):
+            # poe.ninja's profile API now returns {type, charModel}; older
+            # responses used {hasData, charModel}. Accept either — the character
+            # data is present whenever charModel is.
+            char_model = data.get("charModel")
+            if not char_model:
                 logger.info(f"Profile API returned no data: {account}/{character}")
                 return None
-
-            char_model = data.get("charModel", {})
             return self._parse_character(char_model, account, character)
 
         except Exception as e:
