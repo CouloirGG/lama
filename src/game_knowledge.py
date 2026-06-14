@@ -122,11 +122,11 @@ KEYSTONES: Dict[str, KeystoneInfo] = {
     ),
 
     "Ancestral Bond": KeystoneInfo(
-        description="You can't deal damage directly. +1 to maximum number of summoned totems.",
-        benefits="Extra totem scales clear speed and single-target damage. The 'no damage' downside is irrelevant because totems deal the damage for you.",
-        impact="Without Ancestral Bond, totem builds have one fewer totem, directly reducing your damage output and coverage. For totem builds, this is a pure damage gain.",
-        synergies=["Totem skills", "Totem placement speed"],
-        anti_synergies=["Self-cast builds", "Attack builds"],
+        description="You can't deal damage directly. Reworked in 0.5.0: now DOUBLES your maximum totem limit (instead of a flat +1), placing totems costs nothing and consumes no charges, and each totem reserves 75 spirit.",
+        benefits="Doubling the totem limit is a far bigger damage multiplier than the old +1 for invested totem builds, and free/no-charge placement removes the old casting friction. The 'no direct damage' downside is irrelevant — totems deal the damage.",
+        impact="Without Ancestral Bond, totem builds lose the doubled limit (so far fewer totems) and pay placement costs — directly cutting damage and coverage. For a totem build it's a large, near-mandatory gain.",
+        synergies=["Totem skills", "Spirit reservation efficiency", "Totem placement speed"],
+        anti_synergies=["Self-cast builds", "Attack builds", "Low spirit pools"],
         build_types=["totem"],
     ),
 
@@ -150,10 +150,10 @@ KEYSTONES: Dict[str, KeystoneInfo] = {
 
     "Ghost Reaver": KeystoneInfo(
         description="Life leech applies to Energy Shield instead of life.",
-        benefits="Gives ES builds access to leech-based sustain. Essential for attack-based ES characters who need instant recovery during fights.",
-        impact="Without Ghost Reaver, ES builds can't leech — your only recovery is ES recharge (which has a delay). In sustained combat, you'll have no way to recover ES until you stop taking damage.",
+        benefits="Gives ES builds leech-based sustain — more important after 0.5.0, which nerfed ES recharge. Note 0.5.0 also removed instant leech: leech now applies gradually (single highest instance per resource, capped at 40k damage), so it's steady recovery rather than the old instant burst.",
+        impact="Without Ghost Reaver, ES builds can't leech at all — recovery falls back on ES recharge, which 0.5.0 nerfed (slower start, weaker rate). In sustained fights you'll have no reliable way to refill ES while taking hits.",
         synergies=["Energy Shield gear", "Attack builds", "Life leech sources"],
-        anti_synergies=["Life builds", "ES recharge builds"],
+        anti_synergies=["Life builds", "Pure ES-recharge builds"],
         build_types=["energy_shield", "attack_es"],
     ),
 
@@ -235,8 +235,8 @@ KEYSTONES: Dict[str, KeystoneInfo] = {
 
     "Vitality Siphon": KeystoneInfo(
         description="Life and ES leech from spell damage. Spell hits recover a percentage of damage dealt as life and energy shield.",
-        benefits="Gives spell builds sustain they normally can't get — life and ES leech from every spell hit. Keeps you alive during sustained combat without relying on flasks or regen.",
-        impact="Without Vitality Siphon, your spell build has no leech. You'll rely entirely on regen, flasks, and ES recharge for sustain. In prolonged boss fights, you'll run out of recovery and die.",
+        benefits="Gives spell builds sustain they normally can't get. Since 0.5.0 removed instant leech (single highest instance, 40k cap), it's steady recovery during sustained combat rather than instant burst — still valuable given ES recharge was also nerfed.",
+        impact="Without Vitality Siphon, your spell build has no leech and leans on regen, flasks, and the now-weaker ES recharge. In prolonged boss fights you'll run low on recovery and die.",
         synergies=["High DPS spells", "ES builds", "Sanguimancy"],
         anti_synergies=["Low hit-rate builds", "DoT-only builds"],
         build_types=["spell_damage", "energy_shield", "sustain"],
@@ -432,14 +432,18 @@ DEFENSE_MECHANICS: Dict[str, DefenseMechanicInfo] = {
         how_it_works=(
             "ES starts recharging after a delay (typically 2 seconds of no "
             "damage taken). It can be very large with the right gear — "
-            "CI builds can have 8000+ ES. Chaos damage bypasses ES unless "
-            "you have CI or specific mods."
+            "CI builds can have 8000+ ES. 0.5.0 nerfed ES recharge (slower "
+            "start and reduced recharge-rate notables), so ES builds now "
+            "lean more on leech (Ghost Reaver) and the new Runic Ward layer "
+            "for in-combat recovery. Chaos damage bypasses ES unless you "
+            "have CI or specific mods."
         ),
         strengths=["Can reach very high values",
                    "Recharges without flasks",
                    "CI makes you chaos immune"],
         weaknesses=["Chaos damage bypasses it by default",
                     "Recharge delay can be deadly",
+                    "Recharge was nerfed in 0.5.0 (weaker recovery)",
                     "Stuns interrupt recharge"],
     ),
 
@@ -482,21 +486,47 @@ DEFENSE_MECHANICS: Dict[str, DefenseMechanicInfo] = {
 
     "deflection": DefenseMechanicInfo(
         description=(
-            "Deflection is a POE2 defense mechanic that provides damage "
-            "reduction against deflected hits, scaling with shield defenses."
+            "Deflection is a POE2 shield defense that gives a CHANCE to "
+            "Deflect incoming hits. Reformulated in 0.5.0 to scale better "
+            "with Deflection Rating and capped at 95% — mirroring how "
+            "Evasion's chance-to-Evade is capped at 95%."
         ),
         how_it_works=(
-            "When wielding a shield, deflection provides a baseline damage "
-            "reduction layer. It scales with the shield's defensive stats "
-            "and is checked separately from block, giving shield users "
-            "an additional mitigation layer."
+            "Deflection is an entropy-style chance to deflect a hit, scaling "
+            "with your Deflection Rating against the attacker's accuracy "
+            "(0.5.0 formula), up to a 95% cap. More shield/Deflection "
+            "investment raises the chance. It is checked separately from "
+            "block, giving shield users an additional avoidance layer."
         ),
-        strengths=["Additional layer for shield users",
-                   "Scales with shield investment",
+        strengths=["Additional avoidance layer for shield users",
+                   "Scales with Deflection Rating investment",
+                   "Can reach a 95% deflect chance",
                    "Works alongside block"],
         weaknesses=["Requires a shield",
-                    "Less effective without shield investment",
+                    "Chance-based — unreliable at low investment",
                     "Does not apply to unshielded characters"],
+    ),
+
+    "runic_ward": DefenseMechanicInfo(
+        description=(
+            "Runic Ward is a new 0.5.0 (Kalguuran) defensive layer — a "
+            "separate pool that keeps you alive once you hit 1 life, "
+            "absorbing damage while it lasts and regenerating independently "
+            "of your life and energy shield."
+        ),
+        how_it_works=(
+            "Granted by Kalguuran armour via Verisium Runeforging: armour "
+            "bases below item level 55 gain Runic Ward for free, while "
+            "higher-level bases trade some conventional defenses (armour/"
+            "evasion/ES) for it. It activates at 1 life as a last-stand "
+            "buffer and regenerates on its own, independent of life recovery."
+        ),
+        strengths=["Independent regeneration (no flasks needed)",
+                   "A genuine last-stand layer at 1 life",
+                   "Free on low-level (sub-ilvl-55) armour bases"],
+        weaknesses=["Requires Kalguuran/Verisium-crafted armour",
+                    "Higher-level bases trade away conventional defenses",
+                    "New mechanic — limited gear support so far"],
     ),
 }
 
