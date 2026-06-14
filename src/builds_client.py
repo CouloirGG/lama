@@ -1113,29 +1113,41 @@ class BuildsClient:
             if divine_price <= 0:
                 return prices
 
-            resp = self._session.get(
-                f"{POE2SCOUT_API}/items/unique/{slug}",
-                timeout=15,
-            )
-            if resp.status_code != 200:
+            from urllib.parse import quote
+            league = getattr(self, "_poe2scout_league", "") or ""
+            if not league:
                 return prices
 
-            data = resp.json()
-            items = data if isinstance(data, list) else data.get("items", [])
+            items, page = [], 1
+            while True:
+                resp = self._session.get(
+                    f"{POE2SCOUT_API}/poe2/Leagues/{quote(league)}/Uniques/ByCategory",
+                    params={"Category": slug, "Page": page, "PerPage": 25}, timeout=15,
+                )
+                if resp.status_code != 200:
+                    break
+                data = resp.json()
+                batch = data.get("Items", []) if isinstance(data, dict) else []
+                items.extend(batch)
+                if not batch or page >= data.get("Pages", 1):
+                    break
+                page += 1
 
             for item in items:
-                name = item.get("name", "")
-                raw_price = item.get("currentPrice", 0) or 0
+                name = item.get("Name", "")
+                raw_price = item.get("CurrentPrice", 0) or 0   # Exalted Orbs
                 if not name or not raw_price:
                     continue
 
                 divine_value = raw_price / divine_price
-                if divine_value >= 0.85:
-                    display = f"~{divine_value:.0f} div" if divine_value >= 10 else f"~{divine_value:.1f} div"
+                if divine_value >= 10:
+                    display = f"~{divine_value:.0f} div"
+                elif divine_value >= 0.85:
+                    display = f"~{divine_value:.1f} div"
                 elif raw_price >= 1:
-                    display = f"~{round(raw_price)}c"
+                    display = f"~{round(raw_price)} ex"
                 else:
-                    display = "< 1c"
+                    display = "< 1 ex"
                 prices[name] = display
 
             self._set_cache(cache_key, prices)
@@ -1146,18 +1158,24 @@ class BuildsClient:
         return prices
 
     def _get_divine_price(self) -> float:
-        """Get chaos-per-divine from poe2scout leagues endpoint."""
+        """Get exalted-per-divine from poe2scout's current league; also caches the
+        poe2scout league display name on the instance for ByCategory calls."""
         cached = self._get_cached("divine_price", TTL_PRICES)
         if cached is not None:
             return cached
 
         try:
-            resp = self._session.get(f"{POE2SCOUT_API}/leagues", timeout=10)
+            resp = self._session.get(f"{POE2SCOUT_API}/poe2/Leagues", timeout=10)
             if resp.status_code != 200:
                 return 0
             leagues = resp.json()
-            if leagues and isinstance(leagues, list):
-                price = leagues[0].get("divinePrice", 0) or 0
+            cur = next((l for l in leagues
+                        if l.get("IsCurrent") and not str(l.get("Value", "")).startswith("HC")), None)
+            if not cur and leagues:
+                cur = leagues[0]
+            if cur:
+                self._poe2scout_league = cur.get("Value", "")
+                price = cur.get("DivinePrice", 0) or 0
                 if price > 0:
                     self._set_cache("divine_price", price)
                     return price
