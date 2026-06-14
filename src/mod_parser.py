@@ -1,31 +1,21 @@
 """
 LAMA - Mod Parser
-Matches item mod text to trade API stat IDs for rare item pricing.
+Matches item mod text to stat IDs for item analysis.
 
-On startup, fetches stat filter definitions from the POE2 trade API
-(GET /api/trade2/data/stats), caches them to disk for 24h, and compiles
+Loads stat filter definitions from bundled resource files
+(resources/trade_stats.json, resources/trade_items.json) and compiles
 each stat text template into a regex for matching against clipboard mod lines.
 """
 
 import re
 import json
-import time
 import logging
 from dataclasses import dataclass
 from typing import List, Optional
 
-import requests
-
-from config import (
-    TRADE_STATS_URL,
-    TRADE_STATS_CACHE_FILE,
-    TRADE_ITEMS_URL,
-    TRADE_ITEMS_CACHE_FILE,
-)
+from bundle_paths import get_resource
 
 logger = logging.getLogger(__name__)
-
-STATS_CACHE_MAX_AGE = 86400  # 24 hours
 
 
 @dataclass
@@ -124,14 +114,11 @@ class ModParser:
         return self._loaded
 
     def load_stats(self):
-        """Load stat definitions and base types from disk cache or trade API."""
-        # Try disk cache first
-        if self._load_from_disk():
-            self._loaded = True
-        elif self._fetch_from_api():
+        """Load stat definitions and base types from bundled resource files."""
+        if self._load_from_resource():
             self._loaded = True
         else:
-            logger.warning("ModParser: no stat definitions available — rare pricing disabled")
+            logger.warning("ModParser: no stat definitions available — mod matching disabled")
 
         # Load base types (for magic item base_type resolution)
         self._load_base_types()
@@ -236,56 +223,20 @@ class ModParser:
         return None
 
     def _load_base_types(self):
-        """Load base type list from disk cache or trade API items endpoint."""
-        if self._load_base_types_from_disk():
-            return
-        self._fetch_base_types_from_api()
-
-    def _load_base_types_from_disk(self) -> bool:
-        """Load cached base types from disk."""
+        """Load base type list from bundled resource file."""
         try:
-            if not TRADE_ITEMS_CACHE_FILE.exists():
-                return False
+            items_path = get_resource("resources/trade_items.json")
+            if not items_path.exists():
+                logger.warning("ModParser: bundled trade_items.json not found")
+                return
 
-            age = time.time() - TRADE_ITEMS_CACHE_FILE.stat().st_mtime
-            if age > STATS_CACHE_MAX_AGE:
-                return False
-
-            with open(TRADE_ITEMS_CACHE_FILE, "r", encoding="utf-8") as f:
+            with open(items_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             self._build_base_types(data)
-            logger.info(f"ModParser: loaded {len(self._base_types)} base types from disk cache")
-            return True
+            logger.info(f"ModParser: loaded {len(self._base_types)} base types from bundled data")
         except Exception as e:
-            logger.warning(f"ModParser: base types disk cache load failed: {e}")
-            return False
-
-    def _fetch_base_types_from_api(self) -> bool:
-        """Fetch item base types from the trade API items endpoint."""
-        try:
-            logger.info("ModParser: fetching base types from trade API...")
-            resp = requests.get(
-                TRADE_ITEMS_URL,
-                timeout=15,
-                headers={"User-Agent": "LAMA/1.0"},
-            )
-            if resp.status_code != 200:
-                logger.warning(f"ModParser: items API returned HTTP {resp.status_code}")
-                return False
-
-            data = resp.json()
-
-            TRADE_ITEMS_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(TRADE_ITEMS_CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f)
-
-            self._build_base_types(data)
-            logger.info(f"ModParser: fetched {len(self._base_types)} base types from API")
-            return True
-        except Exception as e:
-            logger.warning(f"ModParser: items API fetch failed: {e}")
-            return False
+            logger.warning(f"ModParser: base types load failed: {e}")
 
     def _build_base_types(self, data: dict):
         """Extract unique base type names from the items API response.
@@ -305,52 +256,22 @@ class ModParser:
 
     # ─── Data Loading ─────────────────────────────
 
-    def _load_from_disk(self) -> bool:
-        """Load cached stat definitions from disk."""
+    def _load_from_resource(self) -> bool:
+        """Load stat definitions from bundled resource file."""
         try:
-            if not TRADE_STATS_CACHE_FILE.exists():
+            stats_path = get_resource("resources/trade_stats.json")
+            if not stats_path.exists():
+                logger.warning("ModParser: bundled trade_stats.json not found")
                 return False
 
-            age = time.time() - TRADE_STATS_CACHE_FILE.stat().st_mtime
-            if age > STATS_CACHE_MAX_AGE:
-                logger.debug("Stats cache expired, will re-fetch")
-                return False
-
-            with open(TRADE_STATS_CACHE_FILE, "r", encoding="utf-8") as f:
+            with open(stats_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             self._build_stats(data)
-            logger.info(f"ModParser: loaded {len(self._stats)} stats from disk cache")
+            logger.info(f"ModParser: loaded {len(self._stats)} stats from bundled data")
             return True
         except Exception as e:
-            logger.warning(f"ModParser: disk cache load failed: {e}")
-            return False
-
-    def _fetch_from_api(self) -> bool:
-        """Fetch stat definitions from the trade API."""
-        try:
-            logger.info("ModParser: fetching stat definitions from trade API...")
-            resp = requests.get(
-                TRADE_STATS_URL,
-                timeout=15,
-                headers={"User-Agent": "LAMA/1.0"},
-            )
-            if resp.status_code != 200:
-                logger.warning(f"ModParser: trade stats API returned HTTP {resp.status_code}")
-                return False
-
-            data = resp.json()
-
-            # Save to disk cache
-            TRADE_STATS_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(TRADE_STATS_CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f)
-
-            self._build_stats(data)
-            logger.info(f"ModParser: fetched {len(self._stats)} stats from API")
-            return True
-        except Exception as e:
-            logger.warning(f"ModParser: API fetch failed: {e}")
+            logger.warning(f"ModParser: resource load failed: {e}")
             return False
 
     def _build_stats(self, data: dict):

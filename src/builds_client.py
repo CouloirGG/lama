@@ -38,24 +38,42 @@ TTL_PRICES = 900        # 15 minutes
 POE2SCOUT_API = "https://poe2scout.com/api"
 
 # Ascendancy → base class mapping
+# Base classes (8 released): Warrior, Witch, Ranger, Sorceress, Monk, Mercenary, Huntress, Druid
+# Unreleased: Duelist, Templar, Shadow, Marauder (4 more base classes, 12 more ascendancies)
 ASCENDANCY_MAP = {
-    "Blood Mage": "Witch",
-    "Oracle": "Witch",
-    "Pathfinder": "Ranger",
-    "Deadeye": "Ranger",
+    # Warrior (3/3)
     "Titan": "Warrior",
     "Warbringer": "Warrior",
+    "Smith of Kitava": "Warrior",
+    # Witch (3/3)
+    "Blood Mage": "Witch",
+    "Lich": "Witch",
+    "Infernalist": "Witch",
+    # Ranger (2/3 — 3rd unrevealed)
+    "Pathfinder": "Ranger",
+    "Deadeye": "Ranger",
+    # Sorceress (3/3)
     "Stormweaver": "Sorceress",
     "Chronomancer": "Sorceress",
     "Disciple of Varashta": "Sorceress",
-    "Amazon": "Huntress",
-    "Ritualist": "Huntress",
-    "Witchhunter": "Mercenary",
-    "Gemling Legionnaire": "Mercenary",
+    # Monk (3/3)
     "Invoker": "Monk",
     "Acolyte of Chayula": "Monk",
-    "Lich": "Druid",
+    "Martial Artist": "Monk",         # added 0.5.0 Runes of Aldur
+    # Mercenary (3/3)
+    "Tactician": "Mercenary",
+    "Witchhunter": "Mercenary",       # poe.ninja spells it without space
+    "Witch Hunter": "Mercenary",      # alternate spelling
+    "Gemling Legionnaire": "Mercenary",
+    # Huntress (3/3)
+    "Amazon": "Huntress",
+    "Ritualist": "Huntress",
+    "Spirit Walker": "Huntress",      # added 0.5.0 Runes of Aldur
+    # Druid (2/3 — 3rd unrevealed)
+    "Oracle": "Druid",
     "Shaman": "Druid",
+    # Special / alternate forms
+    "Abyssal Lich": "Witch",          # variant of Lich on poe.ninja
 }
 
 # Equipment slot display names (inventoryId → readable)
@@ -169,6 +187,28 @@ def _field_as_message(f: dict) -> List[dict]:
     return _decode_fields(f.get("data", b""))
 
 
+def _reshape_character_columns(columns: List[dict]) -> List[dict]:
+    """Reshape column-oriented character data into row-oriented dicts.
+
+    Input:  [{"column": "name", "values": ["Alice"]}, {"column": "account", "values": ["Alice-1234"]}, ...]
+    Output: [{"name": "Alice", "account": "Alice-1234", ...}]
+    """
+    if not columns:
+        return []
+    # Find max row count across all columns
+    max_rows = max((len(c["values"]) for c in columns), default=0)
+    if max_rows == 0:
+        return []
+    rows: List[dict] = [{} for _ in range(max_rows)]
+    for col in columns:
+        col_name = col["column"]
+        for i, val in enumerate(col["values"]):
+            if i < max_rows:
+                rows[i][col_name] = val
+    # Filter out empty rows
+    return [r for r in rows if r.get("name") or r.get("account")]
+
+
 @dataclass
 class CharacterItem:
     """An equipped item with full mod data."""
@@ -215,6 +255,8 @@ class CharacterData:
     keystones: list = field(default_factory=list)    # List[str]
     pob_code: str = ""
     defensive_stats: Optional[dict] = None           # poe.ninja pre-calculated defenses
+    ascendancy_points: int = 0                       # number of ascendancy points allocated
+    jewels: list = field(default_factory=list)        # List[CharacterItem] — jewels with mods
 
 
 @dataclass
@@ -237,6 +279,33 @@ class BuildsClient:
         self._lock = threading.Lock()
         self._snapshot_version: Optional[str] = None
         self._snapshot_name: Optional[str] = None
+        self._snapshot_league_url: Optional[str] = None
+
+    def _get_with_retry(self, url: str, timeout: int = 15, max_retries: int = 4):
+        """GET with backoff on rate-limit (429) / unavailable (503).
+
+        Honors the Retry-After header, otherwise exponential backoff. Returns the
+        final Response so existing 200/404/status handling at call sites is
+        unchanged. Without this a single 429 silently drops a character, and a
+        whole class can harvest to 0 builds when poe.ninja is throttling (common
+        early in a league). See docs/season-migration.md.
+        """
+        backoff = 1.0
+        resp = self._session.get(url, timeout=timeout)
+        for attempt in range(max_retries):
+            if resp.status_code not in (429, 503):
+                return resp
+            retry_after = resp.headers.get("Retry-After")
+            try:
+                wait = float(retry_after) if retry_after else backoff
+            except (TypeError, ValueError):
+                wait = backoff
+            wait = min(max(wait, backoff), 30.0)
+            logger.info(f"poe.ninja HTTP {resp.status_code}; retry {attempt + 1}/{max_retries} in {wait:.0f}s")
+            time.sleep(wait)
+            backoff = min(backoff * 2, 30.0)
+            resp = self._session.get(url, timeout=timeout)
+        return resp
 
     def _get_cached(self, key: str, ttl: int) -> Optional[Any]:
         """Check cache. Returns data or None if expired/missing."""
@@ -261,6 +330,9 @@ class BuildsClient:
             resp = self._session.get(f"{BASE_URL}/data/index-state", timeout=10)
             if resp.status_code != 200:
                 logger.warning(f"poe.ninja index-state: HTTP {resp.status_code}")
+                # Use last known good values if we have them
+                if self._snapshot_version and self._snapshot_name:
+                    return True
                 return False
 
             data = resp.json()
@@ -280,16 +352,32 @@ class BuildsClient:
 
             self._snapshot_version = snapshot["version"]
             self._snapshot_name = snapshot["snapshotName"]
+            self._snapshot_league_url = snapshot.get("url", "")
             self._set_cache("snapshot", True)
-            logger.debug(f"poe.ninja snapshot: v={self._snapshot_version}, name={self._snapshot_name}")
+            logger.debug(f"poe.ninja snapshot: v={self._snapshot_version}, name={self._snapshot_name}, league={self._snapshot_league_url}")
             return True
 
         except Exception as e:
             logger.warning(f"poe.ninja snapshot fetch failed: {e}")
             return False
 
+    def _get_profile_version(self) -> Optional[str]:
+        """Extract numeric profile version from snapshot version.
+
+        Snapshot version format: '0335-20260311-00092' → profile version '335'.
+        """
+        if not self._snapshot_version:
+            return None
+        try:
+            return str(int(self._snapshot_version.split("-")[0]))
+        except (ValueError, IndexError):
+            return None
+
     def lookup_character(self, account: str, character: str) -> Optional[CharacterData]:
         """Look up a character by account + name.
+
+        Tries the builds/ladder API first, then falls back to the profile API
+        which works for any public character (not just ladder-ranked ones).
 
         Returns CharacterData or None on failure.
         """
@@ -307,30 +395,76 @@ class BuildsClient:
         if cached:
             return cached
 
+        # 1. Try builds/ladder API (only has ladder-ranked characters)
+        result = self._lookup_builds_api(normalized_account, character)
+        if result:
+            self._set_cache(cache_key, result)
+            return result
+
+        # 2. Fall back to profile API (works for any public character)
+        result = self._lookup_profile_api(normalized_account, character)
+        if result:
+            self._set_cache(cache_key, result)
+            return result
+
+        return None
+
+    def _lookup_builds_api(self, account: str, character: str) -> Optional[CharacterData]:
+        """Look up character via poe.ninja builds/ladder API."""
         try:
             url = (
                 f"{BASE_URL}/builds/{self._snapshot_version}/character"
-                f"?account={normalized_account}"
+                f"?account={account}"
                 f"&name={character}"
                 f"&overview={self._snapshot_name}"
             )
-            resp = self._session.get(url, timeout=15)
+            resp = self._get_with_retry(url, timeout=15)
 
             if resp.status_code == 404:
-                logger.info(f"Character not found: {account}/{character}")
+                logger.info(f"Character not on ladder: {account}/{character}")
                 return None
             if resp.status_code != 200:
-                logger.warning(f"poe.ninja character: HTTP {resp.status_code}")
+                logger.warning(f"poe.ninja builds API: HTTP {resp.status_code}")
                 return None
 
             data = resp.json()
-            result = self._parse_character(data, normalized_account, character)
-            if result:
-                self._set_cache(cache_key, result)
-            return result
+            return self._parse_character(data, account, character)
 
         except Exception as e:
-            logger.warning(f"Character lookup failed: {e}")
+            logger.warning(f"Builds API lookup failed: {e}")
+            return None
+
+    def _lookup_profile_api(self, account: str, character: str) -> Optional[CharacterData]:
+        """Look up character via poe.ninja profile API (works for any public character)."""
+        profile_ver = self._get_profile_version()
+        if not profile_ver:
+            return None
+
+        try:
+            league_url = self._snapshot_league_url or ""
+            url = (
+                f"{BASE_URL}/profile/characters"
+                f"/{account}/{league_url}/{character}/model/{profile_ver}"
+            )
+            resp = self._get_with_retry(url, timeout=15)
+
+            if resp.status_code == 404:
+                logger.info(f"Character not found via profile API: {account}/{character}")
+                return None
+            if resp.status_code != 200:
+                logger.warning(f"poe.ninja profile API: HTTP {resp.status_code}")
+                return None
+
+            data = resp.json()
+            if not data.get("hasData"):
+                logger.info(f"Profile API returned no data: {account}/{character}")
+                return None
+
+            char_model = data.get("charModel", {})
+            return self._parse_character(char_model, account, character)
+
+        except Exception as e:
+            logger.warning(f"Profile API lookup failed: {e}")
             return None
 
     def _parse_character(self, data: dict, account: str, char_name: str) -> Optional[CharacterData]:
@@ -383,6 +517,26 @@ class BuildsClient:
                 elif isinstance(k, dict) and "name" in k:
                     keystones.append(k["name"])
 
+            # Jewels — parse full mod data
+            jewels = []
+            for j in data.get("jewels", []):
+                jdata = j.get("itemData", j) if isinstance(j, dict) else {}
+                if not isinstance(jdata, dict):
+                    continue
+                jewel = CharacterItem(
+                    name=jdata.get("name", "") or "",
+                    type_line=jdata.get("typeLine", "") or "",
+                    slot="Jewel",
+                    rarity=jdata.get("rarity", "") or "",
+                    implicit_mods=self._to_str_list(jdata.get("implicitMods")),
+                    explicit_mods=self._to_str_list(jdata.get("explicitMods")),
+                    crafted_mods=self._to_str_list(jdata.get("craftedMods")),
+                    desecrated_mods=self._to_str_list(jdata.get("desecratedMods")),
+                    enchant_mods=self._to_str_list(jdata.get("enchantMods")),
+                )
+                if jewel.name or jewel.explicit_mods or jewel.desecrated_mods:
+                    jewels.append(jewel)
+
             # Class/ascendancy
             asc_name = data.get("class", "")
             base_class = ASCENDANCY_MAP.get(asc_name, asc_name)
@@ -426,6 +580,10 @@ class BuildsClient:
                     "intelligence": _n(raw_ds.get("intelligence")),
                 }
 
+            # Extract ascendancy point count from passiveCounts
+            passive_counts = data.get("passiveCounts", {})
+            ascendancy_points = passive_counts.get("ascendancy", 0) if isinstance(passive_counts, dict) else 0
+
             return CharacterData(
                 account=data.get("account", account),
                 name=data.get("name", char_name),
@@ -437,6 +595,8 @@ class BuildsClient:
                 keystones=keystones,
                 pob_code=data.get("pathOfBuildingExport", "") or "",
                 defensive_stats=defensive_stats,
+                ascendancy_points=ascendancy_points,
+                jewels=jewels,
             )
 
         except Exception as e:
@@ -557,8 +717,8 @@ class BuildsClient:
 
         try:
             url = (
-                f"{BASE_URL}/builds/{quote(self._snapshot_version)}/popular-skills"
-                f"?overview={quote(self._snapshot_name)}"
+                f"{BASE_URL}/builds/{quote(str(self._snapshot_version))}/popular-skills"
+                f"?overview={quote(str(self._snapshot_name))}"
             )
             resp = self._session.get(url, timeout=10)
             if resp.status_code != 200:
@@ -601,10 +761,10 @@ class BuildsClient:
 
         try:
             url = (
-                f"{BASE_URL}/builds/{quote(self._snapshot_version)}/popular-anoints"
-                f"?overview={quote(self._snapshot_name)}"
-                f"&characterClass={quote(char_class)}"
-                f"&skill={quote(skill)}"
+                f"{BASE_URL}/builds/{quote(str(self._snapshot_version))}/popular-anoints"
+                f"?overview={quote(str(self._snapshot_name))}"
+                f"&characterClass={quote(str(char_class))}"
+                f"&skill={quote(str(skill))}"
             )
             resp = self._session.get(url, timeout=10)
             if resp.status_code != 200:
@@ -733,12 +893,12 @@ class BuildsClient:
 
         try:
             url = (
-                f"{BASE_URL}/builds/{quote(self._snapshot_version)}/search"
-                f"?overview={quote(self._snapshot_name)}"
-                f"&class={quote(char_class)}"
-                f"&skills={quote(skill)}"
+                f"{BASE_URL}/builds/{quote(str(self._snapshot_version))}/search"
+                f"?overview={quote(str(self._snapshot_name))}"
+                f"&class={quote(str(char_class))}"
+                f"&skills={quote(str(skill))}"
             )
-            resp = self._session.get(url, timeout=15)
+            resp = self._get_with_retry(url, timeout=15)
             if resp.status_code != 200:
                 logger.warning(f"poe.ninja search: HTTP {resp.status_code}")
                 return None
@@ -760,6 +920,8 @@ class BuildsClient:
             total_count = 0
             dimensions = []
             dict_hashes = {}
+            stat_ranges = {}   # field 3: population stat min/max
+            characters = []    # field 5: per-character column data
 
             for f in inner_fields:
                 if f["fieldNumber"] == 1 and f["wireType"] == 0:
@@ -794,6 +956,43 @@ class BuildsClient:
                             "displayName": display_name,
                             "entries": entries,
                         })
+                elif f["fieldNumber"] == 3 and f["wireType"] == 2:
+                    # Stat range: field 1=name, field 2=min, field 3=max
+                    # Min values use unsigned varint encoding for negatives
+                    sr_fields = _field_as_message(f)
+                    sr_name = ""
+                    sr_min = 0
+                    sr_max = 0
+                    for sf in sr_fields:
+                        if sf["fieldNumber"] == 1 and sf["wireType"] == 2:
+                            sr_name = _field_as_string(sf)
+                        elif sf["fieldNumber"] == 2 and sf["wireType"] == 0:
+                            v = sf["value"]
+                            # Decode as signed 64-bit (two's complement)
+                            sr_min = v if v < (1 << 63) else v - (1 << 64)
+                        elif sf["fieldNumber"] == 3 and sf["wireType"] == 0:
+                            v = sf["value"]
+                            sr_max = v if v < (1 << 63) else v - (1 << 64)
+                    if sr_name:
+                        stat_ranges[sr_name] = {"min": sr_min, "max": sr_max}
+                elif f["fieldNumber"] == 5 and f["wireType"] == 2:
+                    # Character column: field 1=column name, field 2=values
+                    col_fields = _field_as_message(f)
+                    col_name = ""
+                    col_values = []
+                    for cf in col_fields:
+                        if cf["fieldNumber"] == 1 and cf["wireType"] == 2:
+                            col_name = _field_as_string(cf)
+                        elif cf["fieldNumber"] == 2 and cf["wireType"] == 2:
+                            # Decode repeated values
+                            val_fields = _field_as_message(cf)
+                            for vf in val_fields:
+                                if vf["wireType"] == 2:
+                                    col_values.append(_field_as_string(vf))
+                                elif vf["wireType"] == 0:
+                                    col_values.append(vf["value"])
+                    if col_name:
+                        characters.append({"column": col_name, "values": col_values})
                 elif f["fieldNumber"] == 6 and f["wireType"] == 2:
                     # Dictionary hash message
                     hash_fields = _field_as_message(f)
@@ -807,10 +1006,15 @@ class BuildsClient:
                     if type_name and hash_val:
                         dict_hashes[type_name] = hash_val
 
+            # Reshape character columns into rows
+            featured_characters = _reshape_character_columns(characters)
+
             result = {
                 "totalCount": total_count,
                 "dimensions": dimensions,
                 "dictHashes": dict_hashes,
+                "statRanges": stat_ranges,
+                "featuredCharacters": featured_characters,
             }
             self._set_cache(cache_key, result)
             return result
@@ -827,8 +1031,8 @@ class BuildsClient:
             return cached
 
         try:
-            url = f"{BASE_URL}/builds/dictionary/{quote(hash_val)}"
-            resp = self._session.get(url, timeout=15)
+            url = f"{BASE_URL}/builds/dictionary/{quote(str(hash_val))}"
+            resp = self._get_with_retry(url, timeout=15)
             if resp.status_code != 200:
                 logger.warning(f"poe.ninja dictionary: HTTP {resp.status_code}")
                 return None
@@ -1073,6 +1277,7 @@ class BuildsClient:
                 return []
 
             total = search["totalCount"] or 1
+            types = dictionary.get("metadata", {}).get("type", [])
             result = []
             for entry in ks_dim["entries"]:
                 key = entry["key"]
@@ -1081,10 +1286,12 @@ class BuildsClient:
                 name = dictionary["names"][key]
                 if not name:
                     continue
+                node_type = types[key] if key < len(types) else ""
                 result.append({
                     "name": name,
                     "count": entry["count"],
                     "percentage": round((entry["count"] / total) * 100, 1),
+                    "type": node_type,  # "Ascendancy" or "Keystone"
                 })
 
             result.sort(key=lambda x: x["count"], reverse=True)
@@ -1095,6 +1302,91 @@ class BuildsClient:
         except Exception as e:
             logger.warning(f"Popular keystones fetch failed: {e}")
             return []
+
+    def fetch_archetype_profile(self, char_class: str,
+                                skill: str) -> Optional[dict]:
+        """Fetch full population profile for an archetype (class + skill).
+
+        Returns a dict with:
+        - totalCount: population size
+        - statRanges: {stat_name: {min, max}} for 37 stats
+        - featuredCharacters: list of top characters with name, account, stats
+        - dimensions: item/keystone/skill adoption data
+        - dictHashes: for resolving dimension names
+        """
+        if not self._fetch_snapshot_info():
+            return None
+        return self._fetch_search(char_class, skill)
+
+    def fetch_popular_rare_mods(self, char_class: str, skill: str,
+                                max_chars: int = 5) -> dict:
+        """Analyze rare item mods across featured characters for an archetype.
+
+        Returns: {slot: [(normalized_mod, percentage), ...]} showing what mods
+        top players stack on rare items in each slot. Samples up to max_chars
+        featured characters from the search endpoint.
+        """
+        import time as _time
+
+        cache_key = f"rare-mods-{char_class}-{skill}"
+        cached = self._get_cached(cache_key, TTL_SEARCH)
+        if cached is not None:
+            return cached
+
+        profile = self.fetch_archetype_profile(char_class, skill)
+        if not profile:
+            return {}
+
+        featured = profile.get("featuredCharacters", [])
+        if not featured:
+            return {}
+
+        slot_mod_counts: dict = {}  # slot -> Counter
+        slot_item_counts: dict = {}  # slot -> int
+
+        for ch in featured[:max_chars]:
+            acct = ch.get("account", "")
+            name = ch.get("name", "")
+            if not acct or not name:
+                continue
+            char = self.lookup_character(acct, name)
+            if not char:
+                continue
+
+            for item in char.equipment:
+                if item.rarity != "Rare" or item.slot in ("Flask", "Flask2"):
+                    continue
+                slot = item.slot
+                if slot not in slot_mod_counts:
+                    from collections import Counter as _Counter
+                    slot_mod_counts[slot] = _Counter()
+                    slot_item_counts[slot] = 0
+
+                slot_item_counts[slot] += 1
+                all_mods = (item.explicit_mods or []) + (item.implicit_mods or [])
+                for mod in all_mods:
+                    clean = _NINJA_BRACKET_RE.sub(r"\2", mod)
+                    normalized = re.sub(r"[\d,.]+", "#", clean).strip()
+                    slot_mod_counts[slot][normalized] += 1
+
+            _time.sleep(0.2)
+
+        # Convert to percentage-based results
+        result = {}
+        for slot in slot_mod_counts:
+            total = slot_item_counts.get(slot, 1)
+            if total == 0:
+                continue
+            mods_with_pct = [
+                (mod, round(count / total * 100, 1))
+                for mod, count in slot_mod_counts[slot].most_common(10)
+                if count / total > 0.15  # only show mods on 15%+ of rares
+            ]
+            if mods_with_pct:
+                result[slot] = mods_with_pct
+
+        self._set_cache(cache_key, result)
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -1235,6 +1527,11 @@ ATTACK_SKILLS = frozenset([
     "Shield Wall", "Gathering Storm",
     "Whirling Assault", "Devour", "Seismic Cry", "Primal Strikes",
     "Fangs of Frost", "Storm Wave", "Falling Thunder",
+    "Slam", "Punch", "Shield Slam", "Upheaval",
+    # Monk skills
+    "Bell", "Tempest Bell", "Sacred Bell", "Palm Strike",
+    "Frozen Sweep", "Inner Fire", "Lightning Kick", "Spinning Kick",
+    "Rising Palm", "Thunder Palm",
     # Ranged - Bow
     "Split Arrow", "Lightning Arrow", "Ice Shot", "Burning Arrow",
     "Tornado Shot", "Rain of Arrows", "Barrage", "Caustic Arrow",
@@ -1277,12 +1574,17 @@ SPELL_SKILLS = frozenset([
     "Raise Zombie", "Summon Skeletons", "Summon Raging Spirit",
     "Summon Phantasm", "Raise Spectre",
     "Unearth", "Desecrate", "Spirit Nova",
+    "Bone Storm", "Tornado", "Tempest Flurry", "Detonate Dead",
+    "Volatile Dead", "Fire Storm", "Firestorm",
+    "Summon Skeleton", "Ice Shard",
 ])
 
 MINION_SKILLS = frozenset([
-    "Raise Zombie", "Summon Skeletons", "Summon Raging Spirit",
-    "Summon Phantasm", "Raise Spectre", "Animate Weapon",
-    "Dominate", "Summon Reaper", "Summon Volatile Dead",
+    "Raise Zombie", "Summon Skeletons", "Summon Skeleton",
+    "Summon Raging Spirit", "Summon Phantasm", "Raise Spectre",
+    "Animate Weapon", "Dominate", "Summon Reaper",
+    "Summon Volatile Dead", "Raise Zombie",
+    "Summon Holy Relic", "Absolution",
 ])
 
 MELEE_SKILLS = frozenset([
@@ -1353,6 +1655,37 @@ class BuildArchetype:
     is_coc: bool = False
     elements: List[str] = field(default_factory=list)
     dead_mods: List[Dict[str, str]] = field(default_factory=list)
+    level: int = 0
+
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-safe dict for persistence."""
+        return {
+            "tags": self.tags,
+            "damage_type": self.damage_type,
+            "defense_type": self.defense_type,
+            "main_skill": self.main_skill,
+            "is_crit": self.is_crit,
+            "is_coc": self.is_coc,
+            "elements": self.elements,
+            "level": self.level,
+            # dead_mods excluded — rebuild from classify_build() each time
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "BuildArchetype":
+        """Deserialize from a settings dict."""
+        if not data or not isinstance(data, dict):
+            return cls()
+        return cls(
+            tags=data.get("tags", []),
+            damage_type=data.get("damage_type", "unknown"),
+            defense_type=data.get("defense_type", "life"),
+            main_skill=data.get("main_skill", ""),
+            is_crit=data.get("is_crit", False),
+            is_coc=data.get("is_coc", False),
+            elements=data.get("elements", []),
+            level=data.get("level", 0),
+        )
 
 
 def classify_build(char: CharacterData) -> BuildArchetype:
@@ -1361,15 +1694,25 @@ def classify_build(char: CharacterData) -> BuildArchetype:
     Determines damage type, defense strategy, elements, crit, CoC,
     and identifies dead mod patterns.
     """
-    # Find main skill by highest damage
+    # Find main skill by highest damage (check all DPS fields for DoT builds)
     main_skill = ""
     main_dps = 0
     for sg in char.skill_groups:
         for d in sg.dps:
-            effective = d.dps if d.dps > 0 else d.damage
+            effective = max(d.dps or 0, d.dot_dps or 0, d.damage or 0)
             if effective > main_dps:
                 main_dps = effective
                 main_skill = d.name
+
+    # Fallback: check for minion skills in gem list (minion DPS is often 0 for the player)
+    if not main_skill and char.skill_groups:
+        for sg in char.skill_groups:
+            for g in sg.gems:
+                if g in MINION_SKILLS:
+                    main_skill = g
+                    break
+            if main_skill:
+                break
 
     # Fallback: first gem in first skill group
     if not main_skill and char.skill_groups:
@@ -1377,31 +1720,30 @@ def classify_build(char: CharacterData) -> BuildArchetype:
         if gems:
             main_skill = gems[0]
 
-    # Detect Cast on Crit — relaxed: CoC gem anywhere + main skill is spell,
-    # or CoC gem + any spell + any attack across all skill groups
+    # Detect Cast on Crit
+    # CoC gem in same group as the main DPS spell = CoC build
+    # CoC gem anywhere + main skill is spell + attack gem exists = likely CoC
     is_coc = False
     all_gems = [g for sg in char.skill_groups for g in sg.gems]
     has_coc_gem = any("Cast on Crit" in g or "Cast when Crit" in g for g in all_gems)
     if has_coc_gem:
-        if main_skill in SPELL_SKILLS:
-            is_coc = True
-        else:
-            has_any_spell = any(g in SPELL_SKILLS for g in all_gems)
-            has_any_attack = any(g in ATTACK_SKILLS for g in all_gems)
-            if has_any_spell and has_any_attack:
-                is_coc = True
-    # Heuristic fallback: spell DPS + attack gem in same group
-    if not is_coc and main_skill in SPELL_SKILLS:
+        # Check if CoC + main skill + attack are in the same group
         for sg in char.skill_groups:
-            has_dps = any(d.name == main_skill for d in sg.dps)
+            has_coc_here = any("Cast on Crit" in g or "Cast when Crit" in g for g in sg.gems)
+            if not has_coc_here:
+                continue
+            has_spell = any(g in SPELL_SKILLS for g in sg.gems)
             has_attack = any(g in ATTACK_SKILLS for g in sg.gems)
-            if has_dps and has_attack:
+            has_main_dps = any(d.name == main_skill for d in sg.dps) if main_skill in SPELL_SKILLS else False
+            if (has_spell and has_attack) or has_main_dps:
                 is_coc = True
                 break
+        # Note: removed overly broad fallback that flagged any spell+attack as CoC.
+        # Only flag CoC when the CoC gem is literally in a group with the spell.
 
     # Damage type
     if main_skill in MINION_SKILLS:
-        damage_type = "spell"
+        damage_type = "minion"
     elif main_skill in SPELL_SKILLS:
         damage_type = "spell"
     elif main_skill in ATTACK_SKILLS:
@@ -1464,7 +1806,7 @@ def classify_build(char: CharacterData) -> BuildArchetype:
                 is_crit = True
                 break
 
-    # Defense type
+    # Defense type — check keystones first, then fall back to actual stats
     has_ci = "Chaos Inoculation" in char.keystones
     has_mom = "Mind Over Matter" in char.keystones
     has_eb = "Eldritch Battery" in char.keystones
@@ -1472,10 +1814,21 @@ def classify_build(char: CharacterData) -> BuildArchetype:
         defense_type = "es"
     elif has_mom and has_eb:
         defense_type = "mom"
+    elif has_mom:
+        defense_type = "mom"
     elif any(k in ES_KEYSTONES for k in char.keystones):
         defense_type = "hybrid"
     else:
-        defense_type = "life"
+        # Check actual defensive stats — ES-primary if ES >> life
+        ds = char.defensive_stats or {}
+        char_life = ds.get("life", 0) or 0
+        char_es = ds.get("energyShield", 0) or 0
+        if char_es > char_life * 2 and char_es > 2000:
+            defense_type = "es"
+        elif char_es > char_life and char_es > 1000:
+            defense_type = "hybrid"
+        else:
+            defense_type = "life"
 
     # Dead mods
     dead_mods = []
@@ -1525,12 +1878,111 @@ def classify_build(char: CharacterData) -> BuildArchetype:
         is_coc=is_coc,
         elements=sorted(elements),
         dead_mods=found_dead,
+        level=char.level,
     )
 
 
 # ---------------------------------------------------------------------------
 # Build Efficiency — upgrade priority, anoint optimizer, cost tiers, lineage ROI
 # ---------------------------------------------------------------------------
+
+# ─── Anti-Synergy Detection ──────────────────────────
+# Rules that detect common build mistakes and conflicts.
+# Each rule has a check function: (archetype, keystones_set, all_mod_texts) -> bool
+
+def _has_off_element_mods(primary_elem: str, mod_texts: list) -> bool:
+    """Check if mod texts contain damage for elements the build doesn't scale."""
+    other_elements = {"fire", "cold", "lightning"} - {primary_elem}
+    for mod in mod_texts:
+        mod_lower = mod.lower()
+        for elem in other_elements:
+            if f"adds" in mod_lower and f"{elem}" in mod_lower and "damage" in mod_lower:
+                return True
+    return False
+
+
+_ANTI_SYNERGY_RULES = [
+    {
+        "id": "crit_with_eo",
+        "name": "Crit + Elemental Overload conflict",
+        "check": lambda arch, ks, mods: (
+            "Elemental Overload" in ks and
+            any(re.search(r"Critical (Hit Chance|Damage Bonus|Strike Multiplier)",
+                          m, re.I) for m in mods)
+        ),
+        "severity": "error",
+        "message": "Elemental Overload negates crit scaling — remove crit mods or drop EO",
+    },
+    {
+        "id": "ci_life_stacking",
+        "name": "CI + Life stacking",
+        "check": lambda arch, ks, mods: (
+            "Chaos Inoculation" in ks and
+            sum(1 for m in mods if re.search(r"to maximum Life", m, re.I)) >= 3
+        ),
+        "severity": "warning",
+        "message": "Chaos Inoculation sets life to 1 — life mods are wasted affixes",
+    },
+    {
+        "id": "mom_no_mana",
+        "name": "MoM without mana investment",
+        "check": lambda arch, ks, mods: (
+            arch.defense_type == "mom" and
+            sum(1 for m in mods
+                if re.search(r"to maximum Mana|increased maximum Mana|Mana Regeneration",
+                             m, re.I)) < 2
+        ),
+        "severity": "warning",
+        "message": "Mind over Matter needs mana investment — look for mana mods on gear",
+    },
+    {
+        "id": "off_element_scaling",
+        "name": "Off-element damage mods",
+        "check": lambda arch, ks, mods: (
+            len(arch.elements) == 1 and
+            arch.elements[0] in ("fire", "cold", "lightning") and
+            _has_off_element_mods(arch.elements[0], mods)
+        ),
+        "severity": "info",
+        "message": "You have flat damage mods for elements your build doesn't scale",
+    },
+]
+
+
+def detect_anti_synergies(archetype, keystones: set,
+                          equipment: list) -> List[Dict[str, str]]:
+    """Run anti-synergy rules against build data.
+
+    Args:
+        archetype: BuildArchetype from classify_build()
+        keystones: Set of keystone names the player has
+        equipment: List of CharacterItem
+
+    Returns:
+        List of {id, name, severity, message} for triggered rules.
+    """
+    # Collect all mod texts from all equipment
+    all_mod_texts = []
+    for eq in equipment:
+        for m_list in [eq.explicit_mods, eq.crafted_mods, eq.implicit_mods,
+                       eq.fractured_mods, eq.rune_mods, eq.desecrated_mods]:
+            for m in (m_list or []):
+                all_mod_texts.append(strip_ninja_brackets(m))
+
+    findings = []
+    for rule in _ANTI_SYNERGY_RULES:
+        try:
+            if rule["check"](archetype, keystones, all_mod_texts):
+                findings.append({
+                    "id": rule["id"],
+                    "name": rule["name"],
+                    "severity": rule["severity"],
+                    "message": rule["message"],
+                })
+        except Exception:
+            continue
+    return findings
+
 
 INVESTMENT_TIERS = [
     {"label": "Starter", "min": 0, "max": 5, "desc": "Build-defining cheap uniques"},

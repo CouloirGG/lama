@@ -37,11 +37,6 @@ class TestPricingEngineInit:
             game_id="test",
             default_league="Test",
             cache_dir=Path("/tmp/test"),
-            trade_api_base="https://example.com",
-            trade_stats_url="https://example.com/stats",
-            trade_items_url="https://example.com/items",
-            trade_stats_cache_file=Path("/tmp/stats.json"),
-            trade_items_cache_file=Path("/tmp/items.json"),
         )
         engine = PricingEngine(cfg)
         assert not engine.ready
@@ -192,24 +187,6 @@ class TestFullPipeline:
             text = fixture_file.read_text(encoding="utf-8")
             item = engine.parse_item(text)
             assert item is not None, f"Failed to parse {fixture_file.name}"
-
-
-class TestEstimatePrice:
-    """Test the calibration estimate pathway."""
-
-    def test_estimate_returns_float_or_none(self, engine):
-        text = load_fixture("rare_ring_brimstone.txt")
-        item = engine.parse_item(text)
-        score = engine.score_item(item)
-        if score:
-            est = engine.estimate_price(item, score)
-            # May be None if no calibration data loaded
-            assert est is None or isinstance(est, (int, float))
-
-    def test_estimate_with_none_score(self, engine):
-        text = load_fixture("rare_ring_brimstone.txt")
-        item = engine.parse_item(text)
-        assert engine.estimate_price(item, None) is None
 
 
 class TestParseMods:

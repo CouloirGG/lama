@@ -12,14 +12,11 @@ Usage:
 
 import sys
 import os
-import re
 import time
-import queue
 import logging
 import argparse
 import threading
 from pathlib import Path
-from typing import Optional
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -36,13 +33,9 @@ from item_parser import ItemParser
 from price_cache import PriceCache
 from overlay import PriceOverlay, ConsoleOverlay
 from mod_parser import ModParser
-from trade_client import TradeClient
 from filter_updater import FilterUpdater, find_template_filter
 from mod_database import ModDatabase
-from calibration import CalibrationEngine
 from bug_reporter import BugReporter
-from flag_reporter import FlagReporter
-from telemetry import TelemetryUploader
 
 logger = logging.getLogger("poe2-overlay")
 
@@ -76,27 +69,11 @@ class LAMA:
         self.item_parser = ItemParser()
         self.mod_parser = ModParser()
         self.mod_database = ModDatabase()
-        self.trade_client = TradeClient(
-            league=self.league,
-            divine_to_chaos_fn=lambda: self.price_cache.divine_to_chaos,
-            divine_to_exalted_fn=lambda: self.price_cache.divine_to_exalted,
-            mod_database=self.mod_database,
-        )
-        self.calibration = CalibrationEngine()
 
-        # Deep query state: last scored item (for Ctrl+Shift+C trade lookup)
-        self._last_scored_item = None
-        self._last_scored_mods = None
-        self._last_scored_result = None
-        self._last_scored_cursor = (0, 0)
-        self._last_scored_lock = threading.Lock()
-
-        # Flag reporter state: snapshot of last displayed item for Ctrl+Shift+F
-        self._last_flaggable = None
-        self._last_flaggable_lock = threading.Lock()
-
-        # Auto-calibration queue: A/S graded items get trade API lookups in background
-        self._calibration_queue = queue.Queue()
+        # Pipeline dedup: skip re-processing the same item within a short window
+        self._last_pipeline_item: str = ""
+        self._last_pipeline_time: float = 0
+        self._PIPELINE_DEDUP_TTL: float = 2.0  # seconds
 
         # Filter updater
         template = find_template_filter(APP_DIR / "resources")
@@ -111,6 +88,7 @@ class LAMA:
 
         # Load overlay display settings from dashboard config
         self._display_settings = self._load_display_settings()
+        self._build_archetype = self._load_build_archetype()
 
         if use_console:
             self.overlay = ConsoleOverlay()
@@ -128,21 +106,17 @@ class LAMA:
             theme = self._display_settings.get("overlay_theme", "poe2")
             pulse_style = self._display_settings.get("overlay_pulse_style", "sheen")
             self.overlay = PriceOverlay(theme=theme, pulse_style=pulse_style,
-                                        scale_factor=scale)
+                                        scale_factor=scale, game_rect=rect)
+
+        # Set overlay mode (stars_only suppresses popup overlays)
+        if hasattr(self.overlay, 'set_overlay_mode'):
+            self.overlay.set_overlay_mode(
+                self._display_settings.get("overlay_mode", "stars_only"))
 
         # Apply custom tier styles to overlay (if any)
         if hasattr(self.overlay, 'load_custom_styles'):
             self.overlay.load_custom_styles(
                 self._display_settings.get("overlay_tier_styles", {}))
-
-        # Trade query cancellation: increment on each new detection so
-        # stale trade queries abort before wasting API calls.
-        self._trade_generation = 0
-        self._trade_gen_lock = threading.Lock()
-
-        # Deep query flag: base_type of item currently being deep-queried.
-        # Auto-cal skips items matching this key to avoid wasting API budget.
-        self._deep_query_item_key = None
 
         # Statistics
         self.stats = {
@@ -159,22 +133,21 @@ class LAMA:
             root_fn=lambda: self.overlay._root,
             stats_fn=lambda: self.stats,
             overlay=self.overlay,
-            item_context_fn=lambda: self._get_item_context(),
+            item_context_fn=lambda: None,
         )
-
-        # Flag reporter (Ctrl+Shift+F)
-        self.flag_reporter = FlagReporter(
-            root_fn=lambda: self.overlay._root,
-            overlay=self.overlay,
-        )
-
-        # Telemetry uploader (opt-in)
-        self.telemetry = TelemetryUploader(league=self.league)
 
         # Wire up detection callbacks
         self.item_detector.set_callback(self._on_change_detected)
         self.item_detector.set_hide_callback(self.overlay.hide)
         self.item_detector.set_reshow_callback(self._on_reshow)
+
+    # Overlay mode → format_overlay_text flags
+    _MODE_FLAGS = {
+        "stars_only": {"show_grade": False, "show_price": False, "show_stars": False, "show_mods": False, "show_dps": False},
+        "minimal":    {"show_grade": False, "show_price": True,  "show_stars": False, "show_mods": False, "show_dps": False},
+        "standard":   {"show_grade": True,  "show_price": True,  "show_stars": True,  "show_mods": False, "show_dps": True},
+        "detailed":   {"show_grade": True,  "show_price": True,  "show_stars": True,  "show_mods": True,  "show_dps": True},
+    }
 
     @staticmethod
     def _load_display_settings() -> dict:
@@ -182,16 +155,11 @@ class LAMA:
         import json
         settings_file = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "dashboard_settings.json"
         defaults = {
-            "overlay_show_grade": True,
-            "overlay_show_price": True,
-            "overlay_show_stars": True,
-            "overlay_show_mods": False,
-            "overlay_show_dps": True,
+            "overlay_mode": "stars_only",
             "overlay_show_low_value": False,
             "overlay_tier_styles": {},
             "overlay_theme": "poe2",
             "overlay_pulse_style": "sheen",
-            "telemetry_enabled": False,
         }
         try:
             if settings_file.exists():
@@ -200,9 +168,39 @@ class LAMA:
                 for key in defaults:
                     if key in saved:
                         defaults[key] = saved[key]
+                # Migrate legacy per-toggle settings → overlay_mode
+                if "overlay_mode" not in saved:
+                    if saved.get("overlay_show_mods"):
+                        defaults["overlay_mode"] = "detailed"
+                    elif saved.get("overlay_show_grade", True) and saved.get("overlay_show_dps", True):
+                        defaults["overlay_mode"] = "standard"
+                    elif saved.get("overlay_show_price", True):
+                        defaults["overlay_mode"] = "minimal"
+                    else:
+                        defaults["overlay_mode"] = "stars_only"
         except Exception:
             pass
         return defaults
+
+    @staticmethod
+    def _load_build_archetype():
+        """Load persisted BuildArchetype from dashboard settings (if any)."""
+        import json
+        try:
+            from builds_client import BuildArchetype
+            settings_file = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "dashboard_settings.json"
+            if settings_file.exists():
+                with open(settings_file) as f:
+                    saved = json.load(f)
+                arch_data = saved.get("build_archetype")
+                if arch_data:
+                    arch = BuildArchetype.from_dict(arch_data)
+                    logger.info(f"Build archetype loaded: {arch.damage_type}/{arch.defense_type} "
+                                f"lv{arch.level} [{', '.join(arch.tags)}]")
+                    return arch
+        except Exception as e:
+            logger.debug(f"No build archetype loaded: {e}")
+        return None
 
     def start(self):
         """
@@ -243,10 +241,8 @@ class LAMA:
             if self.mod_database.load(self.mod_parser):
                 stats = self.mod_database.get_stats()
                 logger.info(f"Local scoring ready (bridge={stats['bridge_size']}, ladders={stats['ladder_count']})")
-                # Load calibration data: shard first (baseline), then user data (overrides)
-                self._load_calibration_data()
             else:
-                logger.warning("Local scoring disabled — falling back to trade API")
+                logger.warning("Local scoring disabled")
 
         # 1c. Handle filter update
         if self._test_filter_update:
@@ -257,11 +253,6 @@ class LAMA:
         if not self._no_filter_update:
             self.filter_updater.start()
 
-        # 1d. Start telemetry schedule if opt-in
-        if self._display_settings.get("telemetry_enabled", False):
-            self.telemetry.start_schedule()
-            logger.info("Telemetry: schedule started (opt-in enabled)")
-
         # 2. Start item detection in background thread
         logger.info("Starting item detection (clipboard mode)...")
         detect_thread = threading.Thread(
@@ -271,35 +262,19 @@ class LAMA:
         )
         detect_thread.start()
 
-        # 2b. Deep query hotkey listener (Ctrl+Shift+C)
-        if self.mod_database.loaded:
-            threading.Thread(
-                target=self._deep_query_hotkey_loop,
-                daemon=True,
-                name="DeepQueryHotkey",
-            ).start()
-
-        # 2c. Bug report hotkey listener (Ctrl+Shift+B)
+        # 2b. Bug report hotkey listener (Ctrl+Shift+B)
         threading.Thread(
             target=self._bug_report_hotkey_loop,
             daemon=True,
             name="BugReportHotkey",
         ).start()
 
-        # 2e. Flag reporter hotkey listener (Ctrl+Shift+F)
+        # 2c. Star clear hotkey listener (Ctrl+Shift+X)
         threading.Thread(
-            target=self._flag_hotkey_loop,
+            target=self._star_clear_hotkey_loop,
             daemon=True,
-            name="FlagReportHotkey",
+            name="StarClearHotkey",
         ).start()
-
-        # 2d. Auto-calibration queue processor
-        if self.mod_database.loaded:
-            threading.Thread(
-                target=self._calibration_queue_loop,
-                daemon=True,
-                name="CalibrationQueue",
-            ).start()
 
         # 3. Start status reporting
         status_thread = threading.Thread(
@@ -321,7 +296,6 @@ class LAMA:
     def stop(self):
         """Shut down all components."""
         logger.info("\nShutting down...")
-        self.telemetry.stop_schedule()
         self.filter_updater.stop()
         self.price_cache.stop()
         self.overlay.shutdown()
@@ -358,6 +332,16 @@ class LAMA:
                 logger.info(f"Parse failed: {item_text.split(chr(10))[0]}")
                 return
 
+            # Pipeline dedup: skip if same item was just processed
+            # Prevents duplicate processing from clipboard read races
+            item_ident = f"{item.name}|{item.base_type}|{item.rarity}"
+            now = time.time()
+            if (item_ident == self._last_pipeline_item
+                    and (now - self._last_pipeline_time) < self._PIPELINE_DEDUP_TTL):
+                return
+            self._last_pipeline_item = item_ident
+            self._last_pipeline_time = now
+
             logger.info(
                 f"Item: {item.name} ({item.rarity})"
                 + (f" base={item.base_type}" if item.base_type else "")
@@ -392,11 +376,17 @@ class LAMA:
                     cursor_y=cursor_y,
                     price_divine=result.get("divine_value", 0),
                 )
-                self._cache_for_flag(
-                    item_name=item.name, rarity=item.rarity,
-                    tier=result["tier"], display_text=static_text,
-                    price_divine=result.get("divine_value", 0),
-                    clipboard_text=item_text)
+                # Star for valuable currency
+                if chaos_val >= 5:
+                    star_key = item.name or item.base_type or ""
+                    if chaos_val >= 500:
+                        self.overlay.place_star(cursor_x, cursor_y, "gold3", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                    elif chaos_val >= 100:
+                        self.overlay.place_star(cursor_x, cursor_y, "gold2", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                    elif chaos_val >= 25:
+                        self.overlay.place_star(cursor_x, cursor_y, "gold1", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                    else:
+                        self.overlay.place_star(cursor_x, cursor_y, "silver1", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
                 self.stats["successful_lookups"] += 1
                 return
 
@@ -423,11 +413,6 @@ class LAMA:
                     cursor_x=cursor_x, cursor_y=cursor_y,
                     price_divine=divine,
                 )
-                self._cache_for_flag(
-                    item_name=item.name, base_type=item.base_type,
-                    rarity=item.rarity, tier=tier,
-                    display_text=chanceable_text, price_divine=divine,
-                    clipboard_text=item_text)
                 self.stats["successful_lookups"] += 1
                 return
 
@@ -451,12 +436,6 @@ class LAMA:
                             cursor_y=cursor_y,
                             price_divine=result.get("divine_value", 0),
                         )
-                        self._cache_for_flag(
-                            item_name=result.get("name", base),
-                            base_type=item.base_type, rarity=item.rarity,
-                            tier=result["tier"], display_text=unid_text,
-                            price_divine=result.get("divine_value", 0),
-                            clipboard_text=item_text)
                         self.stats["successful_lookups"] += 1
                         return
 
@@ -468,24 +447,7 @@ class LAMA:
                 )
                 return
 
-            # Step 1c: Corrupted uniques → trade API for Vaal-outcome-aware pricing
-            if item.rarity == "unique" and getattr(item, "corrupted", False):
-                static_result = self.price_cache.lookup(
-                    item_name=item.lookup_key,
-                    base_type=item.base_type,
-                    item_level=item.item_level,
-                )
-                # Parse mods for roll-specific pricing
-                parsed_mods = []
-                if item.mods and self.mod_parser.loaded:
-                    parsed_mods = self.mod_parser.parse_mods(item)
-                self._price_unique_async(item, cursor_x, cursor_y,
-                                         static_result=static_result,
-                                         parsed_mods=parsed_mods,
-                                         clipboard_text=item_text)
-                return
-
-            # Step 2: Non-unique items with mods → local scoring (or trade API fallback)
+            # Step 2: Non-unique items with mods → local scoring
             if (item.rarity in ("rare", "magic") and item.mods
                     and self.mod_parser.loaded):
                 # Resolve magic item base_type if missing
@@ -499,22 +461,14 @@ class LAMA:
                     self._show_dismiss(item, cursor_x, cursor_y)
                     return
 
-                # Primary path: local scoring (instant, no API calls)
+                # Local scoring (instant, no API calls)
                 if self.mod_database.loaded:
                     self._score_and_display(item, parsed_mods, cursor_x, cursor_y,
                                             clipboard_text=item_text)
                     return
 
-                # Fallback: trade API (if mod database failed to load)
-                if self._has_only_common_mods(item.mods):
-                    self._show_dismiss(item, cursor_x, cursor_y)
-                    return
-                self._price_rare_async(item, cursor_x, cursor_y)
-                return
-
-            # Step 2b: Normal/magic items with 2+ sockets → trade API for base pricing
-            if item.rarity in ("normal", "magic") and item.sockets >= 2:
-                self._price_base_async(item, cursor_x, cursor_y)
+                # No mod database — can't score
+                self._show_dismiss(item, cursor_x, cursor_y)
                 return
 
             # Step 3: Static price lookup (uniques, currency, gems)
@@ -550,388 +504,58 @@ class LAMA:
                 cursor_y=cursor_y,
                 price_divine=result.get("divine_value", 0),
             )
-            self._cache_for_flag(
-                item_name=matched_name, base_type=item.base_type,
-                rarity=item.rarity,
-                item_class=getattr(item, "item_class", None),
-                tier=result["tier"], display_text=static_text,
-                price_divine=result.get("divine_value", 0),
-                clipboard_text=item_text)
+            # Star for valuable static-priced items (uniques, gems, etc.)
+            divine_val = result.get("divine_value", 0)
+            d2c = self.price_cache.divine_to_chaos or 1
+            chaos_val = divine_val * d2c
+            if chaos_val >= 5:
+                star_key = matched_name or item.base_type or ""
+                if chaos_val >= 500:
+                    self.overlay.place_star(cursor_x, cursor_y, "gold3", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                elif chaos_val >= 100:
+                    self.overlay.place_star(cursor_x, cursor_y, "gold2", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                elif chaos_val >= 25:
+                    self.overlay.place_star(cursor_x, cursor_y, "gold1", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
+                else:
+                    self.overlay.place_star(cursor_x, cursor_y, "silver1", item_key=star_key, item_class=getattr(item, "item_class", "") or "")
             self.stats["successful_lookups"] += 1
 
         except Exception as e:
             logger.error(f"Pipeline error: {e}", exc_info=True)
 
-    def _price_rare_async(self, item, cursor_x: int, cursor_y: int):
-        """
-        Price a rare item via the trade API in a background thread.
-        Shows animated "Checking." indicator, then updates with result.
-        Cancels any previous in-flight trade query via generation counter.
-        """
-        display_name = item.name or item.base_type
-
-        # Increment generation — any in-flight trade query with an older
-        # generation will abort before making more API calls.
-        with self._trade_gen_lock:
-            self._trade_generation += 1
-            my_gen = self._trade_generation
-
-        def _is_stale():
-            """Check if a newer item detection has superseded us."""
-            with self._trade_gen_lock:
-                return my_gen != self._trade_generation
-
-        # Show initial checking indicator
-        self.overlay.show_price(
-            text="Checking...",
-            tier="low",
-            cursor_x=cursor_x,
-            cursor_y=cursor_y,
-        )
-
-        # Animated dots: cycles ". → .. → ..." while searching
-        search_done = threading.Event()
-
-        def _animate_dots():
-            dots = 1
-            while not search_done.wait(0.4):
-                if _is_stale():
-                    return
-                dots = (dots % 3) + 1
-                self.overlay.update_text(f"Checking{'.' * dots}")
-
-        def _do_price():
-            anim = threading.Thread(
-                target=_animate_dots, daemon=True, name="PriceAnim")
-            anim.start()
-            try:
-                # Resolve missing base_type for magic items (name includes
-                # prefix + base + suffix, e.g. "Mystic Stellar Amulet of the Fox")
-                if not item.base_type and item.name:
-                    resolved = self.mod_parser.resolve_base_type(item.name)
-                    if resolved:
-                        item.base_type = resolved
-                        logger.info(f"Resolved base type: '{item.name}' -> '{resolved}'")
-                    else:
-                        logger.info(f"Could not resolve base type for '{item.name}'")
-
-                if _is_stale():
-                    logger.debug(f"Trade query cancelled (stale): {display_name}")
-                    return
-
-                parsed_mods = self.mod_parser.parse_mods(item)
-                if not parsed_mods:
-                    logger.info(f"No mods matched for {display_name}")
-                    self._show_dismiss(item, cursor_x, cursor_y)
-                    self.stats["not_found"] += 1
-                    return
-
-                logger.info(f"Matched {len(parsed_mods)} mods for {display_name}")
-
-                result = self.trade_client.price_rare_item(
-                    item, parsed_mods, is_stale=_is_stale)
-                if _is_stale():
-                    logger.debug(f"Trade result discarded (stale): {display_name}")
-                    return
-                if result:
-                    self.overlay.show_price(
-                        text=result.display,
-                        tier=result.tier,
-                        cursor_x=cursor_x,
-                        cursor_y=cursor_y,
-                        estimate=result.estimate,
-                        price_divine=result.min_price,
-                    )
-                    self.stats["successful_lookups"] += 1
-                else:
-                    self._show_dismiss(item, cursor_x, cursor_y)
-                    self.stats["not_found"] += 1
-            except Exception as e:
-                logger.error(f"Rare pricing error: {e}", exc_info=True)
-                self.overlay.show_price(
-                    text="?", tier="low",
-                    cursor_x=cursor_x, cursor_y=cursor_y,
-                )
-                self.stats["not_found"] += 1
-            finally:
-                search_done.set()
-
-        thread = threading.Thread(target=_do_price, daemon=True, name="RarePricer")
-        thread.start()
-
-    def _price_base_async(self, item, cursor_x: int, cursor_y: int):
-        """
-        Price a normal/magic base item via the trade API in a background thread.
-        Used for items valued by their base type + sockets (e.g., 3-socket bases).
-        """
-        display_name = item.base_type or item.name
-        sockets = item.sockets
-        ilvl = getattr(item, "item_level", 0) or 0
-        # Build tag: " (3S, ilvl 82)" or " (ilvl 82)" or " (3S)" or ""
-        parts = []
-        if sockets:
-            parts.append(f"{sockets}S")
-        if ilvl > 0:
-            parts.append(f"ilvl {ilvl}")
-        tag = f" ({', '.join(parts)})" if parts else ""
-
-        with self._trade_gen_lock:
-            self._trade_generation += 1
-            my_gen = self._trade_generation
-
-        def _is_stale():
-            with self._trade_gen_lock:
-                return my_gen != self._trade_generation
-
-        # Show initial checking indicator
-        self.overlay.show_price(
-            text="Checking...",
-            tier="low",
-            cursor_x=cursor_x,
-            cursor_y=cursor_y,
-        )
-
-        # Animated dots: cycles ". → .. → ..." while searching
-        search_done = threading.Event()
-
-        def _animate_dots():
-            dots = 1
-            while not search_done.wait(0.4):
-                if _is_stale():
-                    return
-                dots = (dots % 3) + 1
-                self.overlay.update_text(f"Checking{'.' * dots}")
-
-        def _do_price():
-            anim = threading.Thread(
-                target=_animate_dots, daemon=True, name="BaseAnim")
-            anim.start()
-            try:
-                if _is_stale():
-                    return
-
-                result = self.trade_client.price_base_item(
-                    item, is_stale=_is_stale)
-                if _is_stale():
-                    return
-                if result:
-                    self.overlay.show_price(
-                        text=result.display,
-                        tier=result.tier,
-                        cursor_x=cursor_x,
-                        cursor_y=cursor_y,
-                        price_divine=result.min_price,
-                    )
-                    self.stats["successful_lookups"] += 1
-                else:
-                    self._show_dismiss(item, cursor_x, cursor_y)
-                    self.stats["not_found"] += 1
-            except Exception as e:
-                logger.error(f"Base pricing error: {e}", exc_info=True)
-                self.overlay.show_price(
-                    text="?", tier="low",
-                    cursor_x=cursor_x, cursor_y=cursor_y,
-                )
-                self.stats["not_found"] += 1
-            finally:
-                search_done.set()
-
-        thread = threading.Thread(target=_do_price, daemon=True, name="BasePricer")
-        thread.start()
-
-    def _price_unique_async(self, item, cursor_x: int, cursor_y: int,
-                            static_result: dict = None, parsed_mods=None,
-                            clipboard_text=None):
-        """Price a corrupted unique via the trade API in a background thread.
-
-        Shows static price immediately if available, then upgrades with
-        trade API result that reflects actual Vaal outcomes + sockets.
-        """
-        display_name = item.name or item.base_type
-        sockets = getattr(item, "sockets", 0) or 0
-        tag = f"{sockets}S corrupted" if sockets else "corrupted"
-
-        # Show static price immediately while trade API refines
-        if static_result:
-            static_display = static_result.get("display", "?")
-            self.overlay.show_price(
-                text=static_display,
-                tier=static_result.get("tier", "low"),
-                cursor_x=cursor_x, cursor_y=cursor_y,
-                price_divine=static_result.get("divine_value", 0),
-            )
-        else:
-            self.overlay.show_price(
-                text="Checking...",
-                tier="low",
-                cursor_x=cursor_x, cursor_y=cursor_y,
-            )
-
-        with self._trade_gen_lock:
-            self._trade_generation += 1
-            my_gen = self._trade_generation
-
-        def _is_stale():
-            with self._trade_gen_lock:
-                return my_gen != self._trade_generation
-
-        search_done = threading.Event()
-
-        def _animate_dots():
-            dots = 1
-            while not search_done.wait(0.4):
-                if _is_stale():
-                    return
-                dots = (dots % 3) + 1
-                self.overlay.update_text(f"Checking{'.' * dots}")
-
-        def _do_price():
-            # Only animate dots if we don't already have a static price shown
-            if not static_result:
-                anim = threading.Thread(
-                    target=_animate_dots, daemon=True, name="UniqueAnim")
-                anim.start()
-            try:
-                if _is_stale():
-                    return
-
-                result = self.trade_client.price_unique_item(
-                    item, mods=parsed_mods, is_stale=_is_stale)
-                if _is_stale():
-                    return
-                if result and result.min_price > 0:
-                    self.overlay.show_price(
-                        text=result.display,
-                        tier=result.tier,
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                        price_divine=result.min_price,
-                    )
-                    self._cache_for_flag(
-                        item_name=display_name, base_type=item.base_type,
-                        rarity=item.rarity, tier=result.tier,
-                        display_text=result.display,
-                        price_divine=result.min_price,
-                        clipboard_text=clipboard_text)
-                    self.stats["successful_lookups"] += 1
-                elif static_result:
-                    # Trade API returned nothing — fall back to static
-                    self.overlay.show_price(
-                        text=static_result.get("display", "?"),
-                        tier=static_result.get("tier", "low"),
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                        price_divine=static_result.get("divine_value", 0),
-                    )
-                    self._cache_for_flag(
-                        item_name=display_name, base_type=item.base_type,
-                        rarity=item.rarity,
-                        tier=static_result.get("tier", "low"),
-                        display_text=static_result.get("display", "?"),
-                        price_divine=static_result.get("divine_value", 0),
-                        clipboard_text=clipboard_text)
-                    self.stats["successful_lookups"] += 1
-                else:
-                    self._show_dismiss(item, cursor_x, cursor_y)
-                    self.stats["not_found"] += 1
-            except Exception as e:
-                logger.error(f"Unique pricing error: {e}", exc_info=True)
-                if static_result:
-                    self.overlay.show_price(
-                        text=static_result.get("display", "?"),
-                        tier=static_result.get("tier", "low"),
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                        price_divine=static_result.get("divine_value", 0),
-                    )
-                else:
-                    self.overlay.show_price(
-                        text="?", tier="low",
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                    )
-                self.stats["not_found"] += 1
-            finally:
-                search_done.set()
-
-        thread = threading.Thread(target=_do_price, daemon=True,
-                                  name="UniquePricer")
-        thread.start()
-
-    # ─── Local Scoring + Deep Query ──────────────────
+    # ─── Local Scoring ────────────────────────────────
 
     def _score_and_display(self, item, parsed_mods, cursor_x, cursor_y,
                            clipboard_text=None):
-        """Score item locally, display grade, store state for deep query."""
+        """Score item locally and display grade overlay."""
         from config import GRADE_TIER_MAP
-        score = self.mod_database.score_item(item, parsed_mods)
+        score = self.mod_database.score_item(item, parsed_mods,
+                                              archetype=self._build_archetype)
         display_name = item.name or item.base_type
 
-        # Store for deep query hotkey
-        with self._last_scored_lock:
-            self._last_scored_item = item
-            self._last_scored_mods = parsed_mods
-            self._last_scored_result = score
-            self._last_scored_cursor = (cursor_x, cursor_y)
-
         overlay_tier = GRADE_TIER_MAP.get(score.grade.value, "low")
-
-        # Extract per-mod tier and roll quality data for calibration
-        mod_tiers = {ms.mod_group: int(ms.tier_label[1:])
-                     for ms in score.mod_scores
-                     if ms.mod_group and ms.tier_label and ms.tier_label[1:].isdigit()}
-        mod_rolls = {ms.mod_group: round(ms.roll_quality, 3)
-                     for ms in score.mod_scores
-                     if ms.mod_group and hasattr(ms, 'roll_quality')
-                     and ms.roll_quality is not None}
-
-        # Query calibration for price estimate
-        price_est = self.calibration.estimate(
-            score.normalized_score, getattr(item, "item_class", "") or "",
-            grade=score.grade.value,
-            top_tier_count=score.top_tier_count,
-            mod_count=len(score.mod_scores),
-            mod_groups=[ms.mod_group for ms in score.mod_scores if ms.mod_group],
-            base_type=getattr(item, "base_type", ""),
-            mod_tiers=mod_tiers,
-            mod_rolls=mod_rolls,
-            somv_factor=getattr(score, "somv_factor", 1.0),
-            pdps=getattr(item, "physical_dps", 0.0),
-            edps=getattr(item, "elemental_dps", 0.0))
-
-        # Check trade cache — deep query or auto-cal may have a real price
-        cached_trade = None
-        if hasattr(self, 'trade_client') and self.trade_client:
-            cached_trade = self.trade_client.lookup_cached(item, parsed_mods)
-        if cached_trade and cached_trade.min_price > 0:
-            price_est = cached_trade.min_price
-            logger.info(f"Using cached trade result: {cached_trade.display}")
 
         d2c = self.price_cache.divine_to_chaos
         d2e = self.price_cache.divine_to_exalted
         ds = self._display_settings
+        mode = ds.get("overlay_mode", "stars_only")
+        flags = self._MODE_FLAGS.get(mode, self._MODE_FLAGS["stars_only"])
         text = score.format_overlay_text(
-            price_estimate=price_est,
+            price_estimate=None,
+            estimate_low=None,
+            estimate_high=None,
+            confidence_tier=None,
+            value_tier=None,
             divine_to_chaos=d2c,
             divine_to_exalted=d2e,
-            show_grade=ds.get("overlay_show_grade", True),
-            show_price=ds.get("overlay_show_price", True),
-            show_stars=ds.get("overlay_show_stars", True),
-            show_mods=ds.get("overlay_show_mods", True),
-            show_dps=ds.get("overlay_show_dps", True),
+            show_grade=flags["show_grade"],
+            show_price=flags["show_price"],
+            show_stars=flags["show_stars"],
+            show_mods=flags["show_mods"],
+            show_dps=flags["show_dps"],
         )
 
-        # If we have a price estimate, use price-based tier instead of grade-based.
-        # Only override for B+ grades — C/JUNK calibration estimates are unreliable
-        # and would show misleading colors (e.g. orange "C") with few samples.
-        if price_est is not None and score.grade.value not in ("C", "JUNK"):
-            chaos_val = price_est * d2c
-            if chaos_val >= 25:
-                overlay_tier = "high"
-            elif chaos_val >= 5:
-                overlay_tier = "good"
-            elif chaos_val >= 1:
-                overlay_tier = "decent"
-            else:
-                overlay_tier = "low"
-
-        # Scrap override: JUNK/C items with quality/sockets → bronze "SCRAP"
+        # Scrap override: JUNK/C items with quality/sockets
         if text == "SCRAP":
             overlay_tier = "scrap"
 
@@ -943,72 +567,29 @@ class LAMA:
         if score.somv_factor != 1.0:
             logger.info(f"SOMV factor: {score.somv_factor:.3f} (roll quality)")
 
-        log_extra = f" est~{price_est:.1f}d" if price_est else ""
-        logger.info(f"Grade {score.grade.value}: {display_name} "
-                     f"(score={score.normalized_score:.3f}{log_extra}) "
-                     f"{score.top_mods_summary}")
-
-        # Borderless mode: when all display toggles are off, text is just "★"
-        is_borderless = (text == "\u2605")
-        # Suppress ✗ overlay for JUNK/C when low-value display is off
-        if text == "\u2717" and not ds.get("overlay_show_low_value", False):
-            pass  # suppress overlay, fall through to logging/caching
+        # Log dual grade when build archetype is active and grades diverge
+        if score.universal_grade is not None and score.universal_grade != score.grade:
+            logger.info(f"Grade {score.grade.value} (build) / "
+                         f"{score.universal_grade.value} (universal): {display_name} "
+                         f"(score={score.normalized_score:.3f}) "
+                         f"{score.top_mods_summary}")
         else:
-            self.overlay.show_price(text=text, tier=overlay_tier,
-                                    cursor_x=cursor_x, cursor_y=cursor_y,
-                                    borderless=is_borderless,
-                                    estimate=cached_trade.estimate if cached_trade else False,
-                                    price_divine=cached_trade.min_price if cached_trade else (price_est or 0))
+            logger.info(f"Grade {score.grade.value}: {display_name} "
+                         f"(score={score.normalized_score:.3f}) "
+                         f"{score.top_mods_summary}")
 
-        # Cache for flag reporter
-        mod_details = None
-        if hasattr(score, "mod_scores") and score.mod_scores:
-            mod_details = [
-                {"text": ms.raw_text, "tier": ms.tier_label,
-                 "weight": round(ms.weight, 3)}
-                for ms in score.mod_scores[:6]
-            ]
-        self._cache_for_flag(
-            item_name=display_name, base_type=item.base_type,
-            rarity=item.rarity,
-            item_class=getattr(item, "item_class", None),
-            grade=score.grade.value, price_divine=price_est,
-            tier=overlay_tier, display_text=text,
-            normalized_score=round(score.normalized_score, 3),
-            clipboard_text=clipboard_text, mod_details=mod_details)
+        # Show popup overlay (unless stars_only mode)
+        if mode != "stars_only":
+            is_borderless = (text == "\u2605")
+            if text == "\u2717" and not ds.get("overlay_show_low_value", False):
+                pass  # suppress junk overlay
+            else:
+                self.overlay.show_price(text=text, tier=overlay_tier,
+                                        cursor_x=cursor_x, cursor_y=cursor_y,
+                                        borderless=is_borderless)
 
         if score.grade.value not in ("C", "JUNK"):
             self.stats["successful_lookups"] += 1
-
-        # Auto-queue for background trade API calibration.
-        # A/S always, B always, C sampled 1-in-3, JUNK sampled 1-in-5.
-        # Higher rates feed more real trade prices into calibration.
-        import random
-        grade = score.grade.value
-        if grade in ("A", "S", "B"):
-            self._calibration_queue.put((item, parsed_mods, score))
-        elif grade == "C" and random.random() < 0.33:
-            self._calibration_queue.put((item, parsed_mods, score))
-        elif grade == "JUNK" and random.random() < 0.20:
-            self._calibration_queue.put((item, parsed_mods, score))
-
-    def _deep_query_hotkey_loop(self):
-        """Poll for Ctrl+Shift+C to trigger trade API lookup on last scored item."""
-        import ctypes
-        VK_SHIFT, VK_CONTROL, VK_C = 0x10, 0x11, 0x43
-        _gaks = ctypes.windll.user32.GetAsyncKeyState
-        was_pressed = False
-
-        while True:
-            time.sleep(0.05)  # 20 Hz
-            pressed = bool(_gaks(VK_CONTROL) & 0x8000
-                           and _gaks(VK_SHIFT) & 0x8000
-                           and _gaks(VK_C) & 0x8000)
-            if pressed and not was_pressed:
-                was_pressed = True
-                self._trigger_deep_query()
-            elif not pressed:
-                was_pressed = False
 
     def _bug_report_hotkey_loop(self):
         """Poll for Ctrl+Shift+B to trigger bug report dialog."""
@@ -1028,284 +609,44 @@ class LAMA:
             elif not pressed:
                 was_pressed = False
 
-    def _cache_for_flag(self, *, item_name=None, base_type=None, rarity=None,
-                         item_class=None, grade=None, price_divine=None,
-                         tier=None, display_text=None, normalized_score=None,
-                         clipboard_text=None, mod_details=None):
-        """Snapshot the current item for flagging via Ctrl+Shift+F."""
-        data = {
-            "item_name": item_name,
-            "base_type": base_type,
-            "rarity": rarity,
-            "item_class": item_class,
-            "grade": grade,
-            "price_divine": price_divine,
-            "tier": tier,
-            "display_text": display_text,
-            "normalized_score": normalized_score,
-            "clipboard_text": clipboard_text,
-            "mod_details": mod_details,
-        }
-        with self._last_flaggable_lock:
-            self._last_flaggable = data
-
-    def _get_item_context(self):
-        """Return last flaggable item snapshot (for bug reporter price context)."""
-        with self._last_flaggable_lock:
-            return self._last_flaggable
-
-    def _flag_hotkey_loop(self):
-        """Poll for Ctrl+Shift+F to trigger flag dialog."""
+    def _star_clear_hotkey_loop(self):
+        """Poll for Ctrl+Shift+X to clear all star indicators."""
         import ctypes
-        VK_SHIFT, VK_CONTROL, VK_F = 0x10, 0x11, 0x46
+        VK_SHIFT, VK_CONTROL, VK_X = 0x10, 0x11, 0x58
         _gaks = ctypes.windll.user32.GetAsyncKeyState
         was_pressed = False
+        focus_lost_since = None
 
         while True:
             time.sleep(0.05)  # 20 Hz
+
+            # Hotkey: Ctrl+Shift+X
             pressed = bool(_gaks(VK_CONTROL) & 0x8000
                            and _gaks(VK_SHIFT) & 0x8000
-                           and _gaks(VK_F) & 0x8000)
+                           and _gaks(VK_X) & 0x8000)
             if pressed and not was_pressed:
                 was_pressed = True
-                with self._last_flaggable_lock:
-                    snapshot = self._last_flaggable
-                self.flag_reporter.flag(snapshot)
+                logger.info("Star clear: Ctrl+Shift+X pressed")
+                self.overlay.clear_stars()
             elif not pressed:
                 was_pressed = False
 
-    def _trigger_deep_query(self):
-        """Execute trade API lookup on the last locally-scored item."""
-        with self._last_scored_lock:
-            item = self._last_scored_item
-            mods = self._last_scored_mods
-            score = self._last_scored_result
-            cx, cy = self._last_scored_cursor
-
-        if not item or not mods:
-            return
-        if not self.item_detector.game_window.is_poe2_foreground():
-            return
-
-        logger.info(f"Deep query: {item.name or item.base_type}")
-        self._deep_query_item_key = item.base_type
-        self._price_rare_deep_async(item, mods, score, cx, cy)
-
-    def _price_rare_deep_async(self, item, parsed_mods, score_result, cursor_x, cursor_y):
-        """Trade API lookup for a locally-scored item (triggered by Ctrl+Shift+C)."""
-        display_name = item.name or item.base_type
-        grade_str = score_result.grade.value
-
-        with self._trade_gen_lock:
-            self._trade_generation += 1
-            my_gen = self._trade_generation
-
-        def _is_stale():
-            with self._trade_gen_lock:
-                return my_gen != self._trade_generation
-
-        self.overlay.show_price(text="Checking...",
-                                tier="low",
-                                cursor_x=cursor_x, cursor_y=cursor_y)
-        search_done = threading.Event()
-
-        def _animate_dots():
-            dots = 1
-            while not search_done.wait(0.4):
-                if _is_stale():
-                    return
-                dots = (dots % 3) + 1
-                self.overlay.update_text(f"Checking{'.' * dots}")
-
-        def _do_deep():
-            threading.Thread(target=_animate_dots, daemon=True,
-                             name="DeepAnim").start()
-            try:
-                if _is_stale():
-                    return
-
-                result = self.trade_client.price_rare_item(
-                    item, parsed_mods, is_stale=_is_stale)
-                if _is_stale():
-                    return
-                if result:
-                    self.overlay.show_price(
-                        text=result.display,
-                        tier=result.tier,
-                        cursor_x=cursor_x, cursor_y=cursor_y,
-                        estimate=result.estimate,
-                        price_divine=result.min_price)
-                    self.stats["successful_lookups"] += 1
-                    self._log_calibration(score_result, result, item)
-                else:
-                    self.overlay.show_price(
-                        text="No listings", tier="low",
-                        cursor_x=cursor_x, cursor_y=cursor_y)
-                    self.stats["not_found"] += 1
-            except Exception as e:
-                logger.error(f"Deep query error: {e}", exc_info=True)
-                self.overlay.show_price(
-                    text="?", tier="low",
-                    cursor_x=cursor_x, cursor_y=cursor_y)
-            finally:
-                self._deep_query_item_key = None
-                search_done.set()
-
-        threading.Thread(target=_do_deep, daemon=True,
-                         name="DeepQueryPricer").start()
-
-    def _log_calibration(self, score_result, trade_result, item):
-        """Append grade-vs-price calibration record and live-update engine.
-
-        Write-time quality filters:
-        - Skip estimates (mod-dropped prices are unreliable)
-        - Skip prices above CALIBRATION_MAX_PRICE_DIVINE (price-fixers)
-        - Skip results with < CALIBRATION_MIN_RESULTS listings (too thin)
-        """
-        import json
-        from config import (CALIBRATION_LOG_FILE, CALIBRATION_MAX_PRICE_DIVINE,
-                            CALIBRATION_MIN_RESULTS)
-        try:
-            # Write-time quality filters
-            if trade_result.estimate:
-                logger.debug("Calibration: skipping estimate (unreliable)")
-                return
-            if trade_result.min_price <= 0:
-                return
-            if trade_result.min_price > CALIBRATION_MAX_PRICE_DIVINE:
-                logger.debug(f"Calibration: skipping {trade_result.min_price:.1f}d "
-                             f"(>{CALIBRATION_MAX_PRICE_DIVINE}d cap)")
-                return
-            if trade_result.num_results < CALIBRATION_MIN_RESULTS:
-                logger.debug(f"Calibration: skipping {trade_result.num_results} results "
-                             f"(<{CALIBRATION_MIN_RESULTS} min)")
-                return
-
-            mod_tiers = {ms.mod_group: int(ms.tier_label[1:])
-                         for ms in score_result.mod_scores
-                         if ms.mod_group and ms.tier_label and ms.tier_label[1:].isdigit()}
-            record = {
-                "ts": int(time.time()),
-                "league": self.league,
-                "grade": score_result.grade.value,
-                "score": round(score_result.normalized_score, 3),
-                "item_class": getattr(item, "item_class", ""),
-                "top_mods": score_result.top_mods_summary,
-                "min_divine": trade_result.min_price,
-                "max_divine": trade_result.max_price,
-                "results": trade_result.num_results,
-                "estimate": False,
-                "total_dps": round(score_result.total_dps, 1),
-                "total_defense": score_result.total_defense,
-                "dps_factor": round(score_result.dps_factor, 3),
-                "defense_factor": round(score_result.defense_factor, 3),
-                "somv_factor": round(score_result.somv_factor, 3),
-                "top_tier_count": score_result.top_tier_count,
-                "mod_count": len(score_result.mod_scores),
-                "mod_groups": [ms.mod_group for ms in score_result.mod_scores if ms.mod_group],
-                "base_type": getattr(item, "base_type", ""),
-                "mod_tiers": mod_tiers,
-            }
-            CALIBRATION_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(CALIBRATION_LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record) + "\n")
-
-            # Live-update calibration engine so estimates improve within session
-            self.calibration.add_sample(
-                score_result.normalized_score,
-                trade_result.min_price,
-                getattr(item, "item_class", ""),
-                grade=score_result.grade.value,
-                top_tier_count=score_result.top_tier_count,
-                mod_count=len(score_result.mod_scores),
-                mod_groups=[ms.mod_group for ms in score_result.mod_scores if ms.mod_group],
-                base_type=getattr(item, "base_type", ""),
-                mod_tiers=mod_tiers)
-        except Exception as e:
-            logger.warning(f"Calibration log failed: {e}")
-
-    def _load_calibration_data(self):
-        """Load calibration data in merge order: shard first, then user data.
-
-        1. Load bundled shard from resources/ (instant, offline fallback)
-        2. Attempt remote shard download (background, non-blocking)
-        3. Load user's personal calibration.jsonl (overrides shard data)
-        """
-        from config import CALIBRATION_LOG_FILE
-        from bundle_paths import get_resource
-
-        total = 0
-
-        # Step 1: Bundled shard (offline fallback)
-        bundled = get_resource("resources/calibration_shard.json.gz")
-        if bundled.exists():
-            n = self.calibration.load_shard(bundled)
-            total += n
-            if n:
-                logger.info(f"Calibration: {n} bundled shard samples loaded")
-
-        # Step 2: Remote shard (background, non-blocking)
-        def _fetch_remote():
-            try:
-                n = self.calibration.load_remote_shard(self.league)
-                if n:
-                    logger.info(f"Calibration: {n} remote shard samples loaded "
-                                 f"(total: {self.calibration.sample_count()})")
-            except Exception as e:
-                logger.debug(f"Remote shard fetch failed: {e}")
-
-        threading.Thread(target=_fetch_remote, daemon=True,
-                         name="ShardFetch").start()
-
-        # Step 3: User's personal calibration data (overrides/supplements shard)
-        n = self.calibration.load(CALIBRATION_LOG_FILE)
-        total += n
-
-        if total:
-            logger.info(f"Calibration: {self.calibration.sample_count()} total samples")
-        else:
-            logger.info("Calibration: no data yet (grade-only display)")
-
-    def _calibration_queue_loop(self):
-        """Process auto-queued items for trade API calibration."""
-        while True:
-            item, parsed_mods, score_result = self._calibration_queue.get()
-            display_name = item.name or item.base_type
-
-            # Skip items that have a deep query in progress — the deep query
-            # will produce the same result and log calibration itself.
-            if item.base_type and item.base_type == self._deep_query_item_key:
-                logger.debug(f"Auto-cal: skipping {display_name} (deep query in progress)")
-                continue
-
-            try:
-                # Wait out any active rate limit before attempting
-                while self.trade_client._is_rate_limited():
-                    wait = self.trade_client._rate_limited_until - time.time()
-                    if wait > 0:
-                        time.sleep(min(wait + 1, 65))
-
-                result = self.trade_client.price_rare_item(
-                    item, parsed_mods, is_stale=lambda: False)
-                if result and "Rate limited" in result.display:
-                    # Still rate limited — re-queue and back off
-                    self._calibration_queue.put((item, parsed_mods, score_result))
-                    time.sleep(10)
-                elif result and result.min_price > 0:
-                    self._log_calibration(score_result, result, item)
-                    logger.info(
-                        f"Auto-cal: {display_name} "
-                        f"grade={score_result.grade.value} -> {result.display}")
-                else:
-                    logger.info(
-                        f"Auto-cal: {display_name} "
-                        f"grade={score_result.grade.value} -> no listings")
-            except Exception as e:
-                logger.warning(f"Auto-cal failed ({display_name}): {e}")
+            # Auto-clear: if POE2 loses focus for >30 seconds, clear stars
+            if self.item_detector.game_window.is_poe2_foreground():
+                focus_lost_since = None
+            else:
+                if focus_lost_since is None:
+                    focus_lost_since = time.time()
+                elif time.time() - focus_lost_since > 30:
+                    logger.info("Star clear: POE2 lost focus for 30s")
+                    self.overlay.clear_stars()
+                    focus_lost_since = None  # Reset so we don't spam
 
     # Items that should always show ✗ (too cheap to bother pricing)
     def _show_dismiss(self, item, cursor_x, cursor_y):
         """Show dismiss (✗) or scrap hammer if the item has quality/sockets."""
+        if self._display_settings.get("overlay_mode", "stars_only") == "stars_only":
+            return  # no popup overlays in stars-only mode
         has_scrap = (
             getattr(item, "quality", 0) > 0 or
             getattr(item, "sockets", 0) > 0
@@ -1327,34 +668,6 @@ class LAMA:
         "heavy belt": "Headhunter",
         "tribal mask": "The Vertex",
     }
-
-    # High-roll detection: don't dismiss common mods with exceptional values
-    _MOD_VALUE_RE = re.compile(r'[+-]?(\d+(?:\.\d+)?)')
-    _HIGH_ROLL_THRESHOLD = 100       # flat values: +158 mana → keep
-    _HIGH_ROLL_PCT_THRESHOLD = 50    # percentage values: 60% regen → keep
-
-    def _has_only_common_mods(self, mods: list) -> bool:
-        """Check if all mods are common filler (not worth trade API lookup).
-        Implicit mods are always considered common (inherent to base type).
-        High-roll common mods (e.g., +158 mana) are NOT considered common.
-        Uses the canonical pattern list from TradeClient."""
-        patterns = TradeClient._COMMON_MOD_PATTERNS
-        for mod_type, mod_text in mods:
-            if mod_type == "implicit":
-                continue  # Implicits don't drive item value
-            text_lower = mod_text.lower()
-            if not any(pat in text_lower for pat in patterns):
-                return False
-            # Common pattern matched — but check if the roll is high enough
-            # to be valuable despite being a "common" mod type
-            m = self._MOD_VALUE_RE.search(mod_text)
-            if m:
-                value = float(m.group(1))
-                is_pct = "%" in mod_text or "increased" in text_lower or "reduced" in text_lower
-                threshold = self._HIGH_ROLL_PCT_THRESHOLD if is_pct else self._HIGH_ROLL_THRESHOLD
-                if value >= threshold:
-                    return False  # High roll — don't dismiss
-        return True
 
     def _save_debug_text(self, text: str, cx: int, cy: int):
         """Save clipboard text for debugging."""
@@ -1383,7 +696,6 @@ class LAMA:
                 hits = self.stats["successful_lookups"]
                 hit_rate = (hits / total * 100) if total > 0 else 0
 
-                cal_count = self.calibration.sample_count()
                 d2c = cache_stats.get('divine_to_chaos', 0)
                 d2e = cache_stats.get('divine_to_exalted', 0)
                 m2d = cache_stats.get('mirror_to_divine', 0)
@@ -1393,7 +705,7 @@ class LAMA:
                     f"Triggers: {total} | Prices shown: {hits} ({hit_rate:.0f}%) | "
                     f"Cache: {cache_stats['total_items']} items | "
                     f"Last refresh: {cache_stats['last_refresh']} | "
-                    f"D2C: {d2c:.1f} | D2E: {d2e:.1f} | M2D: {m2d:.1f} | Cal: {cal_count}"
+                    f"D2C: {d2c:.1f} | D2E: {d2e:.1f} | M2D: {m2d:.1f}"
                 )
             except Exception:
                 pass

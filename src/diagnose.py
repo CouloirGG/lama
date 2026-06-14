@@ -263,7 +263,7 @@ def test_price_cache():
         # Try to discover available league names
         try:
             info("\nTrying to discover available leagues...")
-            for test_league in ["Fate of the Vaal", "Standard", "Hardcore"]:
+            for test_league in [DEFAULT_LEAGUE, "Standard", "Hardcore"]:
                 r = requests.get(poe2_url,
                     params={"league": test_league, "type": "Currency"},
                     timeout=10, headers={"User-Agent": "LAMA/1.0"})

@@ -12,13 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 class ItemLookup:
-    """Wraps ItemParser + ModParser + ModDatabase + CalibrationEngine."""
+    """Wraps ItemParser + ModParser + ModDatabase for item scoring."""
 
     def __init__(self):
         self._item_parser = None
         self._mod_parser = None
         self._mod_database = None
-        self._calibration = None
         self._ready = False
 
     @property
@@ -31,8 +30,6 @@ class ItemLookup:
             from item_parser import ItemParser
             from mod_parser import ModParser
             from mod_database import ModDatabase
-            from calibration import CalibrationEngine
-            from config import CALIBRATION_LOG_FILE
 
             self._item_parser = ItemParser()
 
@@ -42,16 +39,6 @@ class ItemLookup:
             self._mod_database = ModDatabase()
             if self._mod_parser.loaded:
                 self._mod_database.load(self._mod_parser)
-
-            self._calibration = CalibrationEngine()
-            self._calibration.load(CALIBRATION_LOG_FILE)
-
-            # Load shards for better estimates
-            try:
-                from config import SHARD_DIR
-                self._calibration.load_shards(SHARD_DIR)
-            except Exception:
-                pass  # shards are optional
 
             self._ready = (
                 self._mod_parser.loaded
@@ -66,7 +53,7 @@ class ItemLookup:
     def lookup(self, text: str) -> Optional[Dict[str, Any]]:
         """Parse and score item text.
 
-        Returns dict with keys: item, mods, score, estimate
+        Returns dict with keys: item, mods, score
         or None if parsing fails.
         """
         if not self._ready:
@@ -82,49 +69,6 @@ class ItemLookup:
 
         # Score item
         score = self._mod_database.score_item(item, parsed_mods)
-
-        # Estimate price
-        estimate = None
-        if self._calibration and score:
-            try:
-                mod_scores = getattr(score, "mod_scores", [])
-                mod_tiers = {ms.mod_group: int(ms.tier_label[1:])
-                             for ms in mod_scores
-                             if ms.mod_group and ms.tier_label and ms.tier_label[1:].isdigit()}
-                mod_rolls = {ms.mod_group: round(ms.roll_quality, 3)
-                             for ms in mod_scores
-                             if ms.mod_group and hasattr(ms, 'roll_quality')
-                             and ms.roll_quality is not None}
-                price_divine = self._calibration.estimate(
-                    score.normalized_score,
-                    getattr(item, "item_class", "") or "",
-                    grade=score.grade.value,
-                    top_tier_count=getattr(score, "top_tier_count", 0),
-                    mod_count=len(mod_scores) or 4,
-                    mod_groups=[ms.mod_group for ms in mod_scores if ms.mod_group],
-                    base_type=getattr(item, "base_type", ""),
-                    mod_tiers=mod_tiers,
-                    mod_rolls=mod_rolls,
-                    somv_factor=getattr(score, "somv_factor", 1.0),
-                    pdps=getattr(item, "physical_dps", 0.0),
-                    edps=getattr(item, "elemental_dps", 0.0),
-                )
-                if price_divine is not None:
-                    from price_cache import PriceCache
-                    # Try to get divine-to-chaos from any running price cache
-                    d2c = 0
-                    try:
-                        import server
-                        if hasattr(server, 'price_cache') and server.price_cache:
-                            d2c = getattr(server.price_cache, 'divine_to_chaos', 0)
-                    except Exception:
-                        pass
-                    estimate = {
-                        "divine_value": round(price_divine, 2),
-                        "chaos_value": round(price_divine * d2c, 0) if d2c > 0 else None,
-                    }
-            except Exception as e:
-                logger.debug(f"Calibration estimate failed: {e}")
 
         # Build response
         result = {
@@ -150,6 +94,6 @@ class ItemLookup:
                 "top_mods": score.top_mods_summary if score else None,
                 "top_tier_count": score.top_tier_count if score else 0,
             } if score else None,
-            "estimate": estimate,
+            "estimate": None,
         }
         return result

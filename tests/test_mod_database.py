@@ -8,7 +8,11 @@ import pytest
 
 from item_parser import ParsedItem
 from mod_parser import ParsedMod
-from mod_database import ModDatabase, Grade, ModScore, _dps_factor, _defense_factor, _skill_level_factor
+from mod_database import (
+    ModDatabase, Grade, ModScore,
+    _dps_factor, _defense_factor, _skill_level_factor,
+    _get_build_multiplier, _get_progression_tier,
+)
 from tests.conftest import make_item, make_mod
 
 
@@ -544,3 +548,292 @@ def test_skill_level_factor_weapon_with_skills():
         mods = [_make_mod_score("PhysicalDamage"), _make_mod_score(group)]
         assert _skill_level_factor(mods, "Bows") == 1.0, f"Group {group} should bypass penalty"
         assert _skill_level_factor(mods, "Wands") == 1.0, f"Group {group} should bypass penalty"
+
+
+# ── Build-Aware Scoring Tests ──────────────────────────
+
+class _MockArchetype:
+    """Minimal archetype for unit tests (avoids importing builds_client)."""
+    def __init__(self, damage_type="unknown", defense_type="life",
+                 is_crit=False, is_coc=False, elements=None, level=0):
+        self.damage_type = damage_type
+        self.defense_type = defense_type
+        self.is_crit = is_crit
+        self.is_coc = is_coc
+        self.elements = elements or []
+        self.level = level
+
+
+class TestBuildMultiplier:
+    """Tests for _get_build_multiplier()."""
+
+    def test_no_archetype_returns_1(self):
+        assert _get_build_multiplier("AttackSpeed", None) == 1.0
+
+    def test_spell_penalizes_attack_speed(self):
+        arch = _MockArchetype(damage_type="spell")
+        mult = _get_build_multiplier("AttackSpeed", arch)
+        assert mult < 0.2, f"Spell build should heavily penalize AttackSpeed, got {mult}"
+
+    def test_attack_penalizes_cast_speed(self):
+        arch = _MockArchetype(damage_type="attack")
+        mult = _get_build_multiplier("CastSpeed", arch)
+        assert mult < 0.2, f"Attack build should heavily penalize CastSpeed, got {mult}"
+
+    def test_attack_penalizes_spell_damage(self):
+        arch = _MockArchetype(damage_type="attack")
+        mult = _get_build_multiplier("SpellDamage", arch)
+        assert mult < 0.2
+
+    def test_no_crit_penalizes_crit_multi(self):
+        arch = _MockArchetype(is_crit=False)
+        mult = _get_build_multiplier("CriticalStrikeMultiplier", arch)
+        assert mult < 0.2, f"Non-crit should penalize CritMulti, got {mult}"
+
+    def test_crit_build_keeps_crit_multi(self):
+        arch = _MockArchetype(is_crit=True)
+        mult = _get_build_multiplier("CriticalStrikeMultiplier", arch)
+        assert mult == 1.0
+
+    def test_coc_preserves_both_attack_and_spell(self):
+        """CoC builds need both attack speed and cast speed."""
+        arch = _MockArchetype(damage_type="spell", is_coc=True)
+        atk_mult = _get_build_multiplier("AttackSpeed", arch)
+        cast_mult = _get_build_multiplier("CastSpeed", arch)
+        assert atk_mult == 1.0, "CoC should not penalize AttackSpeed"
+        assert cast_mult == 1.0, "CoC should not penalize CastSpeed"
+
+    def test_es_build_boosts_energy_shield(self):
+        arch = _MockArchetype(defense_type="es")
+        mult = _get_build_multiplier("EnergyShield", arch)
+        assert mult > 1.5, f"ES build should boost EnergyShield, got {mult}"
+
+    def test_es_build_penalizes_life(self):
+        arch = _MockArchetype(defense_type="es")
+        mult = _get_build_multiplier("IncreasedLife", arch)
+        assert mult < 0.5, f"ES build should penalize life, got {mult}"
+
+    def test_mom_boosts_mana(self):
+        arch = _MockArchetype(defense_type="mom")
+        mult = _get_build_multiplier("MaximumMana", arch)
+        assert mult > 2.0
+
+    def test_fire_build_penalizes_cold_damage(self):
+        arch = _MockArchetype(elements=["fire"])
+        mult = _get_build_multiplier("AddedColdDamage", arch)
+        assert mult < 0.2
+
+    def test_fire_build_keeps_fire_damage(self):
+        arch = _MockArchetype(elements=["fire"])
+        mult = _get_build_multiplier("AddedFireDamage", arch)
+        assert mult == 1.0, "Fire build should not penalize AddedFireDamage"
+
+    def test_multi_element_no_penalty(self):
+        """Builds with multiple elements should not penalize any of them."""
+        arch = _MockArchetype(elements=["fire", "cold"])
+        fire_mult = _get_build_multiplier("AddedFireDamage", arch)
+        cold_mult = _get_build_multiplier("AddedColdDamage", arch)
+        assert fire_mult == 1.0
+        assert cold_mult == 1.0
+
+    def test_unrelated_group_unaffected(self):
+        arch = _MockArchetype(damage_type="spell", defense_type="life", elements=["fire"])
+        mult = _get_build_multiplier("IncreasedLife", arch)
+        assert mult == 1.0, "Life should be unaffected for life-based spell build"
+
+
+class TestProgressionTier:
+    def test_leveling(self):
+        assert _get_progression_tier(1) == "leveling"
+        assert _get_progression_tier(44) == "leveling"
+
+    def test_cruel(self):
+        assert _get_progression_tier(45) == "cruel"
+        assert _get_progression_tier(67) == "cruel"
+
+    def test_maps(self):
+        assert _get_progression_tier(68) == "maps"
+        assert _get_progression_tier(81) == "maps"
+
+    def test_endgame(self):
+        assert _get_progression_tier(82) == "endgame"
+        assert _get_progression_tier(100) == "endgame"
+
+
+class TestProgressionMultiplier:
+    def test_leveling_boosts_resists(self):
+        arch = _MockArchetype(level=30)
+        mult = _get_build_multiplier("FireResist", arch)
+        assert mult > 2.0, f"Leveling should boost resists, got {mult}"
+
+    def test_leveling_penalizes_crit(self):
+        arch = _MockArchetype(level=30)
+        mult = _get_build_multiplier("CriticalStrikeMultiplier", arch)
+        # Both no_crit (0.1) and leveling (0.3) apply
+        assert mult < 0.1, f"Leveling non-crit should heavily penalize crit, got {mult}"
+
+    def test_endgame_no_progression_adjustment(self):
+        arch = _MockArchetype(level=90)
+        mult = _get_build_multiplier("FireResist", arch)
+        assert mult == 1.0, "Endgame should have no progression multiplier"
+
+
+class TestDualScoring:
+    """Tests for dual universal/build scoring in score_item()."""
+
+    def test_no_archetype_no_universal_fields(self, mod_database, stat_ids):
+        """Without archetype, universal_grade should be None."""
+        item = make_item(cls="Rings", ilvl=80)
+        mods = [make_mod(stat_ids, "crit_multi", 40, "40% increased Critical Damage Bonus")]
+        score = mod_database.score_item(item, mods, archetype=None)
+        assert score.universal_grade is None
+        assert score.universal_normalized is None
+
+    def test_with_archetype_has_universal_fields(self, mod_database, stat_ids):
+        """With archetype, universal_grade should be populated."""
+        arch = _MockArchetype(damage_type="spell", is_crit=False, level=90)
+        item = make_item(cls="Rings", ilvl=80)
+        mods = [make_mod(stat_ids, "crit_multi", 40, "40% increased Critical Damage Bonus")]
+        score = mod_database.score_item(item, mods, archetype=arch)
+        assert score.universal_grade is not None
+        assert score.universal_normalized is not None
+
+    def test_dual_score_divergence(self, mod_database, stat_ids):
+        """A crit item scored by a non-crit build should have lower build grade
+        than universal grade."""
+        arch = _MockArchetype(damage_type="attack", is_crit=False, level=90)
+        item = make_item(cls="Rings", ilvl=80)
+        mods = [
+            make_mod(stat_ids, "crit_multi", 40, "40% increased Critical Damage Bonus"),
+            make_mod(stat_ids, "crit_chance", 35, "35% increased Critical Hit Chance"),
+            make_mod(stat_ids, "life", 80, "+80 to maximum Life"),
+        ]
+        score = mod_database.score_item(item, mods, archetype=arch)
+        # Build score should be lower (crit penalized)
+        assert score.normalized_score <= score.universal_normalized, (
+            f"Build score {score.normalized_score} should be <= universal {score.universal_normalized}"
+        )
+
+    def test_backward_compat_no_archetype(self, mod_database, stat_ids):
+        """score_item without archetype should produce identical results to before."""
+        item = make_item(cls="Gloves", ilvl=80)
+        mods = [
+            make_mod(stat_ids, "life", 130, "+130 to maximum Life"),
+            make_mod(stat_ids, "fire_res", 30, "+30% to Fire Resistance"),
+        ]
+        score1 = mod_database.score_item(item, mods)
+        score2 = mod_database.score_item(item, mods, archetype=None)
+        assert score1.grade == score2.grade
+        assert score1.normalized_score == score2.normalized_score
+
+
+class TestGapAnalysis:
+    """Tests for gap analysis methods."""
+
+    def test_get_possible_mods_returns_results(self, mod_database):
+        """Should return mods for common item classes."""
+        mods = mod_database.get_possible_mods_for_class("Amulets")
+        assert len(mods) > 0, "Amulets should have possible mods"
+        # Check structure
+        first = mods[0]
+        assert "group" in first
+        assert "weight" in first
+        assert "display_name" in first
+
+    def test_get_possible_mods_sorted_by_weight(self, mod_database):
+        mods = mod_database.get_possible_mods_for_class("Gloves")
+        weights = [m["weight"] for m in mods]
+        assert weights == sorted(weights, reverse=True)
+
+    def test_gap_analysis_excludes_present_mods(self, mod_database):
+        """Mods already on the item should not appear in gap analysis."""
+        possible = mod_database.get_possible_mods_for_class("Rings")
+        present = [possible[0]["group"]] if possible else []
+        gaps = mod_database.compute_gap_analysis("Rings", present)
+        gap_groups = {g["group"] for g in gaps}
+        for p in present:
+            assert p not in gap_groups, f"Present mod {p} should be excluded"
+
+    def test_gap_analysis_build_aware(self, mod_database):
+        """Build-aware gap analysis should rank build-relevant mods higher."""
+        # Fire spell build should value spell damage over attack speed
+        arch = _MockArchetype(damage_type="spell", elements=["fire"], level=90)
+        gaps = mod_database.compute_gap_analysis("Amulets", [], archetype=arch)
+        if gaps:
+            # Should find spell-relevant mods near the top
+            top_names = [g["displayName"].lower() for g in gaps[:5]]
+            # Attack speed should NOT be in top 5 for a spell build
+            for name in top_names:
+                assert "atkspd" not in name.replace(" ", "").lower(), (
+                    f"Attack speed shouldn't be top gap for spell build"
+                )
+
+
+# ── Anti-Synergy Tests ─────────────────────────────────
+
+class TestAntiSynergy:
+    """Tests for detect_anti_synergies() in builds_client."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        from builds_client import (
+            detect_anti_synergies, BuildArchetype, CharacterItem,
+        )
+        self.detect = detect_anti_synergies
+        self.BuildArchetype = BuildArchetype
+        self.CharacterItem = CharacterItem
+
+    def _make_equip(self, explicit_mods=None):
+        return self.CharacterItem(explicit_mods=explicit_mods or [])
+
+    def test_crit_eo_conflict(self):
+        arch = self.BuildArchetype(damage_type="spell", is_crit=False)
+        ks = {"Elemental Overload"}
+        equip = [self._make_equip(["35% increased Critical Hit Chance"])]
+        findings = self.detect(arch, ks, equip)
+        ids = {f["id"] for f in findings}
+        assert "crit_with_eo" in ids
+
+    def test_no_crit_eo_when_no_crit_mods(self):
+        arch = self.BuildArchetype(damage_type="spell", is_crit=False)
+        ks = {"Elemental Overload"}
+        equip = [self._make_equip(["+80 to maximum Life"])]
+        findings = self.detect(arch, ks, equip)
+        ids = {f["id"] for f in findings}
+        assert "crit_with_eo" not in ids
+
+    def test_ci_life_stacking(self):
+        arch = self.BuildArchetype(defense_type="es")
+        ks = {"Chaos Inoculation"}
+        equip = [
+            self._make_equip(["+80 to maximum Life"]),
+            self._make_equip(["+60 to maximum Life"]),
+            self._make_equip(["+120 to maximum Life"]),
+        ]
+        findings = self.detect(arch, ks, equip)
+        ids = {f["id"] for f in findings}
+        assert "ci_life_stacking" in ids
+
+    def test_ci_few_life_mods_ok(self):
+        """1-2 life mods on CI is fine (might be transitional)."""
+        arch = self.BuildArchetype(defense_type="es")
+        ks = {"Chaos Inoculation"}
+        equip = [self._make_equip(["+80 to maximum Life"])]
+        findings = self.detect(arch, ks, equip)
+        ids = {f["id"] for f in findings}
+        assert "ci_life_stacking" not in ids
+
+    def test_off_element_detection(self):
+        arch = self.BuildArchetype(damage_type="spell", elements=["fire"])
+        equip = [self._make_equip(["Adds 10 to 20 Cold Damage"])]
+        findings = self.detect(arch, set(), equip)
+        ids = {f["id"] for f in findings}
+        assert "off_element_scaling" in ids
+
+    def test_no_off_element_for_multi_element(self):
+        """Multi-element builds should not trigger off-element."""
+        arch = self.BuildArchetype(elements=["fire", "cold"])
+        equip = [self._make_equip(["Adds 10 to 20 Cold Damage"])]
+        findings = self.detect(arch, set(), equip)
+        ids = {f["id"] for f in findings}
+        assert "off_element_scaling" not in ids

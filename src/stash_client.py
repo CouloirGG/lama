@@ -18,6 +18,7 @@ from typing import List, Optional, Callable
 import requests
 
 from item_parser import ParsedItem
+from oauth import GGG_USER_AGENT
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ class StashClient:
     def __init__(self, oauth_manager):
         self._oauth = oauth_manager
         self._session = requests.Session()
-        self._session.headers.update({"User-Agent": "LAMA/1.0"})
+        self._session.headers.update({"User-Agent": GGG_USER_AGENT})
 
         # Rate limiting (same pattern as TradeClient)
         self._last_request_time = 0.0

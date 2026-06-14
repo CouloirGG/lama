@@ -35,6 +35,49 @@ from typing import Optional
 
 import platform
 
+# ---------------------------------------------------------------------------
+# Sentry — error tracking
+# ---------------------------------------------------------------------------
+def _sentry_before_send(event, hint):
+    if "extra" in event:
+        for key in list(event["extra"].keys()):
+            if any(s in key.lower() for s in ("token", "key", "secret", "password", "dsn")):
+                event["extra"][key] = "[REDACTED]"
+    return event
+
+_sentry_dsn = os.environ.get("SENTRY_DSN", "")
+if not _sentry_dsn:
+    try:
+        _settings_path = os.path.join(
+            os.path.expanduser("~"), ".poe2-price-overlay", "dashboard_settings.json"
+        )
+        if os.path.exists(_settings_path):
+            with open(_settings_path, "r") as f:
+                _sentry_dsn = json.load(f).get("sentry_dsn", "")
+    except Exception:
+        pass
+
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        _release = "unknown"
+        try:
+            _release = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                stderr=subprocess.DEVNULL, text=True
+            ).strip()
+        except Exception:
+            pass
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            release=f"lama@{_release}",
+            environment="backend",
+            traces_sample_rate=0.1,
+            before_send=_sentry_before_send,
+        )
+    except Exception as e:
+        print(f"  Sentry: init failed ({e})")
+
 import requests
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -48,17 +91,18 @@ from builds_client import (BuildsClient, enrich_item_mods, classify_build,
                            get_anoint_description, compute_build_comparison,
                            compute_improvement_package,
                            SLOT_DISPLAY, SLOT_TO_UNIQUE_SLUG)
+import guide_scraper
+from why_engine import WhyEngine
 from bundle_paths import IS_FROZEN, APP_DIR, get_resource
-from config import TRADE_STATS_CACHE_FILE, TRADE_ITEMS_CACHE_FILE
 from item_lookup import ItemLookup
 from oauth import OAuthManager
 from price_cache import PriceCache
+from config import DEFAULT_LEAGUE, LEAGUE_OPTIONS
 from game_commands import GameCommander
+from character_client import CharacterClient
 from stash_client import StashClient
 from stash_scorer import StashScorer, TabSummary
-from telemetry import TelemetryUploader
-from trade_actions import TradeActions
-from watchlist import WatchlistWorker
+import cloud_notify
 
 logger = logging.getLogger("dashboard")
 
@@ -101,7 +145,7 @@ STATUS_RE = re.compile(
 # Settings manager
 # ---------------------------------------------------------------------------
 DEFAULT_SETTINGS = {
-    "league": "Fate of the Vaal",
+    "league": DEFAULT_LEAGUE,
     "no_filter_update": False,
     "auto_start": True,
     "font_size": 14,
@@ -115,26 +159,21 @@ DEFAULT_SETTINGS = {
     "filter_section_visibility": {},
     "filter_gear_classes": {},
     "filter_color_preset": "default",
-    "watchlist_queries": [],
-    "watchlist_poll_interval": 300,
-    "watchlist_online_only": True,
     "start_with_windows": False,
-    "overlay_show_grade": True,
-    "overlay_show_price": True,
-    "overlay_show_stars": True,
-    "overlay_show_mods": False,
-    "overlay_show_dps": True,
+    "overlay_mode": "stars_only",
     "overlay_show_low_value": False,
-    "overlay_display_preset": "standard",
     "overlay_tier_styles": {},
     "overlay_theme": "poe2",
-    "overlay_pulse_style": "sheen",
-    "telemetry_enabled": False,
-    "poesessid": "",
     "nux_completed": False,
     "window_width": 1100,
     "window_height": 750,
     "window_maximized": False,
+    "companion_enabled": False,
+    "companion_pin": "",
+    "cloud_enabled": False,
+    "cloud_device_id": "",
+    "cloud_secret": "",
+    "cloud_relay_url": "",
 }
 
 
@@ -205,6 +244,40 @@ def deep_merge(base: dict, updates: dict) -> dict:
     return base
 
 
+# ---------------------------------------------------------------------------
+# Companion mode utilities
+# ---------------------------------------------------------------------------
+import random
+import socket
+import io
+
+COMPANION_CHARSET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O/1/I/L
+
+
+def generate_pin(length: int = 4) -> str:
+    """Generate a random PIN from the safe charset."""
+    return "".join(random.choice(COMPANION_CHARSET) for _ in range(length))
+
+
+def get_lan_ip() -> str:
+    """Get the LAN IP address via UDP trick (no actual packet sent)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+_LEGACY_OVERLAY_KEYS = {
+    "overlay_show_grade", "overlay_show_price", "overlay_show_stars",
+    "overlay_show_mods", "overlay_show_dps", "overlay_display_preset",
+    "overlay_pulse_style",
+}
+
+
 def load_settings() -> dict:
     """Load settings from disk, merging with defaults."""
     settings = dict(DEFAULT_SETTINGS)
@@ -213,6 +286,19 @@ def load_settings() -> dict:
             with open(SETTINGS_FILE) as f:
                 saved = json.load(f)
             settings.update(saved)
+            # Migrate legacy per-toggle overlay keys → overlay_mode
+            if any(k in saved for k in _LEGACY_OVERLAY_KEYS) and "overlay_mode" not in saved:
+                if saved.get("overlay_show_mods"):
+                    settings["overlay_mode"] = "detailed"
+                elif saved.get("overlay_show_grade", True) and saved.get("overlay_show_dps", True):
+                    settings["overlay_mode"] = "standard"
+                elif saved.get("overlay_show_price", True):
+                    settings["overlay_mode"] = "minimal"
+                else:
+                    settings["overlay_mode"] = "stars_only"
+            # Remove legacy keys so they don't pollute the settings
+            for k in _LEGACY_OVERLAY_KEYS:
+                settings.pop(k, None)
         except Exception as e:
             logger.warning(f"Failed to load settings: {e}")
     return settings
@@ -488,19 +574,42 @@ class OverlayProcess:
 
 overlay = OverlayProcess()
 log_buffer: deque[dict] = deque(maxlen=500)
-watchlist_worker: Optional[WatchlistWorker] = None
 price_cache: Optional[PriceCache] = None
 item_lookup: Optional[ItemLookup] = None
-telemetry_uploader: Optional[TelemetryUploader] = None
 game_commander = GameCommander()
-trade_actions: Optional[TradeActions] = None
 
 # Character viewer
 builds_client = BuildsClient()
+why_engine_instance = WhyEngine(builds_client)
+
+
+def _lookup_character_with_fallback(account: str, character: str):
+    """Look up a character via poe.ninja (ladder + profile APIs).
+
+    BuildsClient.lookup_character now tries the builds/ladder API first,
+    then falls back to the profile API for non-ladder public characters.
+    If both fail and the user is OAuth-connected, try GGG's API directly.
+    """
+    result = builds_client.lookup_character(account, character)
+    if result:
+        return result
+
+    # Last resort: GGG OAuth API (only works for the authenticated user's own characters)
+    if character_client and oauth_manager and oauth_manager.connected:
+        logger.info(f"poe.ninja miss for {account}/{character}, trying GGG OAuth API")
+        result = character_client.get_character(character)
+        if result:
+            if not result.account:
+                result.account = account
+            return result
+
+    return None
+
 
 # Stash viewer
 oauth_manager: Optional[OAuthManager] = None
 stash_client: Optional[StashClient] = None
+character_client: Optional[CharacterClient] = None
 stash_scorer: Optional[StashScorer] = None
 stash_data: dict = {
     "tabs": [],           # List[TabSummary serialized]
@@ -516,8 +625,8 @@ stash_data: dict = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Set up the event loop reference and background tasks."""
-    global watchlist_worker, price_cache, item_lookup, telemetry_uploader, trade_actions
-    global oauth_manager, stash_client, stash_scorer
+    global price_cache, item_lookup
+    global oauth_manager, stash_client, stash_scorer, character_client
 
     loop = asyncio.get_running_loop()
     overlay.set_loop(loop)
@@ -525,24 +634,16 @@ async def lifespan(app: FastAPI):
     # Background task: periodic status push
     status_task = asyncio.create_task(status_broadcast_loop())
 
-    # Initialize watchlist worker
     settings = load_settings()
-    league = settings.get("league", "Fate of the Vaal")
-    watchlist_worker = WatchlistWorker(league, broadcast_fn=ws_manager.broadcast,
-                                       log_buffer=log_buffer)
-    watchlist_worker.update_queries(
-        settings.get("watchlist_queries", []),
-        settings.get("watchlist_poll_interval", 300),
-        online_only=settings.get("watchlist_online_only", True),
-    )
-    # Propagate POESESSID to watchlist worker if configured
-    poesessid = settings.get("poesessid", "")
-    if poesessid:
-        watchlist_worker.set_session_id(poesessid)
-    watchlist_worker.start(loop)
+    league = settings.get("league", DEFAULT_LEAGUE)
 
-    # Initialize trade actions (authenticated API calls)
-    trade_actions = TradeActions(lambda: load_settings().get("poesessid", ""))
+    # Configure cloud push notifications
+    cloud_notify.configure(
+        device_id=settings.get("cloud_device_id", ""),
+        secret=settings.get("cloud_secret", ""),
+        relay_url=settings.get("cloud_relay_url", ""),
+        enabled=settings.get("cloud_enabled", False),
+    )
 
     # Server-side PriceCache for Markets tab (works without overlay running)
     price_cache = PriceCache(league=league)
@@ -567,14 +668,10 @@ async def lifespan(app: FastAPI):
         settings["start_with_windows"] = actual_autostart
         save_settings(settings)
 
-    # Initialize telemetry uploader (opt-in)
-    telemetry_uploader = TelemetryUploader(league=league)
-    if settings.get("telemetry_enabled", False):
-        telemetry_uploader.start_schedule()
-
     # Initialize OAuth + Stash viewer
     oauth_manager = OAuthManager()
     stash_client = StashClient(oauth_manager)
+    character_client = CharacterClient(oauth_manager)
     stash_scorer = StashScorer()
     def _init_scorer():
         try:
@@ -589,12 +686,8 @@ async def lifespan(app: FastAPI):
     finally:
         status_task.cancel()
         update_task.cancel()
-        if watchlist_worker:
-            watchlist_worker.stop()
         if price_cache:
             price_cache.stop()
-        if telemetry_uploader:
-            telemetry_uploader.stop_schedule()
         # Stop overlay if running
         overlay.stop()
 
@@ -607,6 +700,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+from fastapi.exceptions import RequestValidationError
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(request: Request, exc: RequestValidationError):
+    body = await request.body()
+    logger.warning("422 Validation Error on %s %s — body: %s — errors: %s",
+                    request.method, request.url.path, body.decode(errors="replace"), exc.errors())
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 
 def _get_github_headers() -> dict:
@@ -733,22 +835,11 @@ class SettingsRequest(BaseModel):
     filter_section_visibility: Optional[dict] = None
     filter_gear_classes: Optional[dict] = None
     filter_color_preset: Optional[str] = None
-    watchlist_queries: Optional[list] = None
-    watchlist_poll_interval: Optional[int] = None
-    watchlist_online_only: Optional[bool] = None
     start_with_windows: Optional[bool] = None
-    overlay_show_grade: Optional[bool] = None
-    overlay_show_price: Optional[bool] = None
-    overlay_show_stars: Optional[bool] = None
-    overlay_show_mods: Optional[bool] = None
-    overlay_show_dps: Optional[bool] = None
+    overlay_mode: Optional[str] = None
     overlay_show_low_value: Optional[bool] = None
-    overlay_display_preset: Optional[str] = None
     overlay_tier_styles: Optional[dict] = None
     overlay_theme: Optional[str] = None
-    overlay_pulse_style: Optional[str] = None
-    telemetry_enabled: Optional[bool] = None
-    poesessid: Optional[str] = None
     nux_completed: Optional[bool] = None
 
 
@@ -767,7 +858,7 @@ async def get_status():
 @app.post("/api/start")
 async def start_overlay(req: StartRequest = StartRequest()):
     settings = load_settings()
-    league = req.league or settings.get("league", "Fate of the Vaal")
+    league = req.league or settings.get("league", DEFAULT_LEAGUE)
     no_filter = req.no_filter_update if req.no_filter_update is not None else settings.get("no_filter_update", False)
 
     result = overlay.start(league, no_filter_update=no_filter)
@@ -800,7 +891,7 @@ async def restart_overlay(req: StartRequest = StartRequest()):
     await asyncio.sleep(0.5)
 
     settings = load_settings()
-    league = req.league or settings.get("league", "Fate of the Vaal")
+    league = req.league or settings.get("league", DEFAULT_LEAGUE)
     no_filter = req.no_filter_update if req.no_filter_update is not None else settings.get("no_filter_update", False)
 
     result = overlay.start(league, no_filter_update=no_filter)
@@ -813,11 +904,9 @@ async def restart_overlay(req: StartRequest = StartRequest()):
 def _redact_settings(settings: dict) -> dict:
     """Return settings with sensitive fields redacted for API responses."""
     out = dict(settings)
-    if out.get("poesessid"):
-        out["poesessid_set"] = True
-        out["poesessid"] = ""
-    else:
-        out["poesessid_set"] = False
+    out.pop("companion_pin", None)
+    if out.get("cloud_secret"):
+        out["cloud_secret"] = ""
     return out
 
 
@@ -831,7 +920,7 @@ async def update_settings(req: SettingsRequest):
     settings = load_settings()
     updates = req.model_dump(exclude_none=True)
     # Keys that should be replaced wholesale (client sends full object, not partial)
-    REPLACE_KEYS = {"filter_tier_styles", "filter_gear_classes", "watchlist_queries", "overlay_tier_styles"}
+    REPLACE_KEYS = {"filter_tier_styles", "filter_gear_classes", "overlay_tier_styles"}
     for key in REPLACE_KEYS:
         if key in updates:
             settings[key] = updates.pop(key)
@@ -845,40 +934,8 @@ async def update_settings(req: SettingsRequest):
 
     # Update server-side price cache if league changed
     if "league" in updates and price_cache:
-        new_league = settings.get("league", "Fate of the Vaal")
+        new_league = settings.get("league", DEFAULT_LEAGUE)
         price_cache.league = new_league
-
-    # Start/stop telemetry schedule if the setting changed
-    if "telemetry_enabled" in updates and telemetry_uploader:
-        if settings.get("telemetry_enabled", False):
-            telemetry_uploader.start_schedule()
-        else:
-            telemetry_uploader.stop_schedule()
-
-    # Propagate POESESSID to watchlist worker
-    if "poesessid" in updates and watchlist_worker:
-        watchlist_worker.set_session_id(settings.get("poesessid", ""))
-
-    # Notify watchlist worker if queries, interval, or online filter changed
-    if watchlist_worker and ("watchlist_queries" in updates or "watchlist_poll_interval" in updates or "watchlist_online_only" in updates):
-        queries = settings.get("watchlist_queries", [])
-        watchlist_worker.update_queries(
-            queries,
-            settings.get("watchlist_poll_interval", 300),
-            online_only=settings.get("watchlist_online_only", True),
-        )
-        # Force-refresh all enabled queries so results appear immediately
-        enabled = [q for q in queries if q.get("enabled", True) and q.get("id")]
-        for q in enabled:
-            watchlist_worker.force_refresh(q["id"])
-        # Log to dashboard console
-        log_entry = {
-            "time": time.strftime("%H:%M:%S"),
-            "message": f"Watchlist: {len(enabled)} queries queued for refresh",
-            "color": "#6b8f71",
-        }
-        log_buffer.append(log_entry)
-        await ws_manager.broadcast({"type": "log", **log_entry})
 
     return settings
 
@@ -920,14 +977,9 @@ async def get_leagues():
         return {"leagues": [], "error": f"HTTP {resp.status_code}"}
     except Exception as e:
         logger.warning(f"Failed to fetch leagues: {e}")
-        # Fallback
+        # Fallback (used only when the poe2scout league fetch fails)
         return {
-            "leagues": [
-                {"value": "Fate of the Vaal", "label": "Fate of the Vaal"},
-                {"value": "Standard", "label": "Standard"},
-                {"value": "Hardcore Fate of the Vaal", "label": "Hardcore Fate of the Vaal"},
-                {"value": "Hardcore", "label": "Hardcore"},
-            ],
+            "leagues": LEAGUE_OPTIONS,
             "error": str(e),
         }
 
@@ -959,185 +1011,6 @@ async def post_item_lookup(req: ItemLookupRequest):
             content={"error": "Could not parse item text"},
         )
     return result
-
-
-# ---------------------------------------------------------------------------
-# Watchlist endpoints
-# ---------------------------------------------------------------------------
-@app.get("/api/watchlist/results")
-async def get_watchlist_results():
-    """Return all cached watchlist results."""
-    if not watchlist_worker:
-        return {}
-    return watchlist_worker.get_results()
-
-
-@app.post("/api/watchlist/refresh/{query_id}")
-async def refresh_watchlist_query(query_id: str):
-    """Force-refresh a single watchlist query."""
-    if not watchlist_worker:
-        return {"error": "Watchlist not initialized"}
-    watchlist_worker.force_refresh(query_id)
-    return {"status": "queued", "query_id": query_id}
-
-
-# ---------------------------------------------------------------------------
-# Trade action endpoints (whisper, invite, hideout, trade, kick)
-# ---------------------------------------------------------------------------
-class TradeActionRequest(BaseModel):
-    player: str = ""
-    token: str = ""
-    whisper: str = ""
-
-
-@app.post("/api/trade/whisper")
-async def trade_whisper(req: TradeActionRequest):
-    """Send a trade whisper — via token API if available, else chat fallback."""
-    settings = load_settings()
-    poesessid = settings.get("poesessid", "")
-
-    if req.token and poesessid and trade_actions:
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, trade_actions.whisper_via_token, req.token
-        )
-        if result.get("status") == "sent":
-            return {**result, "method": "api"}
-        logger.warning(f"Whisper token API failed: {result.get('error')}, falling back to chat")
-
-    # The trade API whisper field is the full ready-to-paste message
-    # (e.g. "@CharName Hi, I would like to buy..."), so paste it directly.
-    if req.whisper:
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, game_commander.type_in_chat, req.whisper
-        )
-        return {**result, "method": "chat"}
-
-    if not req.player:
-        return {"error": "No whisper text or player name available"}
-
-    # Bare fallback — just open whisper prompt to player (no message)
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(
-        None, game_commander.type_in_chat, f"@{req.player} ", False
-    )
-    return {**result, "method": "chat"}
-
-
-@app.post("/api/trade/invite")
-async def trade_invite(req: TradeActionRequest):
-    """Send /invite <player> via chat."""
-    if not req.player:
-        return {"error": "Player name required"}
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, game_commander.invite, req.player)
-    return result
-
-
-@app.post("/api/trade/hideout")
-async def trade_hideout(req: TradeActionRequest):
-    """Visit a player's hideout — requires hideout_token + POESESSID.
-
-    POE2 has no /hideout <player> chat command (unlike POE1).
-    The only programmatic way is via the token API.
-    """
-    settings = load_settings()
-    poesessid = settings.get("poesessid", "")
-
-    if req.token and poesessid and trade_actions:
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, trade_actions.hideout_via_token, req.token
-        )
-        if result.get("status") == "sent":
-            return {**result, "method": "api"}
-        return {**result, "method": "api"}
-
-    return {"error": "Hideout requires POESESSID + hideout token (POE2 has no /hideout <player> command)"}
-
-
-@app.post("/api/trade/tradewith")
-async def trade_tradewith(req: TradeActionRequest):
-    """Send /tradewith <player> via chat."""
-    if not req.player:
-        return {"error": "Player name required"}
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, game_commander.trade_with, req.player)
-    return result
-
-
-@app.post("/api/trade/kick")
-async def trade_kick(req: TradeActionRequest):
-    """Send /kick <player> via chat."""
-    if not req.player:
-        return {"error": "Player name required"}
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, game_commander.kick, req.player)
-    return result
-
-
-# ---------------------------------------------------------------------------
-# Market data endpoint (Markets tab)
-# ---------------------------------------------------------------------------
-@app.get("/api/market-data")
-async def get_market_data():
-    """Return currency exchange data with sparklines for the Markets tab."""
-    if not price_cache:
-        return {"currencies": [], "rates": {}, "history": [], "last_refresh": "Never", "league": ""}
-    return price_cache.get_market_data()
-
-
-@app.get("/api/trade-data/stats")
-async def get_trade_stats():
-    """Return flattened stat definitions from cache for autocomplete."""
-    if not TRADE_STATS_CACHE_FILE.exists():
-        return []
-    try:
-        with open(TRADE_STATS_CACHE_FILE) as f:
-            data = json.load(f)
-        stats = []
-        for group in data.get("result", []):
-            group_label = group.get("label", "")
-            for entry in group.get("entries", []):
-                stats.append({
-                    "id": entry.get("id", ""),
-                    "text": entry.get("text", ""),
-                    "type": group_label,
-                })
-        return stats
-    except Exception as e:
-        logger.warning(f"Failed to load trade stats: {e}")
-        return []
-
-
-@app.get("/api/trade-data/items")
-async def get_trade_items():
-    """Return base types grouped by category from cache."""
-    if not TRADE_ITEMS_CACHE_FILE.exists():
-        return []
-    try:
-        with open(TRADE_ITEMS_CACHE_FILE) as f:
-            data = json.load(f)
-        categories = []
-        for group in data.get("result", []):
-            entries = []
-            for entry in group.get("entries", []):
-                item = {"type": entry.get("type", "")}
-                if entry.get("name"):
-                    item["name"] = entry["name"]
-                if entry.get("text"):
-                    item["text"] = entry["text"]
-                entries.append(item)
-            categories.append({
-                "label": group.get("label", ""),
-                "entries": entries,
-            })
-        return categories
-    except Exception as e:
-        logger.warning(f"Failed to load trade items: {e}")
-        return []
-
 
 
 # ---------------------------------------------------------------------------
@@ -1193,10 +1066,10 @@ async def character_lookup(req: CharacterLookupRequest):
         return JSONResponse(status_code=400, content={"error": "Account and character name required"})
     loop = asyncio.get_running_loop()
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found. Make sure the account and character names are correct, and the character is on the current league's ladder."})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Make sure the account and character names are correct. Non-ladder characters require OAuth login."})
 
     # Auto-save to recent characters
     _save_recent_character(
@@ -1205,8 +1078,138 @@ async def character_lookup(req: CharacterLookupRequest):
     )
 
     result = builds_client.serialize_character(char_data)
+    _enrich_equipment(char_data, result)
+    return result
 
-    # Enrich equipment mods with tier data if mod engine is available
+
+class SmartLookupRequest(BaseModel):
+    query: str
+
+
+def _parse_ninja_url(url: str):
+    """Extract account + character from a poe.ninja profile URL.
+
+    Formats:
+      .../profile/Account-1234/league/character/CharName
+      .../profile/Account-1234/character/CharName
+    """
+    import re
+    # With league segment
+    m = re.match(
+        r"https?://poe\.ninja/poe2/profile/([^/]+)/[^/]+/character/([^/?#]+)",
+        url.strip(),
+    )
+    if m:
+        return m.group(1), m.group(2)
+    # Without league segment
+    m = re.match(
+        r"https?://poe\.ninja/poe2/profile/([^/]+)/character/([^/?#]+)",
+        url.strip(),
+    )
+    if m:
+        return m.group(1), m.group(2)
+    return None, None
+
+
+@app.post("/api/character/smart-lookup")
+async def smart_character_lookup(req: SmartLookupRequest):
+    """Flexible character lookup: accepts URLs, account/character, or partial names.
+
+    Input formats:
+      - poe.ninja URL → extract account + character
+      - "account / character" or "account character" → direct lookup
+      - partial text → fuzzy-match against saved characters, then try as character name
+    """
+    q = req.query.strip()
+    if not q:
+        return JSONResponse(status_code=400, content={"error": "Enter a character name, account/character, or poe.ninja URL"})
+
+    loop = asyncio.get_running_loop()
+
+    # 1. poe.ninja URL
+    if "poe.ninja" in q:
+        acct, char = _parse_ninja_url(q)
+        if acct and char:
+            char_data = await loop.run_in_executor(
+                None, _lookup_character_with_fallback, acct, char
+            )
+            if char_data:
+                _save_recent_character(acct, char_data.name,
+                                       char_data.ascendancy or char_data.char_class, char_data.level)
+                result = builds_client.serialize_character(char_data)
+                _enrich_equipment(char_data, result)
+                return result
+            return JSONResponse(status_code=404, content={"error": f"Character not found: {char} (account: {acct})"})
+        return JSONResponse(status_code=400, content={"error": "Could not parse poe.ninja URL. Expected format: poe.ninja/poe2/profile/Account/league/character/Name"})
+
+    # 2. "account / character" or "account, character"
+    for sep in ["/", ","]:
+        if sep in q:
+            parts = [p.strip() for p in q.split(sep, 1)]
+            if len(parts) == 2 and parts[0] and parts[1]:
+                char_data = await loop.run_in_executor(
+                    None, _lookup_character_with_fallback, parts[0], parts[1]
+                )
+                if char_data:
+                    _save_recent_character(parts[0], char_data.name,
+                                           char_data.ascendancy or char_data.char_class, char_data.level)
+                    result = builds_client.serialize_character(char_data)
+                    _enrich_equipment(char_data, result)
+                    return result
+                return JSONResponse(status_code=404, content={"error": f"Character not found: {parts[1]} (account: {parts[0]})"})
+
+    # 3. Single term — fuzzy match saved characters, then try as character name across saved accounts
+    settings = load_settings()
+    saved = settings.get("saved_characters", [])
+    q_lower = q.lower()
+
+    # Check for exact or fuzzy character name match in saved list
+    for acct_group in saved:
+        acct_name = acct_group.get("accountName", "")
+        for ch in acct_group.get("characters", []):
+            if ch["name"].lower() == q_lower:
+                char_data = await loop.run_in_executor(
+                    None, _lookup_character_with_fallback, acct_name, ch["name"]
+                )
+                if char_data:
+                    _save_recent_character(acct_name, char_data.name,
+                                           char_data.ascendancy or char_data.char_class, char_data.level)
+                    result = builds_client.serialize_character(char_data)
+                    _enrich_equipment(char_data, result)
+                    return result
+
+    # Check if query matches an account name — return suggestions
+    acct_matches = []
+    for acct_group in saved:
+        acct_name = acct_group.get("accountName", "")
+        if q_lower in acct_name.lower():
+            for ch in acct_group.get("characters", []):
+                acct_matches.append({"account": acct_name, "name": ch["name"],
+                                     "class": ch.get("class", ""), "level": ch.get("level", 0)})
+
+    # Check if query partially matches any character name
+    char_matches = []
+    for acct_group in saved:
+        acct_name = acct_group.get("accountName", "")
+        for ch in acct_group.get("characters", []):
+            if q_lower in ch["name"].lower() and ch["name"].lower() != q_lower:
+                char_matches.append({"account": acct_name, "name": ch["name"],
+                                     "class": ch.get("class", ""), "level": ch.get("level", 0)})
+
+    suggestions = acct_matches + char_matches
+    if suggestions:
+        return JSONResponse(status_code=300, content={
+            "error": "Multiple matches found. Select one:",
+            "suggestions": suggestions,
+        })
+
+    return JSONResponse(status_code=404, content={
+        "error": f"No character found for \"{q}\". Try: account/character, a poe.ninja URL, or a saved character name."
+    })
+
+
+def _enrich_equipment(char_data, result: dict):
+    """Add mod tier data to equipment in result dict."""
     if item_lookup and item_lookup.ready:
         try:
             mp = item_lookup._mod_parser
@@ -1219,8 +1222,6 @@ async def character_lookup(req: CharacterLookupRequest):
                     result["equipment"][i]["modTiers"] = tier_data
         except Exception as e:
             logger.debug(f"Mod tier enrichment failed: {e}")
-
-    return result
 
 
 @app.get("/api/character/saved")
@@ -1275,10 +1276,11 @@ def _save_recent_character(account: str, name: str, char_class: str, level: int)
         "lastLookup": int(time.time()),
     }
 
-    # Find or create account
+    # Find or create account (normalize # ↔ - for poe.ninja compatibility)
     acct = None
+    normalized = account.lower().replace("#", "-")
     for a in saved:
-        if a["accountName"].lower() == account.lower():
+        if a["accountName"].lower().replace("#", "-") == normalized:
             acct = a
             break
 
@@ -1322,15 +1324,54 @@ async def character_popular_items(req: PopularItemsRequest):
 
     # Look up character first (cached)
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     # Fetch popular items for the slot
     result = await loop.run_in_executor(
         None, builds_client.get_popular_items_for_slot, char_data, req.slot.strip()
     )
+
+    # Enrich rare items with popular mod breakdown
+    slot = req.slot.strip()
+    archetype = classify_build(char_data)
+    char_class = char_data.ascendancy or char_data.char_class
+    skill = archetype.main_skill
+
+    try:
+        rare_mods = await loop.run_in_executor(
+            None, builds_client.fetch_popular_rare_mods, char_class, skill, 5
+        )
+        slot_mods = rare_mods.get(slot, [])
+
+        if slot_mods:
+            import re
+            player_item = next((eq for eq in char_data.equipment if eq.slot == slot), None)
+            player_mod_norms = set()
+            if player_item:
+                from why_engine import _strip_ninja_brackets
+                for mod in (player_item.explicit_mods or []) + (player_item.implicit_mods or []):
+                    clean = _strip_ninja_brackets(mod)
+                    player_mod_norms.add(re.sub(r"[\d,.]+", "#", clean).strip())
+
+            # Result is a dict with "items" key
+            items_list = result.get("items", []) if isinstance(result, dict) else result
+            for item in items_list:
+                if isinstance(item, dict) and item.get("rarity") != "unique":
+                    item["topMods"] = [
+                        {
+                            "name": mod_norm.replace("#", "X"),
+                            "pct": round(pct),
+                            "hasIt": mod_norm in player_mod_norms,
+                        }
+                        for mod_norm, pct in slot_mods[:6]
+                        if pct >= 20
+                    ]
+    except Exception as e:
+        logger.debug(f"Rare mod enrichment failed: {e}")
+
     return result
 
 
@@ -1348,13 +1389,21 @@ async def character_build_insights(req: BuildInsightsRequest):
 
     # Look up character (cached)
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     # Classify build
     archetype = classify_build(char_data)
+
+    # Persist archetype for overlay consumption (build-aware scoring)
+    try:
+        settings = load_settings()
+        settings["build_archetype"] = archetype.to_dict()
+        _save_settings(settings)
+    except Exception as e:
+        logger.debug(f"Failed to persist build archetype: {e}")
 
     # Fetch popular keystones
     char_class = char_data.ascendancy or char_data.char_class
@@ -1439,6 +1488,29 @@ async def character_build_insights(req: BuildInsightsRequest):
                 # Dead mods on this slot (from archetype analysis)
                 slot_dead = [dm for dm in (archetype.dead_mods or []) if dm.get("slot") == eq.slot]
 
+                # Gap analysis: what high-value mods are missing for this build?
+                gap_analysis = []
+                try:
+                    present_groups = [t["group"] for t in all_tiers if t.get("group")]
+                    # Resolve item class from type_line
+                    gap_item_class = eq.type_line.split(" of ")[0].split(" Of ")[0].strip()
+                    # Use the base item class category (e.g. "Gloves", "Amulet")
+                    from item_parser import BASE_TYPE_TO_CLASS
+                    gap_class = BASE_TYPE_TO_CLASS.get(gap_item_class, eq.slot)
+                    # Map common slot names to item classes
+                    _SLOT_TO_CLASS = {
+                        "Helm": "Helmets", "BodyArmour": "Body Armours",
+                        "Gloves": "Gloves", "Boots": "Boots",
+                        "Amulet": "Amulets", "Ring": "Rings", "Ring2": "Rings",
+                        "Belt": "Belts", "Weapon": "Weapons", "Weapon2": "Weapons",
+                        "Offhand": "Shields",
+                    }
+                    gap_class = _SLOT_TO_CLASS.get(eq.slot, gap_class)
+                    gap_analysis = mdb.compute_gap_analysis(
+                        gap_class, present_groups, archetype=archetype)
+                except Exception as e:
+                    logger.debug(f"Gap analysis failed for {eq.slot}: {e}")
+
                 from builds_client import SLOT_DISPLAY
                 slot_summary.append({
                     "slot": eq.slot,
@@ -1451,9 +1523,29 @@ async def character_build_insights(req: BuildInsightsRequest):
                     "weakest": weakest,
                     "weakMods": weak_mods,
                     "deadMods": [{"mod": dm["mod"], "reason": dm["reason"]} for dm in slot_dead[:2]],
+                    "gapAnalysis": gap_analysis[:5],
                 })
         except Exception as e:
             logger.debug(f"Slot summary failed: {e}")
+
+    # Anti-synergy detection
+    anti_synergies = []
+    try:
+        from builds_client import detect_anti_synergies
+        anti_synergies = detect_anti_synergies(
+            archetype, set(char_data.keystones), char_data.equipment)
+        # Promote critically missing keystones (>70% adoption) as anti-synergy
+        for kg in keystone_gaps:
+            if kg["percentage"] >= 70 and not kg["hasIt"]:
+                anti_synergies.append({
+                    "id": f"missing_keystone_{kg['name'].lower().replace(' ', '_')}",
+                    "name": f"Missing popular keystone: {kg['name']}",
+                    "severity": "info",
+                    "message": (f"{kg['percentage']}% of top {archetype.main_skill} "
+                                f"builds use {kg['name']}"),
+                })
+    except Exception as e:
+        logger.debug(f"Anti-synergy detection failed: {e}")
 
     return {
         "archetype": {
@@ -1465,13 +1557,258 @@ async def character_build_insights(req: BuildInsightsRequest):
             "isCoc": archetype.is_coc,
             "elements": archetype.elements,
             "deadMods": archetype.dead_mods,
+            "level": archetype.level,
         },
         "keystoneGaps": {
             "user": list(char_data.keystones),
             "popular": keystone_gaps,
         },
         "slotSummary": slot_summary,
+        "antiSynergies": anti_synergies,
     }
+
+
+class WhyInsightsRequest(BaseModel):
+    account: str
+    character: str
+
+
+@app.post("/api/character/why-insights")
+async def character_why_insights(req: WhyInsightsRequest):
+    """Generate plain-language explanations for a character's build choices."""
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character required"})
+    loop = asyncio.get_running_loop()
+
+    char_data = await loop.run_in_executor(
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
+    )
+    if not char_data:
+        return JSONResponse(status_code=404, content={"error": "Character not found"})
+
+    archetype = classify_build(char_data)
+
+    try:
+        explanations = await loop.run_in_executor(
+            None, why_engine_instance.explain_character, char_data, archetype
+        )
+        return explanations.to_dict()
+    except Exception as e:
+        logger.error(f"Why-engine failed: {e}")
+        return {"keystones": [], "gear": {}, "stats": [], "actions": [], "meta": []}
+
+
+class TreeAnalysisRequest(BaseModel):
+    account: str
+    character: str
+    target_account: str = ""
+    target_character: str = ""
+    target_query: str = ""  # poe.ninja URL alternative
+
+
+@app.post("/api/character/tree-analysis")
+async def character_tree_analysis(req: TreeAnalysisRequest):
+    """Analyze passive tree and recommend swaps vs a target build."""
+    try:
+        if not req.account.strip() or not req.character.strip():
+            return {"swapRecommendations": [], "error": "Account and character required"}
+        loop = asyncio.get_running_loop()
+
+        player = await loop.run_in_executor(
+            None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
+        )
+        if not player:
+            return {"swapRecommendations": [], "error": "Player not found"}
+
+        from pob_decoder import decode_pob_code
+        from tree_analyzer import TreeAnalyzer
+
+        player_pob = decode_pob_code(player.pob_code) if player.pob_code else None
+        if not player_pob or not player_pob.passive_nodes:
+            return {"swapRecommendations": [], "totalAllocated": 0}
+
+        # Get target build (optional) — all wrapped in try/except
+        top_nodes = None
+        target_name = ""
+        try:
+            if req.target_query and "poe.ninja" in req.target_query:
+                acct, char_name = _parse_ninja_url(req.target_query)
+                if acct and char_name:
+                    target = await loop.run_in_executor(
+                        None, _lookup_character_with_fallback, acct, char_name
+                    )
+                    if target and target.pob_code:
+                        top_pob = decode_pob_code(target.pob_code)
+                        top_nodes = top_pob.passive_nodes if top_pob else None
+                        target_name = target.name or ""
+            elif req.target_account and req.target_character:
+                target = await loop.run_in_executor(
+                    None, _lookup_character_with_fallback, req.target_account.strip(), req.target_character.strip()
+                )
+                if target and target.pob_code:
+                    top_pob = decode_pob_code(target.pob_code)
+                    top_nodes = top_pob.passive_nodes if top_pob else None
+                    target_name = target.name or ""
+
+            # If no target specified, use the top featured character for this class
+            if not top_nodes:
+                archetype = classify_build(player)
+                char_class = player.ascendancy or player.char_class
+                profile = await loop.run_in_executor(
+                    None, builds_client.fetch_archetype_profile, char_class, archetype.main_skill
+                )
+                if profile and profile.get("featuredCharacters"):
+                    top_ch = profile["featuredCharacters"][0]
+                    top_char = await loop.run_in_executor(
+                        None, _lookup_character_with_fallback, top_ch.get("account", ""), top_ch.get("name", "")
+                    )
+                    if top_char and top_char.pob_code:
+                        top_pob = decode_pob_code(top_char.pob_code)
+                        top_nodes = top_pob.passive_nodes if top_pob else None
+                        target_name = top_char.name or ""
+        except Exception as e:
+            logger.debug(f"Target lookup failed (non-fatal): {e}")
+
+        analyzer = TreeAnalyzer()
+        analysis = await loop.run_in_executor(
+            None, analyzer.analyze, player_pob.passive_nodes, top_nodes
+        )
+        result = analysis.to_dict()
+        result["targetName"] = target_name
+
+        # Add tree visualization data
+        try:
+            tree_visual = await loop.run_in_executor(
+                None, analyzer.get_tree_visual,
+                player_pob.passive_nodes, top_nodes, analysis.swap_recommendations
+            )
+            result["treeVisual"] = tree_visual
+        except Exception as e:
+            logger.debug(f"Tree visual generation failed (non-fatal): {e}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Tree analysis failed: {e}")
+        return {"swapRecommendations": [], "error": str(e)}
+
+
+class BuildCompareRequest2(BaseModel):
+    player_account: str
+    player_character: str
+    target_query: str  # poe.ninja URL or account/character
+
+
+@app.post("/api/character/compare")
+async def character_compare(req: BuildCompareRequest2):
+    """Compare player build against a target build (guide/reference)."""
+    if not req.player_account.strip() or not req.player_character.strip() or not req.target_query.strip():
+        return JSONResponse(status_code=400, content={"error": "Player and target build required"})
+    loop = asyncio.get_running_loop()
+
+    # Look up player
+    player = await loop.run_in_executor(
+        None, _lookup_character_with_fallback, req.player_account.strip(), req.player_character.strip()
+    )
+    if not player:
+        return JSONResponse(status_code=404, content={"error": "Player character not found"})
+
+    # Parse target — could be a poe.ninja URL or account/character
+    target_query = req.target_query.strip()
+    target = None
+
+    if "poe.ninja" in target_query:
+        acct, char_name = _parse_ninja_url(target_query)
+        if acct and char_name:
+            target = await loop.run_in_executor(
+                None, _lookup_character_with_fallback, acct, char_name
+            )
+    elif "/" in target_query:
+        parts = [p.strip() for p in target_query.split("/", 1)]
+        if len(parts) == 2:
+            target = await loop.run_in_executor(
+                None, _lookup_character_with_fallback, parts[0], parts[1]
+            )
+
+    if not target:
+        return JSONResponse(status_code=404, content={"error": f"Target build not found: {target_query}"})
+
+    try:
+        result = await loop.run_in_executor(
+            None, why_engine_instance.compare_builds, player, target
+        )
+
+        # Enrich shopping list with prices from price_cache
+        if price_cache and result.get("shoppingList"):
+            for item in result["shoppingList"]:
+                target_name = item.get("targetItem", "")
+                target_rarity = item.get("targetRarity", "")
+                if target_rarity in ("Unique", "unique") and target_name:
+                    try:
+                        price_data = price_cache.lookup(target_name, "", 0)
+                        if price_data:
+                            item["price"] = price_data.get("display", "")
+                            item["priceTier"] = price_data.get("tier", "")
+                            item["priceValue"] = price_data.get("divine_value", 0) or price_data.get("chaos_value", 0)
+                    except Exception:
+                        pass
+
+        # Enrich gear diffs with prices too
+        if price_cache and result.get("diffs"):
+            for diff in result["diffs"]:
+                if diff.get("category") != "gear":
+                    continue
+                target_name = diff.get("target", "")
+                target_rarity = diff.get("targetRarity", "")
+                if target_rarity in ("Unique", "unique") and target_name:
+                    try:
+                        price_data = price_cache.lookup(target_name, "", 0)
+                        if price_data:
+                            diff["price"] = price_data.get("display", "")
+                            diff["priceTier"] = price_data.get("tier", "")
+                    except Exception:
+                        pass
+
+        # Enrich shopping list with popular alternatives per slot
+        # (what top players actually use, with prices)
+        if result.get("shoppingList"):
+            try:
+                for item in result["shoppingList"]:
+                    slot = item.get("slot", "")
+                    if not slot:
+                        continue
+                    popular_data = await loop.run_in_executor(
+                        None, builds_client.get_popular_items_for_slot, player, slot
+                    )
+                    alternatives = []
+                    current_name = item.get("currentItem", "").lower()
+                    for pi in (popular_data.get("items") or [])[:8]:
+                        pi_name = pi.get("name", "")
+                        if pi_name.lower() == current_name:
+                            continue  # skip what they already have
+                        alt = {
+                            "name": pi_name,
+                            "usage": pi.get("percentage", 0),
+                            "rarity": pi.get("rarity", ""),
+                        }
+                        # Add price if available
+                        if pi.get("priceText"):
+                            alt["price"] = pi["priceText"]
+                        elif price_cache and pi.get("rarity") == "unique":
+                            try:
+                                pd = price_cache.lookup(pi_name, "", 0)
+                                if pd:
+                                    alt["price"] = pd.get("display", "")
+                            except Exception:
+                                pass
+                        alternatives.append(alt)
+                    item["alternatives"] = alternatives[:5]
+            except Exception as e:
+                logger.debug(f"Popular items enrichment failed (non-fatal): {e}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Build comparison failed: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 class BuildEfficiencyRequest(BaseModel):
@@ -1488,10 +1825,10 @@ async def character_build_efficiency(req: BuildEfficiencyRequest):
 
     # Look up character (cached)
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     # Classify build
     archetype = classify_build(char_data)
@@ -1626,10 +1963,10 @@ async def character_improvement_package(req: ImprovementPackageRequest):
     loop = asyncio.get_running_loop()
 
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     archetype = classify_build(char_data)
     char_class = char_data.ascendancy or char_data.char_class
@@ -1704,10 +2041,10 @@ async def character_build_compare(req: BuildCompareRequest):
     loop = asyncio.get_running_loop()
 
     char_data = await loop.run_in_executor(
-        None, builds_client.lookup_character, req.account.strip(), req.character.strip()
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
     )
     if not char_data:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
 
     archetype = classify_build(char_data)
     char_class = char_data.ascendancy or char_data.char_class
@@ -1741,6 +2078,110 @@ async def character_build_compare(req: BuildCompareRequest):
         char_data, popular_keystones, popular_anoints, popular_by_slot, []
     )
     return comparison
+
+
+# ---------------------------------------------------------------------------
+# Guide Companion endpoints
+# ---------------------------------------------------------------------------
+class GuideImportRequest(BaseModel):
+    url: str
+
+
+class GuideCompareRequest(BaseModel):
+    character: Optional[dict] = None
+    account: Optional[str] = None
+    character_name: Optional[str] = None
+    level: Optional[int] = None
+
+
+class GuideStagePricesRequest(BaseModel):
+    stage: str
+
+
+@app.post("/api/guide/import")
+async def guide_import(req: GuideImportRequest):
+    """Fetch a build guide URL, parse it, save, and return summary."""
+    url = req.url.strip()
+    if not url:
+        return JSONResponse(status_code=400, content={"error": "URL required"})
+    loop = asyncio.get_running_loop()
+    try:
+        guide = await loop.run_in_executor(None, guide_scraper.import_guide, url)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={"error": str(e)})
+    except Exception as e:
+        logger.error("Guide import failed: %s", e)
+        return JSONResponse(status_code=500, content={"error": f"Failed to import guide: {e}"})
+    return {
+        "id": guide.id,
+        "title": guide.title,
+        "source": guide.source,
+        "char_class": guide.char_class,
+        "ascendancy": guide.ascendancy,
+        "main_skill": guide.main_skill,
+        "stages": len(guide.stages),
+        "stage_list": [s.stage for s in guide.stages],
+    }
+
+
+@app.get("/api/guide/list")
+async def guide_list():
+    """Return all saved guides."""
+    return guide_scraper.list_guides()
+
+
+@app.get("/api/guide/{guide_id}")
+async def guide_get(guide_id: str):
+    """Return full parsed guide data."""
+    guide = guide_scraper.load_guide(guide_id)
+    if not guide:
+        return JSONResponse(status_code=404, content={"error": "Guide not found"})
+    return guide_scraper._guide_to_dict(guide)
+
+
+@app.delete("/api/guide/{guide_id}")
+async def guide_delete(guide_id: str):
+    """Delete a saved guide."""
+    ok = guide_scraper.delete_guide(guide_id)
+    if not ok:
+        return JSONResponse(status_code=404, content={"error": "Guide not found"})
+    return {"ok": True}
+
+
+@app.post("/api/guide/{guide_id}/compare")
+async def guide_compare(guide_id: str, req: GuideCompareRequest):
+    """Compare a character against a guide."""
+    guide = guide_scraper.load_guide(guide_id)
+    if not guide:
+        return JSONResponse(status_code=404, content={"error": "Guide not found"})
+
+    char_dict = req.character
+    # If no inline character, look up via account/name
+    if not char_dict and req.account and req.character_name:
+        loop = asyncio.get_running_loop()
+        char_data = await loop.run_in_executor(
+            None, _lookup_character_with_fallback, req.account.strip(), req.character_name.strip()
+        )
+        if not char_data:
+            return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
+        char_dict = builds_client.serialize_character(char_data)
+
+    if not char_dict:
+        return JSONResponse(status_code=400, content={"error": "Provide character data or account+character_name"})
+
+    if req.level:
+        char_dict["level"] = req.level
+
+    return guide_scraper.compare_character_to_guide(char_dict, guide, price_cache)
+
+
+@app.post("/api/guide/{guide_id}/stage-prices")
+async def guide_stage_prices(guide_id: str, req: GuideStagePricesRequest):
+    """Get price estimates for all gear in a guide stage."""
+    guide = guide_scraper.load_guide(guide_id)
+    if not guide:
+        return JSONResponse(status_code=404, content={"error": "Guide not found"})
+    return guide_scraper.get_stage_prices(guide, req.stage, price_cache)
 
 
 # ---------------------------------------------------------------------------
@@ -1781,6 +2222,165 @@ async def oauth_disconnect():
 
 
 # ---------------------------------------------------------------------------
+# OAuth character endpoints (GGG Character API)
+# ---------------------------------------------------------------------------
+@app.get("/api/oauth/characters")
+async def oauth_characters():
+    """List all characters for the OAuth-connected account."""
+    if not oauth_manager or not oauth_manager.connected:
+        return JSONResponse(status_code=401, content={"error": "Not connected"})
+    if not character_client:
+        return JSONResponse(status_code=503, content={"error": "Character client not initialized"})
+    loop = asyncio.get_running_loop()
+    chars = await loop.run_in_executor(None, character_client.list_characters)
+    return {
+        "characters": chars,
+        "account_name": oauth_manager.account_name,
+    }
+
+
+class OAuthCharLookupRequest(BaseModel):
+    character: str
+
+
+@app.post("/api/oauth/character/lookup")
+async def oauth_character_lookup(req: OAuthCharLookupRequest):
+    """Fetch a specific character via GGG API and return enriched data."""
+    if not oauth_manager or not oauth_manager.connected:
+        return JSONResponse(status_code=401, content={"error": "Not connected"})
+    if not character_client:
+        return JSONResponse(status_code=503, content={"error": "Character client not initialized"})
+    if not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Character name required"})
+
+    loop = asyncio.get_running_loop()
+    char_data = await loop.run_in_executor(
+        None, character_client.get_character, req.character.strip()
+    )
+    if not char_data:
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
+
+    result = builds_client.serialize_character(char_data)
+    result["source"] = "ggg"
+
+    # Detect league from character list
+    chars = await loop.run_in_executor(None, character_client.list_characters)
+    for ch in chars:
+        if ch.get("name") == char_data.name:
+            result["detected_league"] = ch.get("league", "")
+            break
+
+    # Enrich equipment mods with tier data
+    if item_lookup and item_lookup.ready:
+        try:
+            mp = item_lookup._mod_parser
+            mdb = item_lookup._mod_database
+            for i, eq in enumerate(char_data.equipment):
+                if eq.slot in _SKIP_SLOTS:
+                    continue
+                tier_data = enrich_item_mods(eq, mp, mdb)
+                if tier_data and i < len(result.get("equipment", [])):
+                    result["equipment"][i]["modTiers"] = tier_data
+        except Exception as e:
+            logger.debug(f"Mod tier enrichment failed: {e}")
+
+    return result
+
+
+class PriceGearRequest(BaseModel):
+    character: str
+
+
+@app.post("/api/oauth/character/price-gear")
+async def oauth_price_gear(req: PriceGearRequest):
+    """Price all equipped items on a character via GGG API."""
+    if not oauth_manager or not oauth_manager.connected:
+        return JSONResponse(status_code=401, content={"error": "Not connected"})
+    if not character_client:
+        return JSONResponse(status_code=503, content={"error": "Character client not initialized"})
+    if not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Character name required"})
+
+    loop = asyncio.get_running_loop()
+    raw = await loop.run_in_executor(
+        None, character_client.get_character_raw, req.character.strip()
+    )
+    if not raw:
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
+
+    # Extract equipment items from raw GGG response
+    char_data = raw.get("character", raw) if isinstance(raw, dict) else raw
+    equipment_items = char_data.get("equipment", []) + char_data.get("items", [])
+
+    slots = []
+    total_divine = 0.0
+    d2c = 0.0
+    if price_cache:
+        d2c = getattr(price_cache, "divine_to_chaos", 0) or 0
+
+    for api_item in equipment_items:
+        slot = api_item.get("inventoryId", "")
+        if not slot:
+            continue
+
+        frame_type = api_item.get("frameType", 0)
+        rarity_map = {0: "normal", 1: "magic", 2: "rare", 3: "unique"}
+        rarity = rarity_map.get(frame_type, "normal")
+        item_name = api_item.get("name", "") or api_item.get("typeLine", "")
+        icon = api_item.get("icon", "")
+        slot_display = SLOT_DISPLAY.get(slot, slot)
+
+        estimate = 0.0
+        grade = ""
+
+        if rarity == "unique" and price_cache:
+            # Lookup unique price from cache
+            try:
+                lookup_name = item_name
+                price_data = price_cache.lookup(lookup_name)
+                if price_data and price_data.get("divine"):
+                    estimate = price_data["divine"]
+                elif price_data and price_data.get("chaos") and d2c > 0:
+                    estimate = price_data["chaos"] / d2c
+            except Exception:
+                pass
+        elif rarity == "rare":
+            # Score via item parser + calibration
+            try:
+                from stash_client import StashClient
+                parsed = StashClient.api_item_to_parsed(api_item)
+                if parsed and item_lookup and item_lookup.ready:
+                    score_result = item_lookup.score_item(parsed)
+                    if score_result:
+                        grade = score_result.get("grade", "")
+                        est_divine = score_result.get("estimate_divine", 0)
+                        if est_divine:
+                            estimate = est_divine
+            except Exception:
+                pass
+
+        total_divine += estimate
+
+        slots.append({
+            "slot": slot_display,
+            "name": item_name,
+            "rarity": rarity,
+            "estimate_divine": round(estimate, 2),
+            "grade": grade,
+            "icon": icon,
+        })
+
+    total_chaos = round(total_divine * d2c, 0) if d2c > 0 else 0
+
+    return {
+        "character": req.character.strip(),
+        "slots": slots,
+        "total_divine": round(total_divine, 1),
+        "total_chaos": int(total_chaos),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Stash viewer endpoints
 # ---------------------------------------------------------------------------
 @app.get("/api/stash/status")
@@ -1807,7 +2407,7 @@ async def refresh_stash():
         return {"status": "already_refreshing"}
 
     settings = load_settings()
-    league = settings.get("league", "Fate of the Vaal")
+    league = settings.get("league", DEFAULT_LEAGUE)
     loop = asyncio.get_running_loop()
 
     stash_data["refreshing"] = True
@@ -1953,20 +2553,6 @@ async def get_wealth_history():
 
 
 # ---------------------------------------------------------------------------
-# Market Signals endpoint (coming soon — Discord integration)
-# ---------------------------------------------------------------------------
-@app.get("/api/market-signals")
-async def get_market_signals():
-    """Return market signals from trusted Discord analysts.
-
-    Currently returns an empty feed. When the Discord bot is connected,
-    this will read from a local cache of messages from #market-signals.
-    Future WS event: {"type": "market_signal", "author": "...", "avatar": "...", "message": "...", "ts": ...}
-    """
-    return {"signals": [], "status": "coming_soon"}
-
-
-# ---------------------------------------------------------------------------
 # Bug report endpoint
 # ---------------------------------------------------------------------------
 class BugReportRequest(BaseModel):
@@ -2093,35 +2679,6 @@ async def submit_bug_report(req: BugReportRequest):
 
 
 # ---------------------------------------------------------------------------
-# Telemetry endpoints (opt-in anonymous calibration data)
-# ---------------------------------------------------------------------------
-@app.post("/api/telemetry/upload")
-async def telemetry_upload():
-    """Manual trigger: upload pending calibration samples now."""
-    if not telemetry_uploader:
-        return {"error": "Telemetry not initialized"}
-    settings = load_settings()
-    if not settings.get("telemetry_enabled", False):
-        return {"error": "Telemetry is disabled"}
-    loop = asyncio.get_running_loop()
-    success, reason = await loop.run_in_executor(None, telemetry_uploader.upload_now)
-    if success:
-        return {"status": "uploaded", "message": reason}
-    return {"error": reason}
-
-
-@app.get("/api/telemetry/status")
-async def telemetry_status():
-    """Return telemetry status for dashboard display."""
-    if not telemetry_uploader:
-        return {"last_upload": None, "pending_samples": 0, "enabled": False}
-    status = telemetry_uploader.get_status()
-    settings = load_settings()
-    status["enabled"] = settings.get("telemetry_enabled", False)
-    return status
-
-
-# ---------------------------------------------------------------------------
 # Feedback endpoint (sends to Discord webhook)
 # ---------------------------------------------------------------------------
 class FeedbackRequest(BaseModel):
@@ -2206,7 +2763,7 @@ _CHAOS_THRESHOLDS = {
 async def get_filter_items():
     """Return items grouped by economy section and tier based on current prices."""
     settings = load_settings()
-    league = settings.get("league", "Fate of the Vaal")
+    league = settings.get("league", DEFAULT_LEAGUE)
     cache_file = SETTINGS_DIR / "cache" / f"prices_{league.lower().replace(' ', '_')}.json"
 
     if not cache_file.exists():
@@ -2271,7 +2828,7 @@ async def get_filter_items():
 async def update_filter():
     """Trigger a loot filter update by spawning a subprocess."""
     settings = load_settings()
-    league = settings.get("league", "Fate of the Vaal")
+    league = settings.get("league", DEFAULT_LEAGUE)
 
     # Pass filter preferences via environment variable so the subprocess
     # can read them and forward to FilterUpdater.update_now()
@@ -2511,24 +3068,225 @@ async def serve_image(filename: str):
     return FileResponse(img_path, media_type="image/png")
 
 
+@app.get("/vendor/{filepath:path}")
+async def serve_vendor(filepath: str):
+    """Serve bundled vendor files (JS, CSS, fonts)."""
+    from fastapi.responses import FileResponse
+    vendor_path = get_resource(f"resources/vendor/{filepath}")
+    if not vendor_path.exists():
+        return HTMLResponse("Not found", status_code=404)
+    media_types = {
+        ".js": "application/javascript",
+        ".css": "text/css",
+        ".ttf": "font/ttf",
+        ".woff2": "font/woff2",
+        ".woff": "font/woff",
+    }
+    ext = "." + filepath.rsplit(".", 1)[-1] if "." in filepath else ""
+    mt = media_types.get(ext, "application/octet-stream")
+    return FileResponse(vendor_path, media_type=mt)
+
+
+# ---------------------------------------------------------------------------
+# Companion mode endpoints (mobile app pairing)
+# ---------------------------------------------------------------------------
+@app.post("/api/companion/enable")
+async def companion_enable():
+    """Enable companion mode — generate PIN and return connection info."""
+    settings = load_settings()
+    pin = generate_pin()
+    settings["companion_enabled"] = True
+    settings["companion_pin"] = pin
+    save_settings(settings)
+    host = get_lan_ip()
+    await ws_manager.broadcast({"type": "settings", "settings": _redact_settings(settings)})
+    await ws_manager.broadcast({
+        "type": "companion_status",
+        "enabled": True,
+        "host": host,
+        "port": PORT,
+        "pin": pin,
+    })
+    return {"host": host, "port": PORT, "pin": pin}
+
+
+@app.post("/api/companion/disable")
+async def companion_disable():
+    """Disable companion mode — clear PIN."""
+    settings = load_settings()
+    settings["companion_enabled"] = False
+    settings["companion_pin"] = ""
+    save_settings(settings)
+    await ws_manager.broadcast({"type": "settings", "settings": _redact_settings(settings)})
+    await ws_manager.broadcast({"type": "companion_status", "enabled": False})
+    return {"status": "disabled"}
+
+
+@app.get("/api/companion/qr")
+async def companion_qr():
+    """Return QR code PNG for mobile pairing."""
+    settings = load_settings()
+    if not settings.get("companion_enabled") or not settings.get("companion_pin"):
+        return JSONResponse({"error": "Companion mode not enabled"}, status_code=400)
+    try:
+        import qrcode
+    except ImportError:
+        return JSONResponse({"error": "qrcode library not installed"}, status_code=500)
+    host = get_lan_ip()
+    pin = settings["companion_pin"]
+    payload = json.dumps({"host": host, "port": PORT, "pin": pin})
+    img = qrcode.make(payload)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buf, media_type="image/png")
+
+
+@app.post("/api/companion/verify")
+async def companion_verify(req: Request):
+    """Verify a companion PIN — called by mobile app before connecting."""
+    settings = load_settings()
+    if not settings.get("companion_enabled"):
+        return JSONResponse({"verified": False, "error": "Companion mode not enabled"}, status_code=403)
+    pin = req.headers.get("X-LAMA-PIN", "")
+    expected = settings.get("companion_pin", "")
+    if not expected or pin != expected:
+        return JSONResponse({"verified": False, "error": "Invalid PIN"}, status_code=401)
+    from config import APP_VERSION
+    return {"verified": True, "version": APP_VERSION}
+
+
+@app.get("/api/companion/info")
+async def companion_info():
+    """Return companion mode status (no PIN unless enabled)."""
+    settings = load_settings()
+    enabled = settings.get("companion_enabled", False)
+    result = {"enabled": enabled}
+    if enabled:
+        result["host"] = get_lan_ip()
+        result["port"] = PORT
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Cloud Alerts endpoints (push notifications via relay)
+# ---------------------------------------------------------------------------
+@app.post("/api/cloud/enable")
+async def cloud_enable():
+    """Enable cloud alerts — generate device_id + secret, save to settings."""
+    import uuid
+    import secrets as secrets_mod
+    settings = load_settings()
+    device_id = str(uuid.uuid4())
+    secret = secrets_mod.token_hex(16)  # 32-char hex
+    settings["cloud_enabled"] = True
+    settings["cloud_device_id"] = device_id
+    settings["cloud_secret"] = secret
+    save_settings(settings)
+    cloud_notify.configure(
+        device_id=device_id, secret=secret,
+        relay_url=settings.get("cloud_relay_url", ""),
+        enabled=True,
+    )
+    await ws_manager.broadcast({"type": "settings", "settings": _redact_settings(settings)})
+    return {"device_id": device_id, "relay_url": settings.get("cloud_relay_url", "")}
+
+
+@app.post("/api/cloud/disable")
+async def cloud_disable():
+    """Disable cloud alerts — clear credentials."""
+    settings = load_settings()
+    settings["cloud_enabled"] = False
+    settings["cloud_device_id"] = ""
+    settings["cloud_secret"] = ""
+    save_settings(settings)
+    cloud_notify.configure(device_id="", secret="", relay_url="", enabled=False)
+    await ws_manager.broadcast({"type": "settings", "settings": _redact_settings(settings)})
+    return {"status": "disabled"}
+
+
+@app.get("/api/cloud/qr")
+async def cloud_qr():
+    """Return QR code PNG for mobile cloud pairing."""
+    settings = load_settings()
+    if not settings.get("cloud_enabled") or not settings.get("cloud_device_id"):
+        return JSONResponse({"error": "Cloud alerts not enabled"}, status_code=400)
+    try:
+        import qrcode
+    except ImportError:
+        return JSONResponse({"error": "qrcode library not installed"}, status_code=500)
+    relay_url = settings.get("cloud_relay_url", "")
+    payload = json.dumps({
+        "relay": relay_url,
+        "id": settings["cloud_device_id"],
+        "key": settings["cloud_secret"],
+    })
+    img = qrcode.make(payload)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buf, media_type="image/png")
+
+
+@app.get("/api/cloud/info")
+async def cloud_info():
+    """Return cloud alerts status (no secret exposed)."""
+    settings = load_settings()
+    enabled = settings.get("cloud_enabled", False)
+    result = {"enabled": enabled}
+    if enabled:
+        result["device_id"] = settings.get("cloud_device_id", "")
+        result["relay_url"] = settings.get("cloud_relay_url", "")
+    return result
+
+
+@app.post("/api/cloud/relay-url")
+async def cloud_set_relay_url(req: Request):
+    """Update the relay URL."""
+    body = await req.json()
+    relay_url = body.get("relay_url", "").strip()
+    settings = load_settings()
+    settings["cloud_relay_url"] = relay_url
+    save_settings(settings)
+    cloud_notify.configure(
+        device_id=settings.get("cloud_device_id", ""),
+        secret=settings.get("cloud_secret", ""),
+        relay_url=relay_url,
+        enabled=settings.get("cloud_enabled", False),
+    )
+    await ws_manager.broadcast({"type": "settings", "settings": _redact_settings(settings)})
+    return {"status": "ok", "relay_url": relay_url}
+
+
 # ---------------------------------------------------------------------------
 # WebSocket endpoint
 # ---------------------------------------------------------------------------
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    # Validate companion PIN if companion mode is enabled
+    settings_raw = load_settings()
+    if settings_raw.get("companion_enabled") and settings_raw.get("companion_pin"):
+        pin = ws.query_params.get("pin", "")
+        # Allow local connections without PIN (dashboard)
+        client_host = ws.client.host if ws.client else ""
+        is_local = client_host in ("127.0.0.1", "::1", "localhost")
+        if not is_local and pin != settings_raw["companion_pin"]:
+            await ws.accept()
+            await ws.close(code=4001, reason="Invalid PIN")
+            return
+
     await ws_manager.connect(ws)
     try:
         # Send initial state
-        settings = _redact_settings(load_settings())
+        settings = _redact_settings(settings_raw)
         init_msg = {
             "type": "init",
             **overlay.get_status(),
             "settings": settings,
             "log": list(log_buffer),
         }
-        if watchlist_worker:
-            init_msg["watchlist_results"] = watchlist_worker.get_results()
-            init_msg["watchlist_states"] = watchlist_worker.get_query_states()
         if oauth_manager:
             init_msg["oauth_status"] = oauth_manager.get_status()
         init_msg["stash_status"] = {
@@ -2538,10 +3296,15 @@ async def websocket_endpoint(ws: WebSocket):
             "refreshing": stash_data.get("refreshing", False),
         }
         await ws.send_json(init_msg)
-        # Keep alive
+        # Keep alive — handle client messages
         while True:
             data = await ws.receive_text()
-            # Future: handle client-sent commands
+            try:
+                msg = json.loads(data)
+                if msg.get("type") == "ping":
+                    await ws.send_json({"type": "pong"})
+            except (json.JSONDecodeError, TypeError):
+                pass
     except WebSocketDisconnect:
         ws_manager.disconnect(ws)
 
@@ -2560,10 +3323,10 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    logger.info(f"Starting LAMA dashboard server on port {PORT}")
+    logger.info(f"Binding to 0.0.0.0:{PORT}")
     uvicorn.run(
         "server:app",
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=PORT,
         log_level="info",
     )

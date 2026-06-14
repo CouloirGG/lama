@@ -54,8 +54,25 @@ IS_DEV_BUILD = GIT_BRANCH not in (None, "main")
 POE2_WINDOW_TITLE = "Path of Exile 2"
 POE2_PROCESS_NAME = "PathOfExile2.exe"
 
-# Default league - user can change this
-DEFAULT_LEAGUE = "Fate of the Vaal"
+# ─────────────────────────────────────────────
+# Current League — SINGLE SOURCE OF TRUTH
+# When a new POE2 season launches, update DEFAULT_LEAGUE / DEFAULT_LEAGUE_HC
+# below and re-run the meta harvester. Everything else (server fallbacks,
+# price cache, diagnostics, league selector) reads from these constants, so a
+# season migration should only need to touch this block + the harvest.
+# Full runbook: docs/season-migration.md
+# ─────────────────────────────────────────────
+DEFAULT_LEAGUE = "Runes of Aldur"          # poe.ninja/poe2scout name; slug "runesofaldur"
+DEFAULT_LEAGUE_HC = "Hardcore Runes of Aldur"
+
+# League options shown in the dashboard selector / used as the API-call fallback.
+# value == the league name poe.ninja / poe2scout expect as an API parameter.
+LEAGUE_OPTIONS = [
+    {"value": DEFAULT_LEAGUE, "label": DEFAULT_LEAGUE},
+    {"value": "Standard", "label": "Standard"},
+    {"value": DEFAULT_LEAGUE_HC, "label": DEFAULT_LEAGUE_HC},
+    {"value": "Hardcore", "label": "Hardcore"},
+]
 
 # ─────────────────────────────────────────────
 # Item Detection
@@ -106,44 +123,11 @@ OVERLAY_REFERENCE_HEIGHT = 1080  # Baseline resolution for overlay scaling
 # Overlay theme: "poe2" (gothic, default) or "classic" (original)
 OVERLAY_THEME = "poe2"
 
-# Overlay pulse style: "sheen" (default), "border", "both", or "none"
-OVERLAY_PULSE_STYLE = "sheen"
+# Overlay mode: "stars_only" (default), "minimal", "standard", "detailed"
+OVERLAY_MODE = "stars_only"
 
-# Price tier colors
-PRICE_COLOR_HIGH = "#ff6b35"       # Orange - very valuable (>= 50 Exalted)
-PRICE_COLOR_GOOD = "#ffd700"       # Gold - worth picking up (>= 5 Exalted)
-PRICE_COLOR_DECENT = "#4ecdc4"     # Teal - decent value (>= 1 Exalted)
-PRICE_COLOR_LOW = "#95a5a6"        # Grey - low value (< 1 Exalted)
-PRICE_COLOR_SCRAP = "#CD7F32"      # Bronze - salvageable junk (quality/sockets)
-
-# Price display thresholds (in Exalted Orb equivalent)
-PRICE_TIER_HIGH = 50.0
-PRICE_TIER_GOOD = 5.0
-PRICE_TIER_DECENT = 1.0
-
-# How long the price tag stays visible (seconds)
+# How long the overlay stays visible (seconds)
 OVERLAY_DISPLAY_DURATION = 2.0
-
-# ─────────────────────────────────────────────
-# Trade API (for rare item pricing)
-# ─────────────────────────────────────────────
-TRADE_API_BASE = "https://www.pathofexile.com/api/trade2"
-TRADE_STATS_URL = f"{TRADE_API_BASE}/data/stats"
-TRADE_MAX_REQUESTS_PER_SECOND = 1  # Conservative to avoid 60s trade API bans
-TRADE_RESULT_COUNT = 8
-TRADE_CACHE_TTL = 300  # 5 minutes
-TRADE_MOD_MIN_MULTIPLIER = 0.8  # 80% of actual value as min filter
-TRADE_STATS_CACHE_FILE = CACHE_DIR / "trade_stats.json"
-TRADE_ITEMS_URL = f"{TRADE_API_BASE}/data/items"
-TRADE_ITEMS_CACHE_FILE = CACHE_DIR / "trade_items.json"
-
-# ─────────────────────────────────────────────
-# Trade Watchlist
-# ─────────────────────────────────────────────
-WATCHLIST_DEFAULT_POLL_INTERVAL = 300   # 5 min between polls per query
-WATCHLIST_MIN_REQUEST_INTERVAL = 2.0    # seconds between any watchlist API calls
-WATCHLIST_FETCH_COUNT = 10              # listings to fetch per query
-WATCHLIST_MAX_QUERIES = 6
 
 # ─────────────────────────────────────────────
 # Loot Filter Updater
@@ -243,10 +227,6 @@ DEFENSE_THRESHOLDS = {
     "Foci":         {82: (60, 120, 250, 420),   68: (50, 100, 200, 350),   0: (15, 50, 100, 200)},
 }
 
-# Trade API filter multipliers (search for items with >= X% of this item's stats)
-TRADE_DPS_FILTER_MULT = 0.75
-TRADE_DEFENSE_FILTER_MULT = 0.70
-
 # ─────────────────────────────────────────────
 # RePoE Mod Database (local scoring engine)
 # ─────────────────────────────────────────────
@@ -262,27 +242,6 @@ GRADE_TIER_MAP = {
     "C": "low",     # C and JUNK both show as ✗ (not worth reselling)
     "JUNK": "low",
 }
-
-# Rate history file (market tab time series)
-RATE_HISTORY_FILE = CACHE_DIR / "rate_history.jsonl"
-RATE_HISTORY_BACKUP = Path(os.path.expanduser("~")) / "OneDrive" / "POE2PriceOverlay" / "rate_history.jsonl"
-
-# Calibration log file (grade vs actual trade price)
-CALIBRATION_LOG_FILE = CACHE_DIR / "calibration.jsonl"
-
-# Harvester state file (resumability across runs)
-HARVESTER_STATE_FILE = CACHE_DIR / "harvester_state.json"
-
-# Calibration write-time filters
-CALIBRATION_MAX_PRICE_DIVINE = 1500.0  # skip records above this
-CALIBRATION_MIN_RESULTS = 3            # skip thin results (< 3 listings)
-
-# ─────────────────────────────────────────────
-# Calibration Shards (pre-built data)
-# ─────────────────────────────────────────────
-SHARD_DIR = CACHE_DIR / "shards"
-SHARD_REFRESH_INTERVAL = 86400  # 24 hours
-SHARD_GITHUB_REPO = "CouloirGG/lama"
 
 # ─────────────────────────────────────────────
 # Logging
@@ -307,16 +266,4 @@ BUG_REPORT_MAX_CLIPBOARDS = 5     # Most recent clipboard debug files
 BUG_REPORT_DB = CACHE_DIR / "bug_reports.jsonl"
 DEBUG_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay" / "debug"
 
-# ─────────────────────────────────────────────
-# Flag Reporting (inaccurate price feedback)
-# ─────────────────────────────────────────────
-DISCORD_FLAG_WEBHOOK_URL = os.environ.get("DISCORD_FLAG_WEBHOOK_URL", "").strip()
 DISCORD_RELEASE_WEBHOOK_URL = os.environ.get("DISCORD_RELEASE_WEBHOOK_URL", "").strip()
-FLAG_REPORT_DB = CACHE_DIR / "flag_reports.jsonl"
-FLAG_REPORT_COOLDOWN = 10  # seconds between flags
-
-# ─────────────────────────────────────────────
-# Telemetry (opt-in anonymous calibration upload)
-# ─────────────────────────────────────────────
-TELEMETRY_UPLOAD_INTERVAL = 86400  # 24 hours
-TELEMETRY_LAST_UPLOAD_FILE = CACHE_DIR / "telemetry_last_upload.json"

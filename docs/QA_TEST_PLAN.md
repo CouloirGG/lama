@@ -1,6 +1,6 @@
 # LAMA — Full QA Test Plan
 
-> **Version:** 0.2.5 | **Last Updated:** 2026-02-22
+> **Version:** 0.2.8 | **Last Updated:** 2026-02-26
 > **Audience:** Alpha testers | **Author:** Couloir
 > **How to use:** Work through each section in order. Check the box when a test passes. Add notes in the "Result / Notes" column for anything unexpected.
 
@@ -19,10 +19,10 @@
 
 | # | Priority | Test | Steps | Expected | Result / Notes |
 |---|----------|------|-------|----------|----------------|
-| 1.1 | P0 | Installer runs | Double-click `LAMA-Setup-0.2.5.exe` | Wizard appears, no admin prompt (lowest privileges) | |
-| 1.2 | P1 | Default install path | Click through wizard with defaults | Installs to `%LOCALAPPDATA%\LAMA` | |
+| 1.1 | P0 | Installer runs | Double-click `POE2PriceOverlay-Setup-0.2.8.exe` | Wizard appears, no admin prompt (lowest privileges) | |
+| 1.2 | P1 | Default install path | Click through wizard with defaults | Installs to `%LOCALAPPDATA%\POE2PriceOverlay` | |
 | 1.3 | P1 | Desktop shortcut | Check "Create desktop icon" task | Shortcut appears on desktop, launches app | |
-| 1.4 | P2 | Auto-start task | Check "Start with Windows" task | Registry key created at `HKCU\...\Run\LAMA` | |
+| 1.4 | P2 | Auto-start task | Check "Start with Windows" task | Registry key created at `HKCU\...\Run\POE2PriceOverlay` | |
 | 1.5 | P0 | First launch | Run LAMA from Start Menu or shortcut | Dashboard window appears (1100x750), no Python logo flash | |
 | 1.6 | P1 | Tray icon | Check system tray after launch | LAMA icon visible (not generic Python icon) | |
 | 1.7 | P2 | NUX walkthrough | First launch with fresh settings | Onboarding walkthrough appears, can click through or skip | |
@@ -57,7 +57,7 @@
 | 3.4 | P1 | Restart overlay | Click "Restart" button | Overlay stops then starts, state transitions visible | |
 | 3.5 | P1 | Statistics display | Start overlay, wait 60s | Uptime, triggers, success rate, cache items, exchange rates shown | |
 | 3.6 | P1 | Live log stream | Start overlay, hover items in POE2 | Log lines appear in real-time via WebSocket | |
-| 3.7 | P2 | Version info | Check status card | Shows version (0.2.5) and branch (dev/main) | |
+| 3.7 | P2 | Version info | Check status card | Shows version (0.2.8) and branch (dev/main) | |
 | 3.8 | P1 | Exchange rates | Check stats after price cache loads | Divine→Chaos, Divine→Exalted, Mirror→Divine displayed | |
 
 ---
@@ -268,7 +268,7 @@
 | 14.1 | P0 | Settings save | Change any setting in dashboard | Persisted to `~/.poe2-price-overlay/dashboard_settings.json` | |
 | 14.2 | P0 | Settings survive restart | Change settings, close app, relaunch | All custom settings restored | |
 | 14.3 | P1 | League change | Change league dropdown | Watchlist and price cache update for new league | |
-| 14.4 | P1 | Auto-start toggle | Toggle "Start with Windows" | Registry key `HKCU\...\Run\LAMA` added/removed | |
+| 14.4 | P1 | Auto-start toggle | Toggle "Start with Windows" | Registry key `HKCU\...\Run\POE2PriceOverlay` added/removed | |
 | 14.5 | P2 | Partial update | POST only one changed key via API | Existing settings preserved (deep merge) | |
 | 14.6 | P2 | Corrupted settings file | Manually corrupt JSON file, relaunch | App loads defaults, no crash | |
 | 14.7 | P2 | POESESSID storage | Enter POESESSID in settings | Stored locally only, used for watchlist auth | |

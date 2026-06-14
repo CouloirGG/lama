@@ -1,0 +1,64 @@
+name: Meta Harvest
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 06:00 UTC
+  workflow_dispatch: {}  # Manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run meta harvester
+        run: python scripts/meta_harvester.py --output meta_shard.json.gz
+
+      - name: Verify shard
+        run: |
+          python -c "
+          import gzip, json
+          with gzip.open('meta_shard.json.gz', 'rt') as f:
+              d = json.load(f)
+          print(f'Shard version: {d.get(\"version\")}')
+          print(f'League: {d.get(\"league\")}')
+          print(f'Classes: {len(d.get(\"class_scaling\", {}))}')
+          print(f'Uniques: {len(d.get(\"popular_uniques\", {}))}')
+          print(f'Support gems: {len(d.get(\"top_support_gems\", {}))}')
+          assert d.get('version') >= 2, 'Shard version too old'
+          assert len(d.get('class_scaling', {})) >= 6, 'Not enough classes'
+          print('Shard validation PASSED')
+          "
+
+      - name: Upload shard to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Delete existing meta release if present
+          gh release delete meta-latest --yes 2>/dev/null || true
+          git push origin :refs/tags/meta-latest 2>/dev/null || true
+
+          # Create new pre-release with shard
+          gh release create meta-latest \
+            meta_shard.json.gz \
+            --title "Meta Shard ($(date +%Y-%m-%d))" \
+            --notes "Auto-generated meta analysis shard.
+
+          **League:** $(python -c "import gzip,json; print(json.load(gzip.open('meta_shard.json.gz','rt')).get('league','?'))")
+          **Classes analyzed:** $(python -c "import gzip,json; print(len(json.load(gzip.open('meta_shard.json.gz','rt')).get('class_scaling',{})))")
+          **Generated:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --prerelease

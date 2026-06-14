@@ -40,14 +40,15 @@ from config import (
     OVERLAY_FONT_SIZE,
     OVERLAY_PADDING,
     OVERLAY_THEME,
-    OVERLAY_PULSE_STYLE,
     OVERLAY_REFERENCE_HEIGHT,
-    PRICE_COLOR_HIGH,
-    PRICE_COLOR_GOOD,
-    PRICE_COLOR_DECENT,
-    PRICE_COLOR_LOW,
-    PRICE_COLOR_SCRAP,
 )
+
+# Tier colors (grade-based)
+TIER_COLOR_HIGH = "#ff6b35"       # Orange - S grade
+TIER_COLOR_GOOD = "#ffd700"       # Gold - A grade
+TIER_COLOR_DECENT = "#4ecdc4"     # Teal - B grade
+TIER_COLOR_LOW = "#95a5a6"        # Grey - C/JUNK grade
+TIER_COLOR_SCRAP = "#CD7F32"      # Bronze - marginal
 
 # ─── Theme Constants ──────────────────────────────────
 THEME_CLASSIC = "classic"
@@ -104,62 +105,15 @@ class PriceOverlay:
 
     _NORMAL_BORDER_COLOR = "#333355"
 
-    # Currency detection patterns for inline icon rendering
+    # Currency detection patterns (kept for text parsing, icons removed)
     _CURRENCY_SHORT_RE = re.compile(r'(?<=\d)(ex|d|c)\b')
     _CURRENCY_LONG_RE = re.compile(r'\b(Divine|Chaos|Exalted|Mirror)s?\b', re.IGNORECASE)
 
-    # Maps icon keys → resource filenames
-    _CURRENCY_ICON_FILES = {
-        "divine": "resources/img/divine_orb.png",
-        "chaos": "resources/img/chaos_orb.png",
-        "exalted": "resources/img/exalted_orb.png",
-        "mirror": "resources/img/mirror_of_kalandra.png",
-        "scrap": "resources/img/scrap_hammer.png",
-    }
-
-    # Value-based border effects:
-    #   (min_divine, colors, pulse_ms, border_width, text_cycle)
-    # pulse_ms=0 means static (no pulse). Checked highest-first.
-    # text_cycle=True cycles label text color through the palette too.
-    _VALUE_TIERS = [
-        (5000, ("#FF4040", "#FF8C00", "#FFD700", "#40FF40", "#40CCFF", "#FF69B4"),
-               150, 4, True),    # Mirror: rainbow, very fast, text cycles
-        (1000, ("#FF4500", "#FFD700"), 250, 3, False),   # Red-orange/gold, fast
-        (500,  ("#FF6600", "#FFD700"), 350, 3, False),    # Orange/gold, fast
-        (250,  ("#FFD700", "#B8860B"), 450, 3, False),    # Gold, medium
-        (100,  ("#FFD700", "#8B7536"), 600, 2, False),    # Gold, slow
-        (50,   ("#DAA520",),           0,   2, False),    # Dark gold, static
-        (25,   ("#A0A0B0",),           0,   2, False),    # Silver, static
-    ]
-
-    # POE2 Gothic: blood/crimson border palette — darker, grittier
-    _VALUE_TIERS_POE2 = [
-        (5000, ("#8b1a1a", "#a85520", "#c4a456", "#5c1510", "#6b5a2e", "#7a2020"),
-               150, 4, True),    # Mirror: blood rainbow, very fast
-        (1000, ("#8b1a1a", "#a85520"), 250, 3, False),   # Crimson/burnt, fast
-        (500,  ("#7a2020", "#a85520"), 350, 3, False),    # Blood/amber, fast
-        (250,  ("#a85520", "#6b5a2e"), 450, 3, False),    # Burnt orange/bronze
-        (100,  ("#6b5a2e", "#5a4a30"), 600, 2, False),    # Tarnished bronze
-        (50,   ("#5a4a30",),           0,   2, False),    # Aged bronze, static
-        (25,   ("#4a3a28",),           0,   2, False),    # Dark leather, static
-    ]
-
-    # Fallback for estimates below 25 divine
-    _ESTIMATE_BORDER_COLORS = ("#FFD700", "#B8860B")
-    _ESTIMATE_BORDER_COLORS_POE2 = ("#a85520", "#6b5a2e")
-    _ESTIMATE_PULSE_MS = 600
-
-    # Tier ID to divine threshold mapping (matches dashboard tier definitions)
-    _TIER_ID_MAP = {
-        "mirror": 5000, "jackpot": 1000, "big_hit": 500,
-        "great_find": 250, "good_find": 100, "worth_sell": 50,
-        "marginal": 25, "vendor": 0,
-    }
-
-    def __init__(self, theme: str = OVERLAY_THEME, pulse_style: str = OVERLAY_PULSE_STYLE,
-                 scale_factor: float = 1.0):
+    def __init__(self, theme: str = OVERLAY_THEME, pulse_style: str = "sheen",
+                 scale_factor: float = 1.0, game_rect: tuple = None):
         self._theme = theme if theme in (THEME_CLASSIC, THEME_POE2) else THEME_POE2
         self._pulse_style = pulse_style if pulse_style in ("border", "sheen", "both", "none") else "sheen"
+        self._game_rect = game_rect  # (left, top, right, bottom) of game window
         # Resolution scale factor (1.0 = 1080p baseline)
         self._scale = max(0.6, min(1.5, scale_factor))
         self._font_size = max(9, round(OVERLAY_FONT_SIZE * self._scale))
@@ -180,14 +134,11 @@ class PriceOverlay:
         self._lock = threading.Lock()
         self._hwnd: int = 0  # Top-level Win32 HWND for SetWindowPos calls
         self._transparent_color = "#010101"  # Nearly black, used as transparency key
-        # Custom tier styles from dashboard settings (keyed by threshold)
-        self._custom_text_colors: dict = {}
-        self._custom_bg_colors: dict = {}
-        self._custom_border_colors: dict = {}
         # Currency icon labels (created in initialize, packed on demand)
         self._icon_label: Optional[tk.Label] = None
         self._suffix_label: Optional[tk.Label] = None
-        self._currency_icons: dict = {}  # key → ImageTk.PhotoImage (must persist)
+        # Legacy icon dict (unused, kept for API compat)
+        self._currency_icons: dict = {}
         # POE2 Canvas theme widgets (created in _initialize_poe2)
         self._canvas: Optional[tk.Canvas] = None
         self._cv_items: dict = {}  # tag → canvas item ID
@@ -202,6 +153,10 @@ class PriceOverlay:
         self._sheen_active: bool = False
         self._sheen_bg: str = _POE2_BG           # background color for blending
         self._sheen_profile: list = [0.05, 0.12, 0.22, 0.35, 0.22, 0.12, 0.05]
+        # Persistent star indicator layer
+        self._star_layer: Optional[StarIndicatorLayer] = None
+        # Overlay mode: "stars_only" suppresses all popup overlays
+        self._overlay_mode: str = "standard"
 
     def initialize(self):
         """
@@ -234,9 +189,6 @@ class PriceOverlay:
         else:
             self._initialize_classic()
 
-        # Pre-load currency icons
-        self._load_currency_icons()
-
         # Force window realization so we get a valid HWND
         self._root.update_idletasks()
 
@@ -246,6 +198,11 @@ class PriceOverlay:
         # Start hidden
         self._root.withdraw()
         self._visible = False
+
+        # Initialize persistent star indicator layer
+        if TK_AVAILABLE:
+            self._star_layer = StarIndicatorLayer(self._root, self._scale, game_rect=self._game_rect)
+            self._star_layer.initialize()
 
         # Process pending updates periodically
         self._root.after(30, self._process_pending)
@@ -270,7 +227,7 @@ class PriceOverlay:
             self._frame,
             text="",
             font=("Segoe UI", self._font_size, "bold"),
-            fg=PRICE_COLOR_GOOD,
+            fg=TIER_COLOR_GOOD,
             bg=OVERLAY_BG_COLOR,
             padx=self._padding,
             pady=self._padding // 2,
@@ -292,7 +249,7 @@ class PriceOverlay:
             self._frame,
             text="",
             font=("Segoe UI", self._font_size, "bold"),
-            fg=PRICE_COLOR_GOOD,
+            fg=TIER_COLOR_GOOD,
             bg=OVERLAY_BG_COLOR,
             padx=self._padding,
             pady=self._padding // 2,
@@ -331,37 +288,19 @@ class PriceOverlay:
         )
         self._canvas.pack()
 
-        # Also create classic widgets (needed for _parse_currency icon rendering)
-        # They won't be packed in POE2 mode, but _load_currency_icons references them
+        # Also create classic widgets (used by _render_text_only fallback)
         self._frame = tk.Frame(self._root)  # hidden, never packed
         self._icon_label = tk.Label(self._frame)
         self._suffix_label = tk.Label(self._frame)
         self._label = tk.Label(self._frame)
 
     def load_custom_styles(self, overlay_tier_styles: dict):
-        """Apply custom tier colors from dashboard settings.
+        """Apply custom tier colors from dashboard settings (no-op, pricing removed)."""
+        pass
 
-        Args:
-            overlay_tier_styles: dict mapping tier IDs (e.g. "mirror", "jackpot")
-                to style dicts with keys: text_color, border_color, bg_color.
-        """
-        self._custom_text_colors.clear()
-        self._custom_bg_colors.clear()
-        self._custom_border_colors.clear()
-        if not overlay_tier_styles:
-            return
-        for tier_id, style in overlay_tier_styles.items():
-            threshold = self._TIER_ID_MAP.get(tier_id)
-            if threshold is None:
-                continue
-            if style.get("text_color"):
-                self._custom_text_colors[threshold] = style["text_color"]
-            if style.get("bg_color"):
-                self._custom_bg_colors[threshold] = style["bg_color"]
-            if style.get("border_color"):
-                self._custom_border_colors[threshold] = style["border_color"]
-        if self._custom_text_colors or self._custom_bg_colors or self._custom_border_colors:
-            logger.info(f"Loaded custom overlay styles for {len(overlay_tier_styles)} tier(s)")
+    def set_overlay_mode(self, mode: str):
+        """Set overlay display mode. 'stars_only' suppresses all popups."""
+        self._overlay_mode = mode
 
     def show_price(self, text: str, tier: str, cursor_x: int, cursor_y: int,
                    estimate: bool = False, price_divine: float = 0,
@@ -369,6 +308,7 @@ class PriceOverlay:
         """
         Show a price tag near the cursor position.
         Thread-safe - can be called from any thread.
+        Suppressed entirely in stars_only mode.
 
         Args:
             text: Price text (e.g., "~8 Exalted")
@@ -379,6 +319,8 @@ class PriceOverlay:
             price_divine: Price in divine orbs (drives border effects)
             borderless: If True, render without border/background (floating icon)
         """
+        if self._overlay_mode == "stars_only":
+            return
         with self._lock:
             self._pending_updates.append(
                 ("show", text, tier, cursor_x, cursor_y, estimate, price_divine,
@@ -386,22 +328,19 @@ class PriceOverlay:
 
     def reshow(self, cursor_x: int, cursor_y: int):
         """Reposition and re-display the overlay without re-rendering.
-
-        Used when the user re-hovers the same item — avoids the cost of
-        re-running the full pricing pipeline and prevents "Checking..."
-        flashes that replace an already-displayed result.
-        Thread-safe.
+        Suppressed in stars_only mode.  Thread-safe.
         """
+        if self._overlay_mode == "stars_only":
+            return
         with self._lock:
             self._pending_updates.append(("reshow", cursor_x, cursor_y))
 
     def update_text(self, text: str):
         """Update the displayed text in-place without re-rendering.
-
-        Used for dot animations (Checking. → Checking.. → Checking...)
-        to avoid full canvas redraws that cause visual flicker.
-        Thread-safe.
+        Suppressed in stars_only mode.  Thread-safe.
         """
+        if self._overlay_mode == "stars_only":
+            return
         with self._lock:
             self._pending_updates.append(("update_text", text))
 
@@ -409,6 +348,17 @@ class PriceOverlay:
         """Hide the price overlay. Thread-safe."""
         with self._lock:
             self._pending_updates.append(("hide",))
+
+    def place_star(self, cursor_x: int, cursor_y: int, tier: str = "gold",
+                   item_key: str = "", item_class: str = ""):
+        """Place a persistent star indicator at cursor position. Thread-safe."""
+        with self._lock:
+            self._pending_updates.append(("star", cursor_x, cursor_y, tier, item_key, item_class))
+
+    def clear_stars(self):
+        """Remove all persistent star indicators. Thread-safe."""
+        with self._lock:
+            self._pending_updates.append(("clear_stars",))
 
     def run(self):
         """
@@ -479,114 +429,6 @@ class PriceOverlay:
             pass
         return (0, 0, 1920, 1080)
 
-    def _load_currency_icons(self):
-        """Pre-load currency icon PNGs, resized to match font size."""
-        if not PIL_AVAILABLE:
-            logger.debug("PIL not available — currency icons disabled")
-            return
-
-        from bundle_paths import get_resource
-
-        icon_size = self._font_size + 4  # ~18px at default font size
-        scrap_size = self._font_size * 3  # Larger — standalone overlay icon (42px)
-        for key, rel_path in self._CURRENCY_ICON_FILES.items():
-            try:
-                img_path = get_resource(rel_path)
-                if not img_path.exists():
-                    continue
-                img = Image.open(img_path).convert("RGBA")
-                size = scrap_size if key == "scrap" else icon_size
-                img = img.resize((size, size), Image.LANCZOS)
-                photo = ImageTk.PhotoImage(img)
-                self._currency_icons[key] = photo
-            except Exception as e:
-                logger.debug(f"Failed to load currency icon {key}: {e}")
-
-        # Generate procedural dismiss X icon (same size as scrap)
-        self._generate_dismiss_icon(scrap_size)
-
-        if self._currency_icons:
-            logger.info(f"Loaded {len(self._currency_icons)} currency icon(s)")
-
-    def _generate_dismiss_icon(self, size: int):
-        """Generate a procedural X icon for the dismiss indicator.
-
-        Draws two crossed gold strokes with a dark shadow behind them,
-        matching the gothic palette (same gold as corner diamonds).
-        """
-        if not PIL_AVAILABLE:
-            return
-        from PIL import ImageDraw
-
-        img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-
-        # Inset from edges so the X isn't touching the border
-        margin = size // 4
-        x0, y0 = margin, margin
-        x1, y1 = size - margin, size - margin
-
-        stroke_w = max(2, size // 12)
-
-        # Shadow (offset dark stroke for depth)
-        shadow = "#1a120c"
-        draw.line([(x0 + 1, y0 + 1), (x1 + 1, y1 + 1)],
-                  fill=shadow, width=stroke_w + 2)
-        draw.line([(x1 + 1, y0 + 1), (x0 + 1, y1 + 1)],
-                  fill=shadow, width=stroke_w + 2)
-
-        # Gold strokes (same as corner diamonds: _POE2_CORNER_GOLD)
-        gold = "#c4a456"
-        draw.line([(x0, y0), (x1, y1)], fill=gold, width=stroke_w)
-        draw.line([(x1, y0), (x0, y1)], fill=gold, width=stroke_w)
-
-        try:
-            photo = ImageTk.PhotoImage(img)
-            self._currency_icons["dismiss"] = photo
-        except Exception as e:
-            logger.debug(f"Failed to create dismiss icon: {e}")
-
-    def _parse_currency(self, text: str):
-        """Find a currency token in text and return (prefix, icon_key, suffix) or None."""
-        # Short forms: "~130d" → ("~130", "divine", " ★3: ..."),  "~45c" → chaos
-        m = self._CURRENCY_SHORT_RE.search(text)
-        if m:
-            suffix = m.group(1)
-            key = "divine" if suffix == "d" else "exalted" if suffix == "ex" else "chaos"
-            if key in self._currency_icons:
-                return text[:m.start()], key, text[m.end():]
-
-        # Long forms: "2-5 Divine", "100 Chaos", "2 Exalted", "1 Mirror"
-        m = self._CURRENCY_LONG_RE.search(text)
-        if m:
-            word = m.group(1).lower()
-            if word in self._currency_icons:
-                return text[:m.start()], word, text[m.end():]
-
-        return None
-
-    def _render_with_icon(self, prefix: str, icon_key: str, suffix: str,
-                          color: str, bg_color: str):
-        """Render as [prefix text][icon][suffix text] labels packed left-to-right."""
-        # Unpack all to ensure correct ordering
-        self._label.pack_forget()
-        self._icon_label.pack_forget()
-        self._suffix_label.pack_forget()
-
-        self._label.configure(text=f" {prefix}", fg=color, bg=bg_color,
-                              padx=(OVERLAY_PADDING, 2))
-        self._label.pack(side="left")
-
-        icon = self._currency_icons.get(icon_key)
-        if icon:
-            self._icon_label.configure(image=icon, bg=bg_color)
-            self._icon_label.pack(side="left")
-
-        if suffix and suffix.strip():
-            self._suffix_label.configure(text=f"{suffix} ", fg=color, bg=bg_color,
-                                         padx=(2, OVERLAY_PADDING))
-            self._suffix_label.pack(side="left")
-
     def _render_text_only(self, text: str, color: str, bg_color: str):
         """Render as a single text label (original behavior)."""
         self._icon_label.pack_forget()
@@ -603,10 +445,9 @@ class PriceOverlay:
                      border_color: str, border_width: int, estimate: bool):
         """Draw the POE2 gothic overlay on the Canvas widget.
 
-        Layout:  ◆──[ [A]  ~130d  ★★★ ]──◆
+        Layout:  ◆──[ [A]  text  ★★★ ]──◆
         - Grade badge (small colored rect + letter) on the left
-        - Price text (large serif) center
-        - Currency icon inline after price
+        - Main text (large serif) center
         - Secondary text (stars, mods) in muted color
         - Corner diamonds at all four corners
         - Decorative rule lines near top/bottom edges
@@ -658,16 +499,8 @@ class PriceOverlay:
                 secondary_part[star_only.end():]
             secondary_part = secondary_part.strip()
 
-        # SCRAP / dismiss ✗ — compact gothic-framed icon indicators
-        if text == "SCRAP":
-            self._render_mini_themed("scrap")
-            return
-        if text == "\u2717":
-            self._render_mini_themed("dismiss")
-            return
-
-        # UNID or low-grade without estimate — plain small tag
-        is_plain = text == "UNID" or (
+        # UNID, SCRAP, dismiss, or low-grade — plain small tag
+        is_plain = text in ("UNID", "SCRAP", "\u2717") or (
             grade_letter in ("C", "JUNK") and not estimate)
 
         if is_plain:
@@ -699,26 +532,12 @@ class PriceOverlay:
         price_w = font.measure(price_part) + 4
         x_cursor += price_w
 
-        # Currency icon (if applicable)
-        icon_key = None
-        icon_w = 0
-        currency = self._parse_currency(price_part) if self._currency_icons else None
-        if currency:
-            _, icon_key, _ = currency
-            # Recalculate: price_part is just the prefix before currency
-            price_part = currency[0]
-            price_w = font.measure(price_part) + 6  # extra for serif overhang
-            icon_w = self._font_size + 10  # icon size + gaps
-            if currency[2] and currency[2].strip():
-                secondary_part = currency[2].strip() + (
-                    ("  " + secondary_part) if secondary_part else "")
-
         # Secondary text
         secondary_w = 0
         if secondary_part:
             secondary_w = font_sm.measure(secondary_part) + 8
 
-        total_content_w = (badge_w + 6 if badge_w else 0) + price_w + icon_w + secondary_w
+        total_content_w = (badge_w + 6 if badge_w else 0) + price_w + secondary_w
         w = total_content_w + pad_x * 2
         h = line_h + pad_y * 2
 
@@ -831,13 +650,7 @@ class PriceOverlay:
             anchor="w", tags="price")
         x += price_w
 
-        # 7. Currency icon
-        if icon_key and icon_key in self._currency_icons:
-            icon = self._currency_icons[icon_key]
-            c.create_image(x + 4, cy, image=icon, anchor="w", tags="icon")
-            x += icon_w
-
-        # 8. Secondary text (non-star remainder, e.g. currency suffix)
+        # 7. Secondary text (non-star remainder)
         if secondary_part:
             c.create_text(x + 4, cy, text=secondary_part,
                           fill=_POE2_TEXT_MUTED, font=font_sm,
@@ -873,86 +686,6 @@ class PriceOverlay:
             fill=_POE2_CORNER_GOLD, outline="", tags="diamond"
         )
 
-    def _render_mini_themed(self, icon_key: str):
-        """Render a compact gothic-framed indicator (SCRAP hammer or dismiss X).
-
-        Applies a mini version of the full POE2 gothic treatment:
-        background fill, edge vignette, grunge splatters/scratches,
-        double border, corner diamonds, centered icon.  No sheen.
-        """
-        c = self._canvas
-        c.delete("all")
-        self._cv_items.clear()
-        c.configure(width=1, height=1)
-
-        icon = self._currency_icons.get(icon_key)
-        if not icon:
-            return
-
-        icon_size = icon.width()
-        pad = round(8 * self._scale)
-        w = icon_size + pad * 2
-        h = icon_size + pad * 2
-        diamond_size = max(2, round(2 * self._scale))
-        border_w = 2
-
-        c.configure(width=w, height=h)
-
-        # 1. Background fill
-        c.create_rectangle(1, 1, w - 1, h - 1, fill=_POE2_BG,
-                           outline="", tags="bg_fill")
-
-        # 2. Edge vignette (compressed 3-strip)
-        vig_w = max(2, w // 10)
-        vig_strip = max(1, vig_w // 3)
-        for i, intensity in enumerate([0.35, 0.20, 0.08]):
-            vc = self._blend_hex(_POE2_BG, _POE2_VIGNETTE, intensity)
-            x0 = 1 + vig_strip * i
-            x1 = 1 + vig_strip * (i + 1)
-            c.create_rectangle(x0, 1, x1, h - 1, fill=vc,
-                               outline="", tags="vignette")
-            rx0 = w - 1 - vig_strip * (i + 1)
-            rx1 = w - 1 - vig_strip * i
-            c.create_rectangle(rx0, 1, rx1, h - 1, fill=vc,
-                               outline="", tags="vignette")
-
-        # 3. Grunge: 2 splatters + 1 scratch (subset for compact space)
-        for xf, yf, sw, sh in _GRUNGE_SPLATTERS[:2]:
-            sx = int(xf * w)
-            sy = int(yf * h)
-            c.create_oval(sx, sy, sx + sw, sy + sh,
-                          fill=_POE2_BLOOD_DARK, outline="", tags="grunge")
-        for x1f, y1f, x2f, y2f in _GRUNGE_SCRATCHES[:1]:
-            c.create_line(int(x1f * w), int(y1f * h),
-                          int(x2f * w), int(y2f * h),
-                          fill=_POE2_BLOOD_MID, width=1, tags="grunge")
-
-        # 4. Double border: outer dark, inner accent
-        c.create_rectangle(1, 1, w - 1, h - 1,
-                           outline=_POE2_BORDER_NORMAL, width=border_w,
-                           fill="", tags="border")
-        c.create_rectangle(border_w + 1, border_w + 1,
-                           w - border_w - 1, h - border_w - 1,
-                           outline=_POE2_BORDER_ACCENT, width=1,
-                           fill="", tags="border_inner")
-
-        # 5. Corner diamonds (smaller than full overlay)
-        self._draw_corner_diamond(c, diamond_size + 1, diamond_size + 1,
-                                  diamond_size)
-        self._draw_corner_diamond(c, w - diamond_size - 1, diamond_size + 1,
-                                  diamond_size)
-        self._draw_corner_diamond(c, diamond_size + 1, h - diamond_size - 1,
-                                  diamond_size)
-        self._draw_corner_diamond(c, w - diamond_size - 1, h - diamond_size - 1,
-                                  diamond_size)
-
-        # 6. Centered icon
-        c.create_image(w // 2, h // 2, image=icon, anchor="center",
-                       tags="indicator_icon")
-
-        # No sheen for low-value indicators
-        self._sheen_strips = []
-
     @staticmethod
     def _blend_hex(c1: str, c2: str, t: float) -> str:
         """Linearly interpolate two hex colors. t=0 → c1, t=1 → c2."""
@@ -975,6 +708,19 @@ class PriceOverlay:
             self._pending_updates.clear()
 
         if updates:
+            # Process star updates immediately (all of them, not deduplicated)
+            star_updates = [u for u in updates if u[0] in ("star", "clear_stars")]
+            for update in star_updates:
+                try:
+                    if update[0] == "star" and self._star_layer:
+                        _, cx, cy, tier, item_key, item_class = update
+                        self._star_layer.add_star(cx, cy, tier, item_key=item_key,
+                                                   item_class=item_class)
+                    elif update[0] == "clear_stars" and self._star_layer:
+                        self._star_layer.clear_all()
+                except Exception as e:
+                    logger.error(f"Star update error: {e}")
+
             # Find the last show/reshow/update_text and last hide in the batch
             last_show = None
             last_reshow = None
@@ -1042,12 +788,12 @@ class PriceOverlay:
 
         # Set text color based on tier
         color = {
-            "high": PRICE_COLOR_HIGH,
-            "good": PRICE_COLOR_GOOD,
-            "decent": PRICE_COLOR_DECENT,
-            "low": PRICE_COLOR_LOW,
-            "scrap": PRICE_COLOR_SCRAP,
-        }.get(tier, PRICE_COLOR_LOW)
+            "high": TIER_COLOR_HIGH,
+            "good": TIER_COLOR_GOOD,
+            "decent": TIER_COLOR_DECENT,
+            "low": TIER_COLOR_LOW,
+            "scrap": TIER_COLOR_SCRAP,
+        }.get(tier, TIER_COLOR_LOW)
 
         # Stop any existing pulse/sheen animation
         if self._pulse_timer:
@@ -1058,68 +804,21 @@ class PriceOverlay:
             self._sheen_timer = None
         self._sheen_active = False
 
-        # ── Compute border effect (shared by both themes) ──
+        # ── Compute border/background colors ──
         bg_color = _POE2_BG if self._theme == THEME_POE2 else OVERLAY_BG_COLOR
         border_color = _POE2_BORDER_NORMAL if self._theme == THEME_POE2 else self._NORMAL_BORDER_COLOR
-        border_colors = None
-        pulse_ms = 0
         border_width = 2
-        text_cycle = False
-        matched_threshold = None
-
-        # Select theme-appropriate tier table
-        value_tiers = (self._VALUE_TIERS_POE2 if self._theme == THEME_POE2
-                       else self._VALUE_TIERS)
-        est_border = (self._ESTIMATE_BORDER_COLORS_POE2 if self._theme == THEME_POE2
-                      else self._ESTIMATE_BORDER_COLORS)
 
         if borderless:
             bg_color = self._transparent_color
             if self._theme == THEME_CLASSIC:
                 self._frame.configure(
                     bg=self._transparent_color, padx=0, pady=0)
-            self._is_estimate = False
-        else:
-            for min_div, colors, pms, bw, tc in value_tiers:
-                if price_divine >= min_div:
-                    border_colors = colors
-                    pulse_ms = pms
-                    border_width = bw
-                    text_cycle = tc
-                    matched_threshold = min_div
-                    break
 
-            # Apply custom tier overrides from dashboard settings
-            if matched_threshold is not None:
-                custom_text = self._custom_text_colors.get(matched_threshold)
-                if custom_text:
-                    color = custom_text
-                custom_bg = self._custom_bg_colors.get(matched_threshold)
-                if custom_bg:
-                    bg_color = custom_bg
-                custom_border = self._custom_border_colors.get(matched_threshold)
-                if custom_border:
-                    border_colors = (custom_border,)
-                    pulse_ms = 0  # static when custom
-
-            # Fallback: estimates below value tiers still get pulse
-            if not border_colors and estimate:
-                border_colors = est_border
-                pulse_ms = self._ESTIMATE_PULSE_MS
-
-            # Apply border effect
-            self._text_pulse = text_cycle
-            if border_colors:
-                self._pulse_colors = border_colors
-                self._pulse_ms = pulse_ms
-                self._pulse_index = 0
-                border_color = border_colors[0]
-                if pulse_ms > 0 and len(border_colors) > 1:
-                    self._is_estimate = True
-                else:
-                    self._is_estimate = False
-            else:
-                self._is_estimate = False
+        self._is_estimate = False
+        self._text_pulse = False
+        self._pulse_colors = ()
+        self._pulse_ms = 0
 
         # ── Theme-specific rendering ───────────────────────
         # When sheen-only, suppress the colored border — keep default neutral
@@ -1151,33 +850,7 @@ class PriceOverlay:
             if not borderless:
                 self._frame.configure(padx=border_width, pady=border_width,
                                       bg=border_color)
-            # Render label content (with or without currency icon)
-            # SCRAP → hammer icon, dismiss ✗ → X icon
-            indicator_key = (
-                "scrap" if text == "SCRAP" else
-                "dismiss" if text == "\u2717" else None)
-            indicator_icon = (self._currency_icons.get(indicator_key)
-                              if indicator_key else None)
-            if indicator_icon:
-                self._icon_label.pack_forget()
-                self._suffix_label.pack_forget()
-                self._label.pack_forget()
-                self._icon_label.configure(image=indicator_icon, bg=bg_color)
-                self._icon_label.pack(side="left")
-            elif self._currency_icons:
-                currency = self._parse_currency(text)
-                if currency:
-                    prefix, icon_key, suffix = currency
-                    self._render_with_icon(prefix, icon_key, suffix, color, bg_color)
-                else:
-                    self._render_text_only(text, color, bg_color)
-            else:
-                self._render_text_only(text, color, bg_color)
-            if self._is_estimate:
-                # Classic theme: only border pulse (sheen is POE2-only)
-                want_border = self._pulse_style in ("border", "both", "sheen")
-                if want_border:
-                    self._start_pulse()
+            self._render_text_only(text, color, bg_color)
 
         # Position near cursor (offsets are absolute, not scaled)
         x = cursor_x + OVERLAY_OFFSET_X
@@ -1491,6 +1164,274 @@ class PriceOverlay:
             logger.warning(f"Click-through not available: {e}")
 
 
+class StarIndicatorLayer:
+    """Persistent star markers pinned at item positions on a full-screen
+    transparent canvas.  Stars accumulate as the player hovers items and
+    persist until explicitly cleared (hotkey or auto-clear).
+
+    Runs on the same tkinter root as PriceOverlay — no extra threads.
+    """
+
+    _MAX_STARS = 200       # safety cap before auto-clearing oldest
+    _STAR_CHAR = "\u2605"  # ★
+    _SHEEN_INTERVAL = 500  # ms between sheen animation frames (~2fps)
+    _SHEEN_STEPS = 12      # frames per full sheen cycle (~6 seconds)
+    _CELL_PX = 52.75       # POE2 inventory cell size at 1080p reference
+    # Inventory grid origin as fraction of game window (at 1920x1080 reference)
+    _INV_ORIGIN_X_FRAC = 1267 / 1920   # ~66% from left
+    _INV_ORIGIN_Y_FRAC = 589 / 1080    # ~54.5% from top
+
+    # Item class → (width, height) in inventory grid cells
+    _ITEM_SLOTS = {
+        "Amulets": (1, 1), "Rings": (1, 1), "Jewels": (1, 1),
+        "Charms": (1, 1), "Stackable Currency": (1, 1),
+        "Belts": (1, 2), "Life Flasks": (1, 2), "Mana Flasks": (1, 2),
+        "Quivers": (1, 2),
+        "Helmets": (2, 2), "Gloves": (2, 2), "Boots": (2, 2),
+        "Foci": (2, 2), "Shields": (2, 2),
+        "Wands": (1, 3), "Sceptres": (1, 3), "Daggers": (1, 3),
+        "One Hand Swords": (1, 3), "One Hand Maces": (1, 3),
+        "One Hand Axes": (1, 3), "Claws": (1, 3),
+        "Body Armours": (2, 3),
+        "Staves": (2, 4), "Two Hand Swords": (2, 4),
+        "Two Hand Maces": (2, 4), "Two Hand Axes": (2, 4),
+        "Bows": (2, 4), "Crossbows": (2, 4),
+        "Waystones": (1, 1), "Tablets": (1, 1),
+    }
+
+    # Star visual tiers: (count, color_hex, sheen_peak_hex, sheen_enabled)
+    # Gold base → orange → hot red as value increases
+    _STAR_TIERS = {
+        "silver1": (1, "#8a8a9a", "#b0b0b8", False),    # muted silver, no sheen
+        "gold1":   (1, "#c4a456", "#e8d088", True),      # warm gold
+        "gold2":   (2, "#e8943a", "#ffc070", True),      # orange-gold
+        "gold3":   (3, "#ff6a4a", "#ffcc88", True),      # hot red with bright peak
+    }
+
+    def __init__(self, root: tk.Tk, scale: float = 1.0, game_rect: tuple = None):
+        self._root = root
+        self._scale = scale
+        self._game_rect = game_rect  # (left, top, right, bottom) of game window
+        # Keyed by item_key (str) -> entry dict with canvas ids & animation data
+        self._stars: dict = {}
+        self._star_list: list = []   # ordered list for sheen animation
+        self._window: Optional[tk.Toplevel] = None
+        self._canvas: Optional[tk.Canvas] = None
+        self._font: Optional[tkfont.Font] = None
+        self._transparent = "#010101"
+        # Computed inventory grid params (set in initialize)
+        self._grid_origin_x = 0
+        self._grid_origin_y = 0
+        self._grid_cell = 53
+        self._sheen_phase = 0       # current animation frame
+        self._sheen_after_id = None
+
+    def initialize(self, game_rect: tuple = None):
+        """Create the full-screen transparent star canvas.
+        game_rect: (left, top, right, bottom) of game window, or full screen.
+        """
+        if not self._root:
+            return
+
+        self._window = tk.Toplevel(self._root)
+        self._window.overrideredirect(True)
+        self._window.attributes("-topmost", True)
+        self._window.attributes("-alpha", 0.92)
+        self._window.configure(bg=self._transparent)
+        try:
+            self._window.attributes("-transparentcolor", self._transparent)
+        except tk.TclError:
+            pass
+
+        # Position over the primary monitor. Stars use absolute screen coords
+        # converted to canvas coords by subtracting the window origin.
+        w = self._root.winfo_screenwidth()
+        h = self._root.winfo_screenheight()
+        x, y = 0, 0
+        self._win_origin = (x, y)
+        self._window.geometry(f"{w}x{h}+{x}+{y}")
+
+        self._canvas = tk.Canvas(
+            self._window, width=w, height=h,
+            bg=self._transparent, highlightthickness=0,
+        )
+        self._canvas.pack()
+
+        font_size = max(8, round(11 * self._scale))
+        for family in _POE2_FONT_CHAIN:
+            try:
+                self._font = tkfont.Font(family=family, size=font_size, weight="bold")
+                break
+            except tk.TclError:
+                continue
+        if not self._font:
+            self._font = tkfont.Font(size=font_size, weight="bold")
+
+        # Compute inventory grid cell size from game window
+        gr = game_rect or self._game_rect
+        if gr:
+            game_h = gr[3] - gr[1]
+            self._grid_cell = self._CELL_PX * (game_h / 1080)
+            logger.info(f"Star grid: cell={self._grid_cell:.1f}px (game_h={game_h})")
+        else:
+            self._grid_cell = self._CELL_PX
+
+        # Make click-through
+        self._window.update_idletasks()
+        self._apply_click_through()
+
+        # Start sheen animation loop
+        self._sheen_tick()
+
+        logger.info("StarIndicatorLayer initialized")
+
+    def _apply_click_through(self):
+        """Apply Win32 click-through flags to the star window."""
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            child_hwnd = self._window.winfo_id()
+            hwnd = user32.GetParent(child_hwnd) or child_hwnd
+
+            GWL_EXSTYLE = -20
+            WS_EX_LAYERED = 0x00080000
+            WS_EX_TOPMOST = 0x00000008
+            WS_EX_TOOLWINDOW = 0x00000080
+            WS_EX_NOACTIVATE = 0x08000000
+
+            style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            style |= WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
+            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_NOZORDER = 0x0004
+            SWP_FRAMECHANGED = 0x0020
+            user32.SetWindowPos(
+                hwnd, 0, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+            )
+        except Exception as e:
+            logger.warning(f"Star layer click-through failed: {e}")
+
+    @staticmethod
+    def _lerp_color(hex_a: str, hex_b: str, t: float) -> str:
+        """Linearly interpolate between two hex colors. t=0 returns a, t=1 returns b."""
+        ra, ga, ba = int(hex_a[1:3], 16), int(hex_a[3:5], 16), int(hex_a[5:7], 16)
+        rb, gb, bb = int(hex_b[1:3], 16), int(hex_b[3:5], 16), int(hex_b[5:7], 16)
+        r = int(ra + (rb - ra) * t)
+        g = int(ga + (gb - ga) * t)
+        b = int(ba + (bb - ba) * t)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _sheen_tick(self):
+        """Animate sheen: smoothly cycle star colors between base and peak."""
+        if not self._canvas:
+            return
+
+        # Only do work if there are animated stars
+        if self._star_list:
+            self._sheen_phase = (self._sheen_phase + 1) % self._SHEEN_STEPS
+            import math
+            t = (math.sin(self._sheen_phase / self._SHEEN_STEPS * math.pi * 2 - math.pi / 2) + 1) / 2
+
+            for entry in self._star_list:
+                if not entry.get("sheen"):
+                    continue
+                color = self._lerp_color(entry["base_color"], entry["peak_color"], t)
+                try:
+                    self._canvas.itemconfig(entry["star_id"], fill=color)
+                except tk.TclError:
+                    pass
+
+        self._sheen_after_id = self._root.after(self._SHEEN_INTERVAL, self._sheen_tick)
+
+    def add_star(self, screen_x: int, screen_y: int, tier: str = "gold1",
+                 item_key: str = "", item_class: str = ""):
+        """Place star at the bottom-right of the item.
+
+        Uses item_class to determine item slot dimensions and offset the star
+        from the cursor position (assumed to be near item center) to the
+        bottom-right corner of the item.
+        Deduplicates by item_key (item name) so each unique item gets one star.
+        tier: "silver1", "gold1", "gold2", "gold3" — controls count, color, sheen.
+        """
+        if not self._canvas:
+            return
+
+        # Dedup by item identity — skip if this item already has a star
+        if item_key and item_key in self._stars:
+            return
+
+        # Auto-clear if too many stars accumulated
+        if len(self._stars) >= self._MAX_STARS:
+            self.clear_all()
+
+        count, color, peak_color, sheen = self._STAR_TIERS.get(
+            tier, self._STAR_TIERS["silver1"])
+        star_text = self._STAR_CHAR * count
+
+        # Offset from cursor (near item center) to bottom-right corner.
+        # Item occupies (w, h) grid cells; cursor is roughly centered on item.
+        w, h = self._ITEM_SLOTS.get(item_class, (1, 1))
+        cell = self._grid_cell
+        # Shift by half the item's pixel dimensions, minus a margin so the
+        # star sits just inside the icon corner rather than outside it.
+        margin = round(6 * self._scale)
+        offset_x = round(w * cell / 2) - margin
+        offset_y = round(h * cell / 2) - margin
+
+        win_x = self._window.winfo_rootx()
+        win_y = self._window.winfo_rooty()
+        cx = screen_x + offset_x - win_x
+        cy = screen_y + offset_y - win_y
+
+        canvas_ids = []
+
+        # Drop shadow (2px offset for readability on any background)
+        shadow_off = round(2 * self._scale)
+        shadow_id = self._canvas.create_text(
+            cx + shadow_off, cy + shadow_off, text=star_text,
+            fill="#000000", font=self._font, anchor="center",
+        )
+        canvas_ids.append(shadow_id)
+
+        # Star characters
+        star_id = self._canvas.create_text(
+            cx, cy, text=star_text, fill=color,
+            font=self._font, anchor="center",
+        )
+        canvas_ids.append(star_id)
+
+        entry = {
+            "ids": canvas_ids,
+            "star_id": star_id,
+            "tier": tier,
+            "x": screen_x,
+            "y": screen_y,
+            "base_color": color,
+            "peak_color": peak_color,
+            "sheen": sheen,
+        }
+        dedup_key = item_key or f"_pos_{screen_x}_{screen_y}"
+        self._stars[dedup_key] = entry
+        self._star_list.append(entry)
+
+    def clear_all(self):
+        """Remove all persistent stars."""
+        if not self._canvas:
+            return
+        for entry in self._star_list:
+            for item_id in entry["ids"]:
+                self._canvas.delete(item_id)
+        self._stars.clear()
+        self._star_list.clear()
+
+    @property
+    def star_count(self) -> int:
+        return len(self._stars)
+
+
 class ConsoleOverlay:
     """
     Fallback overlay that prints to console.
@@ -1519,6 +1460,16 @@ class ConsoleOverlay:
         pass
 
     def hide(self):
+        pass
+
+    def set_overlay_mode(self, mode: str):
+        pass
+
+    def place_star(self, cursor_x: int, cursor_y: int, tier: str = "gold1",
+                   item_key: str = "", item_class: str = ""):
+        pass
+
+    def clear_stars(self):
         pass
 
     def run(self):
@@ -1569,33 +1520,23 @@ if __name__ == "__main__":
             t.sleep(1)
 
             test_prices = [
-                # (text, tier, estimate, price_divine)
-                ("[S] ~130d ★★★", "high", True, 130),
-                ("[A] ~45d ★★", "good", True, 45),
-                ("[B] ~8d ★", "decent", False, 8),
-                ("45 Chaos", "low", False, 0.5),
-                ("SCRAP", "scrap", False, 0),
-                ("\u2717", "low", False, 0),
-                # High-value pulse tests
-                ("[S] ~6000d ★★★", "high", True, 6000),  # Mirror rainbow
-                ("[S] ~300d ★★★", "high", True, 300),     # Gold pulse
+                # (text, tier)
+                ("[S] ★★★", "high"),
+                ("[A] ★★", "good"),
+                ("[B] ★", "decent"),
+                ("[C]", "low"),
+                ("SCRAP", "scrap"),
+                ("UNID", "low"),
             ]
 
-            for entry in test_prices:
-                text, tier = entry[0], entry[1]
-                estimate = entry[2] if len(entry) > 2 else False
-                price_div = entry[3] if len(entry) > 3 else 0
+            for text, tier in test_prices:
                 cx, cy = _get_cursor_pos()
                 try:
-                    print(f"Showing ({_args.theme}): {text!r} tier={tier} "
-                          f"est={estimate} divine={price_div}")
+                    print(f"Showing ({_args.theme}): {text!r} tier={tier}")
                 except UnicodeEncodeError:
                     safe = text.encode("ascii", errors="replace").decode()
-                    print(f"Showing ({_args.theme}): {safe!r} tier={tier} "
-                          f"est={estimate} divine={price_div}")
-                overlay.show_price(text, tier, cx, cy,
-                                   estimate=estimate,
-                                   price_divine=price_div)
+                    print(f"Showing ({_args.theme}): {safe!r} tier={tier}")
+                overlay.show_price(text, tier, cx, cy)
                 t.sleep(3)
 
             overlay.shutdown()
@@ -1606,5 +1547,5 @@ if __name__ == "__main__":
     else:
         print("tkinter not available, using console overlay")
         overlay = ConsoleOverlay()
-        overlay.show_price("12 Divine", "high", 500, 400)
-        overlay.show_price("8 Exalted", "good", 600, 300)
+        overlay.show_price("[S] ★★★", "high", 500, 400)
+        overlay.show_price("[A] ★★", "good", 600, 300)

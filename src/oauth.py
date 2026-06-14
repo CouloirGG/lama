@@ -36,12 +36,20 @@ OAUTH_TOKEN_URL = "https://www.pathofexile.com/oauth/token"
 # Must be registered with GGG — placeholder until approved
 CLIENT_ID = os.environ.get("POE_OAUTH_CLIENT_ID", "lama")
 
-SCOPES = "account:stashes account:profile"
+SCOPES = "account:characters account:stashes account:profile"
 REDIRECT_HOST = "127.0.0.1"
 REDIRECT_PORT_RANGE = (8951, 8960)  # Try ports in this range
 
 TOKEN_DIR = Path(os.path.expanduser("~")) / ".poe2-price-overlay"
 TOKEN_FILE = TOKEN_DIR / "oauth_tokens.json"
+
+
+def _build_user_agent() -> str:
+    from config import APP_VERSION
+    return f"OAuth {CLIENT_ID}/{APP_VERSION} (contact: couloirgg@gmail.com)"
+
+
+GGG_USER_AGENT = _build_user_agent()
 
 # Refresh 5 minutes before expiry
 REFRESH_MARGIN_SECONDS = 300
@@ -123,7 +131,7 @@ class OAuthManager:
 
             return {
                 "Authorization": f"Bearer {self._tokens['access_token']}",
-                "User-Agent": "LAMA/1.0",
+                "User-Agent": GGG_USER_AGENT,
             }
 
     def authorize(self) -> dict:
@@ -207,7 +215,7 @@ class OAuthManager:
                     "redirect_uri": redirect_uri,
                     "code_verifier": verifier,
                 },
-                headers={"User-Agent": "LAMA/1.0"},
+                headers={"User-Agent": GGG_USER_AGENT},
                 timeout=30,
             )
 
@@ -250,7 +258,7 @@ class OAuthManager:
                     "grant_type": "refresh_token",
                     "refresh_token": refresh_token,
                 },
-                headers={"User-Agent": "LAMA/1.0"},
+                headers={"User-Agent": GGG_USER_AGENT},
                 timeout=30,
             )
 
@@ -283,7 +291,7 @@ class OAuthManager:
                 "https://api.pathofexile.com/profile",
                 headers={
                     "Authorization": f"Bearer {self._tokens['access_token']}",
-                    "User-Agent": "LAMA/1.0",
+                    "User-Agent": GGG_USER_AGENT,
                 },
                 timeout=10,
             )

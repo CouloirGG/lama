@@ -57,17 +57,17 @@ if not exist "%LEAGUE_FILE%" (
     echo   Which league are you playing?
     echo   ────────────────────────────────────────────
     echo.
-    echo   1. Fate of the Vaal [current league]
+    echo   1. Runes of Aldur [current league]
     echo   2. Standard
-    echo   3. Hardcore Fate of the Vaal
+    echo   3. Hardcore Runes of Aldur
     echo   4. Hardcore
     echo.
     set /p LEAGUE_CHOICE="  Enter number [1]: "
 
     if "%LEAGUE_CHOICE%"=="2" ( echo Standard>"%LEAGUE_FILE%" )
-    if "%LEAGUE_CHOICE%"=="3" ( echo Hardcore Fate of the Vaal>"%LEAGUE_FILE%" )
+    if "%LEAGUE_CHOICE%"=="3" ( echo Hardcore Runes of Aldur>"%LEAGUE_FILE%" )
     if "%LEAGUE_CHOICE%"=="4" ( echo Hardcore>"%LEAGUE_FILE%" )
-    if not exist "%LEAGUE_FILE%" ( echo Fate of the Vaal>"%LEAGUE_FILE%" )
+    if not exist "%LEAGUE_FILE%" ( echo Runes of Aldur>"%LEAGUE_FILE%" )
 )
 
 set /p LEAGUE=<"%LEAGUE_FILE%"

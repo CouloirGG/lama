@@ -14,6 +14,7 @@ Requirements:
 
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -22,6 +23,49 @@ from urllib.request import Request
 
 # Ensure src/ is on sys.path so bare imports and uvicorn "server:app" work
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# ---------------------------------------------------------------------------
+# Sentry — error tracking
+# ---------------------------------------------------------------------------
+def _sentry_before_send(event, hint):
+    if "extra" in event:
+        for key in list(event["extra"].keys()):
+            if any(s in key.lower() for s in ("token", "key", "secret", "password", "dsn")):
+                event["extra"][key] = "[REDACTED]"
+    return event
+
+_sentry_dsn = os.environ.get("SENTRY_DSN", "")
+if not _sentry_dsn:
+    try:
+        _settings_path = os.path.join(
+            os.path.expanduser("~"), ".poe2-price-overlay", "dashboard_settings.json"
+        )
+        if os.path.exists(_settings_path):
+            with open(_settings_path, "r") as f:
+                _sentry_dsn = json.load(f).get("sentry_dsn", "")
+    except Exception:
+        pass
+
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        _release = "unknown"
+        try:
+            _release = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                stderr=subprocess.DEVNULL, text=True
+            ).strip()
+        except Exception:
+            pass
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            release=f"lama@{_release}",
+            environment="desktop",
+            traces_sample_rate=0.1,
+            before_send=_sentry_before_send,
+        )
+    except Exception as e:
+        print(f"  Sentry: init failed ({e})")
 
 
 def _log(msg):
@@ -40,12 +84,28 @@ WINDOW_WIDTH = 1100
 WINDOW_HEIGHT = 750
 
 
+def _companion_enabled() -> bool:
+    """Check if companion mode is enabled in settings."""
+    settings_path = os.path.join(
+        os.path.expanduser("~"), ".poe2-price-overlay", "dashboard_settings.json"
+    )
+    try:
+        if os.path.exists(settings_path):
+            with open(settings_path) as f:
+                return json.load(f).get("companion_enabled", False)
+    except Exception:
+        pass
+    return False
+
+
 def start_server():
     """Run the FastAPI server in a background thread."""
     import uvicorn
+    # Always bind to 0.0.0.0 so companion mode can be toggled at runtime
+    # without a server restart.  PIN auth protects against unauthorised access.
     uvicorn.run(
         "server:app",
-        host="127.0.0.1",
+        host="0.0.0.0",
         port=PORT,
         log_level="info",
     )
@@ -100,6 +160,22 @@ class WindowApi:
         if not hwnd or self._original_proc:
             return
 
+        # Ensure WS_THICKFRAME is set so Windows sends WM_NCHITTEST for resize
+        GWL_STYLE = -16
+        WS_THICKFRAME = 0x00040000
+        style = ctypes.windll.user32.GetWindowLongPtrW(hwnd, GWL_STYLE)
+        if not (style & WS_THICKFRAME):
+            ctypes.windll.user32.SetWindowLongPtrW(hwnd, GWL_STYLE, style | WS_THICKFRAME)
+            # Refresh the frame without flashing
+            SWP_FRAMECHANGED = 0x0020
+            SWP_NOMOVE = 0x0002
+            SWP_NOSIZE = 0x0001
+            SWP_NOZORDER = 0x0004
+            ctypes.windll.user32.SetWindowPos(
+                hwnd, 0, 0, 0, 0, 0,
+                SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER
+            )
+
         WM_WINDOWPOSCHANGING = 0x0046
         WM_NCHITTEST = 0x0084
         SWP_NOSIZE = 0x0001
@@ -116,7 +192,7 @@ class WindowApi:
         HTBOTTOMLEFT = 16
         HTBOTTOMRIGHT = 17
 
-        RESIZE_BORDER = 6  # pixels from edge that trigger resize cursor
+        RESIZE_BORDER = 8  # pixels from edge that trigger resize cursor
 
         class WINDOWPOS(ctypes.Structure):
             _fields_ = [
@@ -450,7 +526,7 @@ def _set_icon_and_show(get_hwnd, show_fn, api_ref=None, _ms=None):
         ready = api_ref._ready_event.wait(timeout=5.0)
         _log(f"[Startup] {'Dashboard ready' if ready else 'Ready timeout (5s)'}")
 
-    # Now reveal the window — user only ever sees the LAMA icon
+    # Reveal the window (no-op when window is already visible)
     show_fn()
     if _ms:
         _log(f"[Startup] Window shown ({_ms()})")
@@ -488,6 +564,9 @@ def main():
         _log("Then re-run: python app.py")
         _log("=" * 50)
         sys.exit(1)
+
+    # Debug mode — enables WebView2 DevTools (right-click → Inspect)
+    _debug_mode = "--debug" in sys.argv or "-d" in sys.argv
 
     # If launched with --restart, wait for the old process to release the port
     if "--restart" in sys.argv:
@@ -573,8 +652,10 @@ def main():
     threading.Thread(target=_tooltip_updater, args=(tray,), daemon=True).start()
 
     # -------------------------------------------------------------------------
-    # Start hidden so the Python icon never flashes in the taskbar.
-    # The icon thread sets IPropertyStore, then reveals the window.
+    # WebView2 refuses to initialise its render surface in a hidden window,
+    # so we create the window visible.  The dashboard's own splash screen
+    # covers the UI until data arrives, keeping the experience smooth.
+    # A background thread still sets the taskbar icon via IPropertyStore.
     window = webview.create_window(
         WINDOW_TITLE,
         url=f"http://127.0.0.1:{PORT}/dashboard?_t={int(time.time())}",
@@ -587,18 +668,33 @@ def main():
         frameless=True,
         easy_drag=False,
         js_api=api,
-        hidden=True,
     )
 
-    # Set the taskbar icon, then show the window
-    threading.Thread(
-        target=_set_icon_and_show, args=(api._get_hwnd, api.show, api, _ms), daemon=True
-    ).start()
+    def _on_shown():
+        """Install resize hook and taskbar icon once the window is shown."""
+        _log(f"[Startup] Window shown event fired ({_ms()})")
+        # Install resize hook — must happen after window exists
+        # Retry a few times since the HWND may not be ready immediately
+        for attempt in range(10):
+            hwnd = api._get_hwnd()
+            if hwnd:
+                api._install_hook()
+                _log(f"[Startup] Resize hook installed (hwnd={hwnd}, attempt={attempt})")
+                break
+            time.sleep(0.2)
+        else:
+            _log("[Startup] WARNING: Could not find window for resize hook")
+        # Set taskbar icon in background
+        threading.Thread(
+            target=_set_icon_and_show, args=(api._get_hwnd, lambda: None, api, _ms), daemon=True
+        ).start()
+
+    window.events.shown += _on_shown
 
     # This blocks until the window is destroyed (force_close / quit)
     from bundle_paths import get_resource
     ico_path = str(get_resource("resources/img/favicon.ico"))
-    webview.start(icon=ico_path)
+    webview.start(icon=ico_path, debug=_debug_mode)
 
     try:
         tray.stop()

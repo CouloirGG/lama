@@ -1,9 +1,9 @@
 """
-PricingEngine — game-agnostic facade for the LAMA pricing pipeline.
+PricingEngine — game-agnostic facade for the LAMA scoring pipeline.
 
 Single entry point wrapping ItemParser, ModParser, ModDatabase,
-CalibrationEngine, PriceCache, and TradeClient. Consumers pass a GameConfig
-to configure all modules without them importing from config.py directly.
+and PriceCache. Consumers pass a GameConfig to configure all modules
+without them importing from config.py directly.
 
 Usage:
     from core import PricingEngine
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class PricingEngine:
-    """Game-agnostic pricing engine facade.
+    """Game-agnostic scoring engine facade.
 
     Wraps existing modules and injects GameConfig values where they
     would otherwise import from config.py.
@@ -36,9 +36,7 @@ class PricingEngine:
         self._item_parser = None
         self._mod_parser = None
         self._mod_database = None
-        self._calibration = None
         self._price_cache = None
-        self._trade_client = None
         self._ready = False
 
     @property
@@ -56,9 +54,7 @@ class PricingEngine:
             self._init_item_parser()
             self._init_mod_parser()
             self._init_mod_database()
-            self._init_calibration()
             self._init_price_cache()
-            self._init_trade_client()
 
             self._ready = (
                 self._mod_parser is not None
@@ -114,47 +110,6 @@ class PricingEngine:
             parsed_mods = self.parse_mods(item)
         return self._mod_database.score_item(item, parsed_mods)
 
-    def estimate_price(self, item, score) -> Optional[float]:
-        """Estimate price using calibration k-NN (no API calls).
-
-        Args:
-            item: ParsedItem from parse_item().
-            score: ItemScore from score_item().
-
-        Returns:
-            Estimated divine value, or None if insufficient data.
-        """
-        if self._calibration is None or score is None:
-            return None
-        try:
-            mod_scores = getattr(score, "mod_scores", [])
-            mod_tiers = {ms.mod_group: int(ms.tier_label[1:])
-                         for ms in mod_scores
-                         if ms.mod_group and ms.tier_label and ms.tier_label[1:].isdigit()}
-            mod_rolls = {ms.mod_group: round(ms.roll_quality, 3)
-                         for ms in mod_scores
-                         if ms.mod_group and hasattr(ms, 'roll_quality')
-                         and ms.roll_quality is not None}
-            return self._calibration.estimate(
-                score.normalized_score,
-                getattr(item, "item_class", "") or "",
-                grade=score.grade.value,
-                dps_factor=getattr(score, "dps_factor", 1.0),
-                defense_factor=getattr(score, "defense_factor", 1.0),
-                top_tier_count=getattr(score, "top_tier_count", 0),
-                mod_count=len(mod_scores) or 4,
-                mod_groups=[ms.mod_group for ms in mod_scores if ms.mod_group],
-                base_type=getattr(item, "base_type", ""),
-                mod_tiers=mod_tiers,
-                mod_rolls=mod_rolls,
-                somv_factor=getattr(score, "somv_factor", 1.0),
-                pdps=getattr(item, "physical_dps", 0.0),
-                edps=getattr(item, "elemental_dps", 0.0),
-            )
-        except Exception as e:
-            logger.debug(f"Calibration estimate failed: {e}")
-            return None
-
     def lookup_price(self, item) -> Optional[Dict[str, Any]]:
         """Look up static price for uniques/currencies (from PriceCache).
 
@@ -171,24 +126,6 @@ class PricingEngine:
         item_level = getattr(item, "item_level", 0) or 0
         return self._price_cache.lookup(name, base_type, item_level)
 
-    def deep_price(self, item, parsed_mods, is_stale_callback=None):
-        """Query trade API for rare item pricing.
-
-        Args:
-            item: ParsedItem from parse_item().
-            parsed_mods: List of ParsedMod from parse_mods().
-            is_stale_callback: Optional callback that returns True if the
-                query should be abandoned (e.g., user moved to a different item).
-
-        Returns:
-            RarePriceResult or None.
-        """
-        if self._trade_client is None:
-            return None
-        return self._trade_client.price_rare_item(
-            item, parsed_mods, is_stale_callback
-        )
-
     def lookup(self, text: str) -> Optional[Dict[str, Any]]:
         """Full pipeline: parse, score, estimate — like ItemLookup.lookup().
 
@@ -201,20 +138,6 @@ class PricingEngine:
 
         parsed_mods = self.parse_mods(item)
         score = self.score_item(item, parsed_mods)
-
-        # Estimate price
-        estimate = None
-        if self._calibration and score:
-            price_divine = self.estimate_price(item, score)
-            if price_divine is not None:
-                d2c = 0
-                if self._price_cache:
-                    d2c = getattr(self._price_cache, 'divine_to_chaos', 0)
-                estimate = {
-                    "divine_value": round(price_divine, 2),
-                    "chaos_value": (round(price_divine * d2c, 0)
-                                    if d2c > 0 else None),
-                }
 
         return {
             "item": {
@@ -240,7 +163,7 @@ class PricingEngine:
                 "top_mods": score.top_mods_summary if score else None,
                 "top_tier_count": score.top_tier_count if score else 0,
             } if score else None,
-            "estimate": estimate,
+            "estimate": None,
         }
 
     def start_price_updates(self):
@@ -268,15 +191,7 @@ class PricingEngine:
         self._item_parser = ItemParser()
 
     def _init_mod_parser(self):
-        """Configure mod_parser module constants, then load stats."""
-        import mod_parser as mp_module
-
-        # Inject GameConfig values into module-level constants
-        mp_module.TRADE_STATS_URL = self.config.trade_stats_url
-        mp_module.TRADE_STATS_CACHE_FILE = self.config.trade_stats_cache_file
-        mp_module.TRADE_ITEMS_URL = self.config.trade_items_url
-        mp_module.TRADE_ITEMS_CACHE_FILE = self.config.trade_items_cache_file
-
+        """Load mod parser with bundled stat definitions."""
         from mod_parser import ModParser
         self._mod_parser = ModParser()
         self._mod_parser.load_stats()
@@ -309,21 +224,6 @@ class PricingEngine:
         self._mod_database = ModDatabase()
         self._mod_database.load(self._mod_parser)
 
-    def _init_calibration(self):
-        """Load calibration engine with shards."""
-        from calibration import CalibrationEngine
-
-        self._calibration = CalibrationEngine()
-
-        # Load user calibration data
-        if self.config.calibration_log_file:
-            self._calibration.load(self.config.calibration_log_file)
-
-        # Load pre-built shards
-        if self.config.shard_dir and self.config.shard_dir.exists():
-            for shard in sorted(self.config.shard_dir.glob("*.json.gz")):
-                self._calibration.load_shard(shard)
-
     def _init_price_cache(self):
         """Configure price_cache module constants, then create instance."""
         try:
@@ -334,10 +234,6 @@ class PricingEngine:
             pc_module.CACHE_DIR = self.config.cache_dir
             pc_module.DEFAULT_LEAGUE = self.config.default_league
             pc_module.POE2SCOUT_BASE_URL = self.config.price_source_url
-            if self.config.rate_history_file:
-                pc_module.RATE_HISTORY_FILE = self.config.rate_history_file
-            if self.config.rate_history_backup:
-                pc_module.RATE_HISTORY_BACKUP = self.config.rate_history_backup
             if self.config.poe_ninja_exchange_url:
                 pc_module.POE2_EXCHANGE_URL = self.config.poe_ninja_exchange_url
             if self.config.exchange_categories:
@@ -354,34 +250,3 @@ class PricingEngine:
         except Exception as e:
             logger.debug(f"PriceCache init skipped: {e}")
 
-    def _init_trade_client(self):
-        """Configure trade_client module constants, then create instance."""
-        try:
-            import trade_client as tc_module
-
-            # Inject GameConfig values
-            tc_module.TRADE_API_BASE = self.config.trade_api_base
-            tc_module.TRADE_MAX_REQUESTS_PER_SECOND = self.config.trade_max_requests_per_second
-            tc_module.TRADE_RESULT_COUNT = self.config.trade_result_count
-            tc_module.TRADE_CACHE_TTL = self.config.trade_cache_ttl
-            tc_module.TRADE_MOD_MIN_MULTIPLIER = self.config.trade_mod_min_multiplier
-            tc_module.DPS_ITEM_CLASSES = self.config.dps_item_classes
-            tc_module.DEFENSE_ITEM_CLASSES = self.config.defense_item_classes
-            tc_module.TRADE_DPS_FILTER_MULT = self.config.trade_dps_filter_mult
-            tc_module.TRADE_DEFENSE_FILTER_MULT = self.config.trade_defense_filter_mult
-            tc_module.DEFAULT_LEAGUE = self.config.default_league
-
-            from trade_client import TradeClient
-
-            # Wire up exchange rate functions from price cache
-            d2c_fn = lambda: getattr(self._price_cache, 'divine_to_chaos', 68.0) if self._price_cache else 68.0
-            d2e_fn = lambda: getattr(self._price_cache, 'divine_to_exalted', 387.0) if self._price_cache else 387.0
-
-            self._trade_client = TradeClient(
-                league=self.config.default_league,
-                divine_to_chaos_fn=d2c_fn,
-                divine_to_exalted_fn=d2e_fn,
-                mod_database=self._mod_database,
-            )
-        except Exception as e:
-            logger.debug(f"TradeClient init skipped: {e}")

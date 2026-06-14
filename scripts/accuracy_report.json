@@ -1,0 +1,417 @@
+{
+  "timestamp": "2026-03-30 23:27:46",
+  "builds_analyzed": 84,
+  "crashes": 0,
+  "total_discrepancies": 45,
+  "by_category": {
+    "classification": 39,
+    "recommendation": 6
+  },
+  "discrepancies": [
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "ChonkeyBusiness",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "True",
+      "lama_says": "False",
+      "build_name": "kkusi_fov",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "True",
+      "lama_says": "False",
+      "build_name": "KilllerBee",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "madaraloh",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "Tika_GuguGaga",
+      "build_tier": "top"
+    },
+    {
+      "category": "recommendation",
+      "severity": "minor",
+      "description": "Top-tier build gets 3 critical actions (should be minimal)",
+      "claude_says": "This is a top-tier build (451,077 DPS)",
+      "lama_says": "Critical actions: ['Cap Chaos Resistance', 'Increase Effective HP', 'Add Life to 2 Slots']",
+      "build_name": "Tika_GuguGaga",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "Ragnafoquis",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "\u4e0b\u5757\u56fe\u5c31\u51fa\u955c\u5b50",
+      "build_tier": "low"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "\u0422\u0430\u043f\u0430\u0441\u044c\u044f",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "\u30fc\u3068\u3042\u308b\u524d\u885b\u30fc",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "ChronosBlizz",
+      "build_tier": "low"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "True",
+      "lama_says": "False",
+      "build_name": "FOTV_DUDUCITO",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "True",
+      "lama_says": "False",
+      "build_name": "\u51cc\u5a49\u79cb",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "True",
+      "lama_says": "False",
+      "build_name": "sifuWind",
+      "build_tier": "low"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "DixInMyAz",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "Desssp",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "VarashtaEnthusiast",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "\u68ad\u54c8\u65b0\u56fd\u90fd",
+      "build_tier": "low"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "fdghnt",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "\u8e66\u8e66\u718a\u554a\u5662",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "xxFemmeboi",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "Defense type mismatch",
+      "claude_says": "es",
+      "lama_says": "hybrid",
+      "build_name": "Amrith",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "Amrith",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "MedSiniy",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "True",
+      "lama_says": "False",
+      "build_name": "MonkJoey",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "LuciIce",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "MiMo_V",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "\u5341\u842c\u4f0f\u7279\u4e36",
+      "build_tier": "top"
+    },
+    {
+      "category": "recommendation",
+      "severity": "minor",
+      "description": "Top-tier build gets 3 critical actions (should be minimal)",
+      "claude_says": "This is a top-tier build (109,103 DPS)",
+      "lama_says": "Critical actions: ['Cap Chaos Resistance', 'Allocate Mind Over Matter', 'Allocate Eldritch Battery']",
+      "build_name": "LyAtziriAtziri",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "ZAPLATIM",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "sotsunakuPFfov",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "RafaelRangerVaal",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "TempestLevels",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "KiemVangChoQ",
+      "build_tier": "low"
+    },
+    {
+      "category": "recommendation",
+      "severity": "minor",
+      "description": "Top-tier build gets 3 critical actions (should be minimal)",
+      "claude_says": "This is a top-tier build (189,255 DPS)",
+      "lama_says": "Critical actions: ['Cap Chaos Resistance', 'Increase Effective HP', 'Add Life to 5 Slots']",
+      "build_name": "WolfeVaal",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "Daddyishereforyou",
+      "build_tier": "low"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "ZayWuuuuu",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "Sorc_StormweaverArc",
+      "build_tier": "low"
+    },
+    {
+      "category": "recommendation",
+      "severity": "minor",
+      "description": "Top-tier build gets 3 critical actions (should be minimal)",
+      "claude_says": "This is a top-tier build (134,220 DPS)",
+      "lama_says": "Critical actions: ['Cap Chaos Resistance', 'Increase Effective HP', 'Add Life to 7 Slots']",
+      "build_name": "\ubbfc\uc6b0\uc544",
+      "build_tier": "top"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "witchzlayer",
+      "build_tier": "low"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "xJooLzx",
+      "build_tier": "mid"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "Kitsunyan_",
+      "build_tier": "low"
+    },
+    {
+      "category": "classification",
+      "severity": "major",
+      "description": "CoC detection mismatch",
+      "claude_says": "False",
+      "lama_says": "True",
+      "build_name": "porrradeiroman",
+      "build_tier": "low"
+    },
+    {
+      "category": "recommendation",
+      "severity": "minor",
+      "description": "Top-tier build gets 3 critical actions (should be minimal)",
+      "claude_says": "This is a top-tier build (427,778 DPS)",
+      "lama_says": "Critical actions: ['Cap Chaos Resistance', 'Increase Effective HP', 'Add Life to 5 Slots']",
+      "build_name": "Bestalhada",
+      "build_tier": "top"
+    },
+    {
+      "category": "recommendation",
+      "severity": "minor",
+      "description": "Top-tier build gets 3 critical actions (should be minimal)",
+      "claude_says": "This is a top-tier build (35,593 DPS)",
+      "lama_says": "Critical actions: ['Cap Resistances', 'Increase Effective HP', 'Add Life to 2 Slots']",
+      "build_name": "____RASPUTIN____",
+      "build_tier": "top"
+    }
+  ]
+}
