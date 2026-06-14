@@ -1,6 +1,7 @@
-## LAMA v0.3.2 — Character lookup fixed
+## LAMA v0.3.3 — Saved-character & welcome-screen fixes
 
 ### Fixes
-- **Looking up your own (non-ladder) character works again.** poe.ninja changed its profile API response, which silently broke every non-ladder lookup — they returned "Character not found" even for valid public characters. Fixed; off-ladder characters resolve again.
+- **Saved characters look up again.** poe.ninja's character lookup is case-sensitive, and older saves could hold a wrong-case account name — clicking them returned "Character not found." Successful lookups now heal the stored account, so saved characters keep working.
+- **Welcome screen scrolls.** With a lot of saved characters, the list could push the search box off the top with no way to reach it. The character-select screen now scrolls.
 
-This is a quick follow-up to v0.3.1 (which restored item pricing and added the Budget Planner).
+Quick follow-up to v0.3.1 (pricing + Budget Planner) and v0.3.2 (non-ladder lookup).
