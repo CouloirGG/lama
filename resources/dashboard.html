@@ -1228,13 +1228,13 @@
       const vb = `${cx - half} ${cy - half} ${half * 2} ${half * 2}`;
       // category -> text-color class (fill=currentColor), base radius, opacity
       const STYLE = {
-        unallocated: { cls: "text-outline",           r: 150, op: 0.25 },
-        extra:       { cls: "text-secondary",         r: 300, op: 0.5 },
-        shared:      { cls: "text-primary-container",  r: 340, op: 0.9 },
-        allocated:   { cls: "text-primary-container",  r: 320, op: 0.85 },
-        missing:     { cls: "text-error",              r: 390, op: 1 },
-        swap_take:   { cls: "text-tertiary",           r: 440, op: 1 },
-        swap_refund: { cls: "text-secondary",          r: 380, op: 1 },
+        unallocated: { cls: "text-outline",           r: 210, op: 0.35 },
+        extra:       { cls: "text-secondary",         r: 380, op: 0.55 },
+        shared:      { cls: "text-primary-container",  r: 430, op: 0.9 },
+        allocated:   { cls: "text-primary-container",  r: 410, op: 0.85 },
+        missing:     { cls: "text-error",              r: 500, op: 1 },
+        swap_take:   { cls: "text-tertiary",           r: 560, op: 1 },
+        swap_refund: { cls: "text-secondary",          r: 470, op: 1 },
       };
       // Draw faint/background first, highlights last so they sit on top.
       const order = ["unallocated", "extra", "shared", "allocated", "swap_refund", "missing", "swap_take"];
@@ -1249,7 +1249,7 @@
         <div className="mb-3">
           <svg viewBox={vb} preserveAspectRatio="xMidYMid meet"
                className="bg-surface-container-lowest border border-outline-variant/10"
-               style={{ width: "min(100%, 340px)", height: "340px", margin: "0 auto", display: "block" }}>
+               style={{ width: "100%", height: "440px", display: "block" }}>
             {sorted.map((n, i) => {
               const s = STYLE[n.category] || STYLE.unallocated;
               const r = n.isKeystone ? s.r * 1.5 : s.r;
@@ -1562,38 +1562,13 @@
                 );
               })}
 
-              {/* Perk swaps */}
-              {treeAnalysis?.swapRecommendations?.length > 0 && (
-                <div className="mb-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Icon name="account_tree" className="text-base text-secondary" />
-                    <span className="font-headline text-sm font-bold text-on-surface">Passive Tree</span>
-                    <div className="flex-1 h-px bg-outline-variant/20" />
-                    <span className="text-[10px] font-label text-secondary uppercase">{treeAnalysis.swapRecommendations.length} swaps</span>
-                  </div>
-                  {treeAnalysis.treeVisual?.nodes?.length > 0 && (
-                    <PassiveTreeMinimap treeVisual={treeAnalysis.treeVisual} />
-                  )}
-                  {treeAnalysis.swapRecommendations.slice(0, 4).map((s, i) => (
-                    <div key={i} className="bg-surface-container-low border-l-2 border-secondary/60 p-3 mb-1.5">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-error line-through text-sm">{s.refund}</span>
-                        <Icon name="arrow_forward" className="text-xs text-outline" />
-                        <span className="text-tertiary text-sm font-bold">{s.take}</span>
-                        <span className="text-[10px] text-outline ml-auto">{s.netPoints > 0 ? `saves ${s.netPoints} pts` : s.netPoints < 0 ? `costs ${-s.netPoints} pts` : "same cost"}</span>
-                      </div>
-                      <p className="text-xs font-body text-on-surface-variant">{s.summary}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
-            {/* RIGHT: Gear — each slot with upgrade path */}
+            {/* RIGHT: Gear + Passive Tree */}
             <div className="overflow-y-auto p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <Icon name="inventory_2" className="text-base text-on-surface-variant" />
-                <span className="font-headline text-sm font-bold text-on-surface">Equipment</span>
+              <div className="flex items-center gap-2 mb-4">
+                <Icon name="inventory_2" className="text-lg text-on-surface-variant" />
+                <span className="font-headline text-base font-bold text-on-surface">Equipment</span>
               </div>
               {slots.map(sl => {
                 const hasDeadMods = (sl.deadMods?.length || 0) > 0;
@@ -1674,6 +1649,34 @@
                   </div>
                 );
               })}
+
+              {/* Passive Tree (lives here under Equipment so it fills the column and is visible) */}
+              {treeAnalysis?.swapRecommendations?.length > 0 && (
+                <div className="mt-7 pt-5 border-t border-outline-variant/15">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Icon name="account_tree" className="text-lg text-secondary" />
+                    <span className="font-headline text-base font-bold text-on-surface">Passive Tree</span>
+                    <div className="flex-1 h-px bg-outline-variant/20" />
+                    <span className="text-[10px] font-label text-secondary uppercase">{treeAnalysis.swapRecommendations.length} swaps</span>
+                  </div>
+                  {treeAnalysis.treeVisual?.nodes?.length > 0 && (
+                    <PassiveTreeMinimap treeVisual={treeAnalysis.treeVisual} />
+                  )}
+                  <div className="mt-3 space-y-1.5">
+                    {treeAnalysis.swapRecommendations.slice(0, 4).map((s, i) => (
+                      <div key={i} className="bg-surface-container-low border-l-2 border-secondary/60 p-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-error line-through text-sm">{s.refund}</span>
+                          <Icon name="arrow_forward" className="text-xs text-outline" />
+                          <span className="text-tertiary text-sm font-bold">{s.take}</span>
+                          <span className="text-[10px] text-outline ml-auto">{s.netPoints > 0 ? `saves ${s.netPoints} pts` : s.netPoints < 0 ? `costs ${-s.netPoints} pts` : "same cost"}</span>
+                        </div>
+                        <p className="text-xs font-body text-on-surface-variant">{s.summary}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
