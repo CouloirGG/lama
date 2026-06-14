@@ -1212,6 +1212,47 @@
     }
 
 
+    function DpsMeterCard({ sc }) {
+      if (!sc) return null;
+      const fmt = v => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : `${Math.round(v || 0)}`;
+      const pct = sc.dpsPercentile;
+      const skill = sc.dpsSkill || "your main skill";
+      const hasMeta = pct >= 0 && sc.dpsCeiling > 0;
+      const big = sc.dps > 0 ? fmt(sc.dps) : (sc.dpsLabel || "—");
+      return (
+        <div className="mb-5 bg-surface-container-low border-l-2 border-primary-container/60 p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Icon name="bolt" className="text-base text-primary-container" />
+            <span className="font-headline text-sm font-bold text-on-surface">Damage</span>
+            <span className="text-xs text-on-surface-variant truncate">{skill}</span>
+            <div className="flex-1" />
+            <span className="font-headline text-base text-primary-container">{big}</span>
+          </div>
+          {hasMeta ? (
+            <>
+              {/* Percentile bar: fill = your percentile, tick = median (50th) */}
+              <div className="relative h-2 bg-surface-container-lowest mt-2 mb-1 overflow-hidden">
+                <div className="absolute inset-y-0 left-0 bg-primary-container/40" style={{ width: `${Math.min(100, Math.max(2, pct))}%` }} />
+                <div className="absolute inset-y-0 w-px bg-secondary" style={{ left: "50%" }} />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-outline">
+                <span><span className="text-primary-container font-bold">{pct}th</span> percentile for this build</span>
+                <span>median {fmt(sc.dpsMedian)} · top {fmt(sc.dpsCeiling)}</span>
+              </div>
+              {pct < 50 && sc.dpsCeiling > sc.dps && (
+                <p className="text-[11px] text-secondary mt-1.5">Top {skill} builds hit {fmt(sc.dpsCeiling)} — significant DPS headroom to chase.</p>
+              )}
+              {pct >= 80 && (
+                <p className="text-[11px] text-primary-container/80 mt-1.5">Top-tier DPS for this build — invest in survivability or clear speed next.</p>
+              )}
+            </>
+          ) : (
+            <p className="text-[10px] text-outline mt-1">No meta DPS comparison available for this build yet.</p>
+          )}
+        </div>
+      );
+    }
+
     function SinglePageView({ charData, insights, whyInsights, account, character }) {
       const [treeAnalysis, setTreeAnalysis] = useState(null);
       const [expandedSlot, setExpandedSlot] = useState(null);
@@ -1303,6 +1344,7 @@
 
             {/* LEFT: What's working / What's not (synergy categories) */}
             <div className="border-r border-outline-variant/20 overflow-y-auto p-5">
+              <DpsMeterCard sc={sc} />
               {synergy.map(cat => {
                 const hasIssues = cat.missing?.length > 0;
                 const catIcon = { dps: "bolt", survival: "shield", clear_speed: "speed", quality: "auto_awesome" }[cat.category] || "category";
