@@ -1212,6 +1212,73 @@
     }
 
 
+    function PassiveTreeMinimap({ treeVisual }) {
+      const nodes = treeVisual?.nodes;
+      if (!nodes || !nodes.length) return null;
+      // Focus the (square) view on the meaningful/highlighted nodes so they're
+      // large and readable; background nodes outside the frame are clipped.
+      const focus = nodes.filter(n => n.category !== "unallocated");
+      const pts = focus.length ? focus : nodes;
+      let cx = 0, cy = 0;
+      for (const n of pts) { cx += n.x; cy += n.y; }
+      cx /= pts.length; cy /= pts.length;
+      let half = 3000;
+      for (const n of pts) half = Math.max(half, Math.abs(n.x - cx), Math.abs(n.y - cy));
+      half *= 1.3;
+      const vb = `${cx - half} ${cy - half} ${half * 2} ${half * 2}`;
+      // category -> text-color class (fill=currentColor), base radius, opacity
+      const STYLE = {
+        unallocated: { cls: "text-outline",           r: 150, op: 0.25 },
+        extra:       { cls: "text-secondary",         r: 300, op: 0.5 },
+        shared:      { cls: "text-primary-container",  r: 340, op: 0.9 },
+        allocated:   { cls: "text-primary-container",  r: 320, op: 0.85 },
+        missing:     { cls: "text-error",              r: 390, op: 1 },
+        swap_take:   { cls: "text-tertiary",           r: 440, op: 1 },
+        swap_refund: { cls: "text-secondary",          r: 380, op: 1 },
+      };
+      // Draw faint/background first, highlights last so they sit on top.
+      const order = ["unallocated", "extra", "shared", "allocated", "swap_refund", "missing", "swap_take"];
+      const sorted = [...nodes].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
+      const legend = [
+        ["primary-container", "Allocated"],
+        ["error", "Missing (top have)"],
+        ["tertiary", "Take"],
+        ["secondary", "Drop"],
+      ];
+      return (
+        <div className="mb-3">
+          <svg viewBox={vb} preserveAspectRatio="xMidYMid meet"
+               className="bg-surface-container-lowest border border-outline-variant/10"
+               style={{ width: "min(100%, 340px)", height: "340px", margin: "0 auto", display: "block" }}>
+            {sorted.map((n, i) => {
+              const s = STYLE[n.category] || STYLE.unallocated;
+              const r = n.isKeystone ? s.r * 1.5 : s.r;
+              const tip = n.category !== "unallocated"
+                ? <title>{n.name}{n.isKeystone ? " (keystone)" : ""}{n.stats && n.stats.length ? " — " + n.stats.join("; ") : ""}</title>
+                : null;
+              return (
+                <g key={n.id + "_" + i} className={s.cls}>
+                  {n.isKeystone
+                    ? <rect x={n.x - r} y={n.y - r} width={r * 2} height={r * 2} fill="currentColor"
+                            fillOpacity={s.op} transform={`rotate(45 ${n.x} ${n.y})`} />
+                    : <circle cx={n.x} cy={n.y} r={r} fill="currentColor" fillOpacity={s.op} />}
+                  {tip}
+                </g>
+              );
+            })}
+          </svg>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+            {legend.map(([c, label]) => (
+              <span key={label} className="flex items-center gap-1 text-[9px] text-outline">
+                <span className={`w-2 h-2 rounded-full bg-${c}`} />{label}
+              </span>
+            ))}
+            <span className="text-[9px] text-outline">◆ keystone</span>
+          </div>
+        </div>
+      );
+    }
+
     function DpsMeterCard({ sc }) {
       if (!sc) return null;
       const fmt = v => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : `${Math.round(v || 0)}`;
@@ -1408,6 +1475,9 @@
                     <div className="flex-1 h-px bg-outline-variant/20" />
                     <span className="text-[10px] font-label text-secondary uppercase">{treeAnalysis.swapRecommendations.length} swaps</span>
                   </div>
+                  {treeAnalysis.treeVisual?.nodes?.length > 0 && (
+                    <PassiveTreeMinimap treeVisual={treeAnalysis.treeVisual} />
+                  )}
                   {treeAnalysis.swapRecommendations.slice(0, 4).map((s, i) => (
                     <div key={i} className="bg-surface-container-low border-l-2 border-secondary/60 p-3 mb-1.5">
                       <div className="flex items-center gap-2 mb-1">
