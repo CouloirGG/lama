@@ -1297,6 +1297,12 @@ def _save_recent_character(account: str, name: str, char_class: str, level: int)
             break
 
     if acct:
+        # Heal the stored account name to the one that just resolved. poe.ninja's
+        # profile lookup is case-sensitive, and its data returns accounts in a
+        # different case (e.g. "angrysmash#4212") than its URLs ("AngrySMASH-4212"),
+        # so older saves can hold a name that no longer looks up. Overwrite it with
+        # the account that just succeeded so the saved-character click keeps working.
+        acct["accountName"] = account
         # Upsert character
         existing_idx = next(
             (i for i, c in enumerate(acct["characters"])
