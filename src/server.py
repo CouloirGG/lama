@@ -1690,6 +1690,131 @@ async def character_why_insights(req: WhyInsightsRequest):
         return {"keystones": [], "gear": {}, "stats": [], "actions": [], "meta": []}
 
 
+# ── AI Coach (grounded local LLM via Ollama) ──────────────────────────────
+# Principle: LAMA computes the analysis AND ranks the priorities deterministically;
+# the local model only EXPLAINS them in plain language. The model never decides
+# priority or invents numbers — that keeps it accurate and hallucination-free.
+OLLAMA_URL = "http://localhost:11434"
+COACH_MODEL = "phi4:latest"
+
+COACH_SYSTEM = (
+    "You are LAMA, a friendly, concise Path of Exile 2 build coach. Below are FACTS about "
+    "the player's character, computed by LAMA from live ladder data and the current economy "
+    "— they are authoritative.\n"
+    "RULES:\n"
+    "- Use ONLY the facts given. NEVER invent or name a specific item, unique, flask, gem, "
+    "keystone, passive, price, number, or mechanic that is not in the facts.\n"
+    "- When a fix is general (e.g. survival is low), describe it generically — 'add more life "
+    "and cap your resistances on your gear' — do NOT name a specific item LAMA did not provide.\n"
+    "- This is Path of Exile 2, which is NOT Path of Exile 1; never reference PoE1-only items, "
+    "uniques, pantheons, or mechanics.\n"
+    "- LAMA has already ranked the priorities; coach in that exact order.\n"
+    "Write 3-5 short sentences straight to the player: lead with priority #1 and WHY it "
+    "matters, then briefly cover the next one or two, naming ONLY the items/stats from the "
+    "facts. Be specific and encouraging, end with one short line of motivation. Plain "
+    "friendly prose only — no markdown headers or bullet lists."
+)
+
+
+def _ollama_available() -> bool:
+    try:
+        return requests.get(f"{OLLAMA_URL}/api/tags", timeout=2).status_code == 200
+    except Exception:
+        return False
+
+
+def _ollama_chat(system: str, user: str, model: str = COACH_MODEL, timeout: int = 180) -> str:
+    r = requests.post(f"{OLLAMA_URL}/api/chat", json={
+        "model": model,
+        "messages": [{"role": "system", "content": system},
+                     {"role": "user", "content": user}],
+        "stream": False,
+        "options": {"temperature": 0.3},
+    }, timeout=timeout)
+    r.raise_for_status()
+    return ((r.json() or {}).get("message", {}) or {}).get("content", "").strip()
+
+
+def _compute_coach_priorities(sc: dict, synergy: list) -> list:
+    """Rank issues deterministically (defense gates before damage) so the model narrates."""
+    pr = []
+    if sc.get("ehpStatus") == "critical":
+        pr.append(f"Survival is CRITICAL: only {sc.get('ehp','?')} EHP — fix this before chasing damage.")
+    if sc.get("resistStatus") and sc.get("resistStatus") != "positive":
+        pr.append(f"Resistances are not capped ({sc.get('resistSummary','?')}) — cap them; it is cheap and stops one-shots.")
+    if sc.get("ehpStatus") == "warning":
+        pr.append(f"Survival is a little low ({sc.get('ehp','?')} EHP) — worth shoring up soon.")
+    for cat in synergy:
+        if cat.get("status") in ("critical", "warning") and cat.get("missing"):
+            top = sorted(cat["missing"], key=lambda m: m.get("estimatedPct", 0) or 0, reverse=True)[:2]
+            names = ", ".join(m.get("name", "") for m in top if m.get("name"))
+            if names:
+                pr.append(f"{cat.get('label','Damage')}: add {names} (the highest-impact missing pieces).")
+    return pr[:4]
+
+
+def _build_coach_facts(exp: dict, char) -> str:
+    sc = exp.get("scorecard", {}) or {}
+    synergy = exp.get("synergyMap", []) or []
+    lines = [
+        f"CHARACTER: {char.name} — {char.ascendancy or char.char_class}, Level {char.level}, main skill {sc.get('dpsSkill') or 'unknown'}.",
+        f"DPS: {sc.get('dpsLabel','unknown')} ({sc.get('dpsPercentile','?')}th percentile among this build).",
+        f"SURVIVAL: {sc.get('ehp','?')} EHP (status: {sc.get('ehpStatus','?')}).",
+        f"RESISTANCES: {sc.get('resistSummary','?')}.",
+    ]
+    for cat in synergy:
+        miss = (cat.get("missing") or [])[:3]
+        if miss:
+            items = "; ".join(
+                f"{m.get('name')} (+{round(m.get('estimatedPct',0) or 0)}% impact, used by {round(m.get('adoptionPct',0) or 0)}% of top builds)"
+                for m in miss if m.get("name")
+            )
+            if items:
+                lines.append(f"MISSING FOR {(cat.get('label') or '').upper()}: {items}")
+    facts = "\n".join(lines)
+    priorities = _compute_coach_priorities(sc, synergy)
+    if priorities:
+        facts += "\n\nPRIORITY ORDER (already ranked by LAMA — coach in this exact order):\n" + \
+                 "\n".join(f"{i+1}. {p}" for i, p in enumerate(priorities))
+    return facts
+
+
+class CoachRequest(BaseModel):
+    account: str
+    character: str
+    model: str = ""
+
+
+@app.post("/api/character/coach")
+async def character_coach(req: CoachRequest):
+    """Grounded plain-language 'what to focus on' from a local LLM (Ollama)."""
+    if not _ollama_available():
+        return JSONResponse(status_code=503, content={
+            "available": False,
+            "error": "Local AI coach unavailable. Install Ollama and pull a model (e.g. 'ollama pull phi4') to enable it.",
+        })
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character required"})
+    loop = asyncio.get_running_loop()
+    char = await loop.run_in_executor(None, _lookup_character_with_fallback, req.account.strip(), req.character.strip())
+    if not char:
+        return JSONResponse(status_code=404, content={"error": "Character not found"})
+    archetype = classify_build(char)
+    try:
+        exp = (await loop.run_in_executor(None, why_engine_instance.explain_character, char, archetype)).to_dict()
+    except Exception as e:
+        logger.error(f"coach: analysis failed: {e}")
+        return JSONResponse(status_code=500, content={"error": "Analysis failed"})
+    facts = _build_coach_facts(exp, char)
+    model = (req.model or COACH_MODEL).strip()
+    try:
+        coaching = await loop.run_in_executor(None, _ollama_chat, COACH_SYSTEM, facts, model)
+    except Exception as e:
+        logger.error(f"coach: ollama failed: {e}")
+        return JSONResponse(status_code=502, content={"error": f"Coach model failed: {e}"})
+    return {"coaching": coaching, "model": model, "facts": facts}
+
+
 class TreeAnalysisRequest(BaseModel):
     account: str
     character: str

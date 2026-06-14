@@ -1279,6 +1279,53 @@
       );
     }
 
+    function CoachPanel({ account, character }) {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState("");
+      const [unavailable, setUnavailable] = useState(false);
+
+      useEffect(() => {
+        if (!account || !character) return;
+        setLoading(true); setError(""); setUnavailable(false); setData(null);
+        api("/api/character/coach", "POST", { account, character })
+          .then(d => {
+            setLoading(false);
+            if (d && d.available === false) { setUnavailable(true); setError(d.error || ""); }
+            else if (!d || d.error) setError((d && d.error) || "Coach failed.");
+            else setData(d);
+          })
+          .catch(() => { setLoading(false); setError("Coach failed to respond."); });
+      }, [account, character]);
+
+      if (loading) return (
+        <div className="flex-1 flex flex-col items-center justify-center py-16 gap-3 px-8 text-center">
+          <div className="w-8 h-8 border-2 border-secondary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+          <span className="text-sm text-on-surface-variant font-sans">Your local AI coach is reading your build...</span>
+          <span className="text-[11px] text-outline">Runs on your own machine — the first response can take a moment.</span>
+        </div>
+      );
+      if (unavailable) return (
+        <div className="flex-1 flex flex-col items-center justify-center py-16 gap-2 px-8 text-center">
+          <Icon name="smart_toy" className="text-4xl text-outline/40" />
+          <p className="text-sm text-on-surface-variant max-w-md">{error}</p>
+          <p className="text-[11px] text-outline">Install Ollama and run <span className="text-on-surface-variant">ollama pull phi4</span>, then reopen the coach.</p>
+        </div>
+      );
+      if (error) return <p className="text-sm text-error font-sans p-6">{error}</p>;
+      if (!data) return null;
+      return (
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+          <div className="max-w-2xl mx-auto">
+            <p className="text-base font-sans text-on-surface leading-relaxed whitespace-pre-wrap">{data.coaching}</p>
+            <p className="text-[10px] text-outline mt-6 pt-3 border-t border-outline-variant/15">
+              Generated locally by {data.model} from LAMA's analysis of your build — grounded in your real numbers. Double-check big purchases yourself.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     function BudgetPlanner({ account, character }) {
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(true);
@@ -1415,6 +1462,7 @@
       // Compare-vs-another-build overlay (reconnected from the old Compare tab)
       const [compareOpen, setCompareOpen] = useState(false);
       const [budgetOpen, setBudgetOpen] = useState(false);
+      const [coachOpen, setCoachOpen] = useState(false);
       const [compareQuery, setCompareQuery] = useState("");
       const [compareResult, setCompareResult] = useState(null);
       const [compareLoading, setCompareLoading] = useState(false);
@@ -1470,6 +1518,14 @@
               <span className="text-xs text-on-surface-variant">{charData.ascendancy || charData.class} Lv{charData.level}</span>
             </div>
             <div className="flex-1" />
+            <button
+              onClick={() => setCoachOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 border border-secondary/50 text-secondary hover:text-on-surface hover:border-secondary transition-colors"
+              title="AI coach — what to focus on (runs on your local LLM)"
+            >
+              <Icon name="auto_awesome" className="text-xs text-secondary" />
+              <span className="text-xs font-label">Coach</span>
+            </button>
             <button
               onClick={() => setCompareOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface hover:border-tertiary transition-colors"
@@ -1746,6 +1802,22 @@
                 </button>
               </div>
               <BudgetPlanner account={account} character={character} />
+            </div>
+          )}
+
+          {/* ── AI COACH (overlay) ── */}
+          {coachOpen && (
+            <div className="absolute inset-0 z-40 bg-surface flex flex-col overflow-hidden">
+              <div className="flex items-center gap-3 px-6 py-3 border-b border-outline-variant/20 shrink-0">
+                <Icon name="auto_awesome" className="text-base text-secondary" />
+                <span className="font-headline text-lg text-on-surface">Coach</span>
+                <span className="text-xs text-on-surface-variant">what to focus on, {charData.name}</span>
+                <div className="flex-1" />
+                <button onClick={() => setCoachOpen(false)} className="text-on-surface-variant hover:text-on-surface" title="Close">
+                  <Icon name="close" className="text-lg" />
+                </button>
+              </div>
+              <CoachPanel account={account} character={character} />
             </div>
           )}
         </div>
