@@ -1279,6 +1279,93 @@
       );
     }
 
+    function BudgetPlanner({ account, character }) {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState("");
+      const [budget, setBudget] = useState(20);   // divines; 0 = no cap
+
+      useEffect(() => {
+        if (!account || !character) return;
+        setLoading(true); setError("");
+        api("/api/character/budget-plan", "POST", { account, character })
+          .then(d => { setLoading(false); if (d.error) setError(d.error); else setData(d); })
+          .catch(() => { setLoading(false); setError("Failed to build budget plan"); });
+      }, [account, character]);
+
+      if (loading) return (
+        <div className="flex-1 flex flex-col items-center justify-center py-16 gap-3">
+          <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+          <span className="text-sm text-on-surface-variant font-sans">Pricing the meta's upgrades for your build...</span>
+        </div>
+      );
+      if (error) return <p className="text-sm text-error font-sans p-6">{error}</p>;
+      if (!data) return null;
+
+      const ups = data.upgrades || [];
+      const cap = budget > 0 ? budget : Infinity;
+      const within = ups.filter(u => u.priceDiv <= cap);
+      const over = ups.filter(u => u.priceDiv > cap);
+      const total = within.reduce((s, u) => s + u.priceDiv, 0);
+      const fmtD = v => v < 10 ? v.toFixed(1) : Math.round(v);
+      const tierOf = d => d < 5 ? "Starter" : d < 15 ? "Core" : d < 50 ? "Lineage" : "Premium";
+      const tierColor = { Starter: "text-primary-container", Core: "text-tertiary", Lineage: "text-secondary", Premium: "text-error" };
+
+      const Row = ({ u, dim }) => (
+        <div className={`flex items-center gap-2 py-1.5 px-6 border-b border-outline-variant/10 ${dim ? "opacity-40" : ""}`}>
+          <span className="text-[10px] font-label text-tertiary w-9 shrink-0" title="% of top players using this here">{u.adoption}%</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-sm text-secondary block truncate">{u.name}</span>
+            <span className="text-[10px] text-outline">{u.slotDisplay}</span>
+          </div>
+          <span className={`text-[9px] font-label uppercase ${tierColor[tierOf(u.priceDiv)]}`}>{tierOf(u.priceDiv)}</span>
+          <span className="text-xs font-label text-primary-container w-16 text-right shrink-0">{u.priceDisplay}</span>
+        </div>
+      );
+
+      return (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Honest framing */}
+          <div className="px-6 py-3 border-b border-outline-variant/20 shrink-0">
+            <p className="text-xs text-on-surface-variant">
+              <span className="text-on-surface font-bold">{data.pricedCount}</span> unique upgrades top players run, priced live.
+              {data.rareSlots?.length > 0 && <> {data.rareSlots.length} slots also want rare-mod gear — <span className="text-outline">check trade for those</span>.</>}
+            </p>
+            <p className="text-[10px] text-outline mt-0.5">{data.league} · 1 div = {data.rates?.divToExalted}ex / {data.rates?.divToChaos}c</p>
+          </div>
+          {/* Budget cap + running total */}
+          <div className="px-6 py-3 border-b border-outline-variant/20 shrink-0 flex items-center gap-3 flex-wrap">
+            <span className="text-xs font-label text-on-surface-variant uppercase tracking-wider">Budget</span>
+            <div className="flex gap-1.5">
+              {[5, 20, 50, 0].map(c => (
+                <button key={c} onClick={() => setBudget(c)}
+                  className={`px-2.5 py-1 text-xs font-label border transition-colors ${budget === c ? "border-primary-container text-primary-container bg-primary-container/10" : "border-outline-variant/40 text-on-surface-variant hover:text-on-surface"}`}>
+                  {c === 0 ? "Any" : `${c}d`}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1" />
+            <span className="text-xs text-on-surface-variant">
+              <span className="text-primary-container font-bold">{within.length}</span> fit · ~<span className="text-primary-container font-bold">{fmtD(total)}d</span> total
+            </span>
+          </div>
+          {/* Ranked list */}
+          <div className="flex-1 overflow-y-auto">
+            {within.length === 0 && (
+              <p className="text-sm text-outline p-6 text-center">No unique upgrades within {budget}d — your build's remaining gains are mostly rare-mod gear (check trade), or raise the budget.</p>
+            )}
+            {within.map((u, i) => <Row key={u.name + i} u={u} />)}
+            {over.length > 0 && (
+              <>
+                <div className="px-6 py-1.5 text-[10px] font-label text-outline uppercase tracking-widest bg-surface-container-lowest">Above budget</div>
+                {over.map((u, i) => <Row key={"o" + u.name + i} u={u} dim />)}
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     function DpsMeterCard({ sc }) {
       if (!sc) return null;
       const fmt = v => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : `${Math.round(v || 0)}`;
@@ -1327,6 +1414,7 @@
 
       // Compare-vs-another-build overlay (reconnected from the old Compare tab)
       const [compareOpen, setCompareOpen] = useState(false);
+      const [budgetOpen, setBudgetOpen] = useState(false);
       const [compareQuery, setCompareQuery] = useState("");
       const [compareResult, setCompareResult] = useState(null);
       const [compareLoading, setCompareLoading] = useState(false);
@@ -1389,6 +1477,14 @@
             >
               <Icon name="compare_arrows" className="text-xs text-tertiary" />
               <span className="text-xs font-label">Compare</span>
+            </button>
+            <button
+              onClick={() => setBudgetOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface hover:border-primary-container transition-colors"
+              title="Budget planner — priced upgrades for your build"
+            >
+              <Icon name="savings" className="text-xs text-primary-container" />
+              <span className="text-xs font-label">Budget</span>
             </button>
             {/* Health pills */}
             <div className={`flex items-center gap-1.5 px-3 py-1 ${dpsOk ? "bg-primary-container/10" : "bg-error/10"}`}>
@@ -1631,6 +1727,22 @@
                 )}
                 {compareResult && <BuildDiffView result={compareResult} />}
               </div>
+            </div>
+          )}
+
+          {/* ── BUDGET planner (overlay) ── */}
+          {budgetOpen && (
+            <div className="absolute inset-0 z-40 bg-surface flex flex-col overflow-hidden">
+              <div className="flex items-center gap-3 px-6 py-3 border-b border-outline-variant/20 shrink-0">
+                <Icon name="savings" className="text-base text-primary-container" />
+                <span className="font-headline text-lg text-on-surface">Upgrade Budget</span>
+                <span className="text-xs text-on-surface-variant">priced upgrades for {charData.name}</span>
+                <div className="flex-1" />
+                <button onClick={() => setBudgetOpen(false)} className="text-on-surface-variant hover:text-on-surface" title="Close">
+                  <Icon name="close" className="text-lg" />
+                </button>
+              </div>
+              <BudgetPlanner account={account} character={character} />
             </div>
           )}
         </div>
