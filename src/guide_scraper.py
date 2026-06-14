@@ -400,26 +400,31 @@ MAXROLL_PLANNER_API = "https://planners.maxroll.gg/profiles/poe2"
 # Maxroll planner ascendancy field → (base class, ascendancy display name)
 # Format is "{BaseClass}{Number}" e.g. "Witch1", "Warrior1", "Druid2"
 _MAXROLL_ASC_MAP = {
-    "Witch1": ("Witch", "Infernalist"),
-    "Witch2": ("Witch", "Blood Mage"),
-    "Warrior1": ("Warrior", "Titan"),
-    "Warrior2": ("Warrior", "Warbringer"),
-    "Ranger1": ("Ranger", "Deadeye"),
-    "Ranger2": ("Ranger", "Deadeye"),       # fallback
-    "Ranger3": ("Ranger", "Pathfinder"),
-    "Mercenary1": ("Mercenary", "Witchhunter"),
-    "Mercenary2": ("Mercenary", "Gemling Legionnaire"),
-    "Monk1": ("Monk", "Acolyte of Chayula"),
-    "Monk2": ("Monk", "Invoker"),
-    "Monk3": ("Monk", "Martial Artist"),         # 0.5.0; verify Maxroll numbering
-    "Sorceress1": ("Sorceress", "Chronomancer"),
-    "Sorceress2": ("Sorceress", "Stormweaver"),
-    # Last of the Druids expansion classes
-    "Druid1": ("Druid", "Oracle"),
-    "Druid2": ("Druid", "Shaman"),
-    "Huntress1": ("Huntress", "Amazon"),
-    "Huntress2": ("Huntress", "Ritualist"),      # was wrongly "Beastmaster"
-    "Huntress3": ("Huntress", "Spirit Walker"),  # 0.5.0; verify Maxroll numbering
+    # Codes verified against live Maxroll planner JSON (issue #62) where a guide
+    # exists. Maxroll's numbering is its own internal order (NOT in-game order),
+    # so it must be sampled, not assumed. Monk/Huntress/Sorceress/Mercenary and
+    # the *1 slots below are verified; entries marked "unverified" had no Maxroll
+    # guide to sample and may be wrong.
+    "Witch1": ("Witch", "Infernalist"),                  # verified
+    "Witch2": ("Witch", "Blood Mage"),                   # unverified
+    "Warrior1": ("Warrior", "Titan"),                    # verified
+    "Warrior2": ("Warrior", "Warbringer"),               # unverified
+    "Ranger1": ("Ranger", "Deadeye"),                    # verified
+    "Ranger2": ("Ranger", "Deadeye"),                    # unverified fallback
+    "Ranger3": ("Ranger", "Pathfinder"),                 # unverified
+    "Mercenary1": ("Mercenary", "Tactician"),            # verified (was Witchhunter)
+    "Mercenary2": ("Mercenary", "Witchhunter"),          # verified (was Gemling Legionnaire)
+    "Mercenary3": ("Mercenary", "Gemling Legionnaire"),  # verified (added)
+    "Monk1": ("Monk", "Martial Artist"),                 # verified (was Acolyte of Chayula)
+    "Monk2": ("Monk", "Invoker"),                        # verified
+    "Monk3": ("Monk", "Acolyte of Chayula"),             # verified (was Martial Artist)
+    "Sorceress1": ("Sorceress", "Stormweaver"),          # verified (was Chronomancer)
+    "Sorceress2": ("Sorceress", "Chronomancer"),         # verified (was Stormweaver)
+    "Druid1": ("Druid", "Oracle"),                       # unverified
+    "Druid2": ("Druid", "Shaman"),                       # unverified
+    "Huntress1": ("Huntress", "Amazon"),                 # verified
+    "Huntress2": ("Huntress", "Spirit Walker"),          # verified (was Ritualist)
+    "Huntress3": ("Huntress", "Ritualist"),              # verified (was Spirit Walker)
 }
 
 # Fallback: class code prefix → base class name
