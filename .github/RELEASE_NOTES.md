@@ -1,22 +1,12 @@
-## LAMA v0.3.0 — Build Sherpa + Runes of Aldur
+## LAMA v0.3.1 — Pricing fixed + Budget Planner
 
-The biggest LAMA update yet: a redesigned single-page interface, full support for
-the new Path of Exile 2 league, and a new build-comparison tool.
+### Fixes
+- **Item pricing restored.** poe2scout changed its API, which had silently broken all unique pricing — the compare shopping list and the "what top players use" prices were showing blank. Prices are live again (uniques, currency, gems).
+- **Stale-league auto-heal.** If a league setting was carried over from a past season, LAMA now resets it to the current league so it doesn't load old-league prices.
 
-### New season — Runes of Aldur (0.5.0)
-- Updated for PoE2 0.5.0 "Return of the Ancients", including the two new ascendancies — **Martial Artist** (Monk) and **Spirit Walker** (Huntress)
-- League auto-detected from poe.ninja, so your current-league characters just work
-- Fresh, data-driven meta (popular skills, uniques, support gems, class scaling) harvested from the live ladder
+### New
+- **Budget Planner.** On a loaded character, hit **Budget** to see the unique upgrades top players run for your build — priced live, ranked by how common they are, with a budget cap and a running total of what fits. It's honest about rare-gear slots (it points you to trade rather than inventing a price).
 
-### Redesigned interface
-- A single consolidated build view — DPS / EHP / resists, what's working vs what to fix, passive-tree swaps, and per-slot gear upgrades, all on one screen
-- Cleaner, faster, and fully bundled to run offline
-
-### Build comparison (new)
-- Hit **Compare**, paste another player's poe.ninja URL (or account/character), and get a prioritized diff — gear, keystones, jewels, supports, DPS and survivability — plus an upgrade shopping list ranked by impact
-
-### Also
-- Passive-tree analysis with swap recommendations
-- Keystone interaction analysis (class-aware)
-- More resilient poe.ninja lookups (automatic retry/backoff under load)
-- Numerous stability and blank-screen fixes
+### Also (since v0.3.0)
+- DPS-percentile card and a passive-tree mini-map on the character view.
+- 0.5.0 (Runes of Aldur) scoring/keystone tuning and the two new ascendancies.

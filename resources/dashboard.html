@@ -1212,6 +1212,201 @@
     }
 
 
+    function PassiveTreeMinimap({ treeVisual }) {
+      const nodes = treeVisual?.nodes;
+      if (!nodes || !nodes.length) return null;
+      // Focus the (square) view on the meaningful/highlighted nodes so they're
+      // large and readable; background nodes outside the frame are clipped.
+      const focus = nodes.filter(n => n.category !== "unallocated");
+      const pts = focus.length ? focus : nodes;
+      let cx = 0, cy = 0;
+      for (const n of pts) { cx += n.x; cy += n.y; }
+      cx /= pts.length; cy /= pts.length;
+      let half = 3000;
+      for (const n of pts) half = Math.max(half, Math.abs(n.x - cx), Math.abs(n.y - cy));
+      half *= 1.3;
+      const vb = `${cx - half} ${cy - half} ${half * 2} ${half * 2}`;
+      // category -> text-color class (fill=currentColor), base radius, opacity
+      const STYLE = {
+        unallocated: { cls: "text-outline",           r: 150, op: 0.25 },
+        extra:       { cls: "text-secondary",         r: 300, op: 0.5 },
+        shared:      { cls: "text-primary-container",  r: 340, op: 0.9 },
+        allocated:   { cls: "text-primary-container",  r: 320, op: 0.85 },
+        missing:     { cls: "text-error",              r: 390, op: 1 },
+        swap_take:   { cls: "text-tertiary",           r: 440, op: 1 },
+        swap_refund: { cls: "text-secondary",          r: 380, op: 1 },
+      };
+      // Draw faint/background first, highlights last so they sit on top.
+      const order = ["unallocated", "extra", "shared", "allocated", "swap_refund", "missing", "swap_take"];
+      const sorted = [...nodes].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
+      const legend = [
+        ["primary-container", "Allocated"],
+        ["error", "Missing (top have)"],
+        ["tertiary", "Take"],
+        ["secondary", "Drop"],
+      ];
+      return (
+        <div className="mb-3">
+          <svg viewBox={vb} preserveAspectRatio="xMidYMid meet"
+               className="bg-surface-container-lowest border border-outline-variant/10"
+               style={{ width: "min(100%, 340px)", height: "340px", margin: "0 auto", display: "block" }}>
+            {sorted.map((n, i) => {
+              const s = STYLE[n.category] || STYLE.unallocated;
+              const r = n.isKeystone ? s.r * 1.5 : s.r;
+              const tip = n.category !== "unallocated"
+                ? <title>{n.name}{n.isKeystone ? " (keystone)" : ""}{n.stats && n.stats.length ? " — " + n.stats.join("; ") : ""}</title>
+                : null;
+              return (
+                <g key={n.id + "_" + i} className={s.cls}>
+                  {n.isKeystone
+                    ? <rect x={n.x - r} y={n.y - r} width={r * 2} height={r * 2} fill="currentColor"
+                            fillOpacity={s.op} transform={`rotate(45 ${n.x} ${n.y})`} />
+                    : <circle cx={n.x} cy={n.y} r={r} fill="currentColor" fillOpacity={s.op} />}
+                  {tip}
+                </g>
+              );
+            })}
+          </svg>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+            {legend.map(([c, label]) => (
+              <span key={label} className="flex items-center gap-1 text-[9px] text-outline">
+                <span className={`w-2 h-2 rounded-full bg-${c}`} />{label}
+              </span>
+            ))}
+            <span className="text-[9px] text-outline">◆ keystone</span>
+          </div>
+        </div>
+      );
+    }
+
+    function BudgetPlanner({ account, character }) {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState("");
+      const [budget, setBudget] = useState(20);   // divines; 0 = no cap
+
+      useEffect(() => {
+        if (!account || !character) return;
+        setLoading(true); setError("");
+        api("/api/character/budget-plan", "POST", { account, character })
+          .then(d => { setLoading(false); if (d.error) setError(d.error); else setData(d); })
+          .catch(() => { setLoading(false); setError("Failed to build budget plan"); });
+      }, [account, character]);
+
+      if (loading) return (
+        <div className="flex-1 flex flex-col items-center justify-center py-16 gap-3">
+          <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+          <span className="text-sm text-on-surface-variant font-sans">Pricing the meta's upgrades for your build...</span>
+        </div>
+      );
+      if (error) return <p className="text-sm text-error font-sans p-6">{error}</p>;
+      if (!data) return null;
+
+      const ups = data.upgrades || [];
+      const cap = budget > 0 ? budget : Infinity;
+      const within = ups.filter(u => u.priceDiv <= cap);
+      const over = ups.filter(u => u.priceDiv > cap);
+      const total = within.reduce((s, u) => s + u.priceDiv, 0);
+      const fmtD = v => v < 10 ? v.toFixed(1) : Math.round(v);
+      const tierOf = d => d < 5 ? "Starter" : d < 15 ? "Core" : d < 50 ? "Lineage" : "Premium";
+      const tierColor = { Starter: "text-primary-container", Core: "text-tertiary", Lineage: "text-secondary", Premium: "text-error" };
+
+      const Row = ({ u, dim }) => (
+        <div className={`flex items-center gap-2 py-1.5 px-6 border-b border-outline-variant/10 ${dim ? "opacity-40" : ""}`}>
+          <span className="text-[10px] font-label text-tertiary w-9 shrink-0" title="% of top players using this here">{u.adoption}%</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-sm text-secondary block truncate">{u.name}</span>
+            <span className="text-[10px] text-outline">{u.slotDisplay}</span>
+          </div>
+          <span className={`text-[9px] font-label uppercase ${tierColor[tierOf(u.priceDiv)]}`}>{tierOf(u.priceDiv)}</span>
+          <span className="text-xs font-label text-primary-container w-16 text-right shrink-0">{u.priceDisplay}</span>
+        </div>
+      );
+
+      return (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Honest framing */}
+          <div className="px-6 py-3 border-b border-outline-variant/20 shrink-0">
+            <p className="text-xs text-on-surface-variant">
+              <span className="text-on-surface font-bold">{data.pricedCount}</span> unique upgrades top players run, priced live.
+              {data.rareSlots?.length > 0 && <> {data.rareSlots.length} slots also want rare-mod gear — <span className="text-outline">check trade for those</span>.</>}
+            </p>
+            <p className="text-[10px] text-outline mt-0.5">{data.league} · 1 div = {data.rates?.divToExalted}ex / {data.rates?.divToChaos}c</p>
+          </div>
+          {/* Budget cap + running total */}
+          <div className="px-6 py-3 border-b border-outline-variant/20 shrink-0 flex items-center gap-3 flex-wrap">
+            <span className="text-xs font-label text-on-surface-variant uppercase tracking-wider">Budget</span>
+            <div className="flex gap-1.5">
+              {[5, 20, 50, 0].map(c => (
+                <button key={c} onClick={() => setBudget(c)}
+                  className={`px-2.5 py-1 text-xs font-label border transition-colors ${budget === c ? "border-primary-container text-primary-container bg-primary-container/10" : "border-outline-variant/40 text-on-surface-variant hover:text-on-surface"}`}>
+                  {c === 0 ? "Any" : `${c}d`}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1" />
+            <span className="text-xs text-on-surface-variant">
+              <span className="text-primary-container font-bold">{within.length}</span> fit · ~<span className="text-primary-container font-bold">{fmtD(total)}d</span> total
+            </span>
+          </div>
+          {/* Ranked list */}
+          <div className="flex-1 overflow-y-auto">
+            {within.length === 0 && (
+              <p className="text-sm text-outline p-6 text-center">No unique upgrades within {budget}d — your build's remaining gains are mostly rare-mod gear (check trade), or raise the budget.</p>
+            )}
+            {within.map((u, i) => <Row key={u.name + i} u={u} />)}
+            {over.length > 0 && (
+              <>
+                <div className="px-6 py-1.5 text-[10px] font-label text-outline uppercase tracking-widest bg-surface-container-lowest">Above budget</div>
+                {over.map((u, i) => <Row key={"o" + u.name + i} u={u} dim />)}
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function DpsMeterCard({ sc }) {
+      if (!sc) return null;
+      const fmt = v => v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(0)}K` : `${Math.round(v || 0)}`;
+      const pct = sc.dpsPercentile;
+      const skill = sc.dpsSkill || "your main skill";
+      const hasMeta = pct >= 0 && sc.dpsCeiling > 0;
+      const big = sc.dps > 0 ? fmt(sc.dps) : (sc.dpsLabel || "—");
+      return (
+        <div className="mb-5 bg-surface-container-low border-l-2 border-primary-container/60 p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <Icon name="bolt" className="text-base text-primary-container" />
+            <span className="font-headline text-sm font-bold text-on-surface">Damage</span>
+            <span className="text-xs text-on-surface-variant truncate">{skill}</span>
+            <div className="flex-1" />
+            <span className="font-headline text-base text-primary-container">{big}</span>
+          </div>
+          {hasMeta ? (
+            <>
+              {/* Percentile bar: fill = your percentile, tick = median (50th) */}
+              <div className="relative h-2 bg-surface-container-lowest mt-2 mb-1 overflow-hidden">
+                <div className="absolute inset-y-0 left-0 bg-primary-container/40" style={{ width: `${Math.min(100, Math.max(2, pct))}%` }} />
+                <div className="absolute inset-y-0 w-px bg-secondary" style={{ left: "50%" }} />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-outline">
+                <span><span className="text-primary-container font-bold">{pct}th</span> percentile for this build</span>
+                <span>median {fmt(sc.dpsMedian)} · top {fmt(sc.dpsCeiling)}</span>
+              </div>
+              {pct < 50 && sc.dpsCeiling > sc.dps && (
+                <p className="text-[11px] text-secondary mt-1.5">Top {skill} builds hit {fmt(sc.dpsCeiling)} — significant DPS headroom to chase.</p>
+              )}
+              {pct >= 80 && (
+                <p className="text-[11px] text-primary-container/80 mt-1.5">Top-tier DPS for this build — invest in survivability or clear speed next.</p>
+              )}
+            </>
+          ) : (
+            <p className="text-[10px] text-outline mt-1">No meta DPS comparison available for this build yet.</p>
+          )}
+        </div>
+      );
+    }
+
     function SinglePageView({ charData, insights, whyInsights, account, character }) {
       const [treeAnalysis, setTreeAnalysis] = useState(null);
       const [expandedSlot, setExpandedSlot] = useState(null);
@@ -1219,6 +1414,7 @@
 
       // Compare-vs-another-build overlay (reconnected from the old Compare tab)
       const [compareOpen, setCompareOpen] = useState(false);
+      const [budgetOpen, setBudgetOpen] = useState(false);
       const [compareQuery, setCompareQuery] = useState("");
       const [compareResult, setCompareResult] = useState(null);
       const [compareLoading, setCompareLoading] = useState(false);
@@ -1282,6 +1478,14 @@
               <Icon name="compare_arrows" className="text-xs text-tertiary" />
               <span className="text-xs font-label">Compare</span>
             </button>
+            <button
+              onClick={() => setBudgetOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface hover:border-primary-container transition-colors"
+              title="Budget planner — priced upgrades for your build"
+            >
+              <Icon name="savings" className="text-xs text-primary-container" />
+              <span className="text-xs font-label">Budget</span>
+            </button>
             {/* Health pills */}
             <div className={`flex items-center gap-1.5 px-3 py-1 ${dpsOk ? "bg-primary-container/10" : "bg-error/10"}`}>
               <Icon name="bolt" className={`text-xs ${dpsOk ? "text-primary-container" : "text-error"}`} />
@@ -1303,6 +1507,7 @@
 
             {/* LEFT: What's working / What's not (synergy categories) */}
             <div className="border-r border-outline-variant/20 overflow-y-auto p-5">
+              <DpsMeterCard sc={sc} />
               {synergy.map(cat => {
                 const hasIssues = cat.missing?.length > 0;
                 const catIcon = { dps: "bolt", survival: "shield", clear_speed: "speed", quality: "auto_awesome" }[cat.category] || "category";
@@ -1366,6 +1571,9 @@
                     <div className="flex-1 h-px bg-outline-variant/20" />
                     <span className="text-[10px] font-label text-secondary uppercase">{treeAnalysis.swapRecommendations.length} swaps</span>
                   </div>
+                  {treeAnalysis.treeVisual?.nodes?.length > 0 && (
+                    <PassiveTreeMinimap treeVisual={treeAnalysis.treeVisual} />
+                  )}
                   {treeAnalysis.swapRecommendations.slice(0, 4).map((s, i) => (
                     <div key={i} className="bg-surface-container-low border-l-2 border-secondary/60 p-3 mb-1.5">
                       <div className="flex items-center gap-2 mb-1">
@@ -1519,6 +1727,22 @@
                 )}
                 {compareResult && <BuildDiffView result={compareResult} />}
               </div>
+            </div>
+          )}
+
+          {/* ── BUDGET planner (overlay) ── */}
+          {budgetOpen && (
+            <div className="absolute inset-0 z-40 bg-surface flex flex-col overflow-hidden">
+              <div className="flex items-center gap-3 px-6 py-3 border-b border-outline-variant/20 shrink-0">
+                <Icon name="savings" className="text-base text-primary-container" />
+                <span className="font-headline text-lg text-on-surface">Upgrade Budget</span>
+                <span className="text-xs text-on-surface-variant">priced upgrades for {charData.name}</span>
+                <div className="flex-1" />
+                <button onClick={() => setBudgetOpen(false)} className="text-on-surface-variant hover:text-on-surface" title="Close">
+                  <Icon name="close" className="text-lg" />
+                </button>
+              </div>
+              <BudgetPlanner account={account} character={character} />
             </div>
           )}
         </div>

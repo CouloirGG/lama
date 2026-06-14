@@ -59,9 +59,9 @@ POE2SCOUT_UNIQUE_CATEGORIES = [
 ]
 
 POE2SCOUT_CURRENCY_CATEGORIES = [
-    "currency", "fragments", "runes", "talismans", "essences", "ultimatum",
+    "currency", "fragments", "runes", "essences", "ultimatum",
     "expedition", "ritual", "vaultkeys", "breach", "abyss", "uncutgems",
-    "lineagesupportgems", "delirium", "incursion", "idol",
+    "lineagesupportgems", "delirium", "incursion", "idol", "verisium", "vaal",
 ]
 
 REQUEST_DELAY = 0.3  # seconds between API calls
@@ -440,21 +440,29 @@ class PriceCache:
     # ─── poe2scout ────────────────────────────────────
 
     def _fetch_poe2scout_leagues(self, headers: dict):
-        """Fetch league data to get divine orb price (for unit conversion)."""
+        """Fetch league data for the divine price + conversion rates.
+
+        poe2scout's PoE2 economy is denominated in Exalted Orbs (the base
+        currency): DivinePrice = exalted per divine, ChaosDivinePrice = chaos
+        per divine. We treat these as the authoritative conversion rates.
+        """
         try:
-            url = f"{POE2SCOUT_BASE_URL}/leagues"
+            url = f"{POE2SCOUT_BASE_URL}/poe2/Leagues"
             resp = requests.get(url, timeout=15, headers=headers)
             if resp.status_code != 200:
                 logger.warning(f"poe2scout leagues: HTTP {resp.status_code}")
                 return
 
-            leagues = resp.json()
-            for league in leagues:
-                if league.get("value") == self.league:
-                    dp = league.get("divinePrice", 0)
+            for lg in resp.json():
+                if lg.get("Value") == self.league:
+                    dp = lg.get("DivinePrice", 0)        # exalted per divine
+                    cdp = lg.get("ChaosDivinePrice", 0)  # chaos per divine
                     if dp > 0:
                         self._poe2scout_divine_price = dp
-                        logger.info(f"poe2scout: divinePrice={dp:.1f} ({self.league})")
+                        self.divine_to_exalted = dp
+                        if cdp > 0:
+                            self.divine_to_chaos = cdp
+                        logger.info(f"poe2scout: 1 div = {dp:.0f}ex / {cdp:.1f}c ({self.league})")
                     return
 
             logger.warning(f"poe2scout: league '{self.league}' not found in API")
@@ -462,33 +470,31 @@ class PriceCache:
             logger.warning(f"poe2scout leagues failed: {e}")
 
     def _fetch_poe2scout(self, headers: dict, prices: dict):
-        """Fetch all poe2scout categories (uniques + currencies)."""
+        """Fetch all poe2scout categories (uniques + currencies) for the league."""
         if self._poe2scout_divine_price <= 0:
             logger.warning("poe2scout: no divine price — skipping")
             return
 
+        from urllib.parse import quote
+        league_path = quote(self.league)
         total = 0
 
-        # Unique categories
         for cat in POE2SCOUT_UNIQUE_CATEGORIES:
             try:
-                count = self._fetch_poe2scout_paginated(
-                    f"{POE2SCOUT_BASE_URL}/items/unique/{cat}",
+                total += self._fetch_poe2scout_paginated(
+                    f"{POE2SCOUT_BASE_URL}/poe2/Leagues/{league_path}/Uniques/ByCategory",
                     headers, prices, cat, is_unique=True,
                 )
-                total += count
                 time.sleep(REQUEST_DELAY)
             except Exception as e:
                 logger.warning(f"poe2scout unique/{cat} failed: {e}")
 
-        # Currency categories
         for cat in POE2SCOUT_CURRENCY_CATEGORIES:
             try:
-                count = self._fetch_poe2scout_paginated(
-                    f"{POE2SCOUT_BASE_URL}/items/currency/{cat}",
+                total += self._fetch_poe2scout_paginated(
+                    f"{POE2SCOUT_BASE_URL}/poe2/Leagues/{league_path}/Currencies/ByCategory",
                     headers, prices, cat, is_unique=False,
                 )
-                total += count
                 time.sleep(REQUEST_DELAY)
             except Exception as e:
                 logger.warning(f"poe2scout currency/{cat} failed: {e}")
@@ -505,7 +511,7 @@ class PriceCache:
         while True:
             resp = requests.get(
                 base_url,
-                params={"league": self.league, "page": page},
+                params={"Category": category, "Page": page, "PerPage": 25},
                 timeout=15, headers=headers,
             )
             if resp.status_code != 200:
@@ -513,14 +519,8 @@ class PriceCache:
                 break
 
             data = resp.json()
-
-            # Handle both paginated {items:[]} and flat array responses
-            if isinstance(data, list):
-                items = data
-                total_pages = 1
-            else:
-                items = data.get("items", [])
-                total_pages = data.get("pages", 1)
+            items = data.get("Items", []) if isinstance(data, dict) else []
+            total_pages = data.get("Pages", 1) if isinstance(data, dict) else 1
 
             for item in items:
                 if is_unique:
@@ -528,7 +528,7 @@ class PriceCache:
                 else:
                     count += self._parse_poe2scout_currency(item, category, prices)
 
-            if page >= total_pages:
+            if not items or page >= total_pages:
                 break
             page += 1
             time.sleep(REQUEST_DELAY)
@@ -538,9 +538,9 @@ class PriceCache:
 
     def _parse_poe2scout_unique(self, item: dict, category: str, prices: dict) -> int:
         """Parse a unique item from poe2scout. Returns 1 if added, 0 if skipped."""
-        name = item.get("name", "")
-        base_type = item.get("type", "")
-        raw_price = item.get("currentPrice", 0)
+        name = item.get("Name", "")
+        base_type = (item.get("ItemMetadata") or {}).get("base_type", "")
+        raw_price = item.get("CurrentPrice", 0)   # Exalted Orbs
 
         if not name or not raw_price:
             return 0
@@ -548,26 +548,23 @@ class PriceCache:
         divine_value = raw_price / self._poe2scout_divine_price
         chaos_value = divine_value * self.divine_to_chaos
 
-        entry = {
+        # Store by unique name only — never by base_type, which would cause
+        # magic/normal/rare items with the same base to match this unique's price
+        prices[name.lower()] = {
             "divine_value": divine_value,
             "chaos_value": chaos_value,
             "name": name,
             "base_type": base_type,
             "category": f"unique/{category}",
             "source": "poe2scout",
+            "quantity": item.get("CurrentQuantity", 0),
         }
-
-        # Store by unique name only — not by base_type, which would cause
-        # magic/normal/rare items with the same base to match this unique's price
-        key = name.lower()
-        prices[key] = entry
-
         return 1
 
     def _parse_poe2scout_currency(self, item: dict, category: str, prices: dict) -> int:
         """Parse a currency item from poe2scout. Returns 1 if added, 0 if skipped."""
-        name = item.get("text", "")
-        raw_price = item.get("currentPrice", 0)
+        name = item.get("Text") or (item.get("ItemMetadata") or {}).get("name", "")
+        raw_price = item.get("CurrentPrice", 0)   # Exalted Orbs
 
         if not name or not raw_price:
             return 0
@@ -582,6 +579,7 @@ class PriceCache:
             "name": name,
             "category": category,
             "source": "poe2scout",
+            "quantity": item.get("CurrentQuantity", 0),
         }
         # Check if poe.ninja already has this item and is the preferred source
         existing = prices.get(key)

@@ -637,6 +637,18 @@ async def lifespan(app: FastAPI):
     settings = load_settings()
     league = settings.get("league", DEFAULT_LEAGUE)
 
+    # Auto-heal a stale challenge-league setting carried over from a past season:
+    # if the saved league is neither the current default nor a permanent league,
+    # fall back to the current default so pricing/meta don't load dead-league data.
+    if league not in (DEFAULT_LEAGUE, "Standard", "Hardcore") and not league.startswith("Hardcore"):
+        logger.info(f"Stale league setting '{league}' -> using current default '{DEFAULT_LEAGUE}'")
+        league = DEFAULT_LEAGUE
+        settings["league"] = league
+        try:
+            save_settings(settings)
+        except Exception:
+            pass
+
     # Configure cloud push notifications
     cloud_notify.configure(
         device_id=settings.get("cloud_device_id", ""),
@@ -1313,6 +1325,80 @@ class PopularItemsRequest(BaseModel):
     account: str
     character: str
     slot: str
+
+
+@app.post("/api/character/budget-plan")
+async def character_budget_plan(req: CharacterLookupRequest):
+    """Budget planner: the costable (unique) upgrades top players run that you
+    don't already have, priced via the live economy and ranked by adoption.
+    Honest about un-priceable rare-gear slots (those go to 'check trade')."""
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character required"})
+    loop = asyncio.get_running_loop()
+
+    char = await loop.run_in_executor(
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip()
+    )
+    if not char:
+        return JSONResponse(status_code=404, content={"error": "Character not found. Non-ladder characters require OAuth login."})
+
+    owned = {(e.name or "").lower() for e in (char.equipment or []) if getattr(e, "name", "")}
+
+    SLOTS = ["Helm", "BodyArmour", "Gloves", "Boots", "Belt", "Amulet", "Ring", "Weapon"]
+    # Bounded concurrency: 8 simultaneous cold fetches rate-limit poe.ninja and
+    # return thin results, so cap at 3 in flight (the retry helper handles 429s).
+    sem = asyncio.Semaphore(3)
+    async def _fetch_slot(s):
+        async with sem:
+            try:
+                return await loop.run_in_executor(None, builds_client.get_popular_items_for_slot, char, s)
+            except Exception:
+                return None
+    results = await asyncio.gather(*[_fetch_slot(s) for s in SLOTS])
+
+    upgrades, seen, rare_slots = [], set(), set()
+    for res in results:
+        if not isinstance(res, dict):
+            continue
+        slot, slot_display = res.get("slot", ""), res.get("slotDisplay", "")
+        for it in res.get("items", []):
+            name = it.get("name", "")
+            if not name:
+                continue
+            if (it.get("rarity") or "").lower() != "unique":
+                if slot_display:
+                    rare_slots.add(slot_display)
+                continue
+            key = name.lower()
+            if key in owned or key in seen:
+                continue
+            pd = price_cache.lookup(name, "", 0) if price_cache else None
+            if not pd or not pd.get("divine_value"):
+                continue
+            seen.add(key)
+            upgrades.append({
+                "slot": slot, "slotDisplay": slot_display, "name": name,
+                "priceDiv": round(pd["divine_value"], 3),
+                "priceDisplay": pd.get("display", ""),
+                "priceTier": pd.get("tier", ""),
+                "quantity": pd.get("quantity", 0),
+                "adoption": round(it.get("percentage", 0), 1),
+            })
+
+    # Rank by adoption (impact proxy); the client adds the budget cap + tiers.
+    upgrades.sort(key=lambda u: (-u["adoption"], u["priceDiv"]))
+
+    stats = price_cache.get_stats() if price_cache else {}
+    return {
+        "upgrades": upgrades,
+        "rates": {
+            "divToChaos": round(stats.get("divine_to_chaos", 0) or 0, 1),
+            "divToExalted": round(stats.get("divine_to_exalted", 0) or 0, 0),
+        },
+        "pricedCount": len(upgrades),
+        "rareSlots": sorted(rare_slots),
+        "league": stats.get("league", ""),
+    }
 
 
 @app.post("/api/character/popular-items")

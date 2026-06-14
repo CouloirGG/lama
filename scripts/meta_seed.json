@@ -1,0 +1,8482 @@
+{
+  "league": "runes-of-aldur",
+  "total_builds": 264,
+  "per_ascendancy": {
+    "Titan": {
+      "ascendancy": "Titan",
+      "base_class": "Warrior",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Shield Wall",
+          "count": 2
+        },
+        {
+          "name": "Rampage",
+          "count": 2
+        },
+        {
+          "name": "Earthshatter",
+          "count": 2
+        },
+        {
+          "name": "Whirling Assault",
+          "count": 2
+        },
+        {
+          "name": "His Scattering Calamity",
+          "count": 2
+        },
+        {
+          "name": "Maul",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 7
+        },
+        {
+          "name": "Constricting Command",
+          "count": 7
+        },
+        {
+          "name": "Amor Mandragora",
+          "count": 5
+        },
+        {
+          "name": "The Brass Dome",
+          "count": 4
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 4
+        },
+        {
+          "name": "Defiance of Destiny",
+          "count": 3
+        },
+        {
+          "name": "Polcirkeln",
+          "count": 3
+        },
+        {
+          "name": "Headhunter",
+          "count": 3
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 3
+        },
+        {
+          "name": "Nebuloch",
+          "count": 2
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Iron Reflexes",
+          "count": 4
+        },
+        {
+          "name": "Blood Magic",
+          "count": 2
+        },
+        {
+          "name": "Primal Hunger",
+          "count": 2
+        },
+        {
+          "name": "Sacrifice of Flesh",
+          "count": 2
+        },
+        {
+          "name": "Dance with Death",
+          "count": 2
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 2
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 2
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 2
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Rakiata's Flow",
+          "count": 6
+        },
+        {
+          "name": "Uul-Netol's Embrace",
+          "count": 6
+        },
+        {
+          "name": "Garukhan's Resolve",
+          "count": 5
+        },
+        {
+          "name": "Rapid Attacks II",
+          "count": 4
+        },
+        {
+          "name": "Vorana's Siege",
+          "count": 2
+        },
+        {
+          "name": "Rigwald's Ferocity",
+          "count": 2
+        },
+        {
+          "name": "Atalui's Bloodletting",
+          "count": 2
+        },
+        {
+          "name": "Aftershock II",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "life": 10,
+        "mom": 2
+      },
+      "damage_meta": {
+        "attack": 10,
+        "spell": 2
+      },
+      "crit_pct": 0.58,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 166126,
+        "p90": 746121,
+        "max": 1020830
+      },
+      "ehp_median": 30090,
+      "builds": [
+        {
+          "name": "goodnerfing",
+          "level": 100,
+          "main_skill": "Shield Wall",
+          "main_dps": 95026,
+          "defense_type": "life",
+          "uniques": [
+            "Nebuloch",
+            "Mageblood",
+            "The Brass Dome",
+            "Defiance of Destiny",
+            "Amor Mandragora"
+          ],
+          "keystones": [
+            "Blood Magic",
+            "Primal Hunger"
+          ]
+        },
+        {
+          "name": "TimmortalSeven",
+          "level": 100,
+          "main_skill": "Rampage",
+          "main_dps": 170441,
+          "defense_type": "life",
+          "uniques": [
+            "Morior Invictus",
+            "Polcirkeln",
+            "Constricting Command",
+            "Headhunter",
+            "Amor Mandragora"
+          ],
+          "keystones": [
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "STICKYBEARZ",
+          "level": 99,
+          "main_skill": "Rampage",
+          "main_dps": 746121,
+          "defense_type": "life",
+          "uniques": [
+            "Headhunter",
+            "Constricting Command",
+            "Morior Invictus",
+            "Amor Mandragora",
+            "Polcirkeln"
+          ],
+          "keystones": [
+            "Iron Reflexes",
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "furufuru_RoA",
+          "level": 99,
+          "main_skill": "Earthshatter",
+          "main_dps": 19631,
+          "defense_type": "life",
+          "uniques": [
+            "Thrillsteel"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "gil_roflcopter",
+          "level": 98,
+          "main_skill": "Whirling Assault",
+          "main_dps": 650923,
+          "defense_type": "life",
+          "uniques": [
+            "Constricting Command",
+            "Mageblood",
+            "The Brass Dome"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "yaibasandayo",
+          "level": 98,
+          "main_skill": "Whirling Assault",
+          "main_dps": 291371,
+          "defense_type": "life",
+          "uniques": [
+            "The Brass Dome",
+            "Constricting Command",
+            "Mageblood"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "InimigoDoRhoa",
+          "level": 98,
+          "main_skill": "His Scattering Calamity",
+          "main_dps": 1020830,
+          "defense_type": "mom",
+          "uniques": [
+            "Headhunter",
+            "The Unborn Lich",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Pain Attunement",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "BigguBleedu",
+          "level": 98,
+          "main_skill": "Earthshatter",
+          "main_dps": 33136,
+          "defense_type": "life",
+          "uniques": [
+            "Morior Invictus",
+            "Constricting Command",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Iron Reflexes",
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "\uc55e\uac15\uc190\uc11c\uc911\ubc1c\uc2a4\ud06c\ub958\ub798\ub9ac\uc5b4\ud2b8",
+          "level": 98,
+          "main_skill": "His Scattering Calamity",
+          "main_dps": 616423,
+          "defense_type": "mom",
+          "uniques": [
+            "Kalandra's Touch",
+            "The Unborn Lich",
+            "Cornathaum",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Mind Over Matter",
+            "Sacrifice of Flesh",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "Chombi_aldur",
+          "level": 98,
+          "main_skill": "Maul",
+          "main_dps": 144384,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Polcirkeln",
+            "Amor Mandragora",
+            "Andvarius",
+            "Morior Invictus",
+            "Constricting Command"
+          ],
+          "keystones": [
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "TitanGGE",
+          "level": 98,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 22340,
+          "defense_type": "life",
+          "uniques": [
+            "Defiance of Destiny",
+            "Ryslatha's Coil"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "\ub6b1\ub6b1\ub3c4\ub85c\ub871",
+          "level": 98,
+          "main_skill": "Shield Wall",
+          "main_dps": 161811,
+          "defense_type": "life",
+          "uniques": [
+            "Nebuloch",
+            "The Brass Dome",
+            "Kalandra's Touch",
+            "Mageblood",
+            "Constricting Command",
+            "Amor Mandragora",
+            "Defiance of Destiny"
+          ],
+          "keystones": [
+            "Blood Magic",
+            "Primal Hunger"
+          ]
+        }
+      ]
+    },
+    "Warbringer": {
+      "ascendancy": "Warbringer",
+      "base_class": "Warrior",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Shield Wall",
+          "count": 3
+        },
+        {
+          "name": "Voltaic Grenade",
+          "count": 3
+        },
+        {
+          "name": "Crossbow Shot",
+          "count": 2
+        },
+        {
+          "name": "Sunder",
+          "count": 1
+        },
+        {
+          "name": "Ice Shot",
+          "count": 1
+        },
+        {
+          "name": "Earthshatter",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 6
+        },
+        {
+          "name": "Fireflower",
+          "count": 4
+        },
+        {
+          "name": "Headhunter",
+          "count": 2
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 2
+        },
+        {
+          "name": "The Brass Dome",
+          "count": 1
+        },
+        {
+          "name": "Trampletoe",
+          "count": 1
+        },
+        {
+          "name": "Thrillsteel",
+          "count": 1
+        },
+        {
+          "name": "Oaksworn",
+          "count": 1
+        },
+        {
+          "name": "Serle's Grit",
+          "count": 1
+        },
+        {
+          "name": "Ironbound",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Blood Magic",
+          "count": 8
+        },
+        {
+          "name": "Giant's Blood",
+          "count": 2
+        },
+        {
+          "name": "Sacrifice of Flesh",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Rapid Attacks II",
+          "count": 5
+        },
+        {
+          "name": "Elemental Armament II",
+          "count": 4
+        },
+        {
+          "name": "Heft",
+          "count": 3
+        },
+        {
+          "name": "Shock",
+          "count": 3
+        },
+        {
+          "name": "Payload",
+          "count": 3
+        },
+        {
+          "name": "Lightning Attunement",
+          "count": 3
+        },
+        {
+          "name": "Cooldown Recovery II",
+          "count": 3
+        },
+        {
+          "name": "Vorana's Siege",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "life": 12
+      },
+      "damage_meta": {
+        "attack": 10,
+        "unknown": 2
+      },
+      "crit_pct": 0.08,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 22108,
+        "p90": 283759,
+        "max": 461346
+      },
+      "ehp_median": 29645,
+      "builds": [
+        {
+          "name": "StrangledAngel",
+          "level": 99,
+          "main_skill": "Sunder",
+          "main_dps": 75229,
+          "defense_type": "life",
+          "uniques": [
+            "The Brass Dome",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "FucqmanG",
+          "level": 99,
+          "main_skill": "Shield Wall",
+          "main_dps": 103782,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Trampletoe",
+            "Thrillsteel"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "xFurcik",
+          "level": 98,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 22108,
+          "defense_type": "life",
+          "uniques": [
+            "Fireflower",
+            "Oaksworn",
+            "Serle's Grit",
+            "Kalandra's Touch",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "Crying_Clam",
+          "level": 98,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood"
+          ],
+          "keystones": [
+            "Blood Magic",
+            "Giant's Blood"
+          ]
+        },
+        {
+          "name": "Nolaj_ROAWA",
+          "level": 98,
+          "main_skill": "Shield Wall",
+          "main_dps": 283759,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood"
+          ],
+          "keystones": [
+            "Giant's Blood"
+          ]
+        },
+        {
+          "name": "Kalmar_W___",
+          "level": 98,
+          "main_skill": "Voltaic Grenade",
+          "main_dps": 3977,
+          "defense_type": "life",
+          "uniques": [
+            "Fireflower"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "Citric_____",
+          "level": 98,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 6168,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Fireflower"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "BowrriorMoth",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 70642,
+          "defense_type": "life",
+          "uniques": [
+            "Headhunter",
+            "Ironbound",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "Lametotems",
+          "level": 97,
+          "main_skill": "Voltaic Grenade",
+          "main_dps": 3771,
+          "defense_type": "life",
+          "uniques": [],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "MeleeEnjoyer__",
+          "level": 97,
+          "main_skill": "Earthshatter",
+          "main_dps": 13555,
+          "defense_type": "life",
+          "uniques": [
+            "Redblade Banner",
+            "Chernobog's Pillar",
+            "Defiance of Destiny"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "HumptyDumptyTheEgg",
+          "level": 97,
+          "main_skill": "Voltaic Grenade",
+          "main_dps": 1808,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Fireflower",
+            "Brynhand's Mark"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "IcastBlockAss",
+          "level": 97,
+          "main_skill": "Shield Wall",
+          "main_dps": 461346,
+          "defense_type": "life",
+          "uniques": [
+            "Ryslatha's Coil",
+            "Constricting Command"
+          ],
+          "keystones": []
+        }
+      ]
+    },
+    "Smith of Kitava": {
+      "ascendancy": "Smith of Kitava",
+      "base_class": "Warrior",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Shield Wall",
+          "count": 8
+        },
+        {
+          "name": "Whirling Assault",
+          "count": 1
+        },
+        {
+          "name": "Rampage",
+          "count": 1
+        },
+        {
+          "name": "Quarterstaff Strike",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 8
+        },
+        {
+          "name": "Constricting Command",
+          "count": 4
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 3
+        },
+        {
+          "name": "Headhunter",
+          "count": 2
+        },
+        {
+          "name": "Crown of Eyes",
+          "count": 1
+        },
+        {
+          "name": "Vestige of Darkness",
+          "count": 1
+        },
+        {
+          "name": "Blood Price",
+          "count": 1
+        },
+        {
+          "name": "Defiance of Destiny",
+          "count": 1
+        },
+        {
+          "name": "Fury of the King",
+          "count": 1
+        },
+        {
+          "name": "Trenchtimbre",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Blood Magic",
+          "count": 9
+        },
+        {
+          "name": "Sacrifice of Flesh",
+          "count": 4
+        },
+        {
+          "name": "Giant's Blood",
+          "count": 1
+        },
+        {
+          "name": "Dance with Death",
+          "count": 1
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Rapid Attacks II",
+          "count": 8
+        },
+        {
+          "name": "Ahn's Citadel",
+          "count": 6
+        },
+        {
+          "name": "Kaom's Madness",
+          "count": 6
+        },
+        {
+          "name": "Heft",
+          "count": 5
+        },
+        {
+          "name": "Atalui's Bloodletting",
+          "count": 5
+        },
+        {
+          "name": "Uul-Netol's Embrace",
+          "count": 4
+        },
+        {
+          "name": "Close Combat II",
+          "count": 2
+        },
+        {
+          "name": "Heavy Swing",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "life": 12
+      },
+      "damage_meta": {
+        "attack": 11,
+        "unknown": 1
+      },
+      "crit_pct": 0.17,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 71471,
+        "p90": 119734,
+        "max": 157873
+      },
+      "ehp_median": 44845,
+      "builds": [
+        {
+          "name": "xxTheWizardOfOsu",
+          "level": 100,
+          "main_skill": "Shield Wall",
+          "main_dps": 91088,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "MenteMaluca",
+          "level": 100,
+          "main_skill": "Shield Wall",
+          "main_dps": 96311,
+          "defense_type": "life",
+          "uniques": [
+            "Crown of Eyes",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Blood Magic",
+            "Giant's Blood",
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "aleximaloenlol",
+          "level": 98,
+          "main_skill": "Shield Wall",
+          "main_dps": 157873,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "VIKTOR_DER_SCHMIED",
+          "level": 98,
+          "main_skill": "Shield Wall",
+          "main_dps": 71471,
+          "defense_type": "life",
+          "uniques": [
+            "Vestige of Darkness",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Blood Magic",
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "xDxRF__________________",
+          "level": 98,
+          "main_skill": "Shield Wall",
+          "main_dps": 116595,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "EmWarriorr",
+          "level": 98,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "life",
+          "uniques": [
+            "Blood Price"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Krok",
+          "level": 98,
+          "main_skill": "Whirling Assault",
+          "main_dps": 65412,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Dance with Death",
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "KrisDroversonKitava",
+          "level": 97,
+          "main_skill": "Rampage",
+          "main_dps": 39113,
+          "defense_type": "life",
+          "uniques": [
+            "Defiance of Destiny",
+            "Mageblood",
+            "Fury of the King",
+            "Constricting Command"
+          ],
+          "keystones": [
+            "Blood Magic",
+            "Iron Reflexes",
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "DetonateFrameRate",
+          "level": 97,
+          "main_skill": "Quarterstaff Strike",
+          "main_dps": 53094,
+          "defense_type": "life",
+          "uniques": [
+            "Headhunter",
+            "Trenchtimbre",
+            "Constricting Command"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Nightfallslammer",
+          "level": 97,
+          "main_skill": "Shield Wall",
+          "main_dps": 119734,
+          "defense_type": "life",
+          "uniques": [
+            "Andvarius",
+            "Constricting Command",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "SteinSchereShield",
+          "level": 97,
+          "main_skill": "Shield Wall",
+          "main_dps": 35802,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "Phaelsw",
+          "level": 97,
+          "main_skill": "Shield Wall",
+          "main_dps": 44726,
+          "defense_type": "life",
+          "uniques": [
+            "Constricting Command"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        }
+      ]
+    },
+    "Blood Mage": {
+      "ascendancy": "Blood Mage",
+      "base_class": "Witch",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Comet",
+          "count": 3
+        },
+        {
+          "name": "Spark",
+          "count": 2
+        },
+        {
+          "name": "Coiling Bolts",
+          "count": 1
+        },
+        {
+          "name": "His Scattering Calamity",
+          "count": 1
+        },
+        {
+          "name": "Shattering Spite",
+          "count": 1
+        },
+        {
+          "name": "Detonate Dead",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Kalandra's Touch",
+          "count": 7
+        },
+        {
+          "name": "Atziri's Splendour",
+          "count": 5
+        },
+        {
+          "name": "Palm of the Dreamer",
+          "count": 5
+        },
+        {
+          "name": "Mageblood",
+          "count": 4
+        },
+        {
+          "name": "Choir of the Storm",
+          "count": 4
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 3
+        },
+        {
+          "name": "Temporalis",
+          "count": 3
+        },
+        {
+          "name": "Headhunter",
+          "count": 3
+        },
+        {
+          "name": "Atziri's Contempt",
+          "count": 2
+        },
+        {
+          "name": "Rathpith Globe",
+          "count": 2
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Mind Over Matter",
+          "count": 6
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 6
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 2
+        },
+        {
+          "name": "Blood Magic",
+          "count": 2
+        },
+        {
+          "name": "Elemental Equilibrium",
+          "count": 1
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 1
+        },
+        {
+          "name": "Ancestral Bond",
+          "count": 1
+        },
+        {
+          "name": "Chaos Inoculation",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Zenith II",
+          "count": 5
+        },
+        {
+          "name": "Considered Casting",
+          "count": 3
+        },
+        {
+          "name": "Cast on Critical",
+          "count": 3
+        },
+        {
+          "name": "Efficiency II",
+          "count": 3
+        },
+        {
+          "name": "Pierce III",
+          "count": 3
+        },
+        {
+          "name": "Rakiata's Flow",
+          "count": 3
+        },
+        {
+          "name": "Concentrated Area",
+          "count": 2
+        },
+        {
+          "name": "Atalui's Bloodletting",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "mom": 5,
+        "life": 3,
+        "es": 2,
+        "hybrid": 2
+      },
+      "damage_meta": {
+        "spell": 11,
+        "attack": 1
+      },
+      "crit_pct": 0.83,
+      "coc_pct": 0.25,
+      "dps": {
+        "median": 367395,
+        "p90": 1691303,
+        "max": 7787828
+      },
+      "ehp_median": 16225,
+      "builds": [
+        {
+          "name": "sotsunakuwRoA",
+          "level": 100,
+          "main_skill": "Coiling Bolts",
+          "main_dps": 1088976,
+          "defense_type": "mom",
+          "uniques": [
+            "Kalandra's Touch",
+            "Mageblood",
+            "Liminal Coil",
+            "Atziri's Splendour",
+            "Palm of the Dreamer"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "\u662d\u662d\u4e91\u7aef\u6708",
+          "level": 99,
+          "main_skill": "Comet",
+          "main_dps": 760334,
+          "defense_type": "mom",
+          "uniques": [
+            "Atziri's Splendour",
+            "Alpha's Howl",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Elemental Equilibrium",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "iPiglet_FakeWitch",
+          "level": 99,
+          "main_skill": "His Scattering Calamity",
+          "main_dps": 592607,
+          "defense_type": "mom",
+          "uniques": [
+            "Leopold's Applause",
+            "The Unborn Lich",
+            "Ingenuity"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "AbsoluteLightning_",
+          "level": 98,
+          "main_skill": "Spark",
+          "main_dps": 29098,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch",
+            "Demon Stitcher",
+            "Grip of Kulemak",
+            "Palm of the Dreamer",
+            "Temporalis",
+            "Choir of the Storm"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Shukketsu_",
+          "level": 98,
+          "main_skill": "Shattering Spite",
+          "main_dps": 481799,
+          "defense_type": "life",
+          "uniques": [
+            "Atziri's Contempt",
+            "Atziri's Splendour",
+            "Headhunter",
+            "Defiance of Destiny",
+            "Atziri's Contempt",
+            "Alpha's Howl",
+            "Sacred Flame"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "\u81ed\u8c6c\u62c9\u5c4e",
+          "level": 98,
+          "main_skill": "Detonate Dead",
+          "main_dps": 7787828,
+          "defense_type": "mom",
+          "uniques": [
+            "Atziri's Splendour",
+            "Kalandra's Touch",
+            "Runeseeker's Call",
+            "Mageblood",
+            "Sunsplinter",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "cheerwitchkub",
+          "level": 98,
+          "main_skill": "Frost Bomb",
+          "main_dps": 12462,
+          "defense_type": "life",
+          "uniques": [
+            "Alpha's Howl",
+            "Kalandra's Touch",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Ancestral Bond",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "ItzSamuuu",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 141515,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Temporalis",
+            "Palm of the Dreamer",
+            "Kalandra's Touch",
+            "Choir of the Storm",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "ZenoPM",
+          "level": 98,
+          "main_skill": "Firebolt",
+          "main_dps": 184484,
+          "defense_type": "es",
+          "uniques": [
+            "Essentia Sanguis"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "NIVEOUSQAQ",
+          "level": 98,
+          "main_skill": "Spark",
+          "main_dps": 157510,
+          "defense_type": "mom",
+          "uniques": [
+            "Choir of the Storm"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "RinesRoA",
+          "level": 98,
+          "main_skill": "Ember Fusillade",
+          "main_dps": 1691303,
+          "defense_type": "life",
+          "uniques": [
+            "Atziri's Splendour",
+            "Mageblood",
+            "Snakepit",
+            "Palm of the Dreamer"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "nenenenenenenenenenechi",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 252992,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Headhunter",
+            "Temporalis",
+            "Palm of the Dreamer",
+            "Choir of the Storm",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        }
+      ]
+    },
+    "Lich": {
+      "ascendancy": "Lich",
+      "base_class": "Witch",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Profane Ritual",
+          "count": 4
+        },
+        {
+          "name": "Chaos Bolt",
+          "count": 2
+        },
+        {
+          "name": "Frost Bomb",
+          "count": 1
+        },
+        {
+          "name": "Skeletal Storm Mage Minion",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Shavronne's Satchel",
+          "count": 7
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 5
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 4
+        },
+        {
+          "name": "Palm of the Dreamer",
+          "count": 2
+        },
+        {
+          "name": "Mageblood",
+          "count": 2
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 2
+        },
+        {
+          "name": "Dream Fragments",
+          "count": 2
+        },
+        {
+          "name": "Snakepit",
+          "count": 1
+        },
+        {
+          "name": "Waveshaper",
+          "count": 1
+        },
+        {
+          "name": "Atziri's Disdain",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Whispers of Doom",
+          "count": 10
+        },
+        {
+          "name": "Conduit",
+          "count": 7
+        },
+        {
+          "name": "Chaos Inoculation",
+          "count": 7
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 4
+        },
+        {
+          "name": "Resonance",
+          "count": 3
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 2
+        },
+        {
+          "name": "Black Scythe Training",
+          "count": 2
+        },
+        {
+          "name": "Blackflame Covenant",
+          "count": 1
+        },
+        {
+          "name": "Zealot's Oath",
+          "count": 1
+        },
+        {
+          "name": "Knightly Tenets",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Rapid Casting II",
+          "count": 6
+        },
+        {
+          "name": "Charge Profusion II",
+          "count": 4
+        },
+        {
+          "name": "Mobility",
+          "count": 3
+        },
+        {
+          "name": "Magnified Area II",
+          "count": 3
+        },
+        {
+          "name": "Withering Touch",
+          "count": 2
+        },
+        {
+          "name": "Lightning Exposure",
+          "count": 2
+        },
+        {
+          "name": "Unleash",
+          "count": 2
+        },
+        {
+          "name": "Shock",
+          "count": 1
+        }
+      ],
+      "defense_meta": {
+        "es": 11,
+        "mom": 1
+      },
+      "damage_meta": {
+        "spell": 10,
+        "unknown": 2
+      },
+      "crit_pct": 0.58,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 43501,
+        "p90": 94499,
+        "max": 94499
+      },
+      "ehp_median": 44252,
+      "builds": [
+        {
+          "name": "\u4e09\u89d2\u662f\u53ea\u5c0f\u963f\u6bd4\u5deb\u5996",
+          "level": 99,
+          "main_skill": "Chaos Bolt",
+          "main_dps": 94499,
+          "defense_type": "es",
+          "uniques": [
+            "Snakepit",
+            "Waveshaper",
+            "Palm of the Dreamer",
+            "Atziri's Disdain",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Blackflame Covenant",
+            "Whispers of Doom"
+          ]
+        },
+        {
+          "name": "sameman",
+          "level": 99,
+          "main_skill": "Profane Ritual",
+          "main_dps": 48,
+          "defense_type": "es",
+          "uniques": [
+            "Shavronne's Satchel",
+            "Morior Invictus",
+            "Leer Cast"
+          ],
+          "keystones": [
+            "Conduit",
+            "Resonance",
+            "Chaos Inoculation",
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "ManaArbuzer",
+          "level": 99,
+          "main_skill": "Profane Ritual",
+          "main_dps": 387,
+          "defense_type": "es",
+          "uniques": [
+            "Shavronne's Satchel",
+            "Alpha's Howl"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Conduit",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "Gyshay",
+          "level": 99,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Morior Invictus",
+            "Alpha's Howl",
+            "Shavronne's Satchel"
+          ],
+          "keystones": [
+            "Conduit",
+            "Chaos Inoculation",
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "Devaz_Spread",
+          "level": 99,
+          "main_skill": "Chaos Bolt",
+          "main_dps": 20429,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch",
+            "Palm of the Dreamer",
+            "The Vertex"
+          ],
+          "keystones": [
+            "Whispers of Doom"
+          ]
+        },
+        {
+          "name": "ManaCursor",
+          "level": 99,
+          "main_skill": "Profane Ritual",
+          "main_dps": 441,
+          "defense_type": "mom",
+          "uniques": [
+            "Ingenuity",
+            "Alpha's Howl",
+            "Morior Invictus"
+          ],
+          "keystones": [
+            "Zealot's Oath",
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Conduit",
+            "Resonance"
+          ]
+        },
+        {
+          "name": "lichkamachka",
+          "level": 99,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Shavronne's Satchel"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\u7ec8\u5c40\u9996\u9886\u6ee1\u5c4f\u5e55\u4e71\u79c0",
+          "level": 98,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Dream Fragments",
+            "Dream Fragments",
+            "Shavronne's Satchel",
+            "Alpha's Howl"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Conduit",
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "cursemyassb",
+          "level": 98,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Morior Invictus",
+            "Shavronne's Satchel",
+            "Fixation of Yix"
+          ],
+          "keystones": [
+            "Whispers of Doom",
+            "Conduit",
+            "Resonance",
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "TheWalkingDeadSeasonOne",
+          "level": 98,
+          "main_skill": "Frost Bomb",
+          "main_dps": 227,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Saitha's Spear"
+          ],
+          "keystones": [
+            "Whispers of Doom",
+            "Knightly Tenets"
+          ]
+        },
+        {
+          "name": "Ermiss",
+          "level": 98,
+          "main_skill": "Skeletal Storm Mage Minion",
+          "main_dps": 43501,
+          "defense_type": "es",
+          "uniques": [
+            "Ventor's Gamble",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Whispers of Doom"
+          ]
+        },
+        {
+          "name": "RunsLich",
+          "level": 98,
+          "main_skill": "Profane Ritual",
+          "main_dps": 170,
+          "defense_type": "es",
+          "uniques": [
+            "Shavronne's Satchel",
+            "Alpha's Howl",
+            "Doedre's Damning"
+          ],
+          "keystones": [
+            "Whispers of Doom",
+            "Conduit",
+            "Chaos Inoculation"
+          ]
+        }
+      ]
+    },
+    "Infernalist": {
+      "ascendancy": "Infernalist",
+      "base_class": "Witch",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Comet",
+          "count": 3
+        },
+        {
+          "name": "Summon Infernal Hound",
+          "count": 2
+        },
+        {
+          "name": "Flame Wall",
+          "count": 2
+        },
+        {
+          "name": "Explosive Spear",
+          "count": 1
+        },
+        {
+          "name": "Firestorm",
+          "count": 1
+        },
+        {
+          "name": "Chaos Bolt",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 7
+        },
+        {
+          "name": "Ventor's Gamble",
+          "count": 4
+        },
+        {
+          "name": "Sacrosanctum",
+          "count": 3
+        },
+        {
+          "name": "Runeseeker's Call",
+          "count": 2
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 2
+        },
+        {
+          "name": "Snakepit",
+          "count": 2
+        },
+        {
+          "name": "Silks of Veneration",
+          "count": 1
+        },
+        {
+          "name": "Rathpith Globe",
+          "count": 1
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 1
+        },
+        {
+          "name": "Headhunter",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Pain Attunement",
+          "count": 5
+        },
+        {
+          "name": "Ancestral Bond",
+          "count": 4
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 3
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 2
+        },
+        {
+          "name": "Resonance",
+          "count": 1
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 1
+        },
+        {
+          "name": "Knightly Tenets",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Efficiency II",
+          "count": 6
+        },
+        {
+          "name": "Muster",
+          "count": 3
+        },
+        {
+          "name": "Feeding Frenzy II",
+          "count": 3
+        },
+        {
+          "name": "Rapid Casting II",
+          "count": 3
+        },
+        {
+          "name": "Execute III",
+          "count": 3
+        },
+        {
+          "name": "Spell Cascade",
+          "count": 3
+        },
+        {
+          "name": "Cast on Critical",
+          "count": 3
+        },
+        {
+          "name": "Hulking Minions",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "hybrid": 4,
+        "es": 3,
+        "life": 3,
+        "mom": 2
+      },
+      "damage_meta": {
+        "spell": 9,
+        "attack": 1,
+        "unknown": 1,
+        "mixed": 1
+      },
+      "crit_pct": 0.83,
+      "coc_pct": 0.25,
+      "dps": {
+        "median": 55232,
+        "p90": 993963,
+        "max": 1487492
+      },
+      "ehp_median": 17829,
+      "builds": [
+        {
+          "name": "Mahree",
+          "level": 99,
+          "main_skill": "Summon Infernal Hound",
+          "main_dps": 69555,
+          "defense_type": "es",
+          "uniques": [
+            "Silks of Veneration"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "ILOVELOSTARK",
+          "level": 99,
+          "main_skill": "Flame Wall",
+          "main_dps": 591929,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Mageblood",
+            "Rathpith Globe",
+            "Runeseeker's Call",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "\ub2e4\ub798\ub9ac_\uc778\ud37c\ub110",
+          "level": 98,
+          "main_skill": "Explosive Spear",
+          "main_dps": 40910,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Morior Invictus",
+            "Headhunter",
+            "The Ordained",
+            "Sacred Flame"
+          ],
+          "keystones": [
+            "Resonance",
+            "Pain Attunement"
+          ]
+        },
+        {
+          "name": "FullmetalInfernalist",
+          "level": 98,
+          "main_skill": "Firestorm",
+          "main_dps": 1487492,
+          "defense_type": "life",
+          "uniques": [
+            "Runeseeker's Call",
+            "Reverie",
+            "Mageblood"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "GrafCrackula",
+          "level": 98,
+          "main_skill": "Flame Wall",
+          "main_dps": 31258,
+          "defense_type": "mom",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Mind Over Matter",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "StickOnThePlan",
+          "level": 98,
+          "main_skill": "Chaos Bolt",
+          "main_dps": 17775,
+          "defense_type": "life",
+          "uniques": [
+            "Soul Mantle"
+          ],
+          "keystones": [
+            "Ancestral Bond"
+          ]
+        },
+        {
+          "name": "Culaculua",
+          "level": 98,
+          "main_skill": "Summon Infernal Hound",
+          "main_dps": 40254,
+          "defense_type": "mom",
+          "uniques": [
+            "Ventor's Gamble",
+            "Ventor's Gamble"
+          ],
+          "keystones": [
+            "Mind Over Matter"
+          ]
+        },
+        {
+          "name": "iiiLucid",
+          "level": 98,
+          "main_skill": "Skeletal Brute Minion",
+          "main_dps": 20595,
+          "defense_type": "es",
+          "uniques": [
+            "Ventor's Gamble",
+            "Fury of the King",
+            "Bones of Ullr",
+            "Sacrosanctum",
+            "Ventor's Gamble"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "GeordiAldurOne",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 704082,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Mageblood",
+            "Snakepit",
+            "Rise of the Phoenix",
+            "Sacrosanctum"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Whispers of Doom"
+          ]
+        },
+        {
+          "name": "\u8fd9\u8d5b\u5b63\u4e94\u4e07\u6211\u5c31\u6536\u624b",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 993963,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "lazyioos",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 669577,
+          "defense_type": "es",
+          "uniques": [
+            "Snakepit",
+            "Sacrosanctum",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Knightly Tenets"
+          ]
+        },
+        {
+          "name": "Schmoopy_Infer",
+          "level": 98,
+          "main_skill": "Entangle",
+          "main_dps": 2193,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Mageblood"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Eldritch Battery"
+          ]
+        }
+      ]
+    },
+    "Pathfinder": {
+      "ascendancy": "Pathfinder",
+      "base_class": "Ranger",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Ice Shot",
+          "count": 9
+        },
+        {
+          "name": "Twister",
+          "count": 1
+        },
+        {
+          "name": "Profane Ritual",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Headhunter",
+          "count": 9
+        },
+        {
+          "name": "Cadiro's Gambit",
+          "count": 7
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 6
+        },
+        {
+          "name": "Hysseg's Claw",
+          "count": 2
+        },
+        {
+          "name": "Ventor's Gamble",
+          "count": 2
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 2
+        },
+        {
+          "name": "Shavronne's Satchel",
+          "count": 2
+        },
+        {
+          "name": "Mageblood",
+          "count": 1
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 1
+        },
+        {
+          "name": "Doryani's Prototype",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Conduit",
+          "count": 2
+        },
+        {
+          "name": "Chaos Inoculation",
+          "count": 2
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 1
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 1
+        },
+        {
+          "name": "Resonance",
+          "count": 1
+        },
+        {
+          "name": "Oasis",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Garukhan's Resolve",
+          "count": 10
+        },
+        {
+          "name": "Elemental Armament II",
+          "count": 10
+        },
+        {
+          "name": "Rakiata's Flow",
+          "count": 10
+        },
+        {
+          "name": "Fork",
+          "count": 7
+        },
+        {
+          "name": "Ice Bite II",
+          "count": 5
+        },
+        {
+          "name": "Nova Projectiles I",
+          "count": 4
+        },
+        {
+          "name": "Tul's Stillness",
+          "count": 1
+        },
+        {
+          "name": "Execute III",
+          "count": 1
+        }
+      ],
+      "defense_meta": {
+        "hybrid": 7,
+        "es": 5
+      },
+      "damage_meta": {
+        "attack": 9,
+        "unknown": 2,
+        "spell": 1
+      },
+      "crit_pct": 0.83,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 437710,
+        "p90": 2481916,
+        "max": 2481916
+      },
+      "ehp_median": 30885,
+      "builds": [
+        {
+          "name": "stillAengus",
+          "level": 100,
+          "main_skill": "Ice Shot",
+          "main_dps": 2481916,
+          "defense_type": "es",
+          "uniques": [
+            "Hysseg's Claw",
+            "Mageblood"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "\u041f\u0440\u0430\u0432\u043e\u0441\u043b\u0430\u0432\u043d\u044b\u0439\u0411\u043e\u0433\u0430\u0442\u044b\u0440\u044c",
+          "level": 100,
+          "main_skill": "Ice Shot",
+          "main_dps": 272479,
+          "defense_type": "es",
+          "uniques": [
+            "Headhunter",
+            "Cadiro's Gambit",
+            "Kalandra's Touch"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Rea",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 454036,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Headhunter",
+            "Kalandra's Touch",
+            "Cadiro's Gambit"
+          ],
+          "keystones": [
+            "Pain Attunement"
+          ]
+        },
+        {
+          "name": "Xtonyg",
+          "level": 99,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Ventor's Gamble",
+            "Sacred Flame",
+            "Ventor's Gamble",
+            "Alpha's Howl",
+            "Shavronne's Satchel",
+            "Doryani's Prototype",
+            "Astramentis"
+          ],
+          "keystones": [
+            "Whispers of Doom",
+            "Conduit",
+            "Resonance",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "Techno_IceShot",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 1800324,
+          "defense_type": "es",
+          "uniques": [
+            "Headhunter",
+            "Kalandra's Touch"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "CringeSeven",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 421384,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Headhunter",
+            "Kalandra's Touch",
+            "Cadiro's Gambit"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Aigilas_V",
+          "level": 99,
+          "main_skill": "Twister",
+          "main_dps": 172751,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Headhunter",
+            "The Ordained",
+            "Svalinn",
+            "The Taming"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "TafeLynx_Runes",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 346261,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Headhunter"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "BadforJakub",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 303975,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Headhunter",
+            "Cadiro's Gambit",
+            "Kalandra's Touch"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "rota_bubinha",
+          "level": 99,
+          "main_skill": "Profane Ritual",
+          "main_dps": 359,
+          "defense_type": "es",
+          "uniques": [
+            "Shavronne's Satchel",
+            "Alpha's Howl",
+            "Revered Resin"
+          ],
+          "keystones": [
+            "Oasis",
+            "Conduit",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "CronusF",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 748139,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Hysseg's Claw",
+            "Headhunter",
+            "Kalandra's Touch"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "DingleberryPrime",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 564917,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Headhunter"
+          ],
+          "keystones": []
+        }
+      ]
+    },
+    "Deadeye": {
+      "ascendancy": "Deadeye",
+      "base_class": "Ranger",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Ice Shot",
+          "count": 8
+        },
+        {
+          "name": "Twister",
+          "count": 2
+        },
+        {
+          "name": "Explosive Grenade",
+          "count": 1
+        },
+        {
+          "name": "Lightning Arrow",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Headhunter",
+          "count": 8
+        },
+        {
+          "name": "Cadiro's Gambit",
+          "count": 7
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 5
+        },
+        {
+          "name": "Mageblood",
+          "count": 3
+        },
+        {
+          "name": "Valako's Vice",
+          "count": 1
+        },
+        {
+          "name": "Hysseg's Claw",
+          "count": 1
+        },
+        {
+          "name": "Aurseize",
+          "count": 1
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 1
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 1
+        },
+        {
+          "name": "Tangletongue",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Dance with Death",
+          "count": 2
+        },
+        {
+          "name": "Chaos Inoculation",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Elemental Armament II",
+          "count": 11
+        },
+        {
+          "name": "Garukhan's Resolve",
+          "count": 9
+        },
+        {
+          "name": "Rakiata's Flow",
+          "count": 8
+        },
+        {
+          "name": "Fork",
+          "count": 7
+        },
+        {
+          "name": "Ice Bite II",
+          "count": 6
+        },
+        {
+          "name": "Nova Projectiles I",
+          "count": 3
+        },
+        {
+          "name": "Rapid Attacks II",
+          "count": 2
+        },
+        {
+          "name": "Pinpoint Critical",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "hybrid": 5,
+        "es": 4,
+        "life": 3
+      },
+      "damage_meta": {
+        "attack": 10,
+        "spell": 2
+      },
+      "crit_pct": 0.92,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 280067,
+        "p90": 934040,
+        "max": 1473440
+      },
+      "ehp_median": 30362,
+      "builds": [
+        {
+          "name": "AESPA_LEMONADE",
+          "level": 100,
+          "main_skill": "Explosive Grenade",
+          "main_dps": 27604,
+          "defense_type": "life",
+          "uniques": [
+            "Valako's Vice"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Stormy_Scuba",
+          "level": 100,
+          "main_skill": "Ice Shot",
+          "main_dps": 286824,
+          "defense_type": "es",
+          "uniques": [
+            "Hysseg's Claw",
+            "Headhunter",
+            "Cadiro's Gambit"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "FailedGED_IS",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 934040,
+          "defense_type": "es",
+          "uniques": [
+            "Headhunter",
+            "Kalandra's Touch"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "HarambeIceshot",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 1473440,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Mageblood",
+            "Cadiro's Gambit"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Dilice_RoTA",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 79898,
+          "defense_type": "life",
+          "uniques": [
+            "Kalandra's Touch",
+            "Headhunter",
+            "Cadiro's Gambit"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "veromikasrtarks",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 158688,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Headhunter",
+            "Aurseize",
+            "Cadiro's Gambit",
+            "Kalandra's Touch"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "MinionSpinAgain",
+          "level": 99,
+          "main_skill": "Twister",
+          "main_dps": 629265,
+          "defense_type": "life",
+          "uniques": [
+            "Morior Invictus",
+            "Mageblood",
+            "Sacred Flame",
+            "Tangletongue"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "w_SVETAKOMETA_w",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 132815,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Cadiro's Gambit",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "RageproblemsBeyblade",
+          "level": 99,
+          "main_skill": "Twister",
+          "main_dps": 68295,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Skysliver",
+            "Guiding Palm of the Eye",
+            "The Taming",
+            "Mageblood",
+            "The Ordained"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "olley",
+          "level": 99,
+          "main_skill": "Lightning Arrow",
+          "main_dps": 273311,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Headhunter"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "\u0413\u043e\u043b\u043e\u0441\u0430\u0421\u043a\u0430\u0437\u0430\u043b\u0438\u0421\u0434\u0435\u043b\u0430\u0442\u044c\u042d\u0442\u043e",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 312049,
+          "defense_type": "es",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Kalandra's Touch",
+            "Headhunter"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "hejzyk",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 340380,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Headhunter"
+          ],
+          "keystones": []
+        }
+      ]
+    },
+    "Stormweaver": {
+      "ascendancy": "Stormweaver",
+      "base_class": "Sorceress",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Comet",
+          "count": 6
+        },
+        {
+          "name": "Ice Nova",
+          "count": 1
+        },
+        {
+          "name": "Living Bomb",
+          "count": 1
+        },
+        {
+          "name": "Spark",
+          "count": 1
+        },
+        {
+          "name": "Entangle",
+          "count": 1
+        },
+        {
+          "name": "Frostbolt",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 9
+        },
+        {
+          "name": "Adonia's Ego",
+          "count": 7
+        },
+        {
+          "name": "Maligaro's Virtuosity",
+          "count": 6
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 5
+        },
+        {
+          "name": "Palm of the Dreamer",
+          "count": 3
+        },
+        {
+          "name": "Headhunter",
+          "count": 2
+        },
+        {
+          "name": "Call of the Brotherhood",
+          "count": 2
+        },
+        {
+          "name": "Beacon of Azis",
+          "count": 2
+        },
+        {
+          "name": "Nocturne",
+          "count": 1
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 4
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 4
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 3
+        },
+        {
+          "name": "Elemental Equilibrium",
+          "count": 3
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 3
+        },
+        {
+          "name": "Resonance",
+          "count": 1
+        },
+        {
+          "name": "Ancestral Bond",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Efficiency II",
+          "count": 8
+        },
+        {
+          "name": "Zenith II",
+          "count": 6
+        },
+        {
+          "name": "Pinpoint Critical",
+          "count": 5
+        },
+        {
+          "name": "Cast on Critical",
+          "count": 4
+        },
+        {
+          "name": "Boundless Energy II",
+          "count": 3
+        },
+        {
+          "name": "Cast on Elemental Ailment",
+          "count": 2
+        },
+        {
+          "name": "Living Bomb",
+          "count": 2
+        },
+        {
+          "name": "Vorana's Siege",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "es": 7,
+        "hybrid": 3,
+        "mom": 2
+      },
+      "damage_meta": {
+        "spell": 12
+      },
+      "crit_pct": 1.0,
+      "coc_pct": 0.33,
+      "dps": {
+        "median": 229706,
+        "p90": 605623,
+        "max": 1886541
+      },
+      "ehp_median": 19340,
+      "builds": [
+        {
+          "name": "LetsGetDoryaniTonight_",
+          "level": 100,
+          "main_skill": "Comet",
+          "main_dps": 61946,
+          "defense_type": "mom",
+          "uniques": [
+            "Palm of the Dreamer",
+            "Headhunter",
+            "Maligaro's Virtuosity",
+            "Adonia's Ego",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Mind Over Matter"
+          ]
+        },
+        {
+          "name": "YPE",
+          "level": 99,
+          "main_skill": "Ice Nova",
+          "main_dps": 301984,
+          "defense_type": "es",
+          "uniques": [
+            "Headhunter",
+            "Maligaro's Virtuosity",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Resonance"
+          ]
+        },
+        {
+          "name": "ZeljanaFilianore",
+          "level": 99,
+          "main_skill": "Comet",
+          "main_dps": 605623,
+          "defense_type": "es",
+          "uniques": [
+            "Call of the Brotherhood",
+            "Maligaro's Virtuosity",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Elemental Equilibrium",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "merry_Radiance",
+          "level": 99,
+          "main_skill": "Living Bomb",
+          "main_dps": 120039,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Beacon of Azis",
+            "Adonia's Ego",
+            "Mageblood",
+            "Adonia's Ego",
+            "Palm of the Dreamer",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Eldritch Battery",
+            "Pain Attunement"
+          ]
+        },
+        {
+          "name": "Kai_RoA",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 386855,
+          "defense_type": "es",
+          "uniques": [
+            "Maligaro's Virtuosity",
+            "Mageblood",
+            "Call of the Brotherhood"
+          ],
+          "keystones": [
+            "Elemental Equilibrium",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "cobright",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 1886541,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Kalandra's Touch",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "Timmy\u0e0a\u0e32\u0e22\u0e2b\u0e19\u0e49\u0e32\u0e25\u0e32\u0e1a",
+          "level": 98,
+          "main_skill": "Spark",
+          "main_dps": 22048,
+          "defense_type": "mom",
+          "uniques": [
+            "Nocturne",
+            "Adonia's Ego",
+            "Maligaro's Virtuosity",
+            "Alpha's Howl",
+            "Mageblood",
+            "Adonia's Ego",
+            "Sacred Flame"
+          ],
+          "keystones": [
+            "Mind Over Matter"
+          ]
+        },
+        {
+          "name": "Isao_Pew",
+          "level": 98,
+          "main_skill": "Entangle",
+          "main_dps": 2506,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Ancestral Bond",
+            "Mind Over Matter",
+            "Eldritch Battery",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "morph_kok",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 65758,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Adonia's Ego",
+            "Palm of the Dreamer",
+            "Beacon of Azis",
+            "Cloak of Defiance",
+            "Dream Fragments",
+            "Adonia's Ego",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Eldritch Battery",
+            "Pain Attunement"
+          ]
+        },
+        {
+          "name": "Nasuunaldur",
+          "level": 98,
+          "main_skill": "Frostbolt",
+          "main_dps": 329258,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Snakepit"
+          ],
+          "keystones": [
+            "Elemental Equilibrium",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "CyberSweg",
+          "level": 98,
+          "main_skill": "Orb of Storms",
+          "main_dps": 222036,
+          "defense_type": "es",
+          "uniques": [
+            "Ingenuity"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "\u4f50\u5fb7\u5c0f\u6c7d\u8eca\u8cfd\u5b63\u4e94",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 237376,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Maligaro's Virtuosity"
+          ],
+          "keystones": []
+        }
+      ]
+    },
+    "Chronomancer": {
+      "ascendancy": "Chronomancer",
+      "base_class": "Sorceress",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Comet",
+          "count": 4
+        },
+        {
+          "name": "Essence Drain",
+          "count": 2
+        },
+        {
+          "name": "Lightning Warp",
+          "count": 2
+        },
+        {
+          "name": "Entangle",
+          "count": 1
+        },
+        {
+          "name": "Profane Ritual",
+          "count": 1
+        },
+        {
+          "name": "Ember Fusillade",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 6
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 4
+        },
+        {
+          "name": "Snakepit",
+          "count": 4
+        },
+        {
+          "name": "Ventor's Gamble",
+          "count": 3
+        },
+        {
+          "name": "Darkness Enthroned",
+          "count": 2
+        },
+        {
+          "name": "Fixation of Yix",
+          "count": 2
+        },
+        {
+          "name": "Atziri's Splendour",
+          "count": 2
+        },
+        {
+          "name": "Maligaro's Virtuosity",
+          "count": 2
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 2
+        },
+        {
+          "name": "Doedre's Damning",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 8
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 5
+        },
+        {
+          "name": "Elemental Equilibrium",
+          "count": 3
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 2
+        },
+        {
+          "name": "Ancestral Bond",
+          "count": 1
+        },
+        {
+          "name": "Conduit",
+          "count": 1
+        },
+        {
+          "name": "Blackflame Covenant",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Efficiency II",
+          "count": 6
+        },
+        {
+          "name": "Magnified Area II",
+          "count": 3
+        },
+        {
+          "name": "Cast on Critical",
+          "count": 3
+        },
+        {
+          "name": "Boundless Energy II",
+          "count": 3
+        },
+        {
+          "name": "Mobility",
+          "count": 2
+        },
+        {
+          "name": "Pinpoint Critical",
+          "count": 2
+        },
+        {
+          "name": "Zenith II",
+          "count": 2
+        },
+        {
+          "name": "Uhtred's Augury",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "es": 9,
+        "life": 3
+      },
+      "damage_meta": {
+        "spell": 11,
+        "attack": 1
+      },
+      "crit_pct": 0.92,
+      "coc_pct": 0.33,
+      "dps": {
+        "median": 298349,
+        "p90": 654409,
+        "max": 654409
+      },
+      "ehp_median": 25624,
+      "builds": [
+        {
+          "name": "\u0441\u0438\u043b\u044c\u043d\u0435\u0439\u0448\u0438\u0439\u043d\u0435\u0433\u0440",
+          "level": 99,
+          "main_skill": "Essence Drain",
+          "main_dps": 344,
+          "defense_type": "es",
+          "uniques": [
+            "Doedre's Damning",
+            "Evergrasping Ring",
+            "Darkness Enthroned",
+            "Fixation of Yix",
+            "The Prisoner's Manacles",
+            "Alpha's Howl"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "Liehas",
+          "level": 99,
+          "main_skill": "Entangle",
+          "main_dps": 610,
+          "defense_type": "es",
+          "uniques": [
+            "Atziri's Splendour",
+            "Mageblood",
+            "Alpha's Howl",
+            "Dream Fragments"
+          ],
+          "keystones": [
+            "Ancestral Bond",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\u54a9\u54a9\u54a9\u54a9\u54a9\u54a9\u54a9",
+          "level": 99,
+          "main_skill": "Comet",
+          "main_dps": 262646,
+          "defense_type": "life",
+          "uniques": [
+            "Sine Aequo",
+            "Temporalis",
+            "Snakepit",
+            "Palm of the Dreamer",
+            "Mageblood",
+            "Shankgonne"
+          ],
+          "keystones": [
+            "Elemental Equilibrium"
+          ]
+        },
+        {
+          "name": "AncientGangrena",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 288396,
+          "defense_type": "es",
+          "uniques": [
+            "Snakepit",
+            "Maligaro's Virtuosity"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\u6b64\u610f\u5bc4\u662d\u662d",
+          "level": 98,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Ventor's Gamble",
+            "Ingenuity",
+            "Alpha's Howl",
+            "Arvil's Wheel",
+            "Fixation of Yix",
+            "Doryani's Prototype",
+            "Ventor's Gamble"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "Askandra_aldur",
+          "level": 98,
+          "main_skill": "Lightning Warp",
+          "main_dps": 360095,
+          "defense_type": "life",
+          "uniques": [
+            "Maligaro's Virtuosity",
+            "Mageblood",
+            "Myris Uxor",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Elemental Equilibrium"
+          ]
+        },
+        {
+          "name": "Shlro",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 308303,
+          "defense_type": "es",
+          "uniques": [
+            "Snakepit",
+            "Nightscale",
+            "Ventor's Gamble",
+            "Eventide Petals",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "ThatoxRoA",
+          "level": 98,
+          "main_skill": "Essence Drain",
+          "main_dps": 141842,
+          "defense_type": "es",
+          "uniques": [],
+          "keystones": [
+            "Whispers of Doom",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "RekonRoA",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 601921,
+          "defense_type": "es",
+          "uniques": [
+            "Snakepit",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "AncientChronoSupport",
+          "level": 98,
+          "main_skill": "Profane Ritual",
+          "main_dps": 514,
+          "defense_type": "es",
+          "uniques": [
+            "Alpha's Howl",
+            "Darkness Enthroned"
+          ],
+          "keystones": [
+            "Whispers of Doom",
+            "Conduit",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\u5c0f\u516b\u4e58\u4e58\u7684",
+          "level": 98,
+          "main_skill": "Lightning Warp",
+          "main_dps": 654409,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch",
+            "Atziri's Splendour"
+          ],
+          "keystones": [
+            "Elemental Equilibrium"
+          ]
+        },
+        {
+          "name": "RITAMI",
+          "level": 98,
+          "main_skill": "Ember Fusillade",
+          "main_dps": 226729,
+          "defense_type": "life",
+          "uniques": [],
+          "keystones": [
+            "Blackflame Covenant",
+            "Whispers of Doom"
+          ]
+        }
+      ]
+    },
+    "Disciple of Varashta": {
+      "ascendancy": "Disciple of Varashta",
+      "base_class": "Sorceress",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Kelari's Deception",
+          "count": 5
+        },
+        {
+          "name": "Navira's Fracturing",
+          "count": 4
+        },
+        {
+          "name": "Comet",
+          "count": 2
+        },
+        {
+          "name": "Entangle",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 7
+        },
+        {
+          "name": "Evergrasping Ring",
+          "count": 4
+        },
+        {
+          "name": "Andvarius",
+          "count": 4
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 2
+        },
+        {
+          "name": "Maligaro's Virtuosity",
+          "count": 1
+        },
+        {
+          "name": "Decree of Flight",
+          "count": 1
+        },
+        {
+          "name": "Sire of Shards",
+          "count": 1
+        },
+        {
+          "name": "Snakepit",
+          "count": 1
+        },
+        {
+          "name": "Grip of Kulemak",
+          "count": 1
+        },
+        {
+          "name": "Eshtera's Path",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 12
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 1
+        },
+        {
+          "name": "Resonance",
+          "count": 1
+        },
+        {
+          "name": "Wildsurge Incantation",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Muster",
+          "count": 9
+        },
+        {
+          "name": "Bidding II",
+          "count": 8
+        },
+        {
+          "name": "Kelari, the Tainted Sands",
+          "count": 5
+        },
+        {
+          "name": "Hulking Minions",
+          "count": 4
+        },
+        {
+          "name": "Kurgal's Leash",
+          "count": 4
+        },
+        {
+          "name": "Magnified Area II",
+          "count": 4
+        },
+        {
+          "name": "Navira, the Last Mirage",
+          "count": 4
+        },
+        {
+          "name": "Encroaching Ground",
+          "count": 4
+        }
+      ],
+      "defense_meta": {
+        "es": 12
+      },
+      "damage_meta": {
+        "spell": 8,
+        "mixed": 2,
+        "unknown": 1,
+        "attack": 1
+      },
+      "crit_pct": 0.83,
+      "coc_pct": 0.17,
+      "dps": {
+        "median": 179338,
+        "p90": 557748,
+        "max": 580296
+      },
+      "ehp_median": 39745,
+      "builds": [
+        {
+          "name": "KingFud_RoA",
+          "level": 99,
+          "main_skill": "Comet",
+          "main_dps": 501041,
+          "defense_type": "es",
+          "uniques": [
+            "Maligaro's Virtuosity",
+            "Kalandra's Touch",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "ParashnikNikita",
+          "level": 99,
+          "main_skill": "Kelari's Deception",
+          "main_dps": 67363,
+          "defense_type": "es",
+          "uniques": [
+            "Evergrasping Ring",
+            "Decree of Flight"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "vikgamersecret",
+          "level": 99,
+          "main_skill": "Navira's Fracturing",
+          "main_dps": 415444,
+          "defense_type": "es",
+          "uniques": [],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\ud06c\ub85c\ub178_\ub9e8\uc11c",
+          "level": 99,
+          "main_skill": "Kelari's Deception",
+          "main_dps": 134167,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Andvarius",
+            "Andvarius"
+          ],
+          "keystones": [
+            "Whispers of Doom",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "Casualgamerfr",
+          "level": 99,
+          "main_skill": "Kelari's Deception",
+          "main_dps": 71472,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Chaos Inoculation",
+            "Resonance"
+          ]
+        },
+        {
+          "name": "Ryu_hana",
+          "level": 99,
+          "main_skill": "Comet",
+          "main_dps": 580296,
+          "defense_type": "es",
+          "uniques": [
+            "Sire of Shards",
+            "Snakepit",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\u9060\u53e4\u8336\u8336\u5e03",
+          "level": 99,
+          "main_skill": "Navira's Fracturing",
+          "main_dps": 466104,
+          "defense_type": "es",
+          "uniques": [
+            "Evergrasping Ring",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "Xvares",
+          "level": 98,
+          "main_skill": "Kelari's Deception",
+          "main_dps": 55303,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Andvarius",
+            "Andvarius"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "HumongousVrashta",
+          "level": 98,
+          "main_skill": "Kelari's Deception",
+          "main_dps": 44580,
+          "defense_type": "es",
+          "uniques": [
+            "Grip of Kulemak",
+            "Eshtera's Path"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\uc2a4\ub0c5\uc2dc\uc791",
+          "level": 98,
+          "main_skill": "Navira's Fracturing",
+          "main_dps": 557748,
+          "defense_type": "es",
+          "uniques": [
+            "Evergrasping Ring",
+            "Evergrasping Ring"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "natoos",
+          "level": 98,
+          "main_skill": "Entangle",
+          "main_dps": 129018,
+          "defense_type": "es",
+          "uniques": [
+            "Effigy of Cruelty",
+            "Mageblood",
+            "Nightscale"
+          ],
+          "keystones": [
+            "Wildsurge Incantation",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "GnSungGuy",
+          "level": 98,
+          "main_skill": "Navira's Fracturing",
+          "main_dps": 224509,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Silks of Veneration",
+            "The Flesh Poppet"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        }
+      ]
+    },
+    "Invoker": {
+      "ascendancy": "Invoker",
+      "base_class": "Monk",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Orb of Storms",
+          "count": 3
+        },
+        {
+          "name": "Frost Wall",
+          "count": 1
+        },
+        {
+          "name": "Frostbolt",
+          "count": 1
+        },
+        {
+          "name": "Quarterstaff Strike",
+          "count": 1
+        },
+        {
+          "name": "Twister",
+          "count": 1
+        },
+        {
+          "name": "Flame Wall",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 7
+        },
+        {
+          "name": "Headhunter",
+          "count": 3
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 3
+        },
+        {
+          "name": "Maligaro's Virtuosity",
+          "count": 2
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 2
+        },
+        {
+          "name": "Ingenuity",
+          "count": 2
+        },
+        {
+          "name": "Snakepit",
+          "count": 1
+        },
+        {
+          "name": "Effigy of Cruelty",
+          "count": 1
+        },
+        {
+          "name": "The Ordained",
+          "count": 1
+        },
+        {
+          "name": "Skysliver",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 6
+        },
+        {
+          "name": "Ancestral Bond",
+          "count": 5
+        },
+        {
+          "name": "Dance with Death",
+          "count": 2
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 2
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 2
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 2
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 1
+        },
+        {
+          "name": "Elemental Equilibrium",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Elemental Armament II",
+          "count": 5
+        },
+        {
+          "name": "Pinpoint Critical",
+          "count": 4
+        },
+        {
+          "name": "Zenith II",
+          "count": 3
+        },
+        {
+          "name": "Rapid Attacks II",
+          "count": 3
+        },
+        {
+          "name": "Efficiency II",
+          "count": 3
+        },
+        {
+          "name": "Tul's Stillness",
+          "count": 2
+        },
+        {
+          "name": "Deliberation",
+          "count": 2
+        },
+        {
+          "name": "Prolonged Duration II",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "es": 7,
+        "mom": 2,
+        "hybrid": 2,
+        "life": 1
+      },
+      "damage_meta": {
+        "spell": 9,
+        "attack": 3
+      },
+      "crit_pct": 1.0,
+      "coc_pct": 0.08,
+      "dps": {
+        "median": 156930,
+        "p90": 907226,
+        "max": 1014998
+      },
+      "ehp_median": 22892,
+      "builds": [
+        {
+          "name": "PoTayToms",
+          "level": 100,
+          "main_skill": "Frost Wall",
+          "main_dps": 18031,
+          "defense_type": "es",
+          "uniques": [
+            "Headhunter"
+          ],
+          "keystones": [
+            "Ancestral Bond",
+            "Whispers of Doom",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\u9ad8\u8cb4\u3067\u30de\u30b0\u30de\u306a\u30b9\u30ce\u30fc",
+          "level": 99,
+          "main_skill": "Frostbolt",
+          "main_dps": 149718,
+          "defense_type": "es",
+          "uniques": [
+            "Snakepit",
+            "Maligaro's Virtuosity",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "ESixTwoOneEnjoyerr",
+          "level": 98,
+          "main_skill": "Quarterstaff Strike",
+          "main_dps": 164142,
+          "defense_type": "es",
+          "uniques": [
+            "Headhunter",
+            "Effigy of Cruelty"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "FLUUUUUUUU",
+          "level": 98,
+          "main_skill": "Twister",
+          "main_dps": 275981,
+          "defense_type": "life",
+          "uniques": [
+            "Kalandra's Touch",
+            "Sacred Flame",
+            "The Ordained",
+            "Mageblood",
+            "Skysliver"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "Macht_Fister",
+          "level": 98,
+          "main_skill": "Orb of Storms",
+          "main_dps": 65017,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood"
+          ],
+          "keystones": [
+            "Ancestral Bond",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "SeventySevenR",
+          "level": 98,
+          "main_skill": "Flame Wall",
+          "main_dps": 58838,
+          "defense_type": "mom",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Mind Over Matter",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "ZZZZZZKLF",
+          "level": 98,
+          "main_skill": "Storm Wave",
+          "main_dps": 222494,
+          "defense_type": "es",
+          "uniques": [
+            "Hysseg's Claw",
+            "Mageblood"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "jingleBELLSjingleBELLSs",
+          "level": 98,
+          "main_skill": "Lightning Spear",
+          "main_dps": 89993,
+          "defense_type": "hybrid",
+          "uniques": [
+            "The Taming",
+            "Sacred Flame",
+            "Tangletongue",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "Endurok",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 311873,
+          "defense_type": "es",
+          "uniques": [
+            "Maligaro's Virtuosity",
+            "Adonia's Ego",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Elemental Equilibrium",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\u30de\u30f3\u30c1\u30e9\u30f3\u658e\u85e4",
+          "level": 97,
+          "main_skill": "Orb of Storms",
+          "main_dps": 1014998,
+          "defense_type": "mom",
+          "uniques": [
+            "Mageblood",
+            "Rathpith Globe",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Mind Over Matter",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "por_Scubaaa",
+          "level": 97,
+          "main_skill": "Orb of Storms",
+          "main_dps": 21666,
+          "defense_type": "es",
+          "uniques": [
+            "Ingenuity"
+          ],
+          "keystones": [
+            "Ancestral Bond",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "KAYyyyyy",
+          "level": 97,
+          "main_skill": "Crushing Fear",
+          "main_dps": 907226,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Myris Uxor",
+            "Ingenuity",
+            "Horror's Flight"
+          ],
+          "keystones": []
+        }
+      ]
+    },
+    "Acolyte of Chayula": {
+      "ascendancy": "Acolyte of Chayula",
+      "base_class": "Monk",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Profane Ritual",
+          "count": 4
+        },
+        {
+          "name": "Wolf Pack",
+          "count": 1
+        },
+        {
+          "name": "Comet",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Ventor's Gamble",
+          "count": 14
+        },
+        {
+          "name": "Shavronne's Satchel",
+          "count": 11
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 8
+        },
+        {
+          "name": "Doryani's Prototype",
+          "count": 7
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 7
+        },
+        {
+          "name": "Evergrasping Ring",
+          "count": 3
+        },
+        {
+          "name": "Leer Cast",
+          "count": 2
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 1
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 1
+        },
+        {
+          "name": "Svalinn",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 11
+        },
+        {
+          "name": "Conduit",
+          "count": 7
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 6
+        },
+        {
+          "name": "Black Scythe Training",
+          "count": 6
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 2
+        },
+        {
+          "name": "Resonance",
+          "count": 1
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 1
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 1
+        },
+        {
+          "name": "Elemental Equilibrium",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Charge Profusion II",
+          "count": 4
+        },
+        {
+          "name": "Mobility",
+          "count": 3
+        },
+        {
+          "name": "Magnified Area II",
+          "count": 3
+        },
+        {
+          "name": "Rapid Casting II",
+          "count": 3
+        },
+        {
+          "name": "Loyalty",
+          "count": 1
+        },
+        {
+          "name": "Minion Instability",
+          "count": 1
+        },
+        {
+          "name": "Feeding Frenzy I",
+          "count": 1
+        },
+        {
+          "name": "Infernal Legion I",
+          "count": 1
+        }
+      ],
+      "defense_meta": {
+        "es": 11,
+        "life": 1
+      },
+      "damage_meta": {
+        "spell": 9,
+        "unknown": 3
+      },
+      "crit_pct": 0.33,
+      "coc_pct": 0.08,
+      "dps": {
+        "median": 829965,
+        "p90": 829965,
+        "max": 829965
+      },
+      "ehp_median": 32289,
+      "builds": [
+        {
+          "name": "Dojshy",
+          "level": 99,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Alpha's Howl",
+            "Morior Invictus",
+            "Shavronne's Satchel"
+          ],
+          "keystones": [
+            "Conduit",
+            "Resonance",
+            "Chaos Inoculation",
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "\u5192\u5145\u6572\u949f\u4eba",
+          "level": 98,
+          "main_skill": "Wolf Pack",
+          "main_dps": 77,
+          "defense_type": "es",
+          "uniques": [
+            "Shavronne's Satchel",
+            "Ventor's Gamble",
+            "Ventor's Gamble",
+            "Alpha's Howl",
+            "Doryani's Prototype",
+            "Sacred Flame"
+          ],
+          "keystones": [
+            "Conduit",
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "LukaChonkic",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 829965,
+          "defense_type": "life",
+          "uniques": [
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Whispers of Doom",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "Seneca_ghoulzxc",
+          "level": 98,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Leer Cast",
+            "Svalinn",
+            "Shavronne's Satchel"
+          ],
+          "keystones": [
+            "Conduit",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "RukaBlyd",
+          "level": 98,
+          "main_skill": "Profane Ritual",
+          "main_dps": 359,
+          "defense_type": "es",
+          "uniques": [
+            "Doryani's Prototype",
+            "Sacred Flame",
+            "Ventor's Gamble",
+            "Alpha's Howl",
+            "Shavronne's Satchel",
+            "Ventor's Gamble"
+          ],
+          "keystones": [
+            "Iron Reflexes",
+            "Conduit",
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "ChayulaEx",
+          "level": 98,
+          "main_skill": "Profane Ritual",
+          "main_dps": 644,
+          "defense_type": "es",
+          "uniques": [
+            "Evergrasping Ring",
+            "Evergrasping Ring",
+            "Shavronne's Satchel",
+            "Leer Cast",
+            "Fixation of Yix"
+          ],
+          "keystones": [
+            "Conduit",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "DirtyMonkFun",
+          "level": 98,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Ventor's Gamble",
+            "Shavronne's Satchel",
+            "Sacred Flame",
+            "Doryani's Prototype",
+            "Ventor's Gamble"
+          ],
+          "keystones": [
+            "Elemental Equilibrium",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "rota_dmgchao",
+          "level": 98,
+          "main_skill": "Profane Ritual",
+          "main_dps": 398,
+          "defense_type": "es",
+          "uniques": [
+            "Shavronne's Satchel",
+            "Alpha's Howl",
+            "Ventor's Gamble",
+            "Sacred Flame",
+            "Doryani's Prototype",
+            "Ventor's Gamble"
+          ],
+          "keystones": [
+            "Iron Reflexes",
+            "Conduit",
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "RF_chatutay",
+          "level": 98,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Doryani's Prototype",
+            "Ventor's Gamble",
+            "Sacred Flame",
+            "Alpha's Howl",
+            "Ventor's Gamble",
+            "Shavronne's Satchel"
+          ],
+          "keystones": [
+            "Iron Reflexes",
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "MonkTOBu",
+          "level": 98,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Grip of Kulemak",
+            "Shavronne's Satchel",
+            "Alpha's Howl",
+            "Evergrasping Ring"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "MOONKESS",
+          "level": 98,
+          "main_skill": "Profane Ritual",
+          "main_dps": 484,
+          "defense_type": "es",
+          "uniques": [
+            "Sacred Flame",
+            "Alpha's Howl",
+            "Doryani's Prototype",
+            "Ventor's Gamble",
+            "Shavronne's Satchel",
+            "Ventor's Gamble"
+          ],
+          "keystones": [
+            "Iron Reflexes",
+            "Conduit",
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "MalFurikHeartbreaker",
+          "level": 98,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Doryani's Prototype",
+            "Sacred Flame",
+            "Shavronne's Satchel",
+            "Alpha's Howl",
+            "Ventor's Gamble",
+            "Ventor's Gamble"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Iron Reflexes",
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        }
+      ]
+    },
+    "Martial Artist": {
+      "ascendancy": "Martial Artist",
+      "base_class": "Monk",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Twister",
+          "count": 7
+        },
+        {
+          "name": "Ice Shot",
+          "count": 2
+        },
+        {
+          "name": "Flicker Strike",
+          "count": 1
+        },
+        {
+          "name": "Quarterstaff Strike",
+          "count": 1
+        },
+        {
+          "name": "Rend",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 8
+        },
+        {
+          "name": "The Taming",
+          "count": 7
+        },
+        {
+          "name": "The Black Insignia",
+          "count": 7
+        },
+        {
+          "name": "The Ordained",
+          "count": 7
+        },
+        {
+          "name": "Skysliver",
+          "count": 4
+        },
+        {
+          "name": "Headhunter",
+          "count": 4
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 3
+        },
+        {
+          "name": "Lochtonial Caress",
+          "count": 3
+        },
+        {
+          "name": "Guiding Palm of the Heart",
+          "count": 2
+        },
+        {
+          "name": "Palm of the Dreamer",
+          "count": 2
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Dance with Death",
+          "count": 7
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 1
+        },
+        {
+          "name": "Chaos Inoculation",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Elemental Armament II",
+          "count": 9
+        },
+        {
+          "name": "Rakiata's Flow",
+          "count": 9
+        },
+        {
+          "name": "Projectile Acceleration III",
+          "count": 7
+        },
+        {
+          "name": "Retreat III",
+          "count": 6
+        },
+        {
+          "name": "Pinpoint Critical",
+          "count": 5
+        },
+        {
+          "name": "Garukhan's Resolve",
+          "count": 5
+        },
+        {
+          "name": "Ice Bite II",
+          "count": 2
+        },
+        {
+          "name": "Perpetual Charge",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "es": 6,
+        "hybrid": 5,
+        "life": 1
+      },
+      "damage_meta": {
+        "spell": 7,
+        "attack": 5
+      },
+      "crit_pct": 0.92,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 340045,
+        "p90": 464418,
+        "max": 526045
+      },
+      "ehp_median": 33604,
+      "builds": [
+        {
+          "name": "ResurrectGodAura",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 143711,
+          "defense_type": "hybrid",
+          "uniques": [
+            "The Taming",
+            "Guiding Palm of the Heart",
+            "The Black Insignia",
+            "Mageblood",
+            "Skysliver",
+            "The Ordained"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "GothMommyAltGirl",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 367184,
+          "defense_type": "hybrid",
+          "uniques": [
+            "The Ordained",
+            "Mageblood",
+            "The Black Insignia",
+            "The Taming",
+            "Sacred Flame"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "SLAVIK",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 196827,
+          "defense_type": "es",
+          "uniques": [
+            "The Taming",
+            "Mageblood",
+            "Palm of the Dreamer",
+            "The Ordained",
+            "Skysliver",
+            "The Black Insignia"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "ReturnOfTheAmogus",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 154664,
+          "defense_type": "es",
+          "uniques": [
+            "Guiding Palm of the Heart",
+            "Mageblood",
+            "The Ordained",
+            "The Black Insignia",
+            "The Taming"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "Iceshotbell",
+          "level": 100,
+          "main_skill": "Ice Shot",
+          "main_dps": 154010,
+          "defense_type": "life",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Hyrri's Ire",
+            "Headhunter",
+            "The Black Insignia"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "mdaweckaa",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 464418,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "The Ordained",
+            "The Taming",
+            "The Black Insignia",
+            "Sacred Flame"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "Nagakiba_twister_HRU",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 340045,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Skysliver",
+            "The Black Insignia",
+            "Mageblood",
+            "The Taming",
+            "Palm of the Dreamer",
+            "The Ordained"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "Botiaraaaa_Kolokol",
+          "level": 100,
+          "main_skill": "Ice Shot",
+          "main_dps": 526045,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Kalandra's Touch",
+            "Cadiro's Gambit",
+            "Headhunter"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Tempestrerolled",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 162927,
+          "defense_type": "es",
+          "uniques": [
+            "Headhunter",
+            "Sacred Flame",
+            "Skysliver",
+            "The Ordained",
+            "The Taming"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "MashapeLeon",
+          "level": 99,
+          "main_skill": "Flicker Strike",
+          "main_dps": 357618,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Headhunter",
+            "Lochtonial Caress"
+          ],
+          "keystones": [
+            "Pain Attunement"
+          ]
+        },
+        {
+          "name": "\uc774\uc2ed\uc721\ub144\uc624\uc6d4\uc0bc\uc2ed\uc77c",
+          "level": 99,
+          "main_skill": "Quarterstaff Strike",
+          "main_dps": 346203,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Lochtonial Caress",
+            "Hysseg's Claw"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Sherriepuff",
+          "level": 99,
+          "main_skill": "Rend",
+          "main_dps": 535,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Amor Mandragora",
+            "Lochtonial Caress"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        }
+      ]
+    },
+    "Tactician": {
+      "ascendancy": "Tactician",
+      "base_class": "Mercenary",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Crossbow Shot",
+          "count": 3
+        },
+        {
+          "name": "Lightning Spear",
+          "count": 2
+        },
+        {
+          "name": "Wolf Pack",
+          "count": 2
+        },
+        {
+          "name": "Leap Slam",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Morior Invictus",
+          "count": 7
+        },
+        {
+          "name": "Mageblood",
+          "count": 6
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 6
+        },
+        {
+          "name": "Shavronne's Satchel",
+          "count": 4
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 3
+        },
+        {
+          "name": "Fixation of Yix",
+          "count": 3
+        },
+        {
+          "name": "The Hammer of Faith",
+          "count": 3
+        },
+        {
+          "name": "Grip of Kulemak",
+          "count": 3
+        },
+        {
+          "name": "Fury of the King",
+          "count": 3
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 2
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 5
+        },
+        {
+          "name": "Black Scythe Training",
+          "count": 5
+        },
+        {
+          "name": "Giant's Blood",
+          "count": 3
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 3
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 3
+        },
+        {
+          "name": "Sacrifice of Flesh",
+          "count": 3
+        },
+        {
+          "name": "Lord of the Wilds",
+          "count": 3
+        },
+        {
+          "name": "Resonance",
+          "count": 2
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 2
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Rapid Attacks II",
+          "count": 4
+        },
+        {
+          "name": "Elemental Armament II",
+          "count": 3
+        },
+        {
+          "name": "Armour Break III",
+          "count": 2
+        },
+        {
+          "name": "Rakiata's Flow",
+          "count": 2
+        },
+        {
+          "name": "Garukhan's Resolve",
+          "count": 2
+        },
+        {
+          "name": "Amanamu's Tithe",
+          "count": 2
+        },
+        {
+          "name": "Feeding Frenzy I",
+          "count": 2
+        },
+        {
+          "name": "Infernal Legion II",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "life": 5,
+        "es": 5,
+        "mom": 2
+      },
+      "damage_meta": {
+        "attack": 8,
+        "spell": 2,
+        "mixed": 1,
+        "unknown": 1
+      },
+      "crit_pct": 0.83,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 333868,
+        "p90": 414032,
+        "max": 414032
+      },
+      "ehp_median": 28362,
+      "builds": [
+        {
+          "name": "ResurrectResurrected",
+          "level": 100,
+          "main_skill": "Lightning Spear",
+          "main_dps": 333868,
+          "defense_type": "life",
+          "uniques": [
+            "Kalandra's Touch",
+            "Sacred Flame",
+            "Loreweave",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Resonance"
+          ]
+        },
+        {
+          "name": "zimals",
+          "level": 99,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Evergrasping Ring",
+            "Mageblood",
+            "Alpha's Howl",
+            "Evergrasping Ring",
+            "Fixation of Yix",
+            "The Hammer of Faith"
+          ],
+          "keystones": [
+            "Giant's Blood",
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "BAKDUSH",
+          "level": 99,
+          "main_skill": "Wolf Pack",
+          "main_dps": 1695,
+          "defense_type": "mom",
+          "uniques": [
+            "Alpha's Howl",
+            "Grip of Kulemak",
+            "The Hammer of Faith",
+            "Morior Invictus",
+            "Fixation of Yix",
+            "Darkness Enthroned"
+          ],
+          "keystones": [
+            "Giant's Blood",
+            "Mind Over Matter",
+            "Whispers of Doom"
+          ]
+        },
+        {
+          "name": "Exoxit_PooTwo",
+          "level": 99,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 364071,
+          "defense_type": "life",
+          "uniques": [
+            "Painter's Servant",
+            "Mageblood",
+            "Kalandra's Touch",
+            "Morior Invictus"
+          ],
+          "keystones": [
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "Littlefella_Roa",
+          "level": 99,
+          "main_skill": "Leap Slam",
+          "main_dps": 1563,
+          "defense_type": "mom",
+          "uniques": [
+            "Alpha's Howl",
+            "Fixation of Yix",
+            "Mageblood",
+            "Morior Invictus",
+            "The Hammer of Faith"
+          ],
+          "keystones": [
+            "Giant's Blood",
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "reroll_fun_is_forbidden",
+          "level": 99,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 414032,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Morior Invictus"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "dxd_abuse",
+          "level": 99,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Shavronne's Satchel",
+            "Fury of the King"
+          ],
+          "keystones": [
+            "Lord of the Wilds",
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "KidHalfAYearLegue",
+          "level": 99,
+          "main_skill": "Lightning Spear",
+          "main_dps": 361958,
+          "defense_type": "life",
+          "uniques": [
+            "Sacred Flame",
+            "Loreweave",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Resonance"
+          ]
+        },
+        {
+          "name": "Aldur_Garf",
+          "level": 99,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 163964,
+          "defense_type": "life",
+          "uniques": [
+            "Painter's Servant",
+            "Morior Invictus",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "Notysh",
+          "level": 99,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Morior Invictus",
+            "Alpha's Howl",
+            "Fury of the King",
+            "Grip of Kulemak",
+            "Grip of Kulemak",
+            "Shavronne's Satchel"
+          ],
+          "keystones": [
+            "Lord of the Wilds",
+            "Chaos Inoculation",
+            "Black Scythe Training",
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "BobbyThegalaxyDestroyer",
+          "level": 99,
+          "main_skill": "Wolf Pack",
+          "main_dps": 143,
+          "defense_type": "es",
+          "uniques": [
+            "Sacred Flame",
+            "Alpha's Howl",
+            "Shavronne's Satchel",
+            "Ventor's Gamble",
+            "Doryani's Prototype",
+            "Ventor's Gamble"
+          ],
+          "keystones": [
+            "Chaos Inoculation",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "slunyaviy_malec",
+          "level": 99,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Morior Invictus",
+            "Fury of the King",
+            "Shavronne's Satchel",
+            "Alpha's Howl"
+          ],
+          "keystones": [
+            "Lord of the Wilds",
+            "Chaos Inoculation",
+            "Black Scythe Training",
+            "Iron Reflexes"
+          ]
+        }
+      ]
+    },
+    "Witchhunter": {
+      "ascendancy": "Witchhunter",
+      "base_class": "Mercenary",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Explosive Grenade",
+          "count": 5
+        },
+        {
+          "name": "Crossbow Shot",
+          "count": 3
+        },
+        {
+          "name": "Twister",
+          "count": 2
+        },
+        {
+          "name": "Shield Wall",
+          "count": 1
+        },
+        {
+          "name": "Shockburst Rounds",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Hyrri's Ire",
+          "count": 10
+        },
+        {
+          "name": "Headhunter",
+          "count": 6
+        },
+        {
+          "name": "Constricting Command",
+          "count": 6
+        },
+        {
+          "name": "Mageblood",
+          "count": 5
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 3
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 2
+        },
+        {
+          "name": "The Taming",
+          "count": 2
+        },
+        {
+          "name": "The Searing Touch",
+          "count": 1
+        },
+        {
+          "name": "Myris Uxor",
+          "count": 1
+        },
+        {
+          "name": "Horror's Flight",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Dance with Death",
+          "count": 2
+        },
+        {
+          "name": "Blood Magic",
+          "count": 1
+        },
+        {
+          "name": "Resonance",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Elemental Armament II",
+          "count": 10
+        },
+        {
+          "name": "Defy II",
+          "count": 7
+        },
+        {
+          "name": "Rakiata's Flow",
+          "count": 7
+        },
+        {
+          "name": "Rageforged II",
+          "count": 5
+        },
+        {
+          "name": "Brutality III",
+          "count": 3
+        },
+        {
+          "name": "Bleed III",
+          "count": 2
+        },
+        {
+          "name": "Life Leech II",
+          "count": 2
+        },
+        {
+          "name": "Armour Break III",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "life": 12
+      },
+      "damage_meta": {
+        "attack": 10,
+        "spell": 2
+      },
+      "crit_pct": 0.33,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 96148,
+        "p90": 218997,
+        "max": 274405
+      },
+      "ehp_median": 32967,
+      "builds": [
+        {
+          "name": "\ucee4\ud53c\ub2f4\ubc30",
+          "level": 100,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 15347,
+          "defense_type": "life",
+          "uniques": [
+            "Hyrri's Ire",
+            "Headhunter",
+            "The Searing Touch",
+            "Constricting Command"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "magmafromhere",
+          "level": 99,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 32895,
+          "defense_type": "life",
+          "uniques": [
+            "Alpha's Howl",
+            "Headhunter",
+            "Hyrri's Ire"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "DDLG_MOGGED",
+          "level": 98,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 61228,
+          "defense_type": "life",
+          "uniques": [
+            "Myris Uxor",
+            "Horror's Flight",
+            "Hyrri's Ire"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "LalaStalinDeviluke",
+          "level": 98,
+          "main_skill": "Shield Wall",
+          "main_dps": 43978,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Blistering Bond",
+            "Nebuloch",
+            "Amor Mandragora",
+            "The Brass Dome"
+          ],
+          "keystones": [
+            "Blood Magic"
+          ]
+        },
+        {
+          "name": "\u304b\u3093\u3061\u304b\u3093\u3061\u304b\u3093\u3061",
+          "level": 98,
+          "main_skill": "Shockburst Rounds",
+          "main_dps": 274405,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch",
+            "Alpha's Howl",
+            "Hyrri's Ire"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Rei_Mu_",
+          "level": 98,
+          "main_skill": "Explosive Grenade",
+          "main_dps": 218997,
+          "defense_type": "life",
+          "uniques": [
+            "Headhunter",
+            "Constricting Command",
+            "Hyrri's Ire"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Ting_MinionsGreat",
+          "level": 98,
+          "main_skill": "Twister",
+          "main_dps": 95830,
+          "defense_type": "life",
+          "uniques": [
+            "Headhunter",
+            "The Ordained",
+            "The Taming",
+            "Palm of the Dreamer",
+            "Decree of Acuity"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "Octuxxx",
+          "level": 98,
+          "main_skill": "Explosive Grenade",
+          "main_dps": 184543,
+          "defense_type": "life",
+          "uniques": [
+            "Headhunter",
+            "Kalandra's Touch",
+            "Constricting Command",
+            "Hyrri's Ire"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "BigBigMerc",
+          "level": 98,
+          "main_skill": "Twister",
+          "main_dps": 104198,
+          "defense_type": "life",
+          "uniques": [
+            "Sacred Flame",
+            "The Taming",
+            "Skysliver",
+            "Atziri's Contempt",
+            "Mageblood",
+            "Hyrri's Ire"
+          ],
+          "keystones": [
+            "Resonance",
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "grenada_weather",
+          "level": 98,
+          "main_skill": "Explosive Grenade",
+          "main_dps": 106808,
+          "defense_type": "life",
+          "uniques": [
+            "Hyrri's Ire",
+            "Constricting Command",
+            "Mageblood",
+            "Kalandra's Touch"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Karbomba",
+          "level": 98,
+          "main_skill": "Explosive Grenade",
+          "main_dps": 96466,
+          "defense_type": "life",
+          "uniques": [
+            "Constricting Command",
+            "Hyrri's Ire",
+            "Headhunter"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "spidercide",
+          "level": 98,
+          "main_skill": "Explosive Grenade",
+          "main_dps": 60396,
+          "defense_type": "life",
+          "uniques": [
+            "Constricting Command",
+            "Mageblood",
+            "Atziri's Step",
+            "Hyrri's Ire"
+          ],
+          "keystones": []
+        }
+      ]
+    },
+    "Gemling Legionnaire": {
+      "ascendancy": "Gemling Legionnaire",
+      "base_class": "Mercenary",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Ember Fusillade",
+          "count": 3
+        },
+        {
+          "name": "Comet",
+          "count": 2
+        },
+        {
+          "name": "Twister",
+          "count": 2
+        },
+        {
+          "name": "Explosive Grenade",
+          "count": 2
+        },
+        {
+          "name": "Molten Blast",
+          "count": 1
+        },
+        {
+          "name": "Crossbow Shot",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 10
+        },
+        {
+          "name": "Runeseeker's Call",
+          "count": 5
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 3
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 3
+        },
+        {
+          "name": "Decree of Flight",
+          "count": 3
+        },
+        {
+          "name": "Snakepit",
+          "count": 3
+        },
+        {
+          "name": "Palm of the Dreamer",
+          "count": 3
+        },
+        {
+          "name": "Atziri's Splendour",
+          "count": 2
+        },
+        {
+          "name": "Brutus' Lead Sprinkler",
+          "count": 2
+        },
+        {
+          "name": "Astramentis",
+          "count": 2
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Whispers of Doom",
+          "count": 4
+        },
+        {
+          "name": "Chaos Inoculation",
+          "count": 3
+        },
+        {
+          "name": "Blackflame Covenant",
+          "count": 2
+        },
+        {
+          "name": "Dance with Death",
+          "count": 2
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 2
+        },
+        {
+          "name": "Ancestral Bond",
+          "count": 1
+        },
+        {
+          "name": "Sacrifice of Flesh",
+          "count": 1
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Efficiency II",
+          "count": 5
+        },
+        {
+          "name": "Elemental Armament II",
+          "count": 4
+        },
+        {
+          "name": "Rakiata's Flow",
+          "count": 4
+        },
+        {
+          "name": "Wildshards II",
+          "count": 3
+        },
+        {
+          "name": "Projectile Acceleration III",
+          "count": 3
+        },
+        {
+          "name": "Cast on Dodge",
+          "count": 2
+        },
+        {
+          "name": "Boundless Energy II",
+          "count": 2
+        },
+        {
+          "name": "Energy Retention",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "es": 6,
+        "life": 5,
+        "hybrid": 1
+      },
+      "damage_meta": {
+        "spell": 8,
+        "attack": 4
+      },
+      "crit_pct": 0.83,
+      "coc_pct": 0.08,
+      "dps": {
+        "median": 262649,
+        "p90": 724141,
+        "max": 7781032
+      },
+      "ehp_median": 27899,
+      "builds": [
+        {
+          "name": "SSA_Ancients",
+          "level": 99,
+          "main_skill": "Comet",
+          "main_dps": 619059,
+          "defense_type": "life",
+          "uniques": [
+            "Runeseeker's Call",
+            "Sacred Flame",
+            "Mageblood",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Whispers of Doom"
+          ]
+        },
+        {
+          "name": "Fimozix",
+          "level": 99,
+          "main_skill": "Ember Fusillade",
+          "main_dps": 696584,
+          "defense_type": "es",
+          "uniques": [
+            "Decree of Flight",
+            "Effigy of Cruelty",
+            "Snakepit",
+            "Mageblood",
+            "Atziri's Splendour",
+            "Palm of the Dreamer",
+            "Runeseeker's Call"
+          ],
+          "keystones": [
+            "Blackflame Covenant",
+            "Whispers of Doom",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "BrutusSwagsprinkler",
+          "level": 99,
+          "main_skill": "Molten Blast",
+          "main_dps": 194626,
+          "defense_type": "life",
+          "uniques": [
+            "Brutus' Lead Sprinkler",
+            "Brutus' Lead Sprinkler",
+            "Titanrot Cataphract",
+            "Mageblood",
+            "Astramentis",
+            "Valako's Vice"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Bhongskiiiii",
+          "level": 99,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 130422,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Morior Invictus"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "JonathanDodgers",
+          "level": 98,
+          "main_skill": "Ember Fusillade",
+          "main_dps": 204770,
+          "defense_type": "es",
+          "uniques": [
+            "Decree of Flight",
+            "Slivertongue",
+            "Venopuncture",
+            "Palm of the Dreamer",
+            "Runeseeker's Call",
+            "Atziri's Splendour",
+            "Astramentis",
+            "Mageblood",
+            "Snakepit"
+          ],
+          "keystones": [
+            "Ancestral Bond",
+            "Whispers of Doom",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "IllidianceQW",
+          "level": 98,
+          "main_skill": "Twister",
+          "main_dps": 308717,
+          "defense_type": "es",
+          "uniques": [
+            "Headhunter",
+            "Skysliver",
+            "Sacred Flame",
+            "The Taming"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "\u30c6\u30af\u30cb\u30ab\u30eb\u306a\u706b\u76bf",
+          "level": 98,
+          "main_skill": "Ember Fusillade",
+          "main_dps": 391885,
+          "defense_type": "es",
+          "uniques": [
+            "Decree of Flight",
+            "Snakepit",
+            "Mageblood",
+            "Morior Invictus",
+            "Palm of the Dreamer",
+            "Runeseeker's Call"
+          ],
+          "keystones": [
+            "Blackflame Covenant",
+            "Whispers of Doom",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "LowCortisolTotem",
+          "level": 98,
+          "main_skill": "Explosive Grenade",
+          "main_dps": 39406,
+          "defense_type": "life",
+          "uniques": [
+            "The Surrender",
+            "Defiance of Destiny",
+            "Olrovasara"
+          ],
+          "keystones": [
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "Viro_Gemling",
+          "level": 98,
+          "main_skill": "Explosive Grenade",
+          "main_dps": 51284,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Venereable",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 7781032,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Runeseeker's Call",
+            "Kalandra's Touch",
+            "Mageblood",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "DaramG",
+          "level": 98,
+          "main_skill": "Twister",
+          "main_dps": 216582,
+          "defense_type": "es",
+          "uniques": [
+            "The Ordained",
+            "The Taming",
+            "Mageblood",
+            "Sacred Flame"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "fengquesss",
+          "level": 98,
+          "main_skill": "Spark",
+          "main_dps": 724141,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Eldritch Battery"
+          ]
+        }
+      ]
+    },
+    "Amazon": {
+      "ascendancy": "Amazon",
+      "base_class": "Huntress",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Ice Shot",
+          "count": 10
+        },
+        {
+          "name": "Crossbow Shot",
+          "count": 1
+        },
+        {
+          "name": "Twister",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Cadiro's Gambit",
+          "count": 10
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 7
+        },
+        {
+          "name": "Mageblood",
+          "count": 5
+        },
+        {
+          "name": "Essentia Sanguis",
+          "count": 5
+        },
+        {
+          "name": "Headhunter",
+          "count": 5
+        },
+        {
+          "name": "Lioneye's Glare",
+          "count": 3
+        },
+        {
+          "name": "Grip of Kulemak",
+          "count": 3
+        },
+        {
+          "name": "Reverie",
+          "count": 1
+        },
+        {
+          "name": "Decree of Acuity",
+          "count": 1
+        },
+        {
+          "name": "Hysseg's Claw",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 7
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 1
+        },
+        {
+          "name": "Glancing Blows",
+          "count": 1
+        },
+        {
+          "name": "Resonance",
+          "count": 1
+        },
+        {
+          "name": "Dance with Death",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Rakiata's Flow",
+          "count": 11
+        },
+        {
+          "name": "Garukhan's Resolve",
+          "count": 10
+        },
+        {
+          "name": "Elemental Armament II",
+          "count": 8
+        },
+        {
+          "name": "Fork",
+          "count": 6
+        },
+        {
+          "name": "Ice Bite II",
+          "count": 4
+        },
+        {
+          "name": "Minion Pact II",
+          "count": 4
+        },
+        {
+          "name": "Rapid Attacks II",
+          "count": 2
+        },
+        {
+          "name": "Nova Projectiles I",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "es": 8,
+        "life": 2,
+        "hybrid": 2
+      },
+      "damage_meta": {
+        "attack": 11,
+        "spell": 1
+      },
+      "crit_pct": 0.83,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 392549,
+        "p90": 576997,
+        "max": 615234
+      },
+      "ehp_median": 23175,
+      "builds": [
+        {
+          "name": "\u0e23\u0e49\u0e2d\u0e22\u0e40\u0e1b\u0e2d\u0e23\u0e4c\u0e40\u0e0b\u0e47\u0e19\u0e15\u0e4c\u0e04\u0e23\u0e31\u0e1a\u0e19\u0e32\u0e22",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 369611,
+          "defense_type": "es",
+          "uniques": [
+            "Lioneye's Glare",
+            "Kalandra's Touch",
+            "Mageblood",
+            "Cadiro's Gambit",
+            "Grip of Kulemak"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "dududulu",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 576997,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Essentia Sanguis",
+            "Cadiro's Gambit",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "GGramRotA",
+          "level": 98,
+          "main_skill": "Crossbow Shot",
+          "main_dps": 78333,
+          "defense_type": "life",
+          "uniques": [],
+          "keystones": [
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "Swamp_bra",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 237215,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Cadiro's Gambit",
+            "Mageblood",
+            "Grip of Kulemak",
+            "Lioneye's Glare"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\u5b89\u8c22\u4e3d\u4e1d",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 423514,
+          "defense_type": "life",
+          "uniques": [
+            "Reverie",
+            "Decree of Acuity",
+            "Mageblood",
+            "Kalandra's Touch",
+            "Cadiro's Gambit"
+          ],
+          "keystones": [
+            "Glancing Blows"
+          ]
+        },
+        {
+          "name": "\u5c3a\u4e39\u957f\u5de5\u4e39\u4e01\u4e39\u4e02\u4e0b\u4e5a\u53e3\u5c71",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 469072,
+          "defense_type": "es",
+          "uniques": [
+            "Headhunter",
+            "Essentia Sanguis",
+            "Cadiro's Gambit"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\u672b\u65e5\u964d\u4e34\u5341\u4e8c\u661f\u5ea7\u51b3\u5b9a\u4f60\u7684\u5e87\u62a4\u6240",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 615234,
+          "defense_type": "es",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Headhunter",
+            "Hysseg's Claw",
+            "Essentia Sanguis",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "rune_feelsgooooodman",
+          "level": 98,
+          "main_skill": "Twister",
+          "main_dps": 215955,
+          "defense_type": "hybrid",
+          "uniques": [
+            "The Taming",
+            "Sacred Flame",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Resonance",
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "Ice_Shot_Lover",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 489953,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Mageblood",
+            "Cadiro's Gambit"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "\u0448\u0442\u044b\u0447\u043e\u043a",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 332191,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Essentia Sanguis",
+            "Headhunter",
+            "Grip of Kulemak",
+            "Lioneye's Glare",
+            "Cadiro's Gambit"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "AKazzii_ROA",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 415488,
+          "defense_type": "es",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Darkness Enthroned",
+            "Essentia Sanguis",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "AmazonkaVtrusax",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 242825,
+          "defense_type": "es",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        }
+      ]
+    },
+    "Ritualist": {
+      "ascendancy": "Ritualist",
+      "base_class": "Huntress",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Ice Shot",
+          "count": 5
+        },
+        {
+          "name": "Profane Ritual",
+          "count": 3
+        },
+        {
+          "name": "Poisonburst Arrow",
+          "count": 1
+        },
+        {
+          "name": "Spark",
+          "count": 1
+        },
+        {
+          "name": "Bow Shot",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Evergrasping Ring",
+          "count": 12
+        },
+        {
+          "name": "Andvarius",
+          "count": 11
+        },
+        {
+          "name": "Shavronne's Satchel",
+          "count": 9
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 6
+        },
+        {
+          "name": "Cadiro's Gambit",
+          "count": 6
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 6
+        },
+        {
+          "name": "Fixation of Yix",
+          "count": 4
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 3
+        },
+        {
+          "name": "Ming's Heart",
+          "count": 2
+        },
+        {
+          "name": "Headhunter",
+          "count": 2
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 9
+        },
+        {
+          "name": "Conduit",
+          "count": 4
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 2
+        },
+        {
+          "name": "Giant's Blood",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Elemental Armament II",
+          "count": 5
+        },
+        {
+          "name": "Embitter",
+          "count": 5
+        },
+        {
+          "name": "Rapid Casting II",
+          "count": 4
+        },
+        {
+          "name": "Garukhan's Resolve",
+          "count": 4
+        },
+        {
+          "name": "Fork",
+          "count": 3
+        },
+        {
+          "name": "Rapid Attacks II",
+          "count": 3
+        },
+        {
+          "name": "Charge Profusion II",
+          "count": 3
+        },
+        {
+          "name": "Magnified Area II",
+          "count": 3
+        }
+      ],
+      "defense_meta": {
+        "es": 12
+      },
+      "damage_meta": {
+        "attack": 7,
+        "spell": 5
+      },
+      "crit_pct": 0.83,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 38497,
+        "p90": 230084,
+        "max": 230084
+      },
+      "ehp_median": 17121,
+      "builds": [
+        {
+          "name": "oopssist",
+          "level": 100,
+          "main_skill": "Poisonburst Arrow",
+          "main_dps": 230084,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Mageblood",
+            "Ming's Heart",
+            "Scold's Bridle",
+            "Sierran Inheritance",
+            "Ming's Heart"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "DivineOrbBeggar",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 22196,
+          "defense_type": "es",
+          "uniques": [
+            "Andvarius",
+            "Andvarius",
+            "Cadiro's Gambit",
+            "Headhunter",
+            "Aurseize",
+            "Kalandra's Touch",
+            "Morior Invictus"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "oooZALUPA",
+          "level": 99,
+          "main_skill": "Profane Ritual",
+          "main_dps": 359,
+          "defense_type": "es",
+          "uniques": [
+            "Fixation of Yix",
+            "Evergrasping Ring",
+            "Evergrasping Ring",
+            "Evergrasping Ring",
+            "Shavronne's Satchel",
+            "Alpha's Howl"
+          ],
+          "keystones": [
+            "Conduit",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "mister_farmer_three",
+          "level": 99,
+          "main_skill": "Profane Ritual",
+          "main_dps": 484,
+          "defense_type": "es",
+          "uniques": [
+            "Evergrasping Ring",
+            "Shavronne's Satchel",
+            "Evergrasping Ring",
+            "Fixation of Yix",
+            "Alpha's Howl",
+            "Morior Invictus",
+            "Evergrasping Ring"
+          ],
+          "keystones": [
+            "Conduit",
+            "Chaos Inoculation",
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "Nordhop",
+          "level": 99,
+          "main_skill": "",
+          "main_dps": 0,
+          "defense_type": "es",
+          "uniques": [
+            "Morior Invictus",
+            "Alpha's Howl",
+            "Shavronne's Satchel",
+            "Evergrasping Ring",
+            "Fixation of Yix",
+            "Evergrasping Ring",
+            "Evergrasping Ring"
+          ],
+          "keystones": [
+            "Conduit",
+            "Chaos Inoculation",
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "\u0410\u043b\u0435\u0448\u043a\u0430\u0430",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 26865,
+          "defense_type": "es",
+          "uniques": [
+            "Andvarius",
+            "Andvarius",
+            "Aurseize",
+            "Shavronne's Satchel",
+            "Cadiro's Gambit",
+            "Andvarius",
+            "Morior Invictus"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "BatdeimPrime",
+          "level": 99,
+          "main_skill": "Profane Ritual",
+          "main_dps": 484,
+          "defense_type": "es",
+          "uniques": [
+            "Evergrasping Ring",
+            "Evergrasping Ring",
+            "Evergrasping Ring",
+            "Fixation of Yix",
+            "Shavronne's Satchel"
+          ],
+          "keystones": [
+            "Conduit",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "Rolling_Sim_",
+          "level": 99,
+          "main_skill": "Spark",
+          "main_dps": 202,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Horror's Flight",
+            "Shavronne's Satchel",
+            "Greed's Embrace",
+            "The Hammer of Faith",
+            "Andvarius",
+            "Andvarius",
+            "Myris Uxor"
+          ],
+          "keystones": [
+            "Giant's Blood",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "Freespin_Promocode_Oleg",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 111485,
+          "defense_type": "es",
+          "uniques": [
+            "Morior Invictus",
+            "Shavronne's Satchel",
+            "Spiteful Floret",
+            "Cadiro's Gambit",
+            "Kalandra's Touch"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "pukin",
+          "level": 99,
+          "main_skill": "Ice Shot",
+          "main_dps": 38497,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Morior Invictus",
+            "Cadiro's Gambit",
+            "Headhunter",
+            "Andvarius"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "kumochas_extra",
+          "level": 98,
+          "main_skill": "Ice Shot",
+          "main_dps": 46337,
+          "defense_type": "es",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Shavronne's Satchel",
+            "Andvarius",
+            "Andvarius"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "Fluffenson",
+          "level": 98,
+          "main_skill": "Bow Shot",
+          "main_dps": 25601,
+          "defense_type": "es",
+          "uniques": [
+            "Cadiro's Gambit",
+            "Shavronne's Satchel",
+            "Kalandra's Touch",
+            "Andvarius"
+          ],
+          "keystones": [
+            "Chaos Inoculation"
+          ]
+        }
+      ]
+    },
+    "Spirit Walker": {
+      "ascendancy": "Spirit Walker",
+      "base_class": "Huntress",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Twister",
+          "count": 11
+        },
+        {
+          "name": "Primal Strikes",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "The Taming",
+          "count": 11
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 11
+        },
+        {
+          "name": "The Ordained",
+          "count": 7
+        },
+        {
+          "name": "Headhunter",
+          "count": 7
+        },
+        {
+          "name": "Mageblood",
+          "count": 5
+        },
+        {
+          "name": "Skysliver",
+          "count": 2
+        },
+        {
+          "name": "The Black Insignia",
+          "count": 1
+        },
+        {
+          "name": "Palm of the Dreamer",
+          "count": 1
+        },
+        {
+          "name": "Atziri's Step",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Dance with Death",
+          "count": 11
+        },
+        {
+          "name": "Resonance",
+          "count": 3
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 1
+        },
+        {
+          "name": "Black Scythe Training",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Rakiata's Flow",
+          "count": 11
+        },
+        {
+          "name": "Projectile Acceleration III",
+          "count": 11
+        },
+        {
+          "name": "Garukhan's Resolve",
+          "count": 9
+        },
+        {
+          "name": "Prolonged Duration II",
+          "count": 7
+        },
+        {
+          "name": "Salvo",
+          "count": 4
+        },
+        {
+          "name": "Elemental Armament II",
+          "count": 4
+        },
+        {
+          "name": "Deliberation",
+          "count": 4
+        },
+        {
+          "name": "Armour Break III",
+          "count": 3
+        }
+      ],
+      "defense_meta": {
+        "hybrid": 5,
+        "es": 5,
+        "life": 2
+      },
+      "damage_meta": {
+        "spell": 11,
+        "attack": 1
+      },
+      "crit_pct": 1.0,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 254909,
+        "p90": 677033,
+        "max": 1274518
+      },
+      "ehp_median": 38685,
+      "builds": [
+        {
+          "name": "SnusInMyBlood",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 152850,
+          "defense_type": "hybrid",
+          "uniques": [
+            "The Ordained",
+            "The Taming",
+            "Sacred Flame",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Resonance",
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "Vitya_MageBlood",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 143844,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Sacred Flame",
+            "Headhunter",
+            "The Taming",
+            "The Ordained"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "etojemals",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 677033,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Sacred Flame",
+            "Headhunter",
+            "The Taming",
+            "The Ordained",
+            "Skysliver"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "mikki_v",
+          "level": 100,
+          "main_skill": "Twister",
+          "main_dps": 383367,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood",
+            "Sacred Flame",
+            "The Taming",
+            "The Black Insignia",
+            "The Ordained"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "PoeOneBetterGameStill",
+          "level": 100,
+          "main_skill": "Primal Strikes",
+          "main_dps": 288840,
+          "defense_type": "life",
+          "uniques": [
+            "Headhunter",
+            "Sacred Flame"
+          ],
+          "keystones": []
+        },
+        {
+          "name": "Libutio",
+          "level": 99,
+          "main_skill": "Twister",
+          "main_dps": 159723,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Sacred Flame",
+            "The Taming",
+            "Skysliver"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "Ainreich",
+          "level": 99,
+          "main_skill": "Twister",
+          "main_dps": 220978,
+          "defense_type": "es",
+          "uniques": [
+            "Headhunter",
+            "The Taming",
+            "The Ordained",
+            "Sacred Flame"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "\ucc9c\uc8fc\ucc9c\uc8fc",
+          "level": 99,
+          "main_skill": "Twister",
+          "main_dps": 664044,
+          "defense_type": "es",
+          "uniques": [
+            "The Ordained",
+            "Sacred Flame",
+            "The Taming",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "CHoiGameAnBaTyNut",
+          "level": 99,
+          "main_skill": "Twister",
+          "main_dps": 218810,
+          "defense_type": "hybrid",
+          "uniques": [
+            "The Taming",
+            "Palm of the Dreamer",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Resonance",
+            "Dance with Death",
+            "Pain Attunement"
+          ]
+        },
+        {
+          "name": "Aiolosmuuuu",
+          "level": 99,
+          "main_skill": "Twister",
+          "main_dps": 1274518,
+          "defense_type": "es",
+          "uniques": [
+            "The Taming",
+            "Sacred Flame",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Dance with Death",
+            "Black Scythe Training"
+          ]
+        },
+        {
+          "name": "\u6211\u4eec\u730e\u9b54\u7684\u5973\u730e\u4eba\u4e5f\u662f\u730e\u9b54\u4eba",
+          "level": 99,
+          "main_skill": "Twister",
+          "main_dps": 356116,
+          "defense_type": "es",
+          "uniques": [
+            "The Taming",
+            "Atziri's Step",
+            "The Ordained",
+            "Sacred Flame",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Dance with Death"
+          ]
+        },
+        {
+          "name": "spydmolr",
+          "level": 99,
+          "main_skill": "Twister",
+          "main_dps": 169281,
+          "defense_type": "hybrid",
+          "uniques": [
+            "The Taming",
+            "Sacred Flame",
+            "Headhunter"
+          ],
+          "keystones": [
+            "Resonance",
+            "Dance with Death"
+          ]
+        }
+      ]
+    },
+    "Oracle": {
+      "ascendancy": "Oracle",
+      "base_class": "Druid",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Entangle",
+          "count": 3
+        },
+        {
+          "name": "Comet",
+          "count": 3
+        },
+        {
+          "name": "Raise Shield",
+          "count": 2
+        },
+        {
+          "name": "Ember Fusillade",
+          "count": 1
+        },
+        {
+          "name": "Thrashing Vines",
+          "count": 1
+        },
+        {
+          "name": "Orb of Storms",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Kalandra's Touch",
+          "count": 7
+        },
+        {
+          "name": "Mageblood",
+          "count": 7
+        },
+        {
+          "name": "Rathpith Globe",
+          "count": 2
+        },
+        {
+          "name": "Svalinn",
+          "count": 2
+        },
+        {
+          "name": "Xoph's Blood",
+          "count": 2
+        },
+        {
+          "name": "Skysliver",
+          "count": 1
+        },
+        {
+          "name": "Atziri's Splendour",
+          "count": 1
+        },
+        {
+          "name": "Runeseeker's Call",
+          "count": 1
+        },
+        {
+          "name": "Palm of the Dreamer",
+          "count": 1
+        },
+        {
+          "name": "Headhunter",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Ancestral Bond",
+          "count": 8
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 6
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 5
+        },
+        {
+          "name": "Conduit",
+          "count": 5
+        },
+        {
+          "name": "Chaos Inoculation",
+          "count": 5
+        },
+        {
+          "name": "Blackflame Covenant",
+          "count": 5
+        },
+        {
+          "name": "Ritual Cadence",
+          "count": 5
+        },
+        {
+          "name": "Resonance",
+          "count": 4
+        },
+        {
+          "name": "Hollow Palm Technique",
+          "count": 4
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 4
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "M\u00f3rrigan's Insight",
+          "count": 4
+        },
+        {
+          "name": "Magnified Area II",
+          "count": 4
+        },
+        {
+          "name": "Rapid Casting II",
+          "count": 3
+        },
+        {
+          "name": "Spellslinger",
+          "count": 3
+        },
+        {
+          "name": "Zenith II",
+          "count": 2
+        },
+        {
+          "name": "Living Lightning II",
+          "count": 2
+        },
+        {
+          "name": "Branching Fissures I",
+          "count": 2
+        },
+        {
+          "name": "Enduring Impact I",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "es": 5,
+        "mom": 4,
+        "life": 3
+      },
+      "damage_meta": {
+        "spell": 10,
+        "unknown": 2
+      },
+      "crit_pct": 0.58,
+      "coc_pct": 0.08,
+      "dps": {
+        "median": 114238,
+        "p90": 1819417,
+        "max": 1819417
+      },
+      "ehp_median": 21669,
+      "builds": [
+        {
+          "name": "\u770b\u770b\u4f60\u7684\u725b\u6cbb",
+          "level": 100,
+          "main_skill": "Ember Fusillade",
+          "main_dps": 966139,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Mageblood",
+            "Skysliver",
+            "Atziri's Splendour"
+          ],
+          "keystones": [
+            "Mind Over Matter",
+            "Scarred Faith",
+            "Wildsurge Incantation",
+            "Eldritch Battery",
+            "Conduit",
+            "Resonance",
+            "Chaos Inoculation",
+            "Hollow Palm Technique",
+            "Unwavering Stance"
+          ]
+        },
+        {
+          "name": "FoxyRena",
+          "level": 100,
+          "main_skill": "Entangle",
+          "main_dps": 8293,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Mageblood",
+            "Runeseeker's Call"
+          ],
+          "keystones": [
+            "Ancestral Bond",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "morlox_v",
+          "level": 100,
+          "main_skill": "Thrashing Vines",
+          "main_dps": 145117,
+          "defense_type": "mom",
+          "uniques": [
+            "Palm of the Dreamer",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Zealot's Oath",
+            "Ancestral Bond",
+            "Mind Over Matter",
+            "Scarred Faith",
+            "Elemental Equilibrium",
+            "Wildsurge Incantation",
+            "Blackflame Covenant",
+            "Ritual Cadence",
+            "Eldritch Battery",
+            "Conduit"
+          ]
+        },
+        {
+          "name": "Numyu_NerfBebop",
+          "level": 98,
+          "main_skill": "Orb of Storms",
+          "main_dps": 631087,
+          "defense_type": "mom",
+          "uniques": [
+            "Kalandra's Touch",
+            "Mageblood",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Mind Over Matter",
+            "Elemental Equilibrium",
+            "Blackflame Covenant",
+            "Whispers of Doom",
+            "Ritual Cadence",
+            "Eldritch Battery",
+            "Conduit",
+            "Resonance",
+            "Hollow Palm Technique"
+          ]
+        },
+        {
+          "name": "TronstyAldur",
+          "level": 98,
+          "main_skill": "Entangle",
+          "main_dps": 1778,
+          "defense_type": "mom",
+          "uniques": [
+            "Headhunter",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Mind Over Matter",
+            "Whispers of Doom",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "Ahungcaytay",
+          "level": 98,
+          "main_skill": "Raise Shield",
+          "main_dps": 278,
+          "defense_type": "life",
+          "uniques": [
+            "Svalinn",
+            "Blood Price",
+            "Xoph's Blood"
+          ],
+          "keystones": [
+            "Iron Reflexes",
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "AthanhNEEE",
+          "level": 98,
+          "main_skill": "Raise Shield",
+          "main_dps": 165,
+          "defense_type": "life",
+          "uniques": [
+            "Xoph's Blood",
+            "Svalinn",
+            "Leer Cast"
+          ],
+          "keystones": [
+            "Iron Reflexes",
+            "Sacrifice of Flesh"
+          ]
+        },
+        {
+          "name": "vacuNONONO",
+          "level": 98,
+          "main_skill": "Entangle",
+          "main_dps": 683,
+          "defense_type": "es",
+          "uniques": [
+            "Darkness Enthroned"
+          ],
+          "keystones": [
+            "Ancestral Bond",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "Ancient_Kei",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 1819417,
+          "defense_type": "es",
+          "uniques": [
+            "Mageblood",
+            "Snakepit"
+          ],
+          "keystones": [
+            "Wildsurge Incantation",
+            "Blackflame Covenant",
+            "Whispers of Doom",
+            "Ritual Cadence",
+            "Conduit",
+            "Chaos Inoculation",
+            "Circular Teachings"
+          ]
+        },
+        {
+          "name": "shokiRunes",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 98644,
+          "defense_type": "es",
+          "uniques": [
+            "Kalandra's Touch",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Ancestral Bond",
+            "Chaos Inoculation"
+          ]
+        },
+        {
+          "name": "MrPerfectoZeroFive",
+          "level": 98,
+          "main_skill": "Spark",
+          "main_dps": 61500,
+          "defense_type": "mom",
+          "uniques": [
+            "Kalandra's Touch",
+            "Mageblood",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Mind Over Matter",
+            "Elemental Equilibrium",
+            "Blackflame Covenant",
+            "Whispers of Doom",
+            "Ritual Cadence",
+            "Eldritch Battery",
+            "Conduit",
+            "Resonance",
+            "Hollow Palm Technique"
+          ]
+        },
+        {
+          "name": "MSSxdrunes",
+          "level": 98,
+          "main_skill": "Comet",
+          "main_dps": 114238,
+          "defense_type": "life",
+          "uniques": [
+            "Mageblood"
+          ],
+          "keystones": [
+            "Zealot's Oath",
+            "Ancestral Bond",
+            "Scarred Faith",
+            "Blackflame Covenant",
+            "Ritual Cadence",
+            "Eldritch Battery",
+            "Resonance",
+            "Hollow Palm Technique"
+          ]
+        }
+      ]
+    },
+    "Shaman": {
+      "ascendancy": "Shaman",
+      "base_class": "Druid",
+      "sample_size": 12,
+      "top_skills": [
+        {
+          "name": "Thunderstorm",
+          "count": 6
+        },
+        {
+          "name": "Flame Wall",
+          "count": 3
+        },
+        {
+          "name": "Rampage",
+          "count": 2
+        },
+        {
+          "name": "Bone Cage",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Rathpith Globe",
+          "count": 9
+        },
+        {
+          "name": "Runeseeker's Call",
+          "count": 8
+        },
+        {
+          "name": "Mageblood",
+          "count": 8
+        },
+        {
+          "name": "Dream Fragments",
+          "count": 6
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 4
+        },
+        {
+          "name": "Cloak of Defiance",
+          "count": 3
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 3
+        },
+        {
+          "name": "Headhunter",
+          "count": 3
+        },
+        {
+          "name": "Crown of Eyes",
+          "count": 1
+        },
+        {
+          "name": "Polcirkeln",
+          "count": 1
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Pain Attunement",
+          "count": 9
+        },
+        {
+          "name": "Ancestral Bond",
+          "count": 9
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 9
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 3
+        },
+        {
+          "name": "Lord of the Wilds",
+          "count": 2
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 2
+        },
+        {
+          "name": "Sacrifice of Flesh",
+          "count": 1
+        },
+        {
+          "name": "Wildsurge Incantation",
+          "count": 1
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 1
+        },
+        {
+          "name": "Sacrifice of Mind",
+          "count": 1
+        }
+      ],
+      "common_supports": [
+        {
+          "name": "Efficiency II",
+          "count": 9
+        },
+        {
+          "name": "Shock",
+          "count": 5
+        },
+        {
+          "name": "Overcharge",
+          "count": 5
+        },
+        {
+          "name": "Lightning Penetration",
+          "count": 5
+        },
+        {
+          "name": "Commiserate",
+          "count": 4
+        },
+        {
+          "name": "Spell Cascade",
+          "count": 3
+        },
+        {
+          "name": "Momentum",
+          "count": 2
+        },
+        {
+          "name": "Garukhan's Resolve",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "hybrid": 7,
+        "life": 3,
+        "mom": 2
+      },
+      "damage_meta": {
+        "spell": 10,
+        "attack": 2
+      },
+      "crit_pct": 0.5,
+      "coc_pct": 0.0,
+      "dps": {
+        "median": 164923,
+        "p90": 561032,
+        "max": 607894
+      },
+      "ehp_median": 27470,
+      "builds": [
+        {
+          "name": "\ud1a0\ud15c\ubc15\uc774\uae40\ub543\uc950",
+          "level": 99,
+          "main_skill": "Thunderstorm",
+          "main_dps": 152746,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Dream Fragments",
+            "Rathpith Globe",
+            "Runeseeker's Call",
+            "Mageblood",
+            "Cloak of Defiance"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "WhichMonstersTasteGood",
+          "level": 98,
+          "main_skill": "Rampage",
+          "main_dps": 177100,
+          "defense_type": "life",
+          "uniques": [
+            "Crown of Eyes",
+            "Morior Invictus",
+            "Mageblood",
+            "Polcirkeln"
+          ],
+          "keystones": [
+            "Lord of the Wilds",
+            "Sacrifice of Flesh",
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "guyazil",
+          "level": 98,
+          "main_skill": "Flame Wall",
+          "main_dps": 471750,
+          "defense_type": "mom",
+          "uniques": [
+            "Runeseeker's Call",
+            "Mageblood",
+            "Effigy of Cruelty",
+            "Kalandra's Touch",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Mind Over Matter",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "heyfub_IMJUNG",
+          "level": 98,
+          "main_skill": "Thunderstorm",
+          "main_dps": 43970,
+          "defense_type": "life",
+          "uniques": [
+            "Morior Invictus",
+            "Trampletoe",
+            "Sunsplinter",
+            "Headhunter",
+            "Palm of the Dreamer",
+            "Kalandra's Touch"
+          ],
+          "keystones": [
+            "Wildsurge Incantation",
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "Sweeet_Totems",
+          "level": 98,
+          "main_skill": "Thunderstorm",
+          "main_dps": 561032,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Mageblood",
+            "Kalandra's Touch",
+            "Runeseeker's Call",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Whispers of Doom",
+            "Eldritch Battery",
+            "Sacrifice of Mind"
+          ]
+        },
+        {
+          "name": "Gscrikle_TTTT",
+          "level": 98,
+          "main_skill": "Flame Wall",
+          "main_dps": 93079,
+          "defense_type": "mom",
+          "uniques": [
+            "Rathpith Globe",
+            "Kalandra's Touch",
+            "Darkness Enthroned"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Mind Over Matter",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "chumptotemcuck",
+          "level": 98,
+          "main_skill": "Flame Wall",
+          "main_dps": 450381,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Mageblood",
+            "Dream Fragments",
+            "Runeseeker's Call",
+            "Cloak of Defiance",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "MierenTotAld",
+          "level": 98,
+          "main_skill": "Thunderstorm",
+          "main_dps": 150497,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Cloak of Defiance",
+            "Dream Fragments",
+            "Runeseeker's Call",
+            "Mageblood",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "Clyfte_RotA",
+          "level": 98,
+          "main_skill": "Bone Cage",
+          "main_dps": 119832,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Rathpith Globe",
+            "Dream Fragments",
+            "Mageblood",
+            "Runeseeker's Call"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "FREESTYLER_TOTEMS",
+          "level": 98,
+          "main_skill": "Thunderstorm",
+          "main_dps": 337372,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Runeseeker's Call",
+            "Dream Fragments",
+            "Headhunter",
+            "Rathpith Globe"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Eldritch Battery"
+          ]
+        },
+        {
+          "name": "Maullow",
+          "level": 98,
+          "main_skill": "Rampage",
+          "main_dps": 42896,
+          "defense_type": "life",
+          "uniques": [
+            "Defiance of Destiny",
+            "Headhunter",
+            "Morior Invictus"
+          ],
+          "keystones": [
+            "Lord of the Wilds",
+            "Scarred Faith",
+            "Iron Reflexes"
+          ]
+        },
+        {
+          "name": "Zhoracle",
+          "level": 98,
+          "main_skill": "Thunderstorm",
+          "main_dps": 607894,
+          "defense_type": "hybrid",
+          "uniques": [
+            "Dream Fragments",
+            "Runeseeker's Call",
+            "Rathpith Globe",
+            "Mageblood"
+          ],
+          "keystones": [
+            "Pain Attunement",
+            "Ancestral Bond",
+            "Eldritch Battery"
+          ]
+        }
+      ]
+    }
+  },
+  "per_class": {
+    "Warrior": {
+      "base_class": "Warrior",
+      "sample_size": 36,
+      "top_skills": [
+        {
+          "name": "Shield Wall",
+          "count": 13
+        },
+        {
+          "name": "Rampage",
+          "count": 3
+        },
+        {
+          "name": "Earthshatter",
+          "count": 3
+        },
+        {
+          "name": "Whirling Assault",
+          "count": 3
+        },
+        {
+          "name": "Crossbow Shot",
+          "count": 3
+        },
+        {
+          "name": "Voltaic Grenade",
+          "count": 3
+        },
+        {
+          "name": "His Scattering Calamity",
+          "count": 2
+        },
+        {
+          "name": "Maul",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 21
+        },
+        {
+          "name": "Constricting Command",
+          "count": 12
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 8
+        },
+        {
+          "name": "Headhunter",
+          "count": 7
+        },
+        {
+          "name": "The Brass Dome",
+          "count": 5
+        },
+        {
+          "name": "Defiance of Destiny",
+          "count": 5
+        },
+        {
+          "name": "Amor Mandragora",
+          "count": 5
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 4
+        },
+        {
+          "name": "Fireflower",
+          "count": 4
+        },
+        {
+          "name": "Polcirkeln",
+          "count": 3
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Blood Magic",
+          "count": 19
+        },
+        {
+          "name": "Sacrifice of Flesh",
+          "count": 7
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 5
+        },
+        {
+          "name": "Dance with Death",
+          "count": 3
+        },
+        {
+          "name": "Giant's Blood",
+          "count": 3
+        },
+        {
+          "name": "Primal Hunger",
+          "count": 2
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 2
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 2
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "life": 34,
+        "mom": 2
+      },
+      "dps_median": 83158
+    },
+    "Witch": {
+      "base_class": "Witch",
+      "sample_size": 36,
+      "top_skills": [
+        {
+          "name": "Comet",
+          "count": 6
+        },
+        {
+          "name": "Profane Ritual",
+          "count": 4
+        },
+        {
+          "name": "Chaos Bolt",
+          "count": 3
+        },
+        {
+          "name": "Spark",
+          "count": 2
+        },
+        {
+          "name": "Frost Bomb",
+          "count": 2
+        },
+        {
+          "name": "Summon Infernal Hound",
+          "count": 2
+        },
+        {
+          "name": "Flame Wall",
+          "count": 2
+        },
+        {
+          "name": "Coiling Bolts",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 13
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 11
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 8
+        },
+        {
+          "name": "Palm of the Dreamer",
+          "count": 7
+        },
+        {
+          "name": "Shavronne's Satchel",
+          "count": 7
+        },
+        {
+          "name": "Atziri's Splendour",
+          "count": 5
+        },
+        {
+          "name": "Headhunter",
+          "count": 5
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 5
+        },
+        {
+          "name": "Ventor's Gamble",
+          "count": 5
+        },
+        {
+          "name": "Choir of the Storm",
+          "count": 4
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Whispers of Doom",
+          "count": 13
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 12
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 9
+        },
+        {
+          "name": "Chaos Inoculation",
+          "count": 8
+        },
+        {
+          "name": "Conduit",
+          "count": 7
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 6
+        },
+        {
+          "name": "Ancestral Bond",
+          "count": 5
+        },
+        {
+          "name": "Resonance",
+          "count": 4
+        },
+        {
+          "name": "Blood Magic",
+          "count": 2
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "es": 16,
+        "mom": 8,
+        "life": 6,
+        "hybrid": 6
+      },
+      "dps_median": 157510
+    },
+    "Ranger": {
+      "base_class": "Ranger",
+      "sample_size": 24,
+      "top_skills": [
+        {
+          "name": "Ice Shot",
+          "count": 17
+        },
+        {
+          "name": "Twister",
+          "count": 3
+        },
+        {
+          "name": "Profane Ritual",
+          "count": 1
+        },
+        {
+          "name": "Explosive Grenade",
+          "count": 1
+        },
+        {
+          "name": "Lightning Arrow",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Headhunter",
+          "count": 17
+        },
+        {
+          "name": "Cadiro's Gambit",
+          "count": 14
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 11
+        },
+        {
+          "name": "Mageblood",
+          "count": 4
+        },
+        {
+          "name": "Hysseg's Claw",
+          "count": 3
+        },
+        {
+          "name": "Ventor's Gamble",
+          "count": 2
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 2
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 2
+        },
+        {
+          "name": "Shavronne's Satchel",
+          "count": 2
+        },
+        {
+          "name": "The Ordained",
+          "count": 2
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 3
+        },
+        {
+          "name": "Conduit",
+          "count": 2
+        },
+        {
+          "name": "Dance with Death",
+          "count": 2
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 1
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 1
+        },
+        {
+          "name": "Resonance",
+          "count": 1
+        },
+        {
+          "name": "Oasis",
+          "count": 1
+        }
+      ],
+      "defense_meta": {
+        "hybrid": 12,
+        "es": 9,
+        "life": 3
+      },
+      "dps_median": 326214
+    },
+    "Sorceress": {
+      "base_class": "Sorceress",
+      "sample_size": 36,
+      "top_skills": [
+        {
+          "name": "Comet",
+          "count": 12
+        },
+        {
+          "name": "Kelari's Deception",
+          "count": 5
+        },
+        {
+          "name": "Navira's Fracturing",
+          "count": 4
+        },
+        {
+          "name": "Entangle",
+          "count": 3
+        },
+        {
+          "name": "Essence Drain",
+          "count": 2
+        },
+        {
+          "name": "Lightning Warp",
+          "count": 2
+        },
+        {
+          "name": "Ice Nova",
+          "count": 1
+        },
+        {
+          "name": "Living Bomb",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 22
+        },
+        {
+          "name": "Maligaro's Virtuosity",
+          "count": 9
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 9
+        },
+        {
+          "name": "Adonia's Ego",
+          "count": 7
+        },
+        {
+          "name": "Snakepit",
+          "count": 6
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 5
+        },
+        {
+          "name": "Evergrasping Ring",
+          "count": 5
+        },
+        {
+          "name": "Palm of the Dreamer",
+          "count": 4
+        },
+        {
+          "name": "Andvarius",
+          "count": 4
+        },
+        {
+          "name": "Ventor's Gamble",
+          "count": 3
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 24
+        },
+        {
+          "name": "Elemental Equilibrium",
+          "count": 6
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 6
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 5
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 4
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 3
+        },
+        {
+          "name": "Resonance",
+          "count": 2
+        },
+        {
+          "name": "Ancestral Bond",
+          "count": 2
+        },
+        {
+          "name": "Conduit",
+          "count": 1
+        },
+        {
+          "name": "Blackflame Covenant",
+          "count": 1
+        }
+      ],
+      "defense_meta": {
+        "es": 28,
+        "hybrid": 3,
+        "life": 3,
+        "mom": 2
+      },
+      "dps_median": 250011
+    },
+    "Monk": {
+      "base_class": "Monk",
+      "sample_size": 36,
+      "top_skills": [
+        {
+          "name": "Twister",
+          "count": 8
+        },
+        {
+          "name": "Profane Ritual",
+          "count": 4
+        },
+        {
+          "name": "Orb of Storms",
+          "count": 3
+        },
+        {
+          "name": "Quarterstaff Strike",
+          "count": 2
+        },
+        {
+          "name": "Comet",
+          "count": 2
+        },
+        {
+          "name": "Ice Shot",
+          "count": 2
+        },
+        {
+          "name": "Frost Wall",
+          "count": 1
+        },
+        {
+          "name": "Frostbolt",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 15
+        },
+        {
+          "name": "Ventor's Gamble",
+          "count": 14
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 12
+        },
+        {
+          "name": "Shavronne's Satchel",
+          "count": 11
+        },
+        {
+          "name": "The Ordained",
+          "count": 8
+        },
+        {
+          "name": "The Taming",
+          "count": 8
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 8
+        },
+        {
+          "name": "Headhunter",
+          "count": 7
+        },
+        {
+          "name": "Doryani's Prototype",
+          "count": 7
+        },
+        {
+          "name": "The Black Insignia",
+          "count": 7
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 18
+        },
+        {
+          "name": "Dance with Death",
+          "count": 9
+        },
+        {
+          "name": "Conduit",
+          "count": 7
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 6
+        },
+        {
+          "name": "Black Scythe Training",
+          "count": 6
+        },
+        {
+          "name": "Ancestral Bond",
+          "count": 5
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 4
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 3
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 3
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "es": 24,
+        "hybrid": 7,
+        "life": 3,
+        "mom": 2
+      },
+      "dps_median": 209660
+    },
+    "Mercenary": {
+      "base_class": "Mercenary",
+      "sample_size": 36,
+      "top_skills": [
+        {
+          "name": "Crossbow Shot",
+          "count": 7
+        },
+        {
+          "name": "Explosive Grenade",
+          "count": 7
+        },
+        {
+          "name": "Twister",
+          "count": 4
+        },
+        {
+          "name": "Ember Fusillade",
+          "count": 3
+        },
+        {
+          "name": "Lightning Spear",
+          "count": 2
+        },
+        {
+          "name": "Wolf Pack",
+          "count": 2
+        },
+        {
+          "name": "Comet",
+          "count": 2
+        },
+        {
+          "name": "Leap Slam",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 21
+        },
+        {
+          "name": "Hyrri's Ire",
+          "count": 10
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 9
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 8
+        },
+        {
+          "name": "Alpha's Howl",
+          "count": 8
+        },
+        {
+          "name": "Headhunter",
+          "count": 8
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 7
+        },
+        {
+          "name": "Constricting Command",
+          "count": 6
+        },
+        {
+          "name": "Runeseeker's Call",
+          "count": 5
+        },
+        {
+          "name": "Shavronne's Satchel",
+          "count": 4
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 8
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 7
+        },
+        {
+          "name": "Black Scythe Training",
+          "count": 5
+        },
+        {
+          "name": "Sacrifice of Flesh",
+          "count": 4
+        },
+        {
+          "name": "Dance with Death",
+          "count": 4
+        },
+        {
+          "name": "Resonance",
+          "count": 3
+        },
+        {
+          "name": "Giant's Blood",
+          "count": 3
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 3
+        },
+        {
+          "name": "Lord of the Wilds",
+          "count": 3
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 2
+        }
+      ],
+      "defense_meta": {
+        "life": 22,
+        "es": 11,
+        "mom": 2,
+        "hybrid": 1
+      },
+      "dps_median": 184543
+    },
+    "Huntress": {
+      "base_class": "Huntress",
+      "sample_size": 36,
+      "top_skills": [
+        {
+          "name": "Ice Shot",
+          "count": 15
+        },
+        {
+          "name": "Twister",
+          "count": 12
+        },
+        {
+          "name": "Profane Ritual",
+          "count": 3
+        },
+        {
+          "name": "Crossbow Shot",
+          "count": 1
+        },
+        {
+          "name": "Poisonburst Arrow",
+          "count": 1
+        },
+        {
+          "name": "Spark",
+          "count": 1
+        },
+        {
+          "name": "Bow Shot",
+          "count": 1
+        },
+        {
+          "name": "Primal Strikes",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Cadiro's Gambit",
+          "count": 16
+        },
+        {
+          "name": "Headhunter",
+          "count": 14
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 13
+        },
+        {
+          "name": "The Taming",
+          "count": 12
+        },
+        {
+          "name": "Sacred Flame",
+          "count": 12
+        },
+        {
+          "name": "Evergrasping Ring",
+          "count": 12
+        },
+        {
+          "name": "Mageblood",
+          "count": 11
+        },
+        {
+          "name": "Andvarius",
+          "count": 11
+        },
+        {
+          "name": "Shavronne's Satchel",
+          "count": 9
+        },
+        {
+          "name": "The Ordained",
+          "count": 7
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Chaos Inoculation",
+          "count": 16
+        },
+        {
+          "name": "Dance with Death",
+          "count": 12
+        },
+        {
+          "name": "Resonance",
+          "count": 4
+        },
+        {
+          "name": "Conduit",
+          "count": 4
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 3
+        },
+        {
+          "name": "Glancing Blows",
+          "count": 1
+        },
+        {
+          "name": "Giant's Blood",
+          "count": 1
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 1
+        },
+        {
+          "name": "Black Scythe Training",
+          "count": 1
+        }
+      ],
+      "defense_meta": {
+        "es": 25,
+        "hybrid": 7,
+        "life": 4
+      },
+      "dps_median": 237215
+    },
+    "Druid": {
+      "base_class": "Druid",
+      "sample_size": 24,
+      "top_skills": [
+        {
+          "name": "Thunderstorm",
+          "count": 6
+        },
+        {
+          "name": "Entangle",
+          "count": 3
+        },
+        {
+          "name": "Comet",
+          "count": 3
+        },
+        {
+          "name": "Flame Wall",
+          "count": 3
+        },
+        {
+          "name": "Raise Shield",
+          "count": 2
+        },
+        {
+          "name": "Rampage",
+          "count": 2
+        },
+        {
+          "name": "Ember Fusillade",
+          "count": 1
+        },
+        {
+          "name": "Thrashing Vines",
+          "count": 1
+        }
+      ],
+      "top_uniques": [
+        {
+          "name": "Mageblood",
+          "count": 15
+        },
+        {
+          "name": "Kalandra's Touch",
+          "count": 11
+        },
+        {
+          "name": "Rathpith Globe",
+          "count": 11
+        },
+        {
+          "name": "Runeseeker's Call",
+          "count": 9
+        },
+        {
+          "name": "Dream Fragments",
+          "count": 6
+        },
+        {
+          "name": "Headhunter",
+          "count": 4
+        },
+        {
+          "name": "Cloak of Defiance",
+          "count": 3
+        },
+        {
+          "name": "Morior Invictus",
+          "count": 3
+        },
+        {
+          "name": "Palm of the Dreamer",
+          "count": 2
+        },
+        {
+          "name": "Svalinn",
+          "count": 2
+        }
+      ],
+      "top_keystones": [
+        {
+          "name": "Ancestral Bond",
+          "count": 17
+        },
+        {
+          "name": "Eldritch Battery",
+          "count": 15
+        },
+        {
+          "name": "Pain Attunement",
+          "count": 12
+        },
+        {
+          "name": "Mind Over Matter",
+          "count": 7
+        },
+        {
+          "name": "Conduit",
+          "count": 5
+        },
+        {
+          "name": "Chaos Inoculation",
+          "count": 5
+        },
+        {
+          "name": "Blackflame Covenant",
+          "count": 5
+        },
+        {
+          "name": "Ritual Cadence",
+          "count": 5
+        },
+        {
+          "name": "Whispers of Doom",
+          "count": 5
+        },
+        {
+          "name": "Iron Reflexes",
+          "count": 5
+        }
+      ],
+      "defense_meta": {
+        "hybrid": 7,
+        "mom": 6,
+        "life": 6,
+        "es": 5
+      },
+      "dps_median": 150497
+    }
+  }
+}
