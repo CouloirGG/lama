@@ -1238,12 +1238,13 @@
 
     // 1:1 passive tree rendered from GGG's official sprite atlases, with the
     // player's allocation highlighted plus missing/swap nodes. Pan + zoom.
-    function PassiveTreeCanvas({ treeNodes }) {
+    function PassiveTreeCanvas({ treeNodes, swaps }) {
       const canvasRef = useRef(null);
       const viewRef = useRef(null);          // { scale, cx, cy }
       const dragRef = useRef(null);
       const [assets, setAssets] = useState(null);
       const [err, setErr] = useState("");
+      const [hover, setHover] = useState(null);   // { node, x, y }
 
       useEffect(() => {
         let alive = true;
@@ -1259,6 +1260,15 @@
         return { p, missing, take: new Set(treeNodes?.swapTake || []), refund: new Set(treeNodes?.swapRefund || []) };
       }, [treeNodes]);
 
+      // Why a take/refund node is flagged — keyed by notable name, from the swap list.
+      const swapWhy = useMemo(() => {
+        const take = {}, refund = {};
+        for (const s of (swaps || [])) {
+          if (s.take) take[s.take] = s.summary; if (s.refund) refund[s.refund] = s.summary;
+        }
+        return { take, refund };
+      }, [swaps]);
+
       // Pre-extract drawable nodes + edge segments (main tree only, has art).
       const geom = useMemo(() => {
         if (!assets) return null;
@@ -1268,7 +1278,8 @@
           const n = nd[id];
           if (!n || n.x == null || n.ascendancyId || !n.icon || n.isMastery) continue;
           nodes.push({ id: String(id), x: n.x, y: n.y, icon: n.icon,
-                       notable: !!n.isNotable, keystone: !!n.isKeystone });
+                       notable: !!n.isNotable, keystone: !!n.isKeystone,
+                       name: n.name || "", stats: n.stats || [] });
         }
         const edges = [];
         for (const e of (assets.data.edges || [])) {
@@ -1371,26 +1382,46 @@
           const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
           v.scale = Math.max(0.008, Math.min(0.5, v.scale * f));
           v.cx = wx - (mx - cv.width / 2) / v.scale; v.cy = wy - (my - cv.height / 2) / v.scale;
-          draw();
+          setHover(null); draw();
         };
-        const onDown = (e) => { dragRef.current = { x: e.clientX, y: e.clientY }; cv.style.cursor = "grabbing"; };
+        const onDown = (e) => { dragRef.current = { x: e.clientX, y: e.clientY, moved: false }; cv.style.cursor = "grabbing"; setHover(null); };
         const onMove = (e) => {
-          const d = dragRef.current, v = viewRef.current; if (!d || !v) return;
-          v.cx -= (e.clientX - d.x) / v.scale; v.cy -= (e.clientY - d.y) / v.scale;
-          d.x = e.clientX; d.y = e.clientY; draw();
+          const v = viewRef.current; if (!v) return;
+          const d = dragRef.current;
+          if (d) {   // panning
+            v.cx -= (e.clientX - d.x) / v.scale; v.cy -= (e.clientY - d.y) / v.scale;
+            d.x = e.clientX; d.y = e.clientY; d.moved = true; draw(); return;
+          }
+          if (!geom) return;
+          const r = cv.getBoundingClientRect();
+          const px = e.clientX - r.left, py = e.clientY - r.top;
+          if (px < 0 || py < 0 || px > r.width || py > r.height) { setHover(h => h ? null : h); return; }
+          const wx = v.cx + (px - cv.width / 2) / v.scale, wy = v.cy + (py - cv.height / 2) / v.scale;
+          let hit = null, best = Infinity;
+          for (const n of geom.nodes) {
+            const rad = n.keystone ? 110 : n.notable ? 80 : 55;
+            const dx = wx - n.x, dy = wy - n.y, dd = dx * dx + dy * dy;
+            if (dd < rad * rad && dd < best) { best = dd; hit = n; }
+          }
+          cv.style.cursor = hit ? "pointer" : "grab";
+          if (hit) setHover({ node: hit, x: px, y: py });
+          else setHover(h => h ? null : h);
         };
         const onUp = () => { dragRef.current = null; cv.style.cursor = "grab"; };
+        const onLeave = () => { if (!dragRef.current) setHover(null); };
         cv.addEventListener("wheel", onWheel, { passive: false });
         cv.addEventListener("mousedown", onDown);
+        cv.addEventListener("mouseleave", onLeave);
         window.addEventListener("mousemove", onMove);
         window.addEventListener("mouseup", onUp);
         return () => {
           cv.removeEventListener("wheel", onWheel);
           cv.removeEventListener("mousedown", onDown);
+          cv.removeEventListener("mouseleave", onLeave);
           window.removeEventListener("mousemove", onMove);
           window.removeEventListener("mouseup", onUp);
         };
-      }, [draw]);
+      }, [draw, geom]);
 
       if (err) return (
         <div className="mb-3 p-4 bg-surface-container-lowest border border-outline-variant/10 text-sm text-on-surface-variant">
@@ -1398,6 +1429,23 @@
         </div>
       );
       const legend = [["#ffb77b", "Allocated"], ["#ffb4ab", "Missing (top have)"], ["#b5eaff", "Take"], ["#e9c176", "Drop"]];
+
+      // Tooltip content + placement for the hovered node.
+      let tip = null;
+      if (hover) {
+        const n = hover.node, id = n.id, { p, missing, take, refund } = sets;
+        let label = null, color = "#d7c3b5", why = null;
+        if (take.has(id)) { label = "Suggested pickup"; color = "#b5eaff"; why = swapWhy.take[n.name]; }
+        else if (refund.has(id)) { label = "Suggested drop"; color = "#e9c176"; why = swapWhy.refund[n.name]; }
+        else if (missing.has(id)) { label = "Top builds take this"; color = "#ffb4ab"; }
+        else if (p.has(id)) { label = "Allocated"; color = "#ffb77b"; }
+        const cw = canvasRef.current?.width || 0, ch = canvasRef.current?.height || 520;
+        const flipX = hover.x > cw - 280, flipY = hover.y > ch - 150;
+        tip = { n, label, color, why,
+                left: flipX ? hover.x - 14 : hover.x + 14,
+                top: flipY ? hover.y - 14 : hover.y + 14,
+                transform: `${flipX ? "translateX(-100%)" : ""} ${flipY ? "translateY(-100%)" : ""}`.trim() };
+      }
       return (
         <div className="mb-3">
           <div className="relative">
@@ -1410,7 +1458,20 @@
                 <span className="text-xs text-on-surface-variant">Loading passive tree…</span>
               </div>
             )}
-            <span className="absolute bottom-1.5 right-2 text-[9px] text-outline pointer-events-none">scroll to zoom · drag to pan</span>
+            {tip && (
+              <div className="absolute z-20 pointer-events-none bg-surface-container border border-outline-variant/50 shadow-xl px-3 py-2"
+                   style={{ left: tip.left, top: tip.top, maxWidth: "250px", transform: tip.transform }}>
+                <div className="text-xs font-bold text-on-surface leading-snug">{tip.n.name || "Passive"}</div>
+                {tip.label && <div className="text-[9px] font-label uppercase tracking-wide mt-0.5" style={{ color: tip.color }}>{tip.label}</div>}
+                {tip.n.stats && tip.n.stats.length > 0 && (
+                  <div className="mt-1 space-y-0.5">
+                    {tip.n.stats.map((s, i) => <div key={i} className="text-[11px] text-on-surface-variant leading-snug">{s}</div>)}
+                  </div>
+                )}
+                {tip.why && <div className="text-[11px] text-secondary mt-1.5 leading-snug border-t border-outline-variant/15 pt-1.5">{tip.why}</div>}
+              </div>
+            )}
+            <span className="absolute bottom-1.5 right-2 text-[9px] text-outline pointer-events-none">hover a node · scroll to zoom · drag to pan</span>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
             {legend.map(([c, label]) => (
@@ -1861,7 +1922,7 @@
                       <span className="text-[10px] font-label text-secondary uppercase">{treeAnalysis.swapRecommendations.length} swaps</span>
                     )}
                   </div>
-                  <PassiveTreeCanvas treeNodes={treeAnalysis.treeNodes} />
+                  <PassiveTreeCanvas treeNodes={treeAnalysis.treeNodes} swaps={treeAnalysis.swapRecommendations} />
                   <div className="mt-3 space-y-1.5">
                     {(treeAnalysis.swapRecommendations || []).slice(0, 4).map((s, i) => (
                       <div key={i} className="bg-surface-container-low border-l-2 border-secondary/60 p-3">
