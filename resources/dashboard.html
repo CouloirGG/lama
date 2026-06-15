@@ -1295,40 +1295,42 @@
           if (p.has(s[4]) && p.has(s[5])) continue;
           ctx.moveTo(SX(s[0]), SY(s[1])); ctx.lineTo(SX(s[2]), SY(s[3]));
         }
-        ctx.lineWidth = Math.max(0.6, 16 * v.scale); ctx.strokeStyle = "rgba(159,141,129,0.18)"; ctx.stroke();
+        ctx.lineWidth = Math.max(0.5, 8 * v.scale); ctx.strokeStyle = "rgba(159,141,129,0.18)"; ctx.stroke();
         ctx.beginPath();
         for (const s of geom.edges) {
           if (!(p.has(s[4]) && p.has(s[5]))) continue;
           ctx.moveTo(SX(s[0]), SY(s[1])); ctx.lineTo(SX(s[2]), SY(s[3]));
         }
-        ctx.lineWidth = Math.max(1.5, 34 * v.scale); ctx.strokeStyle = "rgba(255,183,123,0.85)"; ctx.stroke();
+        ctx.lineWidth = Math.max(1.2, 18 * v.scale); ctx.strokeStyle = "rgba(255,183,123,0.85)"; ctx.stroke();
 
-        // nodes (culled to viewport)
-        const blit = (img, frames, key, sx, sy, d) => {
-          const f = frames[key]; if (!f) return false;
-          const r = f.frame; ctx.drawImage(img, r.x, r.y, r.w, r.h, sx - d / 2, sy - d / 2, d, d); return true;
+        // nodes (culled). Each sprite is drawn at its TRUE world size: atlas
+        // exports at scale 0.5, so world px = sprite px * 2. Returns the screen
+        // diameter so highlight rings can wrap the frame.
+        const SP = 2;
+        const blit = (img, frames, key, sx, sy) => {
+          const f = frames[key]; if (!f) return 0;
+          const r = f.frame, dw = r.w * SP * v.scale, dh = r.h * SP * v.scale;
+          ctx.drawImage(img, r.x, r.y, r.w, r.h, sx - dw / 2, sy - dh / 2, dw, dh);
+          return Math.max(dw, dh);
         };
         for (const n of geom.nodes) {
           const sx = SX(n.x), sy = SY(n.y);
-          if (sx < -120 || sx > W + 120 || sy < -120 || sy > H + 120) continue;
+          if (sx < -140 || sx > W + 140 || sy < -140 || sy > H + 140) continue;
           const alloc = p.has(n.id);
           const kind = n.keystone ? "keystone" : n.notable ? "notable" : "normal";
-          const dia = (kind === "keystone" ? 480 : kind === "notable" ? 360 : 250) * v.scale;
-          const st = kind === "keystone" ? "keystone" : kind === "notable" ? "notable" : "normal";
-          if (alloc) blit(assets.skillsImg, assets.skills, `${st}Active:${n.icon}`, sx, sy, dia);
-          else       blit(assets.sdisImg, assets.sdis, `${st}Inactive:${n.icon}`, sx, sy, dia);
+          if (alloc) blit(assets.skillsImg, assets.skills, `${kind}Active:${n.icon}`, sx, sy);
+          else       blit(assets.sdisImg, assets.sdis, `${kind}Inactive:${n.icon}`, sx, sy);
           const fname = kind === "keystone" ? (alloc ? "KeystoneFrameAllocated" : "KeystoneFrameUnallocated")
                       : kind === "notable"  ? (alloc ? "NotableFrameAllocated" : "NotableFrameUnallocated")
                       :                       (alloc ? "PSSkillFrameActive" : "PSSkillFrame");
-          blit(assets.frameImg, assets.frame, `frame:${fname}`, sx, sy, dia * 1.28);
-          // highlight overlays
+          const fd = blit(assets.frameImg, assets.frame, `frame:${fname}`, sx, sy);
           let ring = null;
           if (take.has(n.id)) ring = "#b5eaff";
           else if (refund.has(n.id)) ring = "#e9c176";
           else if (missing.has(n.id)) ring = "#ffb4ab";
           if (ring) {
-            ctx.beginPath(); ctx.arc(sx, sy, dia * 0.72, 0, 6.2832);
-            ctx.lineWidth = Math.max(2, 12 * v.scale); ctx.strokeStyle = ring; ctx.stroke();
+            ctx.beginPath(); ctx.arc(sx, sy, (fd || 16) / 2 + Math.max(3, 6 * v.scale), 0, 6.2832);
+            ctx.lineWidth = Math.max(1.5, 9 * v.scale); ctx.strokeStyle = ring; ctx.stroke();
           }
         }
       }, [assets, geom, sets]);
@@ -1341,16 +1343,20 @@
         cv.width = Math.max(300, Math.floor(rect.width));
         cv.height = Math.max(300, Math.floor(rect.height));
         const nd = assets.data.nodes;
-        let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9, c = 0;
+        let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9, mx = 0, my = 0, c = 0;
         for (const id of treeNodes.player) {
           const n = nd[id]; if (!n || n.x == null) continue;
           minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x);
-          miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y); c++;
+          miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y);
+          mx += n.x; my += n.y; c++;
         }
         if (!c) return;
+        // Fit the allocated span, but floor the zoom so nodes stay readable —
+        // center on the player's node centroid; scroll out for the full tree.
         const bw = Math.max(2500, maxx - minx), bh = Math.max(2500, maxy - miny);
-        const scale = Math.min(cv.width / (bw * 1.2), cv.height / (bh * 1.2));
-        viewRef.current = { scale, cx: (minx + maxx) / 2, cy: (miny + maxy) / 2 };
+        const fit = Math.min(cv.width / (bw * 1.15), cv.height / (bh * 1.15));
+        const scale = Math.min(0.3, Math.max(fit, 0.18));
+        viewRef.current = { scale, cx: mx / c, cy: my / c };
         draw();
       }, [assets, geom, treeNodes, draw]);
 
