@@ -1215,30 +1215,44 @@
     function PassiveTreeMinimap({ treeVisual }) {
       const nodes = treeVisual?.nodes;
       if (!nodes || !nodes.length) return null;
-      // Focus the (square) view on the meaningful/highlighted nodes so they're
-      // large and readable; background nodes outside the frame are clipped.
-      const focus = nodes.filter(n => n.category !== "unallocated");
-      const pts = focus.length ? focus : nodes;
+      const edges = treeVisual?.edges || [];
+
+      // Focus the (square) view on the player's region: highlighted dots plus
+      // the endpoints of their allocated path. Skeleton outside is clipped.
+      const focus = [];
+      for (const n of nodes) if (n.category !== "unallocated") focus.push([n.x, n.y]);
+      for (const e of edges) if (e[4] === 1) { focus.push([e[0], e[1]]); focus.push([e[2], e[3]]); }
+      const pts = focus.length ? focus : nodes.map(n => [n.x, n.y]);
       let cx = 0, cy = 0;
-      for (const n of pts) { cx += n.x; cy += n.y; }
+      for (const p of pts) { cx += p[0]; cy += p[1]; }
       cx /= pts.length; cy /= pts.length;
-      let half = 3000;
-      for (const n of pts) half = Math.max(half, Math.abs(n.x - cx), Math.abs(n.y - cy));
-      half *= 1.3;
+      let half = 2000;
+      for (const p of pts) half = Math.max(half, Math.abs(p[0] - cx), Math.abs(p[1] - cy));
+      half *= 1.18;
       const vb = `${cx - half} ${cy - half} ${half * 2} ${half * 2}`;
-      // category -> text-color class (fill=currentColor), base radius, opacity
+
+      // Edge paths: faint full skeleton + bright allocated path. Stroke widths
+      // scale with the zoom so they read consistently.
+      let skel = "", allo = "";
+      for (const e of edges) {
+        const seg = `M${e[0]} ${e[1]}L${e[2]} ${e[3]}`;
+        if (e[4] === 1) allo += seg; else skel += seg;
+      }
+      const sw = half / 42;
+
+      // category -> text-color class (stroke/fill=currentColor), base radius, opacity.
+      // Unallocated dots are not drawn — the skeleton already shows the shape.
       const STYLE = {
-        unallocated: { cls: "text-outline",           r: 210, op: 0.35 },
-        extra:       { cls: "text-secondary",         r: 380, op: 0.55 },
-        shared:      { cls: "text-primary-container",  r: 430, op: 0.9 },
-        allocated:   { cls: "text-primary-container",  r: 410, op: 0.85 },
-        missing:     { cls: "text-error",              r: 500, op: 1 },
-        swap_take:   { cls: "text-tertiary",           r: 560, op: 1 },
-        swap_refund: { cls: "text-secondary",          r: 470, op: 1 },
+        extra:       { cls: "text-secondary",         r: 300, op: 0.7 },
+        shared:      { cls: "text-primary-container",  r: 340, op: 0.95 },
+        allocated:   { cls: "text-primary-container",  r: 300, op: 0.9 },
+        missing:     { cls: "text-error",              r: 430, op: 1 },
+        swap_take:   { cls: "text-tertiary",           r: 480, op: 1 },
+        swap_refund: { cls: "text-secondary",          r: 400, op: 1 },
       };
-      // Draw faint/background first, highlights last so they sit on top.
-      const order = ["unallocated", "extra", "shared", "allocated", "swap_refund", "missing", "swap_take"];
-      const sorted = [...nodes].sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
+      const order = ["extra", "shared", "allocated", "swap_refund", "missing", "swap_take"];
+      const dots = nodes.filter(n => STYLE[n.category])
+                        .sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
       const legend = [
         ["primary-container", "Allocated"],
         ["error", "Missing (top have)"],
@@ -1250,19 +1264,21 @@
           <svg viewBox={vb} preserveAspectRatio="xMidYMid meet"
                className="bg-surface-container-lowest border border-outline-variant/10"
                style={{ width: "100%", height: "440px", display: "block" }}>
-            {sorted.map((n, i) => {
-              const s = STYLE[n.category] || STYLE.unallocated;
+            {skel && <path d={skel} className="text-outline" stroke="currentColor"
+                           strokeWidth={sw * 0.32} strokeOpacity={0.10} fill="none" />}
+            {allo && <path d={allo} className="text-primary-container" stroke="currentColor"
+                           strokeWidth={sw * 0.6} strokeOpacity={0.9} fill="none"
+                           strokeLinecap="round" strokeLinejoin="round" />}
+            {dots.map((n, i) => {
+              const s = STYLE[n.category];
               const r = n.isKeystone ? s.r * 1.5 : s.r;
-              const tip = n.category !== "unallocated"
-                ? <title>{n.name}{n.isKeystone ? " (keystone)" : ""}{n.stats && n.stats.length ? " — " + n.stats.join("; ") : ""}</title>
-                : null;
               return (
                 <g key={n.id + "_" + i} className={s.cls}>
                   {n.isKeystone
                     ? <rect x={n.x - r} y={n.y - r} width={r * 2} height={r * 2} fill="currentColor"
                             fillOpacity={s.op} transform={`rotate(45 ${n.x} ${n.y})`} />
                     : <circle cx={n.x} cy={n.y} r={r} fill="currentColor" fillOpacity={s.op} />}
-                  {tip}
+                  <title>{n.name}{n.isKeystone ? " (keystone)" : ""}{n.stats && n.stats.length ? " — " + n.stats.join("; ") : ""}</title>
                 </g>
               );
             })}

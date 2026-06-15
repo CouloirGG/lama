@@ -13,6 +13,7 @@ Usage:
 
 import json
 import logging
+import math
 import os
 from collections import deque
 from dataclasses import dataclass, field
@@ -36,6 +37,8 @@ class TreeNode:
     is_mastery: bool = False
     ascendancy: str = ""
     group: int = 0
+    orbit: int = 0
+    orbit_index: int = 0
     connections: List[str] = field(default_factory=list)
 
 
@@ -104,7 +107,33 @@ class TreeAnalyzer:
         self._nodes: Dict[str, TreeNode] = {}
         self._graph: Dict[str, Set[str]] = {}
         self._groups: Dict[int, Tuple[float, float]] = {}  # group_id -> (x, y)
+        self._orbit_radii: List[float] = []
+        self._orbit_angles: List[List[float]] = []  # [orbit][orbitIndex] -> radians
+        self._pos_cache: Dict[str, Tuple[float, float]] = {}
         self._loaded = False
+
+    def _node_position(self, node: "TreeNode") -> Optional[Tuple[float, float]]:
+        """True (x, y) of a node: group centre offset along its orbit.
+
+        PoE trees arrange each group's nodes on concentric orbits; position =
+        group centre + orbitRadius[orbit] rotated by the node's orbit angle.
+        Falls back to the bare group centre if orbit data is unavailable.
+        """
+        cached = self._pos_cache.get(node.id)
+        if cached is not None:
+            return cached
+        centre = self._groups.get(node.group)
+        if not centre:
+            return None
+        gx, gy = centre
+        r = self._orbit_radii[node.orbit] if node.orbit < len(self._orbit_radii) else 0
+        try:
+            ang = self._orbit_angles[node.orbit][node.orbit_index]
+        except (IndexError, TypeError):
+            ang = 0.0
+        pos = (gx + r * math.sin(ang), gy - r * math.cos(ang))
+        self._pos_cache[node.id] = pos
+        return pos
 
     def _ensure_loaded(self):
         if self._loaded:
@@ -153,9 +182,16 @@ class TreeAnalyzer:
                 is_mastery="Mastery" in raw.get("name", ""),
                 ascendancy=raw.get("ascendancyName", ""),
                 group=raw.get("group", 0),
+                orbit=raw.get("orbit", 0),
+                orbit_index=raw.get("orbitIndex", 0),
                 connections=[str(c["id"]) for c in raw.get("connections", [])],
             )
             self._nodes[nid] = node
+
+        # Orbit geometry constants (radius per orbit + angle per orbit-index)
+        consts = tree_data.get("constants", {}) or {}
+        self._orbit_radii = consts.get("orbitRadii", []) or []
+        self._orbit_angles = consts.get("orbitAnglesByOrbit", []) or []
 
         # Parse groups for positions
         raw_groups = tree_data.get("groups", [])
@@ -398,9 +434,14 @@ class TreeAnalyzer:
     def get_tree_visual(self, player_node_ids: List[int],
                         top_node_ids: Optional[List[int]] = None,
                         swaps: Optional[List[SwapRecommendation]] = None) -> dict:
-        """Return position data for an SVG tree mini-map.
+        """Return position + edge data for an SVG tree mini-map.
 
-        Returns notables/keystones only (not small passives) with group x,y positions.
+        - ``nodes``: notables/keystones (not small passives), positioned along
+          their true orbits so they don't stack on the group centre.
+        - ``edges``: the full tree skeleton as ``[x1, y1, x2, y2, allocated]``
+          line segments, so the map reads as a tree instead of a dot cloud.
+          ``allocated`` is 1 when both endpoints are in the player's tree.
+
         Nodes are categorized as: allocated, shared, missing (top has, you don't),
         extra (you have, top doesn't), swap_take, swap_refund.
         """
@@ -426,7 +467,7 @@ class TreeAnalyzer:
             if node.ascendancy:
                 continue
 
-            pos = self._groups.get(node.group)
+            pos = self._node_position(node)
             if not pos:
                 continue
 
@@ -452,11 +493,36 @@ class TreeAnalyzer:
             nodes_out.append({
                 "id": nid,
                 "name": node.name,
-                "x": pos[0],
-                "y": pos[1],
+                "x": round(pos[0]),
+                "y": round(pos[1]),
                 "category": cat,
                 "isKeystone": node.is_keystone,
                 "stats": node.stats[:2],
             })
 
-        return {"nodes": nodes_out}
+        # Tree skeleton edges (deduped, ascendancy excluded). Coordinates are
+        # carried inline so the frontend needs no small-passive node list.
+        edges_out = []
+        seen = set()
+        for nid, node in self._nodes.items():
+            if node.ascendancy:
+                continue
+            p1 = self._node_position(node)
+            if not p1:
+                continue
+            for cid in node.connections:
+                key = (nid, cid) if nid < cid else (cid, nid)
+                if key in seen:
+                    continue
+                other = self._nodes.get(cid)
+                if not other or other.ascendancy:
+                    continue
+                p2 = self._node_position(other)
+                if not p2:
+                    continue
+                seen.add(key)
+                alloc = 1 if (nid in allocated and cid in allocated) else 0
+                edges_out.append([round(p1[0]), round(p1[1]),
+                                  round(p2[0]), round(p2[1]), alloc])
+
+        return {"nodes": nodes_out, "edges": edges_out}
