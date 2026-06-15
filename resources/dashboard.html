@@ -1281,11 +1281,28 @@
                        notable: !!n.isNotable, keystone: !!n.isKeystone,
                        name: n.name || "", stats: n.stats || [] });
         }
+        // Edges: a connection between two nodes on the same group + orbit is an
+        // arc along that orbit ring (what makes the tree read as concentric
+        // rings); everything else is a straight line.
+        const groups = assets.data.groups || {};
         const edges = [];
         for (const e of (assets.data.edges || [])) {
           const a = nd[e.from], b = nd[e.to];
           if (!a || !b || a.x == null || b.x == null || a.ascendancyId || b.ascendancyId) continue;
-          edges.push([a.x, a.y, b.x, b.y, String(e.from), String(e.to)]);
+          const ia = String(e.from), ib = String(e.to);
+          if (a.group != null && a.group === b.group && a.orbit === b.orbit && a.orbit > 0) {
+            const g = groups[a.group] || groups[String(a.group)];
+            if (g) {
+              const r = Math.hypot(a.x - g.x, a.y - g.y);
+              const a1 = Math.atan2(a.y - g.y, a.x - g.x);
+              let da = Math.atan2(b.y - g.y, b.x - g.x) - a1;
+              while (da > Math.PI) da -= 2 * Math.PI;
+              while (da < -Math.PI) da += 2 * Math.PI;
+              edges.push({ arc: true, cx: g.x, cy: g.y, r, a1, da, ia, ib });
+              continue;
+            }
+          }
+          edges.push({ arc: false, ax: a.x, ay: a.y, bx: b.x, by: b.y, ia, ib });
         }
         return { nodes, edges };
       }, [assets]);
@@ -1301,17 +1318,22 @@
 
         // edges: faint skeleton, then bright allocated path
         ctx.lineCap = "round";
-        ctx.beginPath();
-        for (const s of geom.edges) {
-          if (p.has(s[4]) && p.has(s[5])) continue;
-          ctx.moveTo(SX(s[0]), SY(s[1])); ctx.lineTo(SX(s[2]), SY(s[3]));
-        }
+        const pathEdges = (allocated) => {
+          ctx.beginPath();
+          for (const e of geom.edges) {
+            if ((p.has(e.ia) && p.has(e.ib)) !== allocated) continue;
+            if (e.arc) {
+              const r = e.r * v.scale, ccx = SX(e.cx), ccy = SY(e.cy);
+              ctx.moveTo(ccx + r * Math.cos(e.a1), ccy + r * Math.sin(e.a1));
+              ctx.arc(ccx, ccy, r, e.a1, e.a1 + e.da, e.da < 0);
+            } else {
+              ctx.moveTo(SX(e.ax), SY(e.ay)); ctx.lineTo(SX(e.bx), SY(e.by));
+            }
+          }
+        };
+        pathEdges(false);
         ctx.lineWidth = Math.max(0.5, 8 * v.scale); ctx.strokeStyle = "rgba(159,141,129,0.18)"; ctx.stroke();
-        ctx.beginPath();
-        for (const s of geom.edges) {
-          if (!(p.has(s[4]) && p.has(s[5]))) continue;
-          ctx.moveTo(SX(s[0]), SY(s[1])); ctx.lineTo(SX(s[2]), SY(s[3]));
-        }
+        pathEdges(true);
         ctx.lineWidth = Math.max(1.2, 18 * v.scale); ctx.strokeStyle = "rgba(255,183,123,0.85)"; ctx.stroke();
 
         // nodes (culled). Each sprite is drawn at its TRUE world size: atlas
