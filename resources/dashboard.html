@@ -1260,6 +1260,16 @@
         return { p, missing, take: new Set(treeNodes?.swapTake || []), refund: new Set(treeNodes?.swapRefund || []) };
       }, [treeNodes]);
 
+      // Only show ascendancy sub-trees the player has actually allocated into.
+      const playerAsc = useMemo(() => {
+        const s = new Set();
+        if (assets && treeNodes?.player) {
+          const nd = assets.data.nodes;
+          for (const id of treeNodes.player) { const n = nd[id]; if (n && n.ascendancyId) s.add(n.ascendancyId); }
+        }
+        return s;
+      }, [assets, treeNodes]);
+
       // Why a take/refund node is flagged — keyed by notable name, from the swap list.
       const swapWhy = useMemo(() => {
         const take = {}, refund = {};
@@ -1276,9 +1286,9 @@
         const nodes = [];
         for (const id in nd) {
           const n = nd[id];
-          if (!n || n.x == null || n.ascendancyId || !n.icon || n.isMastery) continue;
+          if (!n || n.x == null || !n.icon || n.isMastery) continue;
           nodes.push({ id: String(id), x: n.x, y: n.y, icon: n.icon,
-                       notable: !!n.isNotable, keystone: !!n.isKeystone,
+                       notable: !!n.isNotable, keystone: !!n.isKeystone, asc: n.ascendancyId || null,
                        name: n.name || "", stats: n.stats || [] });
         }
         // Edges: a connection between two nodes on the same group + orbit is an
@@ -1288,8 +1298,8 @@
         const edges = [];
         for (const e of (assets.data.edges || [])) {
           const a = nd[e.from], b = nd[e.to];
-          if (!a || !b || a.x == null || b.x == null || a.ascendancyId || b.ascendancyId) continue;
-          const ia = String(e.from), ib = String(e.to);
+          if (!a || !b || a.x == null || b.x == null) continue;
+          const ia = String(e.from), ib = String(e.to), asc = a.ascendancyId || b.ascendancyId || null;
           if (a.group != null && a.group === b.group && a.orbit === b.orbit && a.orbit > 0) {
             const g = groups[a.group] || groups[String(a.group)];
             if (g) {
@@ -1298,13 +1308,27 @@
               let da = Math.atan2(b.y - g.y, b.x - g.x) - a1;
               while (da > Math.PI) da -= 2 * Math.PI;
               while (da < -Math.PI) da += 2 * Math.PI;
-              edges.push({ arc: true, cx: g.x, cy: g.y, r, a1, da, ia, ib });
+              edges.push({ arc: true, cx: g.x, cy: g.y, r, a1, da, ia, ib, asc });
               continue;
             }
           }
-          edges.push({ arc: false, ax: a.x, ay: a.y, bx: b.x, by: b.y, ia, ib });
+          edges.push({ arc: false, ax: a.x, ay: a.y, bx: b.x, by: b.y, ia, ib, asc });
         }
-        return { nodes, edges };
+        // Orbit radii are constant tree-wide; build the faint ring behind each
+        // group's used orbits (the in-game group backgrounds).
+        const orbitR = {};
+        for (const id in nd) {
+          const n = nd[id];
+          if (!n || n.x == null || n.ascendancyId || !n.orbit || orbitR[n.orbit] != null) continue;
+          const g = groups[n.group] || groups[String(n.group)];
+          if (g) orbitR[n.orbit] = Math.hypot(n.x - g.x, n.y - g.y);
+        }
+        const rings = [];
+        for (const gid in groups) {
+          const g = groups[gid];
+          for (const o of (g.orbits || [])) if (o > 0 && orbitR[o]) rings.push({ x: g.x, y: g.y, r: orbitR[o] });
+        }
+        return { nodes, edges, rings };
       }, [assets]);
 
       const draw = useCallback(() => {
@@ -1316,11 +1340,21 @@
         const SX = x => W / 2 + (x - v.cx) * v.scale;
         const SY = y => H / 2 + (y - v.cy) * v.scale;
 
+        // faint group orbit rings (culled to viewport)
+        ctx.beginPath();
+        for (const rg of geom.rings) {
+          const cxs = SX(rg.x), cys = SY(rg.y), rr = rg.r * v.scale;
+          if (cxs + rr < 0 || cxs - rr > W || cys + rr < 0 || cys - rr > H) continue;
+          ctx.moveTo(cxs + rr, cys); ctx.arc(cxs, cys, rr, 0, 6.2832);
+        }
+        ctx.lineWidth = Math.max(0.4, 5 * v.scale); ctx.strokeStyle = "rgba(159,141,129,0.07)"; ctx.stroke();
+
         // edges: faint skeleton, then bright allocated path
         ctx.lineCap = "round";
         const pathEdges = (allocated) => {
           ctx.beginPath();
           for (const e of geom.edges) {
+            if (e.asc && !playerAsc.has(e.asc)) continue;
             if ((p.has(e.ia) && p.has(e.ib)) !== allocated) continue;
             if (e.arc) {
               const r = e.r * v.scale, ccx = SX(e.cx), ccy = SY(e.cy);
@@ -1347,6 +1381,7 @@
           return Math.max(dw, dh);
         };
         for (const n of geom.nodes) {
+          if (n.asc && !playerAsc.has(n.asc)) continue;
           const sx = SX(n.x), sy = SY(n.y);
           if (sx < -140 || sx > W + 140 || sy < -140 || sy > H + 140) continue;
           const alloc = p.has(n.id);
@@ -1366,7 +1401,7 @@
             ctx.lineWidth = Math.max(1.5, 9 * v.scale); ctx.strokeStyle = ring; ctx.stroke();
           }
         }
-      }, [assets, geom, sets]);
+      }, [assets, geom, sets, playerAsc]);
 
       // Fit the view to the player's allocated region whenever data changes.
       useEffect(() => {
@@ -1378,7 +1413,7 @@
         const nd = assets.data.nodes;
         let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9, mx = 0, my = 0, c = 0;
         for (const id of treeNodes.player) {
-          const n = nd[id]; if (!n || n.x == null) continue;
+          const n = nd[id]; if (!n || n.x == null || n.ascendancyId) continue;
           minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x);
           miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y);
           mx += n.x; my += n.y; c++;
@@ -1421,6 +1456,7 @@
           const wx = v.cx + (px - cv.width / 2) / v.scale, wy = v.cy + (py - cv.height / 2) / v.scale;
           let hit = null, best = Infinity;
           for (const n of geom.nodes) {
+            if (n.asc && !playerAsc.has(n.asc)) continue;
             const rad = n.keystone ? 110 : n.notable ? 80 : 55;
             const dx = wx - n.x, dy = wy - n.y, dd = dx * dx + dy * dy;
             if (dd < rad * rad && dd < best) { best = dd; hit = n; }
@@ -1443,7 +1479,7 @@
           window.removeEventListener("mousemove", onMove);
           window.removeEventListener("mouseup", onUp);
         };
-      }, [draw, geom]);
+      }, [draw, geom, playerAsc]);
 
       if (err) return (
         <div className="mb-3 p-4 bg-surface-container-lowest border border-outline-variant/10 text-sm text-on-surface-variant">
