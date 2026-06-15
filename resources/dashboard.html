@@ -1245,6 +1245,8 @@
       const [assets, setAssets] = useState(null);
       const [err, setErr] = useState("");
       const [hover, setHover] = useState(null);   // { node, x, y }
+      const [pinned, setPinned] = useState(null); // node clicked to pin in the corner panel
+      const pinnedRef = useRef(null); pinnedRef.current = pinned;
 
       useEffect(() => {
         let alive = true;
@@ -1405,6 +1407,7 @@
 
       // Fit the view to the player's allocated region whenever data changes.
       useEffect(() => {
+        setPinned(null);
         if (!assets || !geom || !treeNodes?.player?.length) return;
         const cv = canvasRef.current; if (!cv) return;
         const rect = cv.getBoundingClientRect();
@@ -1441,18 +1444,8 @@
           v.cx = wx - (mx - cv.width / 2) / v.scale; v.cy = wy - (my - cv.height / 2) / v.scale;
           setHover(null); draw();
         };
-        const onDown = (e) => { dragRef.current = { x: e.clientX, y: e.clientY, moved: false }; cv.style.cursor = "grabbing"; setHover(null); };
-        const onMove = (e) => {
-          const v = viewRef.current; if (!v) return;
-          const d = dragRef.current;
-          if (d) {   // panning
-            v.cx -= (e.clientX - d.x) / v.scale; v.cy -= (e.clientY - d.y) / v.scale;
-            d.x = e.clientX; d.y = e.clientY; d.moved = true; draw(); return;
-          }
-          if (!geom) return;
-          const r = cv.getBoundingClientRect();
-          const px = e.clientX - r.left, py = e.clientY - r.top;
-          if (px < 0 || py < 0 || px > r.width || py > r.height) { setHover(h => h ? null : h); return; }
+        const nodeAt = (px, py) => {
+          const v = viewRef.current; if (!v || !geom) return null;
           const wx = v.cx + (px - cv.width / 2) / v.scale, wy = v.cy + (py - cv.height / 2) / v.scale;
           let hit = null, best = Infinity;
           for (const n of geom.nodes) {
@@ -1461,11 +1454,37 @@
             const dx = wx - n.x, dy = wy - n.y, dd = dx * dx + dy * dy;
             if (dd < rad * rad && dd < best) { best = dd; hit = n; }
           }
+          return hit;
+        };
+        const onDown = (e) => { dragRef.current = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false }; cv.style.cursor = "grabbing"; setHover(null); };
+        const onMove = (e) => {
+          const v = viewRef.current; if (!v) return;
+          const d = dragRef.current;
+          if (d) {   // panning
+            v.cx -= (e.clientX - d.x) / v.scale; v.cy -= (e.clientY - d.y) / v.scale;
+            d.x = e.clientX; d.y = e.clientY;
+            if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) > 4) d.moved = true;
+            draw(); return;
+          }
+          const r = cv.getBoundingClientRect();
+          const px = e.clientX - r.left, py = e.clientY - r.top;
+          if (px < 0 || py < 0 || px > r.width || py > r.height) { setHover(h => h ? null : h); return; }
+          const hit = nodeAt(px, py);
           cv.style.cursor = hit ? "pointer" : "grab";
           if (hit) setHover({ node: hit, x: px, y: py });
           else setHover(h => h ? null : h);
         };
-        const onUp = () => { dragRef.current = null; cv.style.cursor = "grab"; };
+        const onUp = (e) => {
+          const d = dragRef.current; dragRef.current = null; cv.style.cursor = "grab";
+          if (!d || d.moved) return;   // it was a drag, not a click
+          const r = cv.getBoundingClientRect();
+          const px = e.clientX - r.left, py = e.clientY - r.top;
+          if (px < 0 || py < 0 || px > r.width || py > r.height) return;
+          const hit = nodeAt(px, py);
+          if (!hit || (pinnedRef.current && pinnedRef.current.id === hit.id)) { setPinned(null); return; }
+          setPinned(hit);
+          const v = viewRef.current; if (v) { v.cx = hit.x; v.cy = hit.y; setHover(null); draw(); }
+        };
         const onLeave = () => { if (!dragRef.current) setHover(null); };
         cv.addEventListener("wheel", onWheel, { passive: false });
         cv.addEventListener("mousedown", onDown);
@@ -1488,22 +1507,29 @@
       );
       const legend = [["#ffb77b", "Allocated"], ["#ffb4ab", "Missing (top have)"], ["#b5eaff", "Take"], ["#e9c176", "Drop"]];
 
-      // Tooltip content + placement for the hovered node.
+      // Shared: classify a node (label, accent colour, the "why").
+      const nodeInfo = (n) => {
+        const id = n.id, { p, missing, take, refund } = sets;
+        if (take.has(id)) return { label: "Suggested pickup", color: "#b5eaff", why: swapWhy.take[n.name] };
+        if (refund.has(id)) return { label: "Suggested drop", color: "#e9c176", why: swapWhy.refund[n.name] };
+        if (missing.has(id)) return { label: "Top builds take this", color: "#ffb4ab", why: null };
+        if (p.has(id)) return { label: "Allocated", color: "#ffb77b", why: null };
+        return { label: null, color: "#d7c3b5", why: null };
+      };
+      const stat = (s, i) => <div key={i} className="text-[11px] text-on-surface-variant leading-snug">{s}</div>;
+
+      // Floating tooltip for the hovered node.
       let tip = null;
       if (hover) {
-        const n = hover.node, id = n.id, { p, missing, take, refund } = sets;
-        let label = null, color = "#d7c3b5", why = null;
-        if (take.has(id)) { label = "Suggested pickup"; color = "#b5eaff"; why = swapWhy.take[n.name]; }
-        else if (refund.has(id)) { label = "Suggested drop"; color = "#e9c176"; why = swapWhy.refund[n.name]; }
-        else if (missing.has(id)) { label = "Top builds take this"; color = "#ffb4ab"; }
-        else if (p.has(id)) { label = "Allocated"; color = "#ffb77b"; }
+        const info = nodeInfo(hover.node);
         const cw = canvasRef.current?.width || 0, ch = canvasRef.current?.height || 520;
         const flipX = hover.x > cw - 280, flipY = hover.y > ch - 150;
-        tip = { n, label, color, why,
+        tip = { n: hover.node, ...info,
                 left: flipX ? hover.x - 14 : hover.x + 14,
                 top: flipY ? hover.y - 14 : hover.y + 14,
                 transform: `${flipX ? "translateX(-100%)" : ""} ${flipY ? "translateY(-100%)" : ""}`.trim() };
       }
+      const pinInfo = pinned ? nodeInfo(pinned) : null;
       return (
         <div className="mb-3">
           <div className="relative">
@@ -1529,7 +1555,22 @@
                 {tip.why && <div className="text-[11px] text-secondary mt-1.5 leading-snug border-t border-outline-variant/15 pt-1.5">{tip.why}</div>}
               </div>
             )}
-            <span className="absolute bottom-1.5 right-2 text-[9px] text-outline pointer-events-none">hover a node · scroll to zoom · drag to pan</span>
+            {pinned && pinInfo && (
+              <div className="absolute top-2 left-2 z-20 bg-surface-container border border-outline-variant/50 shadow-xl px-3 py-2" style={{ maxWidth: "260px" }}>
+                <div className="flex items-start gap-2">
+                  <div className="flex-1">
+                    <div className="text-xs font-bold text-on-surface leading-snug">{pinned.name || "Passive"}</div>
+                    {pinInfo.label && <div className="text-[9px] font-label uppercase tracking-wide mt-0.5" style={{ color: pinInfo.color }}>{pinInfo.label}</div>}
+                  </div>
+                  <button onClick={() => setPinned(null)} className="text-on-surface-variant hover:text-on-surface -mt-0.5" title="Unpin">
+                    <Icon name="close" className="text-sm" />
+                  </button>
+                </div>
+                {pinned.stats && pinned.stats.length > 0 && <div className="mt-1 space-y-0.5">{pinned.stats.map(stat)}</div>}
+                {pinInfo.why && <div className="text-[11px] text-secondary mt-1.5 leading-snug border-t border-outline-variant/15 pt-1.5">{pinInfo.why}</div>}
+              </div>
+            )}
+            <span className="absolute bottom-1.5 right-2 text-[9px] text-outline pointer-events-none">click a node to pin · scroll to zoom · drag to pan</span>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
             {legend.map(([c, label]) => (
