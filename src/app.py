@@ -587,8 +587,8 @@ def main():
 
     _log(f"[Startup] Server ready ({_ms()})")
 
-    # Load saved window geometry from settings
-    _win_w, _win_h, _win_max = WINDOW_WIDTH, WINDOW_HEIGHT, False
+    # Load saved window size from settings
+    _win_w, _win_h = WINDOW_WIDTH, WINDOW_HEIGHT
     try:
         _settings_path = os.path.join(
             os.path.expanduser("~"), ".poe2-price-overlay", "dashboard_settings.json"
@@ -596,9 +596,29 @@ def main():
         if os.path.exists(_settings_path):
             with open(_settings_path) as _sf:
                 _saved = json.load(_sf)
-            _win_w = max(900, int(_saved.get("window_width", WINDOW_WIDTH)))
-            _win_h = max(600, int(_saved.get("window_height", WINDOW_HEIGHT)))
-            _win_max = bool(_saved.get("window_maximized", False))
+            _win_w = max(WINDOW_WIDTH, int(_saved.get("window_width", WINDOW_WIDTH)))
+            _win_h = max(WINDOW_HEIGHT, int(_saved.get("window_height", WINDOW_HEIGHT)))
+    except Exception:
+        pass
+
+    # Clamp to the monitor work area (excludes the taskbar) and center the
+    # window. We intentionally do NOT restore a maximized state: a frameless
+    # pywebview window created maximized lands oversized and off-screen on
+    # Windows. The title-bar maximize button still works at runtime.
+    _win_x, _win_y = None, None
+    try:
+        import ctypes
+        from ctypes import wintypes
+        _rect = wintypes.RECT()
+        # SPI_GETWORKAREA = 0x0030 → usable desktop minus taskbar
+        if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(_rect), 0):
+            _wa_w = _rect.right - _rect.left
+            _wa_h = _rect.bottom - _rect.top
+            _margin = 60
+            _win_w = max(WINDOW_WIDTH, min(_win_w, _wa_w - _margin))
+            _win_h = max(WINDOW_HEIGHT, min(_win_h, _wa_h - _margin))
+            _win_x = _rect.left + (_wa_w - _win_w) // 2
+            _win_y = _rect.top + (_wa_h - _win_h) // 2
     except Exception:
         pass
 
@@ -656,19 +676,21 @@ def main():
     # so we create the window visible.  The dashboard's own splash screen
     # covers the UI until data arrives, keeping the experience smooth.
     # A background thread still sets the taskbar icon via IPropertyStore.
-    window = webview.create_window(
-        WINDOW_TITLE,
+    _win_kwargs = dict(
         url=f"http://127.0.0.1:{PORT}/dashboard?_t={int(time.time())}",
         width=_win_w,
         height=_win_h,
         min_size=(900, 600),
-        maximized=_win_max,
         background_color="#0d0b08",
         text_select=True,
         frameless=True,
         easy_drag=False,
         js_api=api,
     )
+    if _win_x is not None and _win_y is not None:
+        _win_kwargs["x"] = _win_x
+        _win_kwargs["y"] = _win_y
+    window = webview.create_window(WINDOW_TITLE, **_win_kwargs)
 
     def _on_shown():
         """Install resize hook and taskbar icon once the window is shown."""
