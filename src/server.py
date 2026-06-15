@@ -1099,24 +1099,35 @@ class SmartLookupRequest(BaseModel):
 
 
 def _parse_ninja_url(url: str):
-    """Extract account + character from a poe.ninja profile URL.
+    """Extract account + character from a poe.ninja profile or builds URL.
 
     Formats:
       .../profile/Account-1234/league/character/CharName
       .../profile/Account-1234/character/CharName
+      .../builds/league/character/Account-1234/CharName   (build-explorer link)
     """
     import re
-    # With league segment
+    u = url.strip()
+    # Builds explorer: /poe2/builds/{league}/character/{account}/{character}
+    # NOTE: order differs from profile URLs — league precedes "character",
+    # and the account comes AFTER the "character" segment.
     m = re.match(
-        r"https?://poe\.ninja/poe2/profile/([^/]+)/[^/]+/character/([^/?#]+)",
-        url.strip(),
+        r"https?://poe\.ninja/poe2/builds/[^/]+/character/([^/?#]+)/([^/?#]+)",
+        u,
     )
     if m:
         return m.group(1), m.group(2)
-    # Without league segment
+    # Profile with league segment
+    m = re.match(
+        r"https?://poe\.ninja/poe2/profile/([^/]+)/[^/]+/character/([^/?#]+)",
+        u,
+    )
+    if m:
+        return m.group(1), m.group(2)
+    # Profile without league segment
     m = re.match(
         r"https?://poe\.ninja/poe2/profile/([^/]+)/character/([^/?#]+)",
-        url.strip(),
+        u,
     )
     if m:
         return m.group(1), m.group(2)
@@ -1939,12 +1950,17 @@ async def character_compare(req: BuildCompareRequest2):
             target = await loop.run_in_executor(
                 None, _lookup_character_with_fallback, acct, char_name
             )
-    elif "/" in target_query:
-        parts = [p.strip() for p in target_query.split("/", 1)]
-        if len(parts) == 2:
-            target = await loop.run_in_executor(
-                None, _lookup_character_with_fallback, parts[0], parts[1]
-            )
+    else:
+        # Accept account + character split on any of these separators
+        # ("-" is excluded: it is the account discriminator, e.g. JCOLLINS510-4794).
+        for sep in ("/", "#", ","):
+            if sep in target_query:
+                parts = [p.strip() for p in target_query.split(sep, 1)]
+                if len(parts) == 2 and parts[0] and parts[1]:
+                    target = await loop.run_in_executor(
+                        None, _lookup_character_with_fallback, parts[0], parts[1]
+                    )
+                break
 
     if not target:
         return JSONResponse(status_code=404, content={"error": f"Target build not found: {target_query}"})
