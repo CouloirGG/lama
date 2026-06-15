@@ -19,3 +19,6 @@ test_results.md
 data/telemetry/
 
 claude.bat
+
+# Cached GGG passive-tree export (downloaded on first run)
+resources/data/tree2/

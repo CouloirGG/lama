@@ -671,6 +671,16 @@ async def lifespan(app: FastAPI):
             logger.warning(f"Item lookup init failed: {e}")
     threading.Thread(target=_init_lookup, daemon=True).start()
 
+    # Prefetch the GGG passive-tree export (data + sprite atlases) so the first
+    # tree view renders instantly instead of cold-downloading ~5MB.
+    def _prefetch_tree2():
+        try:
+            import tree2
+            tree2.ensure_assets()
+        except Exception as e:
+            logger.warning(f"tree2 prefetch failed: {e}")
+    threading.Thread(target=_prefetch_tree2, daemon=True).start()
+
     # Background task: check for updates after a short delay
     update_task = asyncio.create_task(check_for_updates())
 
@@ -1905,14 +1915,18 @@ async def character_tree_analysis(req: TreeAnalysisRequest):
         result["targetName"] = target_name
 
         # Add tree visualization data
+        # GGG node-id sets for the canvas renderer (small payload; the canvas
+        # pulls geometry + sprites from the cached /tree2 export client-side).
         try:
-            tree_visual = await loop.run_in_executor(
-                None, analyzer.get_tree_visual,
-                player_pob.passive_nodes, top_nodes, analysis.swap_recommendations
-            )
-            result["treeVisual"] = tree_visual
+            import tree2
+            result["treeNodes"] = {
+                "player": [str(n) for n in player_pob.passive_nodes],
+                "top": [str(n) for n in (top_nodes or [])],
+                "swapTake": tree2.names_to_ids(s.take_notable for s in analysis.swap_recommendations),
+                "swapRefund": tree2.names_to_ids(s.refund_notable for s in analysis.swap_recommendations),
+            }
         except Exception as e:
-            logger.debug(f"Tree visual generation failed (non-fatal): {e}")
+            logger.debug(f"treeNodes build failed (non-fatal): {e}")
 
         return result
     except Exception as e:
@@ -3318,6 +3332,25 @@ async def serve_vendor(filepath: str):
     ext = "." + filepath.rsplit(".", 1)[-1] if "." in filepath else ""
     mt = media_types.get(ext, "application/octet-stream")
     return FileResponse(vendor_path, media_type=mt)
+
+
+@app.get("/tree2/{filepath:path}")
+async def serve_tree2(filepath: str):
+    """Serve the cached GGG passive-tree export (data.json + WebP sprite atlases).
+
+    Files download on first use; here we resolve from the local cache, fetching
+    on demand if a requested file isn't present yet."""
+    import tree2
+    from fastapi.responses import FileResponse, JSONResponse
+    p = tree2.file_path(filepath)
+    if not p:
+        await asyncio.get_running_loop().run_in_executor(None, tree2.ensure_assets)
+        p = tree2.file_path(filepath)
+    if not p:
+        return JSONResponse(status_code=404, content={"error": "Tree asset not found"})
+    media_types = {".json": "application/json", ".webp": "image/webp"}
+    ext = "." + filepath.rsplit(".", 1)[-1] if "." in filepath else ""
+    return FileResponse(p, media_type=media_types.get(ext, "application/octet-stream"))
 
 
 # ---------------------------------------------------------------------------

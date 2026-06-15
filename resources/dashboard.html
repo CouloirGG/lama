@@ -1212,84 +1212,206 @@
     }
 
 
-    function PassiveTreeMinimap({ treeVisual }) {
-      const nodes = treeVisual?.nodes;
-      if (!nodes || !nodes.length) return null;
-      const edges = treeVisual?.edges || [];
+    // Load the GGG passive-tree export (data.json + WebP sprite atlases) once,
+    // shared across all renders. Resolves to images + frame coordinate maps.
+    let _tree2Promise = null;
+    function loadTree2() {
+      if (_tree2Promise) return _tree2Promise;
+      const base = `${API_BASE}/tree2`;
+      const loadImg = (src) => new Promise((res, rej) => {
+        const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src;
+      });
+      _tree2Promise = Promise.all([
+        fetch(`${base}/data.json`).then(r => r.json()),
+        fetch(`${base}/assets/skills.json`).then(r => r.json()),
+        fetch(`${base}/assets/skills-disabled.json`).then(r => r.json()),
+        fetch(`${base}/assets/frame.json`).then(r => r.json()),
+        loadImg(`${base}/assets/skills.webp`),
+        loadImg(`${base}/assets/skills-disabled.webp`),
+        loadImg(`${base}/assets/frame.webp`),
+      ]).then(([data, skills, sdis, frame, skillsImg, sdisImg, frameImg]) => ({
+        data, skills: skills.frames, sdis: sdis.frames, frame: frame.frames,
+        skillsImg, sdisImg, frameImg,
+      })).catch(e => { _tree2Promise = null; throw e; });
+      return _tree2Promise;
+    }
 
-      // Focus the (square) view on the player's region: highlighted dots plus
-      // the endpoints of their allocated path. Skeleton outside is clipped.
-      const focus = [];
-      for (const n of nodes) if (n.category !== "unallocated") focus.push([n.x, n.y]);
-      for (const e of edges) if (e[4] === 1) { focus.push([e[0], e[1]]); focus.push([e[2], e[3]]); }
-      const pts = focus.length ? focus : nodes.map(n => [n.x, n.y]);
-      let cx = 0, cy = 0;
-      for (const p of pts) { cx += p[0]; cy += p[1]; }
-      cx /= pts.length; cy /= pts.length;
-      let half = 2000;
-      for (const p of pts) half = Math.max(half, Math.abs(p[0] - cx), Math.abs(p[1] - cy));
-      half *= 1.18;
-      const vb = `${cx - half} ${cy - half} ${half * 2} ${half * 2}`;
+    // 1:1 passive tree rendered from GGG's official sprite atlases, with the
+    // player's allocation highlighted plus missing/swap nodes. Pan + zoom.
+    function PassiveTreeCanvas({ treeNodes }) {
+      const canvasRef = useRef(null);
+      const viewRef = useRef(null);          // { scale, cx, cy }
+      const dragRef = useRef(null);
+      const [assets, setAssets] = useState(null);
+      const [err, setErr] = useState("");
 
-      // Edge paths: faint full skeleton + bright allocated path. Stroke widths
-      // scale with the zoom so they read consistently.
-      let skel = "", allo = "";
-      for (const e of edges) {
-        const seg = `M${e[0]} ${e[1]}L${e[2]} ${e[3]}`;
-        if (e[4] === 1) allo += seg; else skel += seg;
-      }
-      const sw = half / 42;
+      useEffect(() => {
+        let alive = true;
+        loadTree2().then(a => { if (alive) setAssets(a); })
+                   .catch(() => { if (alive) setErr("Couldn't load the passive-tree data."); });
+        return () => { alive = false; };
+      }, []);
 
-      // category -> text-color class (stroke/fill=currentColor), base radius, opacity.
-      // Unallocated dots are not drawn — the skeleton already shows the shape.
-      const STYLE = {
-        extra:       { cls: "text-secondary",         r: 300, op: 0.7 },
-        shared:      { cls: "text-primary-container",  r: 340, op: 0.95 },
-        allocated:   { cls: "text-primary-container",  r: 300, op: 0.9 },
-        missing:     { cls: "text-error",              r: 430, op: 1 },
-        swap_take:   { cls: "text-tertiary",           r: 480, op: 1 },
-        swap_refund: { cls: "text-secondary",          r: 400, op: 1 },
-      };
-      const order = ["extra", "shared", "allocated", "swap_refund", "missing", "swap_take"];
-      const dots = nodes.filter(n => STYLE[n.category])
-                        .sort((a, b) => order.indexOf(a.category) - order.indexOf(b.category));
-      const legend = [
-        ["primary-container", "Allocated"],
-        ["error", "Missing (top have)"],
-        ["tertiary", "Take"],
-        ["secondary", "Drop"],
-      ];
+      const sets = useMemo(() => {
+        const p = new Set(treeNodes?.player || []);
+        const top = new Set(treeNodes?.top || []);
+        const missing = new Set([...top].filter(id => !p.has(id)));
+        return { p, missing, take: new Set(treeNodes?.swapTake || []), refund: new Set(treeNodes?.swapRefund || []) };
+      }, [treeNodes]);
+
+      // Pre-extract drawable nodes + edge segments (main tree only, has art).
+      const geom = useMemo(() => {
+        if (!assets) return null;
+        const nd = assets.data.nodes;
+        const nodes = [];
+        for (const id in nd) {
+          const n = nd[id];
+          if (!n || n.x == null || n.ascendancyId || !n.icon || n.isMastery) continue;
+          nodes.push({ id: String(id), x: n.x, y: n.y, icon: n.icon,
+                       notable: !!n.isNotable, keystone: !!n.isKeystone });
+        }
+        const edges = [];
+        for (const e of (assets.data.edges || [])) {
+          const a = nd[e.from], b = nd[e.to];
+          if (!a || !b || a.x == null || b.x == null || a.ascendancyId || b.ascendancyId) continue;
+          edges.push([a.x, a.y, b.x, b.y, String(e.from), String(e.to)]);
+        }
+        return { nodes, edges };
+      }, [assets]);
+
+      const draw = useCallback(() => {
+        const cv = canvasRef.current, v = viewRef.current;
+        if (!cv || !assets || !geom || !v) return;
+        const ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+        const { p, missing, take, refund } = sets;
+        ctx.fillStyle = "#0e0e0e"; ctx.fillRect(0, 0, W, H);
+        const SX = x => W / 2 + (x - v.cx) * v.scale;
+        const SY = y => H / 2 + (y - v.cy) * v.scale;
+
+        // edges: faint skeleton, then bright allocated path
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        for (const s of geom.edges) {
+          if (p.has(s[4]) && p.has(s[5])) continue;
+          ctx.moveTo(SX(s[0]), SY(s[1])); ctx.lineTo(SX(s[2]), SY(s[3]));
+        }
+        ctx.lineWidth = Math.max(0.6, 16 * v.scale); ctx.strokeStyle = "rgba(159,141,129,0.18)"; ctx.stroke();
+        ctx.beginPath();
+        for (const s of geom.edges) {
+          if (!(p.has(s[4]) && p.has(s[5]))) continue;
+          ctx.moveTo(SX(s[0]), SY(s[1])); ctx.lineTo(SX(s[2]), SY(s[3]));
+        }
+        ctx.lineWidth = Math.max(1.5, 34 * v.scale); ctx.strokeStyle = "rgba(255,183,123,0.85)"; ctx.stroke();
+
+        // nodes (culled to viewport)
+        const blit = (img, frames, key, sx, sy, d) => {
+          const f = frames[key]; if (!f) return false;
+          const r = f.frame; ctx.drawImage(img, r.x, r.y, r.w, r.h, sx - d / 2, sy - d / 2, d, d); return true;
+        };
+        for (const n of geom.nodes) {
+          const sx = SX(n.x), sy = SY(n.y);
+          if (sx < -120 || sx > W + 120 || sy < -120 || sy > H + 120) continue;
+          const alloc = p.has(n.id);
+          const kind = n.keystone ? "keystone" : n.notable ? "notable" : "normal";
+          const dia = (kind === "keystone" ? 480 : kind === "notable" ? 360 : 250) * v.scale;
+          const st = kind === "keystone" ? "keystone" : kind === "notable" ? "notable" : "normal";
+          if (alloc) blit(assets.skillsImg, assets.skills, `${st}Active:${n.icon}`, sx, sy, dia);
+          else       blit(assets.sdisImg, assets.sdis, `${st}Inactive:${n.icon}`, sx, sy, dia);
+          const fname = kind === "keystone" ? (alloc ? "KeystoneFrameAllocated" : "KeystoneFrameUnallocated")
+                      : kind === "notable"  ? (alloc ? "NotableFrameAllocated" : "NotableFrameUnallocated")
+                      :                       (alloc ? "PSSkillFrameActive" : "PSSkillFrame");
+          blit(assets.frameImg, assets.frame, `frame:${fname}`, sx, sy, dia * 1.28);
+          // highlight overlays
+          let ring = null;
+          if (take.has(n.id)) ring = "#b5eaff";
+          else if (refund.has(n.id)) ring = "#e9c176";
+          else if (missing.has(n.id)) ring = "#ffb4ab";
+          if (ring) {
+            ctx.beginPath(); ctx.arc(sx, sy, dia * 0.72, 0, 6.2832);
+            ctx.lineWidth = Math.max(2, 12 * v.scale); ctx.strokeStyle = ring; ctx.stroke();
+          }
+        }
+      }, [assets, geom, sets]);
+
+      // Fit the view to the player's allocated region whenever data changes.
+      useEffect(() => {
+        if (!assets || !geom || !treeNodes?.player?.length) return;
+        const cv = canvasRef.current; if (!cv) return;
+        const rect = cv.getBoundingClientRect();
+        cv.width = Math.max(300, Math.floor(rect.width));
+        cv.height = Math.max(300, Math.floor(rect.height));
+        const nd = assets.data.nodes;
+        let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9, c = 0;
+        for (const id of treeNodes.player) {
+          const n = nd[id]; if (!n || n.x == null) continue;
+          minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x);
+          miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y); c++;
+        }
+        if (!c) return;
+        const bw = Math.max(2500, maxx - minx), bh = Math.max(2500, maxy - miny);
+        const scale = Math.min(cv.width / (bw * 1.2), cv.height / (bh * 1.2));
+        viewRef.current = { scale, cx: (minx + maxx) / 2, cy: (miny + maxy) / 2 };
+        draw();
+      }, [assets, geom, treeNodes, draw]);
+
+      // Pan + zoom (native listeners so wheel can preventDefault).
+      useEffect(() => {
+        const cv = canvasRef.current; if (!cv) return;
+        const onWheel = (e) => {
+          e.preventDefault(); const v = viewRef.current; if (!v) return;
+          const r = cv.getBoundingClientRect();
+          const mx = e.clientX - r.left, my = e.clientY - r.top;
+          const wx = v.cx + (mx - cv.width / 2) / v.scale, wy = v.cy + (my - cv.height / 2) / v.scale;
+          const f = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+          v.scale = Math.max(0.008, Math.min(0.5, v.scale * f));
+          v.cx = wx - (mx - cv.width / 2) / v.scale; v.cy = wy - (my - cv.height / 2) / v.scale;
+          draw();
+        };
+        const onDown = (e) => { dragRef.current = { x: e.clientX, y: e.clientY }; cv.style.cursor = "grabbing"; };
+        const onMove = (e) => {
+          const d = dragRef.current, v = viewRef.current; if (!d || !v) return;
+          v.cx -= (e.clientX - d.x) / v.scale; v.cy -= (e.clientY - d.y) / v.scale;
+          d.x = e.clientX; d.y = e.clientY; draw();
+        };
+        const onUp = () => { dragRef.current = null; cv.style.cursor = "grab"; };
+        cv.addEventListener("wheel", onWheel, { passive: false });
+        cv.addEventListener("mousedown", onDown);
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+        return () => {
+          cv.removeEventListener("wheel", onWheel);
+          cv.removeEventListener("mousedown", onDown);
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+        };
+      }, [draw]);
+
+      if (err) return (
+        <div className="mb-3 p-4 bg-surface-container-lowest border border-outline-variant/10 text-sm text-on-surface-variant">
+          {err}
+        </div>
+      );
+      const legend = [["#ffb77b", "Allocated"], ["#ffb4ab", "Missing (top have)"], ["#b5eaff", "Take"], ["#e9c176", "Drop"]];
       return (
         <div className="mb-3">
-          <svg viewBox={vb} preserveAspectRatio="xMidYMid meet"
-               className="bg-surface-container-lowest border border-outline-variant/10"
-               style={{ width: "100%", height: "440px", display: "block" }}>
-            {skel && <path d={skel} className="text-outline" stroke="currentColor"
-                           strokeWidth={sw * 0.32} strokeOpacity={0.10} fill="none" />}
-            {allo && <path d={allo} className="text-primary-container" stroke="currentColor"
-                           strokeWidth={sw * 0.6} strokeOpacity={0.9} fill="none"
-                           strokeLinecap="round" strokeLinejoin="round" />}
-            {dots.map((n, i) => {
-              const s = STYLE[n.category];
-              const r = n.isKeystone ? s.r * 1.5 : s.r;
-              return (
-                <g key={n.id + "_" + i} className={s.cls}>
-                  {n.isKeystone
-                    ? <rect x={n.x - r} y={n.y - r} width={r * 2} height={r * 2} fill="currentColor"
-                            fillOpacity={s.op} transform={`rotate(45 ${n.x} ${n.y})`} />
-                    : <circle cx={n.x} cy={n.y} r={r} fill="currentColor" fillOpacity={s.op} />}
-                  <title>{n.name}{n.isKeystone ? " (keystone)" : ""}{n.stats && n.stats.length ? " — " + n.stats.join("; ") : ""}</title>
-                </g>
-              );
-            })}
-          </svg>
+          <div className="relative">
+            <canvas ref={canvasRef}
+                    className="bg-surface-container-lowest border border-outline-variant/10 w-full"
+                    style={{ height: "520px", display: "block", cursor: "grab" }} />
+            {!assets && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none">
+                <div className="w-6 h-6 border-2 border-secondary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+                <span className="text-xs text-on-surface-variant">Loading passive tree…</span>
+              </div>
+            )}
+            <span className="absolute bottom-1.5 right-2 text-[9px] text-outline pointer-events-none">scroll to zoom · drag to pan</span>
+          </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
             {legend.map(([c, label]) => (
               <span key={label} className="flex items-center gap-1 text-[9px] text-outline">
-                <span className={`w-2 h-2 rounded-full bg-${c}`} />{label}
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c }} />{label}
               </span>
             ))}
-            <span className="text-[9px] text-outline">◆ keystone</span>
           </div>
         </div>
       );
@@ -1723,19 +1845,19 @@
               })}
 
               {/* Passive Tree (lives here under Equipment so it fills the column and is visible) */}
-              {treeAnalysis?.swapRecommendations?.length > 0 && (
+              {treeAnalysis?.treeNodes?.player?.length > 0 && (
                 <div className="mt-7 pt-5 border-t border-outline-variant/15">
                   <div className="flex items-center gap-2 mb-3">
                     <Icon name="account_tree" className="text-lg text-secondary" />
                     <span className="font-headline text-base font-bold text-on-surface">Passive Tree</span>
                     <div className="flex-1 h-px bg-outline-variant/20" />
-                    <span className="text-[10px] font-label text-secondary uppercase">{treeAnalysis.swapRecommendations.length} swaps</span>
+                    {treeAnalysis.swapRecommendations?.length > 0 && (
+                      <span className="text-[10px] font-label text-secondary uppercase">{treeAnalysis.swapRecommendations.length} swaps</span>
+                    )}
                   </div>
-                  {treeAnalysis.treeVisual?.nodes?.length > 0 && (
-                    <PassiveTreeMinimap treeVisual={treeAnalysis.treeVisual} />
-                  )}
+                  <PassiveTreeCanvas treeNodes={treeAnalysis.treeNodes} />
                   <div className="mt-3 space-y-1.5">
-                    {treeAnalysis.swapRecommendations.slice(0, 4).map((s, i) => (
+                    {(treeAnalysis.swapRecommendations || []).slice(0, 4).map((s, i) => (
                       <div key={i} className="bg-surface-container-low border-l-2 border-secondary/60 p-3">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-error line-through text-sm">{s.refund}</span>
