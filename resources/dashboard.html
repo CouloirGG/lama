@@ -1244,10 +1244,11 @@
 
     // 1:1 passive tree rendered from GGG's official sprite atlases, with the
     // player's allocation highlighted plus missing/swap nodes. Pan + zoom.
-    function PassiveTreeCanvas({ treeNodes, swaps }) {
+    function PassiveTreeCanvas({ treeNodes, swaps, focus }) {
       const canvasRef = useRef(null);
       const viewRef = useRef(null);          // { scale, cx, cy }
       const dragRef = useRef(null);
+      const pulseRef = useRef(null);         // { ids:Set, start:ms } — clicked-swap pulse
       const [assets, setAssets] = useState(null);
       const [err, setErr] = useState("");
       const [hover, setHover] = useState(null);   // { node, x, y }
@@ -1434,7 +1435,39 @@
             ctx.lineWidth = Math.max(1.5, 9 * v.scale); ctx.strokeStyle = ring; ctx.stroke();
           }
         }
+
+        // Expanding pulse on a clicked swap's nodes (fades over ~0.7s, loops).
+        const pulse = pulseRef.current;
+        if (pulse) {
+          const phase = ((performance.now() - pulse.start) % 700) / 700;
+          for (const n of geom.nodes) {
+            if (!pulse.ids.has(n.id)) continue;
+            const sx = SX(n.x), sy = SY(n.y), base = (n.keystone ? 110 : n.notable ? 80 : 55) * v.scale;
+            ctx.beginPath(); ctx.arc(sx, sy, base + 6 + phase * base * 1.3, 0, 6.2832);
+            ctx.lineWidth = Math.max(2, 6 * v.scale); ctx.strokeStyle = `rgba(255,221,184,${0.9 * (1 - phase)})`; ctx.stroke();
+          }
+        }
       }, [assets, geom, sets, playerAsc]);
+
+      // Click a swap recommendation -> center on its nodes + pulse them.
+      useEffect(() => {
+        if (!focus || !focus.nodes || !focus.nodes.length || !assets || !geom || !viewRef.current) return;
+        const nd = assets.data.nodes;
+        let mx = 0, my = 0, c = 0;
+        for (const id of focus.nodes) { const n = nd[id]; if (n && n.x != null) { mx += n.x; my += n.y; c++; } }
+        if (!c) return;
+        const v = viewRef.current;
+        v.cx = mx / c; v.cy = my / c; v.scale = Math.max(v.scale, 0.42);
+        pulseRef.current = { ids: new Set(focus.nodes.map(String)), start: performance.now() };
+        let raf;
+        const tick = () => {
+          draw();
+          if (pulseRef.current && performance.now() - pulseRef.current.start < 2400) raf = requestAnimationFrame(tick);
+          else { pulseRef.current = null; draw(); }
+        };
+        tick();
+        return () => { if (raf) cancelAnimationFrame(raf); pulseRef.current = null; };
+      }, [focus, assets, geom, draw]);
 
       // Fit the view to the player's allocated region whenever data changes.
       useEffect(() => {
@@ -1928,6 +1961,7 @@
 
     function SinglePageView({ charData, insights, whyInsights, account, character, onRefresh, refreshing }) {
       const [treeAnalysis, setTreeAnalysis] = useState(null);
+      const [treeFocus, setTreeFocus] = useState(null);   // clicked-swap -> snap tree
       const [expandedSlot, setExpandedSlot] = useState(null);
       const [slotPopular, setSlotPopular] = useState({});
 
@@ -2228,14 +2262,17 @@
                       <span className="text-[10px] font-label text-secondary uppercase">{treeAnalysis.swapRecommendations.length} swaps</span>
                     )}
                   </div>
-                  <PassiveTreeCanvas treeNodes={treeAnalysis.treeNodes} swaps={treeAnalysis.swapRecommendations} />
+                  <PassiveTreeCanvas treeNodes={treeAnalysis.treeNodes} swaps={treeAnalysis.swapRecommendations} focus={treeFocus} />
                   <div className="mt-3 space-y-1.5">
                     {(treeAnalysis.swapRecommendations || []).slice(0, 4).map((s, i) => (
-                      <div key={i} className="bg-surface-container-low border-l-2 border-secondary/60 p-3">
+                      <div key={i} onClick={() => setTreeFocus({ nodes: [...(s.takeNodes || []), ...(s.refundNodes || [])], ts: Date.now() })}
+                           className="bg-surface-container-low border-l-2 border-secondary/60 p-3 cursor-pointer hover:bg-surface-container transition-colors"
+                           title="Show on the tree">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-error line-through text-sm">{s.refund}</span>
                           <Icon name="arrow_forward" className="text-xs text-outline" />
                           <span className="text-tertiary text-sm font-bold">{s.take}</span>
+                          <Icon name="my_location" className="text-[11px] text-outline" />
                           <span className="text-[10px] text-outline ml-auto">{s.netPoints > 0 ? `saves ${s.netPoints} pts` : s.netPoints < 0 ? `costs ${-s.netPoints} pts` : "same cost"}</span>
                         </div>
                         <p className="text-xs font-body text-on-surface-variant">{s.summary}</p>

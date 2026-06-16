@@ -2256,6 +2256,10 @@ async def character_tree_analysis(req: TreeAnalysisRequest):
                 "swapTake": tree2.names_to_ids(s.take_notable for s in analysis.swap_recommendations),
                 "swapRefund": tree2.names_to_ids(s.refund_notable for s in analysis.swap_recommendations),
             }
+            # Per-swap node ids so clicking a swap can snap the tree to it.
+            for sw in result.get("swapRecommendations", []):
+                sw["takeNodes"] = tree2.names_to_ids([sw.get("take", "")])
+                sw["refundNodes"] = tree2.names_to_ids([sw.get("refund", "")])
         except Exception as e:
             logger.debug(f"treeNodes build failed (non-fatal): {e}")
 
