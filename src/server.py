@@ -1941,6 +1941,28 @@ class CoachRequest(BaseModel):
     budget: float = 0.0
 
 
+async def _prepare_coach(req: "CoachRequest", loop):
+    """Shared coach setup: lookup + analysis + tree swaps -> (facts, model).
+
+    Returns {"error","status"} on failure, else {"facts","model"}."""
+    char = await loop.run_in_executor(None, _lookup_character_with_fallback, req.account.strip(), req.character.strip())
+    if not char:
+        return {"error": "Character not found", "status": 404}
+    archetype = classify_build(char)
+    # Run the build analysis and the (free) tree-swap fetch concurrently — both
+    # hit the network, so overlapping them shaves several seconds off the coach.
+    swaps_task = asyncio.create_task(_coach_tree_swaps(char, archetype, loop))
+    try:
+        exp = (await loop.run_in_executor(None, why_engine_instance.explain_character, char, archetype)).to_dict()
+    except Exception as e:
+        swaps_task.cancel()
+        logger.error(f"coach: analysis failed: {e}")
+        return {"error": "Analysis failed", "status": 500}
+    swaps = await swaps_task
+    facts = _build_coach_facts(exp, char, swaps, _resolve_budget(req.budget))
+    return {"facts": facts, "model": (req.model or COACH_MODEL).strip()}
+
+
 @app.post("/api/character/coach")
 async def character_coach(req: CoachRequest):
     """Grounded plain-language 'what to focus on' from a local LLM (Ollama)."""
@@ -1952,28 +1974,63 @@ async def character_coach(req: CoachRequest):
     if not req.account.strip() or not req.character.strip():
         return JSONResponse(status_code=400, content={"error": "Account and character required"})
     loop = asyncio.get_running_loop()
-    char = await loop.run_in_executor(None, _lookup_character_with_fallback, req.account.strip(), req.character.strip())
-    if not char:
-        return JSONResponse(status_code=404, content={"error": "Character not found"})
-    archetype = classify_build(char)
-    # Run the build analysis and the (free) tree-swap fetch concurrently — both
-    # hit the network, so overlapping them shaves several seconds off the coach.
-    swaps_task = asyncio.create_task(_coach_tree_swaps(char, archetype, loop))
-    try:
-        exp = (await loop.run_in_executor(None, why_engine_instance.explain_character, char, archetype)).to_dict()
-    except Exception as e:
-        swaps_task.cancel()
-        logger.error(f"coach: analysis failed: {e}")
-        return JSONResponse(status_code=500, content={"error": "Analysis failed"})
-    swaps = await swaps_task
-    facts = _build_coach_facts(exp, char, swaps, _resolve_budget(req.budget))
-    model = (req.model or COACH_MODEL).strip()
+    prep = await _prepare_coach(req, loop)
+    if "error" in prep:
+        return JSONResponse(status_code=prep["status"], content={"error": prep["error"]})
+    facts, model = prep["facts"], prep["model"]
     try:
         coaching = await loop.run_in_executor(None, _ollama_chat, COACH_SYSTEM, facts, model)
     except Exception as e:
         logger.error(f"coach: ollama failed: {e}")
         return JSONResponse(status_code=502, content={"error": f"Coach model failed: {e}"})
     return {"coaching": coaching, "model": model, "facts": facts}
+
+
+@app.post("/api/character/coach-stream")
+async def character_coach_stream(req: CoachRequest):
+    """Streaming coach: the analysis runs first, then the model's tokens stream
+    in as plain text so the panel fills word-by-word instead of blank-spinning."""
+    from fastapi.responses import StreamingResponse
+    if not _ollama_available():
+        return JSONResponse(status_code=503, content={
+            "available": False,
+            "error": "Local AI coach unavailable. Install Ollama and pull a model (e.g. 'ollama pull phi4') to enable it.",
+        })
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character required"})
+    loop = asyncio.get_running_loop()
+    prep = await _prepare_coach(req, loop)
+    if "error" in prep:
+        return JSONResponse(status_code=prep["status"], content={"error": prep["error"]})
+    facts, model = prep["facts"], prep["model"]
+
+    def generate():
+        try:
+            with requests.post(f"{OLLAMA_URL}/api/chat", json={
+                "model": model,
+                "messages": [{"role": "system", "content": COACH_SYSTEM},
+                             {"role": "user", "content": facts}],
+                "stream": True,
+                "options": {"temperature": 0.3, "num_predict": 260},
+            }, stream=True, timeout=240) as r:
+                r.raise_for_status()
+                for line in r.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except Exception:
+                        continue
+                    delta = (obj.get("message") or {}).get("content", "")
+                    if delta:
+                        yield delta
+                    if obj.get("done"):
+                        break
+        except Exception as e:
+            logger.error(f"coach stream failed: {e}")
+
+    return StreamingResponse(generate(), media_type="text/plain; charset=utf-8",
+                             headers={"X-Coach-Model": model, "X-Accel-Buffering": "no"})
 
 
 class FundingRequest(BaseModel):
