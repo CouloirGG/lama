@@ -1452,9 +1452,14 @@
       // Click a swap recommendation -> center on its nodes + pulse them.
       useEffect(() => {
         if (!focus || !focus.nodes || !focus.nodes.length || !assets || !geom || !viewRef.current) return;
+        const cv = canvasRef.current; if (!cv) return;
+        // Make sure the buffer matches the current display size before centering.
+        const rect = cv.getBoundingClientRect();
+        const cw = Math.max(300, Math.floor(rect.width)), ch = Math.max(300, Math.floor(rect.height));
+        if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
         const nd = assets.data.nodes;
         let mx = 0, my = 0, c = 0;
-        for (const id of focus.nodes) { const n = nd[id]; if (n && n.x != null) { mx += n.x; my += n.y; c++; } }
+        for (const id of focus.nodes) { const n = nd[String(id)]; if (n && n.x != null) { mx += n.x; my += n.y; c++; } }
         if (!c) return;
         const v = viewRef.current;
         v.cx = mx / c; v.cy = my / c; v.scale = Math.max(v.scale, 0.42);
@@ -1494,6 +1499,20 @@
         viewRef.current = { scale, cx: mx / c, cy: my / c };
         draw();
       }, [assets, geom, treeNodes, draw]);
+
+      // Keep the canvas backing buffer in sync with its on-screen size (e.g. on
+      // window maximize) so pan/zoom + click-to-snap coordinates stay correct.
+      useEffect(() => {
+        const cv = canvasRef.current; if (!cv) return;
+        const sync = () => {
+          const rect = cv.getBoundingClientRect();
+          const w = Math.max(300, Math.floor(rect.width)), h = Math.max(300, Math.floor(rect.height));
+          if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; draw(); }
+        };
+        const ro = new ResizeObserver(sync);
+        ro.observe(cv);
+        return () => ro.disconnect();
+      }, [draw]);
 
       // Pan + zoom (native listeners so wheel can preventDefault).
       useEffect(() => {
