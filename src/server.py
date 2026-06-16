@@ -1716,6 +1716,7 @@ async def character_why_insights(req: WhyInsightsRequest):
                 m["costTier"] = t["tier"]
                 m["costLabel"] = t["cost"]
         result["whatIf"] = _build_whatif(result)
+        result["supportingStats"] = _supporting_stats(char_data)
         return result
     except Exception as e:
         logger.error(f"Why-engine failed: {e}")
@@ -1872,6 +1873,52 @@ def _build_whatif(exp: dict) -> dict:
     }
 
 
+def _supporting_stats(char) -> list:
+    """DPS-supporting-stat problems from PoB: you can't deal damage if you run
+    out of resource. Detects mana/life sustain deficits."""
+    out = []
+    try:
+        from pob_decoder import decode_pob_code
+        pob = decode_pob_code(char.pob_code) if getattr(char, "pob_code", None) else None
+        if not pob:
+            return out
+        a = pob.stats.all_stats or {}
+
+        def g(k):
+            try:
+                return float(a.get(k, 0) or 0)
+            except Exception:
+                return 0.0
+
+        # Mana sustain: cost/s vs regen + leech, and how long the pool lasts.
+        cost = g("ManaPerSecondCost")
+        regen = g("ManaRegenRecovery") + g("ManaLeechGainRate")
+        pool = g("ManaUnreserved") or g("Mana")
+        if cost > 0 and cost > regen * 1.05:
+            secs = pool / (cost - regen) if cost > regen else 999
+            out.append({
+                "label": "Mana sustain",
+                "severity": "critical" if secs < 4 else "warning",
+                "summary": (f"You spend ~{round(cost)} mana/s attacking but only recover ~{round(regen)}/s — "
+                            f"about {secs:.0f}s before you're dry. Add mana regeneration, mana leech, or reduce "
+                            f"the skill's mana cost; you can't deal damage when you're out of mana."),
+            })
+
+        # Life-cost sustain (life-cost / blood-magic style skills).
+        lcost = g("LifePerSecondCost")
+        lregen = g("LifeRegenRecovery") + g("LifeLeechGainRate")
+        if lcost > 0 and lcost > lregen * 1.05:
+            out.append({
+                "label": "Life sustain",
+                "severity": "warning",
+                "summary": (f"You spend ~{round(lcost)} life/s casting but only recover ~{round(lregen)}/s — "
+                            f"risky on a life-cost build. Add life leech/regen, or more max life to cast and survive."),
+            })
+    except Exception as e:
+        logger.debug(f"supporting stats failed: {e}")
+    return out
+
+
 def _build_coach_facts(exp: dict, char, swaps: list, budget: float = 0.0) -> str:
     sc = exp.get("scorecard", {}) or {}
     synergy = exp.get("synergyMap", []) or []
@@ -1882,6 +1929,9 @@ def _build_coach_facts(exp: dict, char, swaps: list, budget: float = 0.0) -> str
         f"SURVIVAL: {sc.get('ehp','?')} EHP (status: {sc.get('ehpStatus','?')}).",
         f"RESISTANCES: {sc.get('resistSummary','?')}.",
     ]
+    support = _supporting_stats(char)
+    for s in support:
+        lines.append(f"SUPPORTING STAT — {s['label']} ({s['severity']}): {s['summary']}")
     if budget and budget > 0:
         lines.append(f"PLAYER BUDGET: ~{budget:g} divine spendable right now — keep every recommendation within reach of this.")
     # Free actions: passive-tree swaps (no cost) then free gem/keystone changes.
@@ -1914,14 +1964,20 @@ def _build_coach_facts(exp: dict, char, swaps: list, budget: float = 0.0) -> str
             logger.debug(f"coach funding hint failed: {e}")
     facts = "\n".join(lines)
 
-    # Priority order — defensive gates, then free, then cheap, chase last.
+    # Priority order — resource/defensive gates, then free, then cheap, chase last.
     pr = []
+    for s in support:
+        if s.get("severity") == "critical":
+            pr.append(f"{s['label']} — fix first, you can't deal damage without it: {s['summary']}")
     if sc.get("ehpStatus") == "critical":
         pr.append(f"Survival is CRITICAL ({sc.get('ehp','?')} EHP) — add life and cap resistances on your gear (cheap). Fix this before anything else.")
     if sc.get("resistStatus") and sc.get("resistStatus") != "positive":
         pr.append(f"Cap your resistances ({sc.get('resistSummary','?')}) — cheap, and it stops one-shots.")
     if sc.get("ehpStatus") == "warning":
         pr.append(f"Shore up survival ({sc.get('ehp','?')} EHP) soon — cheap defensive gear.")
+    for s in support:
+        if s.get("severity") != "critical":
+            pr.append(f"{s['label']}: {s['summary']}")
     if free_lines:
         pr.append("Make your FREE changes (the passive/gem swaps above) — biggest impact for zero cost.")
     if cheap:

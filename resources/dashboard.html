@@ -1991,6 +1991,24 @@
       );
     }
 
+    function SupportingStatsCard({ stats }) {
+      if (!stats || !stats.length) return null;
+      return (
+        <div className="mb-5 space-y-2">
+          {stats.map((s, i) => (
+            <div key={i} className={`bg-surface-container-low border-l-2 p-3 ${s.severity === "critical" ? "border-error" : "border-secondary"}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <Icon name="water_drop" className={`text-base ${s.severity === "critical" ? "text-error" : "text-secondary"}`} />
+                <span className="font-headline text-sm font-bold text-on-surface">{s.label}</span>
+                <span className={`text-[9px] font-label uppercase ml-auto ${s.severity === "critical" ? "text-error" : "text-secondary"}`}>{s.severity === "critical" ? "Critical" : "Watch"}</span>
+              </div>
+              <p className="text-xs font-body text-on-surface-variant leading-snug">{s.summary}</p>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     function SinglePageView({ charData, insights, whyInsights, account, character, onRefresh, refreshing }) {
       const [treeAnalysis, setTreeAnalysis] = useState(null);
       const [treeFocus, setTreeFocus] = useState(null);   // clicked-swap -> snap tree
@@ -2128,6 +2146,7 @@
             {/* LEFT: What's working / What's not (synergy categories) */}
             <div className="border-r border-outline-variant/20 overflow-y-auto p-5">
               <DpsMeterCard sc={sc} />
+              <SupportingStatsCard stats={whyInsights?.supportingStats} />
               <WhatIfCard whatIf={whyInsights?.whatIf} />
               {synergy.map(cat => {
                 const hasIssues = cat.missing?.length > 0;
