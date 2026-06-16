@@ -1961,6 +1961,12 @@
           }).catch(() => {});
       }, [account, character, charData]);
 
+      // Pre-warm the AI coach in the background so it's ready (instant) when opened.
+      useEffect(() => {
+        if (!account || !character || !charData) return;
+        api("/api/character/coach/prewarm", "POST", { account, character }).catch(() => {});
+      }, [account, character, charData]);
+
       // When a gear slot is expanded, fetch popular items for it
       useEffect(() => {
         if (!expandedSlot || !account || !charData?.name) return;

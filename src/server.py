@@ -1963,6 +1963,60 @@ async def _prepare_coach(req: "CoachRequest", loop):
     return {"facts": facts, "model": (req.model or COACH_MODEL).strip()}
 
 
+# Coach response cache — generated in the background on character load and
+# served instantly when the panel opens, so the slow model is hidden.
+_coach_cache = {}
+_coach_cache_lock = threading.Lock()
+COACH_CACHE_TTL = 900  # 15 minutes
+
+
+def _coach_key(account, character, budget):
+    return f"{account.strip().lower()}|{character.strip().lower()}|{budget:g}"
+
+
+def _coach_cache_get(key):
+    with _coach_cache_lock:
+        e = _coach_cache.get(key)
+        if e and (time.time() - e.get("ts", 0)) < COACH_CACHE_TTL:
+            return dict(e)
+    return None
+
+
+def _coach_cache_set(key, **kw):
+    with _coach_cache_lock:
+        _coach_cache[key] = {**kw, "ts": time.time()}
+
+
+async def _generate_and_cache(req, loop, key):
+    """Run the full coach (analysis + model) and store it in the cache."""
+    _coach_cache_set(key, status="generating")
+    prep = await _prepare_coach(req, loop)
+    if "error" in prep:
+        _coach_cache_set(key, status="error", error=prep["error"])
+        return
+    facts, model = prep["facts"], prep["model"]
+    try:
+        text = await loop.run_in_executor(None, _ollama_chat, COACH_SYSTEM, facts, model)
+    except Exception as e:
+        logger.error(f"coach prewarm generate failed: {e}")
+        _coach_cache_set(key, status="error", error=str(e))
+        return
+    _coach_cache_set(key, status="done", text=text, model=model)
+
+
+@app.post("/api/character/coach/prewarm")
+async def coach_prewarm(req: CoachRequest):
+    """Start generating the coach in the background so it's ready when opened."""
+    if not _ollama_available() or not req.account.strip() or not req.character.strip():
+        return {"status": "skip"}
+    key = _coach_key(req.account, req.character, _resolve_budget(req.budget))
+    e = _coach_cache_get(key)
+    if e and e.get("status") in ("done", "generating"):
+        return {"status": e["status"]}
+    asyncio.create_task(_generate_and_cache(req, asyncio.get_running_loop(), key))
+    return {"status": "warming"}
+
+
 @app.post("/api/character/coach")
 async def character_coach(req: CoachRequest):
     """Grounded plain-language 'what to focus on' from a local LLM (Ollama)."""
@@ -1999,12 +2053,34 @@ async def character_coach_stream(req: CoachRequest):
     if not req.account.strip() or not req.character.strip():
         return JSONResponse(status_code=400, content={"error": "Account and character required"})
     loop = asyncio.get_running_loop()
+    key = _coach_key(req.account, req.character, _resolve_budget(req.budget))
+
+    # If a prewarm is already generating this, wait for it rather than duplicate.
+    e = _coach_cache_get(key)
+    if e and e.get("status") == "generating":
+        for _ in range(360):   # up to ~90s
+            await asyncio.sleep(0.25)
+            e = _coach_cache_get(key)
+            if not e or e.get("status") != "generating":
+                break
+
+    # Cached + done -> serve instantly (the prewarm already paid the cost).
+    if e and e.get("status") == "done" and e.get("text"):
+        cached_text, cached_model = e["text"], e.get("model", COACH_MODEL)
+        def replay():
+            yield cached_text
+        return StreamingResponse(replay(), media_type="text/plain; charset=utf-8",
+                                 headers={"X-Coach-Model": cached_model, "X-Coach-Cached": "1", "X-Accel-Buffering": "no"})
+
+    # Otherwise generate fresh, stream it, and cache the result for next time.
     prep = await _prepare_coach(req, loop)
     if "error" in prep:
         return JSONResponse(status_code=prep["status"], content={"error": prep["error"]})
     facts, model = prep["facts"], prep["model"]
+    _coach_cache_set(key, status="generating")
 
     def generate():
+        acc = []
         try:
             with requests.post(f"{OLLAMA_URL}/api/chat", json={
                 "model": model,
@@ -2023,11 +2099,14 @@ async def character_coach_stream(req: CoachRequest):
                         continue
                     delta = (obj.get("message") or {}).get("content", "")
                     if delta:
+                        acc.append(delta)
                         yield delta
                     if obj.get("done"):
                         break
-        except Exception as e:
-            logger.error(f"coach stream failed: {e}")
+            _coach_cache_set(key, status="done", text="".join(acc), model=model)
+        except Exception as e2:
+            logger.error(f"coach stream failed: {e2}")
+            _coach_cache_set(key, status="error", error=str(e2))
 
     return StreamingResponse(generate(), media_type="text/plain; charset=utf-8",
                              headers={"X-Coach-Model": model, "X-Accel-Buffering": "no"})
