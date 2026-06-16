@@ -1710,11 +1710,16 @@ async def character_why_insights(req: WhyInsightsRequest):
         result = explanations.to_dict()
         # Tag each recommended (missing) item with its cost tier so the gear list
         # can show Free / Cheap / Chase, consistent with the coach.
+        TIER_ORDER = {"free": 0, "cheap": 1, "chase": 2}
         for cat in (result.get("synergyMap") or []):
             for m in (cat.get("missing") or []):
                 t = _cost_tier(m)
                 m["costTier"] = t["tier"]
                 m["costLabel"] = t["cost"]
+            # Affordability-first: free/cheap before chase, then by impact.
+            cat["missing"] = sorted(
+                cat.get("missing") or [],
+                key=lambda m: (TIER_ORDER.get(m.get("costTier"), 9), -(m.get("estimatedPct") or 0)))
         result["whatIf"] = _build_whatif(result)
         result["supportingStats"] = _supporting_stats(char_data)
         return result
