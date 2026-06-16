@@ -373,11 +373,12 @@ class BuildsClient:
         except (ValueError, IndexError):
             return None
 
-    def lookup_character(self, account: str, character: str) -> Optional[CharacterData]:
+    def lookup_character(self, account: str, character: str, force: bool = False) -> Optional[CharacterData]:
         """Look up a character by account + name.
 
         Tries the builds/ladder API first, then falls back to the profile API
         which works for any public character (not just ladder-ranked ones).
+        ``force`` bypasses the local cache to re-fetch from poe.ninja.
 
         Returns CharacterData or None on failure.
         """
@@ -391,7 +392,7 @@ class BuildsClient:
         # poe.ninja uses "-" instead of "#" for discriminators
         normalized_account = account.replace("#", "-")
         cache_key = f"char-{normalized_account}-{character}"
-        cached = self._get_cached(cache_key, TTL_CHARACTER)
+        cached = None if force else self._get_cached(cache_key, TTL_CHARACTER)
         if cached:
             return cached
 

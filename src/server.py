@@ -583,14 +583,15 @@ builds_client = BuildsClient()
 why_engine_instance = WhyEngine(builds_client)
 
 
-def _lookup_character_with_fallback(account: str, character: str):
+def _lookup_character_with_fallback(account: str, character: str, force: bool = False):
     """Look up a character via poe.ninja (ladder + profile APIs).
 
     BuildsClient.lookup_character now tries the builds/ladder API first,
     then falls back to the profile API for non-ladder public characters.
     If both fail and the user is OAuth-connected, try GGG's API directly.
+    ``force`` bypasses the local cache to re-fetch fresh from poe.ninja.
     """
-    result = builds_client.lookup_character(account, character)
+    result = builds_client.lookup_character(account, character, force=force)
     if result:
         return result
 
@@ -1718,6 +1719,25 @@ async def character_why_insights(req: WhyInsightsRequest):
     except Exception as e:
         logger.error(f"Why-engine failed: {e}")
         return {"keystones": [], "gear": {}, "stats": [], "actions": [], "meta": []}
+
+
+@app.post("/api/character/refresh")
+async def character_refresh(req: WhyInsightsRequest):
+    """Force a fresh poe.ninja re-fetch (bypassing LAMA's cache) and drop the
+    cached coach, so recent in-game changes show up. Note: LAMA is only as fresh
+    as poe.ninja, which snapshots characters periodically — not live."""
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character required"})
+    loop = asyncio.get_running_loop()
+    char = await loop.run_in_executor(
+        None, _lookup_character_with_fallback, req.account.strip(), req.character.strip(), True)
+    if not char:
+        return JSONResponse(status_code=404, content={"error": "Character not found"})
+    prefix = f"{req.account.strip().lower()}|{req.character.strip().lower()}|"
+    with _coach_cache_lock:
+        for k in [k for k in list(_coach_cache) if k.startswith(prefix)]:
+            _coach_cache.pop(k, None)
+    return {"ok": True, "name": char.name}
 
 
 # ── AI Coach (grounded local LLM via Ollama) ──────────────────────────────
@@ -3661,7 +3681,10 @@ async def serve_tree2(filepath: str):
         return JSONResponse(status_code=404, content={"error": "Tree asset not found"})
     media_types = {".json": "application/json", ".webp": "image/webp"}
     ext = "." + filepath.rsplit(".", 1)[-1] if "." in filepath else ""
-    return FileResponse(p, media_type=media_types.get(ext, "application/octet-stream"))
+    # The export is immutable per season (branch-pinned), so let the browser
+    # cache it hard — avoids re-downloading ~6MB on every launch.
+    return FileResponse(p, media_type=media_types.get(ext, "application/octet-stream"),
+                        headers={"Cache-Control": "public, max-age=604800, immutable"})
 
 
 # ---------------------------------------------------------------------------

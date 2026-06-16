@@ -1922,7 +1922,7 @@
       );
     }
 
-    function SinglePageView({ charData, insights, whyInsights, account, character }) {
+    function SinglePageView({ charData, insights, whyInsights, account, character, onRefresh, refreshing }) {
       const [treeAnalysis, setTreeAnalysis] = useState(null);
       const [expandedSlot, setExpandedSlot] = useState(null);
       const [slotPopular, setSlotPopular] = useState({});
@@ -1991,6 +1991,13 @@
             <div className="flex items-center gap-3">
               <span className="font-headline text-lg text-on-surface">{charData.name}</span>
               <span className="text-xs text-on-surface-variant">{charData.ascendancy || charData.class} Lv{charData.level}</span>
+              {onRefresh && (
+                <button onClick={onRefresh} disabled={refreshing}
+                        className="text-on-surface-variant hover:text-on-surface disabled:opacity-50"
+                        title="Refresh from poe.ninja (recent in-game changes may take a while to appear there)">
+                  <Icon name="refresh" className={`text-sm ${refreshing ? "animate-spin" : ""}`} />
+                </button>
+              )}
             </div>
             <div className="flex-1" />
             <button
@@ -2408,6 +2415,19 @@
         return data;
       }, []);
 
+      // Force a fresh re-fetch from poe.ninja (bypasses LAMA's cache + the
+      // cached coach), then re-load so all derived panels refresh.
+      const [refreshing, setRefreshing] = useState(false);
+      const refreshCharacter = useCallback(async () => {
+        if (!account || !character || refreshing) return;
+        setRefreshing(true);
+        try {
+          await api("/api/character/refresh", "POST", { account, character });
+          await handleLookup(account, character);
+        } catch (e) { /* ignore */ }
+        setRefreshing(false);
+      }, [account, character, refreshing, handleLookup]);
+
       // WebSocket handler
       const handleWsMessage = useCallback((msg) => {
         switch (msg.type) {
@@ -2450,6 +2470,8 @@
                 whyInsights={whyInsights}
                 account={account}
                 character={character}
+                onRefresh={refreshCharacter}
+                refreshing={refreshing}
               />
             )}
           </div>
