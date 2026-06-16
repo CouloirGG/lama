@@ -75,6 +75,21 @@ def _log(msg):
     except Exception:
         pass
 
+
+def _strip_window_border(hwnd):
+    """Remove the thin frame border line (Windows 11) so the frameless window
+    has no white edge, windowed or maximized. No-op on older Windows."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        fn = ctypes.windll.dwmapi.DwmSetWindowAttribute
+        fn.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+        DWMWA_BORDER_COLOR = 34
+        color = ctypes.c_uint(0xFFFFFFFE)  # DWMWA_COLOR_NONE
+        fn(wintypes.HWND(hwnd), DWMWA_BORDER_COLOR, ctypes.byref(color), ctypes.sizeof(color))
+    except Exception as e:
+        _log(f"[Startup] border strip skipped: {e}")
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -724,6 +739,7 @@ def main():
             hwnd = api._get_hwnd()
             if hwnd:
                 api._install_hook()
+                _strip_window_border(hwnd)
                 _log(f"[Startup] Resize hook installed (hwnd={hwnd}, attempt={attempt})")
                 break
             time.sleep(0.2)

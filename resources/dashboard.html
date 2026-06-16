@@ -1971,6 +1971,10 @@
         api("/api/character/coach/prewarm", "POST", { account, character }).catch(() => {});
       }, [account, character, charData]);
 
+      // Start downloading the passive-tree assets immediately (in parallel with
+      // tree-analysis) so the canvas can render the moment its data arrives.
+      useEffect(() => { loadTree2().catch(() => {}); }, []);
+
       // When a gear slot is expanded, fetch popular items for it
       useEffect(() => {
         if (!expandedSlot || !account || !charData?.name) return;
