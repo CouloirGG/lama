@@ -1715,6 +1715,7 @@ async def character_why_insights(req: WhyInsightsRequest):
                 t = _cost_tier(m)
                 m["costTier"] = t["tier"]
                 m["costLabel"] = t["cost"]
+        result["whatIf"] = _build_whatif(result)
         return result
     except Exception as e:
         logger.error(f"Why-engine failed: {e}")
@@ -1834,6 +1835,41 @@ def _classify_missing(synergy: list, budget: float = 0.0) -> tuple:
     for b in (free, cheap, chase):
         b.sort(key=lambda r: (-(r["impact"] or 0), -(r["adopt"] or 0)))
     return free, cheap, chase
+
+
+def _build_whatif(exp: dict) -> dict:
+    """Estimated EHP/DPS/resists if the player applies the recommendations.
+
+    DPS/EHP are ESTIMATES — the summed impact %s (capped for diminishing
+    returns, and DPS bounded by the build's ceiling). Resist capping is the
+    stated goal of the 'cap your resists' recommendation, so it's exact-ish."""
+    sc = exp.get("scorecard", {}) or {}
+    dps_pct = ehp_pct = 0.0
+    for cat in (exp.get("synergyMap") or []):
+        ck = cat.get("category")
+        for m in (cat.get("missing") or []):
+            p = m.get("estimatedPct") or 0
+            if ck == "dps":
+                dps_pct += p
+            elif ck == "survival":
+                ehp_pct += p
+    dps_pct = min(dps_pct, 60.0)   # cap the aggregate — impacts overlap
+    ehp_pct = min(ehp_pct, 40.0)
+    cur_dps = sc.get("dps") or 0
+    cur_ehp = sc.get("ehp") or 0
+    ceiling = sc.get("dpsCeiling") or 0
+    proj_dps = cur_dps * (1 + dps_pct / 100)
+    if ceiling and proj_dps > ceiling:
+        proj_dps = ceiling
+    proj_ehp = cur_ehp * (1 + ehp_pct / 100)
+    will_cap = bool(sc.get("resistStatus") and sc.get("resistStatus") != "positive")
+    return {
+        "dps": {"current": cur_dps, "projected": round(proj_dps), "deltaPct": round(dps_pct)},
+        "ehp": {"current": cur_ehp, "projected": round(proj_ehp), "deltaPct": round(ehp_pct)},
+        "resists": {"current": sc.get("resistSummary", ""),
+                    "projected": "All capped" if will_cap else sc.get("resistSummary", ""),
+                    "willCap": will_cap},
+    }
 
 
 def _build_coach_facts(exp: dict, char, swaps: list, budget: float = 0.0) -> str:

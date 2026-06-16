@@ -1959,6 +1959,38 @@
       );
     }
 
+    function WhatIfCard({ whatIf }) {
+      if (!whatIf) return null;
+      const { dps, ehp, resists } = whatIf;
+      if (dps.deltaPct <= 0 && ehp.deltaPct <= 0 && !resists.willCap) return null;
+      const fmt = v => v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}K` : `${Math.round(v || 0)}`;
+      const Row = ({ icon, label, cur, proj, delta, changed, color }) => (
+        <div className="flex items-center gap-2 text-xs">
+          <Icon name={icon} className={`text-sm ${color}`} />
+          <span className="text-on-surface-variant w-14">{label}</span>
+          <span className="text-on-surface-variant">{cur}</span>
+          {changed && <Icon name="arrow_forward" className="text-[11px] text-outline" />}
+          {changed && <span className={`font-bold ${color}`}>{proj}</span>}
+          {delta && <span className="text-[10px] text-outline ml-auto">{delta}</span>}
+        </div>
+      );
+      return (
+        <div className="mb-5 bg-surface-container-lowest border border-secondary/25 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Icon name="trending_up" className="text-base text-secondary" />
+            <span className="font-headline text-sm font-bold text-on-surface">If you apply these</span>
+            <span className="text-[9px] font-label uppercase text-outline bg-outline/10 px-1.5 py-0.5">estimate</span>
+          </div>
+          <div className="space-y-1.5">
+            <Row icon="bolt" label="DPS" cur={fmt(dps.current)} proj={fmt(dps.projected)} delta={dps.deltaPct > 0 ? `~+${dps.deltaPct}%` : ""} changed={dps.deltaPct > 0} color="text-primary-container" />
+            <Row icon="shield" label="EHP" cur={fmt(ehp.current)} proj={fmt(ehp.projected)} delta={ehp.deltaPct > 0 ? `~+${ehp.deltaPct}%` : ""} changed={ehp.deltaPct > 0} color="text-tertiary" />
+            <Row icon="security" label="Resists" cur={resists.current} proj={resists.projected} delta="" changed={resists.willCap} color="text-error" />
+          </div>
+          <p className="text-[9px] text-outline mt-2 leading-snug">DPS/EHP are rough estimates from the listed impacts (not a full recalc); resist-capping is the goal of the recommended fixes.</p>
+        </div>
+      );
+    }
+
     function SinglePageView({ charData, insights, whyInsights, account, character, onRefresh, refreshing }) {
       const [treeAnalysis, setTreeAnalysis] = useState(null);
       const [treeFocus, setTreeFocus] = useState(null);   // clicked-swap -> snap tree
@@ -2096,6 +2128,7 @@
             {/* LEFT: What's working / What's not (synergy categories) */}
             <div className="border-r border-outline-variant/20 overflow-y-auto p-5">
               <DpsMeterCard sc={sc} />
+              <WhatIfCard whatIf={whyInsights?.whatIf} />
               {synergy.map(cat => {
                 const hasIssues = cat.missing?.length > 0;
                 const catIcon = { dps: "bolt", survival: "shield", clear_speed: "speed", quality: "auto_awesome" }[cat.category] || "category";
