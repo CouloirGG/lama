@@ -1436,38 +1436,52 @@
           }
         }
 
-        // Expanding pulse on a clicked swap's nodes (fades over ~0.7s, loops).
+        // Clicked-swap highlight: solid ring + expanding pulse, take=blue, refund=gold.
         const pulse = pulseRef.current;
         if (pulse) {
-          const phase = ((performance.now() - pulse.start) % 700) / 700;
+          const phase = ((performance.now() - pulse.start) % 800) / 800;
           for (const n of geom.nodes) {
-            if (!pulse.ids.has(n.id)) continue;
+            const isTake = pulse.take.has(n.id), isRefund = pulse.refund.has(n.id);
+            if (!isTake && !isRefund) continue;
             const sx = SX(n.x), sy = SY(n.y), base = (n.keystone ? 110 : n.notable ? 80 : 55) * v.scale;
-            ctx.beginPath(); ctx.arc(sx, sy, base + 6 + phase * base * 1.3, 0, 6.2832);
-            ctx.lineWidth = Math.max(2, 6 * v.scale); ctx.strokeStyle = `rgba(255,221,184,${0.9 * (1 - phase)})`; ctx.stroke();
+            const rgb = isTake ? "181,234,255" : "233,193,118";   // tertiary / secondary
+            ctx.beginPath(); ctx.arc(sx, sy, base + 8, 0, 6.2832);
+            ctx.lineWidth = Math.max(2.5, 8 * v.scale); ctx.strokeStyle = `rgba(${rgb},0.95)`; ctx.stroke();
+            ctx.beginPath(); ctx.arc(sx, sy, base + 8 + phase * base * 1.3, 0, 6.2832);
+            ctx.lineWidth = Math.max(2, 6 * v.scale); ctx.strokeStyle = `rgba(${rgb},${0.8 * (1 - phase)})`; ctx.stroke();
           }
         }
       }, [assets, geom, sets, playerAsc]);
 
-      // Click a swap recommendation -> center on its nodes + pulse them.
+      // Click a swap recommendation -> fit both its nodes in view + circle the
+      // take (blue) and refund (gold) nodes distinctly, with a pulse.
       useEffect(() => {
-        if (!focus || !focus.nodes || !focus.nodes.length || !assets || !geom || !viewRef.current) return;
+        if (!focus || !assets || !geom || !viewRef.current) return;
+        const take = (focus.take || []).map(String), refund = (focus.refund || []).map(String);
+        const allIds = [...take, ...refund];
+        if (!allIds.length) return;
         const cv = canvasRef.current; if (!cv) return;
-        // Make sure the buffer matches the current display size before centering.
         const rect = cv.getBoundingClientRect();
         const cw = Math.max(300, Math.floor(rect.width)), ch = Math.max(300, Math.floor(rect.height));
         if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
         const nd = assets.data.nodes;
-        let mx = 0, my = 0, c = 0;
-        for (const id of focus.nodes) { const n = nd[String(id)]; if (n && n.x != null) { mx += n.x; my += n.y; c++; } }
+        let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9, c = 0;
+        for (const id of allIds) {
+          const n = nd[id]; if (!n || n.x == null) continue;
+          minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x);
+          miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y); c++;
+        }
         if (!c) return;
         const v = viewRef.current;
-        v.cx = mx / c; v.cy = my / c; v.scale = Math.max(v.scale, 0.42);
-        pulseRef.current = { ids: new Set(focus.nodes.map(String)), start: performance.now() };
+        v.cx = (minx + maxx) / 2; v.cy = (miny + maxy) / 2;
+        // Zoom so both nodes fit with padding, but stay readable.
+        const bw = Math.max(900, maxx - minx), bh = Math.max(900, maxy - miny);
+        v.scale = Math.max(0.18, Math.min(0.5, Math.min(cv.width / (bw * 1.9), cv.height / (bh * 1.9))));
+        pulseRef.current = { take: new Set(take), refund: new Set(refund), start: performance.now() };
         let raf;
         const tick = () => {
           draw();
-          if (pulseRef.current && performance.now() - pulseRef.current.start < 2400) raf = requestAnimationFrame(tick);
+          if (pulseRef.current && performance.now() - pulseRef.current.start < 3000) raf = requestAnimationFrame(tick);
           else { pulseRef.current = null; draw(); }
         };
         tick();
@@ -2336,7 +2350,7 @@
                   <PassiveTreeCanvas treeNodes={treeAnalysis.treeNodes} swaps={treeAnalysis.swapRecommendations} focus={treeFocus} />
                   <div className="mt-3 space-y-1.5">
                     {(treeAnalysis.swapRecommendations || []).slice(0, 4).map((s, i) => (
-                      <div key={i} onClick={() => setTreeFocus({ nodes: [...(s.takeNodes || []), ...(s.refundNodes || [])], ts: Date.now() })}
+                      <div key={i} onClick={() => setTreeFocus({ take: s.takeNodes || [], refund: s.refundNodes || [], ts: Date.now() })}
                            className="bg-surface-container-low border-l-2 border-secondary/60 p-3 cursor-pointer hover:bg-surface-container transition-colors"
                            title="Show on the tree">
                         <div className="flex items-center gap-2 mb-1">
