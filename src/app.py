@@ -282,16 +282,38 @@ class WindowApi:
             ctypes.windll.user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
 
     def toggle_maximize(self):
+        """Toggle a work-area maximize and return the new state.
+
+        We deliberately do NOT use SW_MAXIMIZE: a frameless window maximized
+        that way fills the whole monitor and covers the taskbar. Instead we
+        resize to the work area (taskbar excluded) and remember the prior rect
+        to restore to."""
         import ctypes
         hwnd = self._get_hwnd()
-        if hwnd:
-            self._guard_until = 0  # allow maximize resize
-            if ctypes.windll.user32.IsZoomed(hwnd):
-                ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-            else:
-                ctypes.windll.user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
-            # Persist maximized state after a brief delay
-            threading.Timer(0.3, self._persist_geometry).start()
+        if not hwnd:
+            return False
+
+        class RECT(ctypes.Structure):
+            _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                        ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+        self._guard_until = 0  # allow the resize
+        if getattr(self, "_maximized", False):
+            r = getattr(self, "_restore_rect", None)
+            if r:
+                ctypes.windll.user32.MoveWindow(hwnd, r[0], r[1], r[2], r[3], True)
+            self._maximized = False
+        else:
+            cur = RECT()
+            ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(cur))
+            self._restore_rect = (cur.left, cur.top, cur.right - cur.left, cur.bottom - cur.top)
+            work = RECT()
+            ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0)  # SPI_GETWORKAREA
+            ctypes.windll.user32.MoveWindow(hwnd, work.left, work.top,
+                                            work.right - work.left, work.bottom - work.top, True)
+            self._maximized = True
+        threading.Timer(0.3, self._persist_geometry).start()
+        return self._maximized
 
     def resize_to(self, width, height):
         """Resize and center the window (called from JS size presets)."""
@@ -319,6 +341,7 @@ class WindowApi:
         y = work.top + (sh - h) // 2
         self._guard_until = 0
         ctypes.windll.user32.MoveWindow(hwnd, x, y, w, h, True)
+        self._maximized = False  # a preset size un-maximizes
         # Persist
         self._pending_geo = (w, h, False)
         threading.Timer(0.3, self._persist_geometry).start()
@@ -339,7 +362,7 @@ class WindowApi:
             hwnd = self._get_hwnd()
             if not hwnd:
                 return
-            is_max = bool(ctypes.windll.user32.IsZoomed(hwnd))
+            is_max = getattr(self, "_maximized", False) or bool(ctypes.windll.user32.IsZoomed(hwnd))
             # If maximized, don't overwrite the normal-size values
             if is_max:
                 geo = getattr(self, "_pending_geo", None)

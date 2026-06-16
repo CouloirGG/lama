@@ -228,6 +228,10 @@
     // NavBar (replaces TopBar) — fixed top, full width
     // -----------------------------------------------------------------------
     function NavBar({ onSettingsClick }) {
+      const [maximized, setMaximized] = useState(false);
+      const toggleMax = async () => {
+        try { setMaximized(!!(await getWindowApi()?.toggle_maximize())); } catch (e) {}
+      };
       return (
         <div
           className="pywebview-drag-region fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 bg-surface-container-lowest border-b border-outline-variant"
@@ -241,8 +245,8 @@
             <button onClick={() => getWindowApi()?.minimize()} className="p-2 hover:bg-surface-container transition-colors text-on-surface-variant hover:text-on-surface" title="Minimize">
               <Icon name="remove" />
             </button>
-            <button onClick={() => getWindowApi()?.toggle_maximize()} className="p-2 hover:bg-surface-container transition-colors text-on-surface-variant hover:text-on-surface" title="Maximize">
-              <Icon name="crop_square" />
+            <button onClick={toggleMax} className="p-2 hover:bg-surface-container transition-colors text-on-surface-variant hover:text-on-surface" title={maximized ? "Restore" : "Maximize"}>
+              <Icon name={maximized ? "filter_none" : "crop_square"} />
             </button>
             <button onClick={() => getWindowApi()?.quit()} className="p-2 hover:bg-surface-container transition-colors text-on-surface-variant hover:text-error" title="Close">
               <Icon name="close" />
