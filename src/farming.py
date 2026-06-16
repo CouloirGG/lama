@@ -120,7 +120,7 @@ def classify_stage(scorecard: dict, level) -> dict:
     return {"stage": stage, "label": label, "why": why}
 
 
-def funding_plan(scorecard: dict, level, chase_items=None) -> dict:
+def funding_plan(scorecard: dict, level, chase_items=None, budget: float = 0.0) -> dict:
     """Personalized, grounded 'how to fund it' plan for this character."""
     st = classify_stage(scorecard, level)
     stage = st["stage"]
@@ -133,9 +133,12 @@ def funding_plan(scorecard: dict, level, chase_items=None) -> dict:
     total = round(sum((c.get("div") or 0) for c in chase), 1)
     gap = None
     if chase:
+        have = round(budget, 1) if budget and budget > 0 else None
         gap = {
             "items": [{"name": c.get("name"), "div": c.get("div"), "cost": c.get("cost")} for c in chase],
             "totalDiv": total if total > 0 else None,
+            "budgetDiv": have,
+            "remainingDiv": (round(max(0.0, total - budget), 1) if (total > 0 and have is not None) else None),
         }
     return {
         "stage": stage,

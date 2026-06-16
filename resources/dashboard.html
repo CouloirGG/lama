@@ -1637,14 +1637,32 @@
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(true);
       const [error, setError] = useState("");
+      const [budget, setBudget] = useState(0);          // applied divine budget
+      const [budgetInput, setBudgetInput] = useState(""); // text field
+      const [budgetReady, setBudgetReady] = useState(false);
 
+      // Load the saved budget once.
       useEffect(() => {
-        if (!account || !character) return;
+        api("/api/settings").then(s => {
+          const b = s?.player_budget_div || 0;
+          setBudget(b); setBudgetInput(b ? String(b) : "");
+        }).finally(() => setBudgetReady(true));
+      }, []);
+
+      // (Re)build the plan when the applied budget changes.
+      useEffect(() => {
+        if (!account || !character || !budgetReady) return;
         setLoading(true); setError("");
-        api("/api/character/funding", "POST", { account, character })
+        api("/api/character/funding", "POST", { account, character, budget })
           .then(d => { setLoading(false); if (d.error) setError(d.error); else setData(d); })
           .catch(() => { setLoading(false); setError("Failed to build a funding plan."); });
-      }, [account, character]);
+      }, [account, character, budgetReady, budget]);
+
+      const applyBudget = () => {
+        const v = Math.max(0, parseFloat(budgetInput) || 0);
+        setBudget(v);
+        api("/api/settings", "POST", { player_budget_div: v }).catch(() => {});
+      };
 
       if (loading) return (
         <div className="flex-1 flex flex-col items-center justify-center py-16 gap-3">
@@ -1664,6 +1682,14 @@
               <span className="text-[10px] font-label uppercase tracking-wide text-on-surface-variant">Your stage</span>
               <span className={`text-sm font-bold ${stageColor}`}>{data.stageLabel}</span>
               {data.stageWhy && <span className="text-[10px] text-outline">({data.stageWhy})</span>}
+              <div className="flex-1" />
+              <span className="text-[10px] text-on-surface-variant">Budget</span>
+              <input type="number" min="0" value={budgetInput}
+                     onChange={e => setBudgetInput(e.target.value)}
+                     onBlur={applyBudget}
+                     onKeyDown={e => { if (e.key === "Enter") applyBudget(); }}
+                     placeholder="div"
+                     className="w-16 px-2 py-1 bg-surface-container border border-outline-variant text-xs text-on-surface placeholder-outline focus:border-tertiary focus:outline-none" />
             </div>
             {gap && gap.items && gap.items.length > 0 && (
               <p className="text-xs text-on-surface-variant mt-2">
@@ -1671,7 +1697,11 @@
                 {gap.items.map((g, i) => (
                   <span key={i}><span className="text-secondary">{g.name}</span>{g.cost ? ` (${g.cost})` : ""}{i < gap.items.length - 1 ? ", " : ""}</span>
                 ))}
-                {gap.totalDiv ? <span> — ~{gap.totalDiv} div to go.</span> : null}
+                {gap.totalDiv ? (
+                  gap.budgetDiv != null
+                    ? <span> — you have ~{gap.budgetDiv} div, <span className="text-secondary">~{gap.remainingDiv} div to go</span>.</span>
+                    : <span> — ~{gap.totalDiv} div to go.</span>
+                ) : null}
               </p>
             )}
           </div>
@@ -1992,14 +2022,27 @@
                             <span className="font-headline text-sm text-on-surface">{m.name}</span>
                             {m.slot && <span className="text-[10px] text-outline ml-2">{m.slot}</span>}
                           </div>
-                          {m.estimatedPct > 0 && (
-                            <span className="text-[10px] font-label text-secondary shrink-0">+{Math.round(m.estimatedPct)}%</span>
-                          )}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {m.estimatedPct > 0 && (
+                              <span className="text-[10px] font-label text-secondary">+{Math.round(m.estimatedPct)}%</span>
+                            )}
+                            {m.costTier && (
+                              <span title={m.costLabel}
+                                    className={`text-[9px] font-label uppercase px-1.5 py-0.5 ${m.costTier === "free" ? "text-primary-container bg-primary-container/10" : m.costTier === "cheap" ? "text-tertiary bg-tertiary/10" : "text-error bg-error/10"}`}>
+                                {m.costTier === "free" ? "Free" : m.costTier === "cheap" ? "Cheap" : "Chase"}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <p className="text-xs font-body text-on-surface-variant mt-1">{m.contribution}</p>
-                        {m.adoptionPct > 0 && (
-                          <span className="text-[10px] text-outline mt-1 block">{Math.round(m.adoptionPct)}% of top players have this</span>
-                        )}
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {m.costTier && m.costTier !== "free" && m.costLabel && (
+                            <span className="text-[10px] text-on-surface-variant">{m.costLabel}</span>
+                          )}
+                          {m.adoptionPct > 0 && (
+                            <span className="text-[10px] text-outline">{Math.round(m.adoptionPct)}% of top players have this</span>
+                          )}
+                        </div>
                       </div>
                     ))}
 

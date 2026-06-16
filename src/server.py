@@ -844,6 +844,7 @@ class StartRequest(BaseModel):
 
 class SettingsRequest(BaseModel):
     league: Optional[str] = None
+    player_budget_div: Optional[float] = None   # player's spendable divine budget
     no_filter_update: Optional[bool] = None
     auto_start: Optional[bool] = None
     font_size: Optional[int] = None
@@ -1705,7 +1706,15 @@ async def character_why_insights(req: WhyInsightsRequest):
         explanations = await loop.run_in_executor(
             None, why_engine_instance.explain_character, char_data, archetype
         )
-        return explanations.to_dict()
+        result = explanations.to_dict()
+        # Tag each recommended (missing) item with its cost tier so the gear list
+        # can show Free / Cheap / Chase, consistent with the coach.
+        for cat in (result.get("synergyMap") or []):
+            for m in (cat.get("missing") or []):
+                t = _cost_tier(m)
+                m["costTier"] = t["tier"]
+                m["costLabel"] = t["cost"]
+        return result
     except Exception as e:
         logger.error(f"Why-engine failed: {e}")
         return {"keystones": [], "gear": {}, "stats": [], "actions": [], "meta": []}
@@ -1749,8 +1758,11 @@ GEAR_SLOTS = {"helm", "bodyarmour", "gloves", "boots", "belt", "amulet",
 CHEAP_DIV_MAX = 5.0   # a priced unique at/under this many divine counts as 'cheap'
 
 
-def _cost_tier(m: dict) -> dict:
-    """Classify a missing recommendation by cost: free / cheap / chase."""
+def _cost_tier(m: dict, budget: float = 0.0) -> dict:
+    """Classify a missing recommendation by cost: free / cheap / chase.
+
+    When the player gives a budget, anything they can actually afford counts as
+    'cheap' and only what's out of reach is a 'chase' item."""
     name = m.get("name") or ""
     nl = name.lower()
     slot = (m.get("slot") or "").lower()
@@ -1769,14 +1781,15 @@ def _cost_tier(m: dict) -> dict:
                 div = round(pd["divine_value"], 2)
         except Exception:
             div = None
+    threshold = budget if budget and budget > 0 else CHEAP_DIV_MAX
     if div is not None:
-        return {"tier": "cheap" if div <= CHEAP_DIV_MAX else "chase", "cost": f"~{div} div", "div": div}
+        return {"tier": "cheap" if div <= threshold else "chase", "cost": f"~{div} div", "div": div}
     if slot in GEAR_SLOTS:   # an unpriced/illiquid unique top builds run = a chase item
         return {"tier": "chase", "cost": "expensive chase unique"}
     return {"tier": "cheap", "cost": "minor upgrade"}
 
 
-def _classify_missing(synergy: list) -> tuple:
+def _classify_missing(synergy: list, budget: float = 0.0) -> tuple:
     """Flatten synergy 'missing' items into (free, cheap, chase) buckets, dropping
     support-gem suggestions essentially no top build actually runs (noise)."""
     free, cheap, chase = [], [], []
@@ -1789,7 +1802,7 @@ def _classify_missing(synergy: list) -> tuple:
             adopt = m.get("adoptionPct") or 0
             if name.lower().startswith("support:") and adopt < 10:
                 continue
-            t = _cost_tier(m)
+            t = _cost_tier(m, budget)
             rec = {"name": name, "cat": label, "impact": m.get("estimatedPct") or 0,
                    "adopt": adopt, "cost": t["cost"], "div": t.get("div")}
             (free if t["tier"] == "free" else cheap if t["tier"] == "cheap" else chase).append(rec)
@@ -1798,16 +1811,18 @@ def _classify_missing(synergy: list) -> tuple:
     return free, cheap, chase
 
 
-def _build_coach_facts(exp: dict, char, swaps: list) -> str:
+def _build_coach_facts(exp: dict, char, swaps: list, budget: float = 0.0) -> str:
     sc = exp.get("scorecard", {}) or {}
     synergy = exp.get("synergyMap", []) or []
-    free, cheap, chase = _classify_missing(synergy)
+    free, cheap, chase = _classify_missing(synergy, budget)
     lines = [
         f"CHARACTER: {char.name} — {char.ascendancy or char.char_class}, Level {char.level}, main skill {sc.get('dpsSkill') or 'unknown'}.",
         f"DPS: {sc.get('dpsLabel','unknown')} ({sc.get('dpsPercentile','?')}th percentile among this build).",
         f"SURVIVAL: {sc.get('ehp','?')} EHP (status: {sc.get('ehpStatus','?')}).",
         f"RESISTANCES: {sc.get('resistSummary','?')}.",
     ]
+    if budget and budget > 0:
+        lines.append(f"PLAYER BUDGET: ~{budget:g} divine spendable right now — keep every recommendation within reach of this.")
     # Free actions: passive-tree swaps (no cost) then free gem/keystone changes.
     free_lines = [f"passive tree swap — {s}" for s in (swaps or [])[:3]]
     free_lines += [f"{r['name']} (+{round(r['impact'])}% {r['cat'].lower()}, free)" for r in free[:3]]
@@ -1899,10 +1914,25 @@ def _ollama_chat(system: str, user: str, model: str = COACH_MODEL, timeout: int 
     return ((r.json() or {}).get("message", {}) or {}).get("content", "").strip()
 
 
+def _resolve_budget(req_budget) -> float:
+    """Player's spendable divine budget: explicit request value, else saved setting."""
+    try:
+        b = float(req_budget or 0)
+    except Exception:
+        b = 0.0
+    if b <= 0:
+        try:
+            b = float(load_settings().get("player_budget_div", 0) or 0)
+        except Exception:
+            b = 0.0
+    return b if b > 0 else 0.0
+
+
 class CoachRequest(BaseModel):
     account: str
     character: str
     model: str = ""
+    budget: float = 0.0
 
 
 @app.post("/api/character/coach")
@@ -1926,7 +1956,7 @@ async def character_coach(req: CoachRequest):
         logger.error(f"coach: analysis failed: {e}")
         return JSONResponse(status_code=500, content={"error": "Analysis failed"})
     swaps = await _coach_tree_swaps(char, archetype, loop)
-    facts = _build_coach_facts(exp, char, swaps)
+    facts = _build_coach_facts(exp, char, swaps, _resolve_budget(req.budget))
     model = (req.model or COACH_MODEL).strip()
     try:
         coaching = await loop.run_in_executor(None, _ollama_chat, COACH_SYSTEM, facts, model)
@@ -1939,6 +1969,7 @@ async def character_coach(req: CoachRequest):
 class FundingRequest(BaseModel):
     account: str
     character: str
+    budget: float = 0.0
 
 
 @app.post("/api/character/funding")
@@ -1959,9 +1990,10 @@ async def character_funding(req: FundingRequest):
         logger.error(f"funding: analysis failed: {e}")
         return JSONResponse(status_code=500, content={"error": "Analysis failed"})
     sc = exp.get("scorecard", {}) or {}
-    _free, _cheap, chase = _classify_missing(exp.get("synergyMap", []) or [])
+    budget = _resolve_budget(req.budget)
+    _free, _cheap, chase = _classify_missing(exp.get("synergyMap", []) or [], budget)
     import farming
-    return farming.funding_plan(sc, char.level, chase)
+    return farming.funding_plan(sc, char.level, chase, budget)
 
 
 class TreeAnalysisRequest(BaseModel):
