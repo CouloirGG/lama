@@ -1725,16 +1725,145 @@ COACH_SYSTEM = (
     "RULES:\n"
     "- Use ONLY the facts given. NEVER invent or name a specific item, unique, flask, gem, "
     "keystone, passive, price, number, or mechanic that is not in the facts.\n"
-    "- When a fix is general (e.g. survival is low), describe it generically — 'add more life "
-    "and cap your resistances on your gear' — do NOT name a specific item LAMA did not provide.\n"
-    "- This is Path of Exile 2, which is NOT Path of Exile 1; never reference PoE1-only items, "
-    "uniques, pantheons, or mechanics.\n"
-    "- LAMA has already ranked the priorities; coach in that exact order.\n"
-    "Write 3-5 short sentences straight to the player: lead with priority #1 and WHY it "
-    "matters, then briefly cover the next one or two, naming ONLY the items/stats from the "
-    "facts. Be specific and encouraging, end with one short line of motivation. Plain "
-    "friendly prose only — no markdown headers or bullet lists."
+    "- This is Path of Exile 2, NOT Path of Exile 1; never reference PoE1-only items or mechanics.\n"
+    "- MONEY MATTERS — assume the player is on a tight budget (a few divine at most). ALWAYS "
+    "lead with the FREE and CHEAP changes (passive/gem swaps, capping resistances, improving "
+    "gear they already own). Cover those first and explain the impact.\n"
+    "- Expensive 'chase' items are LONG-TERM GOALS only. Mention them last, briefly, and ALWAYS "
+    "with their cost (e.g. 'down the line, the ~700 div Headhunter'). NEVER open with an "
+    "expensive item and never imply the player should buy it now.\n"
+    "- LAMA has already ranked the priorities by impact AND affordability; coach in that order.\n"
+    "Write 4-6 short sentences straight to the player: lead with the free/cheap priority #1 and "
+    "WHY, cover the next free/cheap ones naming only the facts' items/stats, then close by naming "
+    "the chase goal with its cost as something to work toward. End with one line of encouragement. "
+    "Plain friendly prose only — no markdown headers or bullet lists."
 )
+
+
+# Cost classification for recommendations -----------------------------------
+GEAR_SLOTS = {"helm", "bodyarmour", "gloves", "boots", "belt", "amulet",
+              "ring", "ring2", "weapon", "weapon2", "quiver", "shield", "focus"}
+CHEAP_DIV_MAX = 5.0   # a priced unique at/under this many divine counts as 'cheap'
+
+
+def _cost_tier(m: dict) -> dict:
+    """Classify a missing recommendation by cost: free / cheap / chase."""
+    name = m.get("name") or ""
+    nl = name.lower()
+    slot = (m.get("slot") or "").lower()
+    # Free: support-gem swaps, passive/keystone tree changes.
+    if nl.startswith("support:") or m.get("sourceType") == "keystone" or "passive" in slot:
+        return {"tier": "free", "cost": "free"}
+    # Improving gear the player already owns (craft/buy a better-rolled rare) — affordable.
+    if "missing key mods" in nl or (not slot and "(" in name):
+        return {"tier": "cheap", "cost": "cheap — improve gear you already own"}
+    # A specific item to acquire — price it against the live economy.
+    div = None
+    if price_cache:
+        try:
+            pd = price_cache.lookup(name, "", 0)
+            if pd and pd.get("divine_value"):
+                div = round(pd["divine_value"], 2)
+        except Exception:
+            div = None
+    if div is not None:
+        return {"tier": "cheap" if div <= CHEAP_DIV_MAX else "chase", "cost": f"~{div} div", "div": div}
+    if slot in GEAR_SLOTS:   # an unpriced/illiquid unique top builds run = a chase item
+        return {"tier": "chase", "cost": "expensive chase unique"}
+    return {"tier": "cheap", "cost": "minor upgrade"}
+
+
+def _classify_missing(synergy: list) -> tuple:
+    """Flatten synergy 'missing' items into (free, cheap, chase) buckets, dropping
+    support-gem suggestions essentially no top build actually runs (noise)."""
+    free, cheap, chase = [], [], []
+    for cat in synergy:
+        label = cat.get("label") or ""
+        for m in (cat.get("missing") or []):
+            name = m.get("name") or ""
+            if not name:
+                continue
+            adopt = m.get("adoptionPct") or 0
+            if name.lower().startswith("support:") and adopt < 10:
+                continue
+            t = _cost_tier(m)
+            rec = {"name": name, "cat": label, "impact": m.get("estimatedPct") or 0,
+                   "adopt": adopt, "cost": t["cost"]}
+            (free if t["tier"] == "free" else cheap if t["tier"] == "cheap" else chase).append(rec)
+    for b in (free, cheap, chase):
+        b.sort(key=lambda r: (-(r["impact"] or 0), -(r["adopt"] or 0)))
+    return free, cheap, chase
+
+
+def _build_coach_facts(exp: dict, char, swaps: list) -> str:
+    sc = exp.get("scorecard", {}) or {}
+    synergy = exp.get("synergyMap", []) or []
+    free, cheap, chase = _classify_missing(synergy)
+    lines = [
+        f"CHARACTER: {char.name} — {char.ascendancy or char.char_class}, Level {char.level}, main skill {sc.get('dpsSkill') or 'unknown'}.",
+        f"DPS: {sc.get('dpsLabel','unknown')} ({sc.get('dpsPercentile','?')}th percentile among this build).",
+        f"SURVIVAL: {sc.get('ehp','?')} EHP (status: {sc.get('ehpStatus','?')}).",
+        f"RESISTANCES: {sc.get('resistSummary','?')}.",
+    ]
+    # Free actions: passive-tree swaps (no cost) then free gem/keystone changes.
+    free_lines = [f"passive tree swap — {s}" for s in (swaps or [])[:3]]
+    free_lines += [f"{r['name']} (+{round(r['impact'])}% {r['cat'].lower()}, free)" for r in free[:3]]
+    if free_lines:
+        lines.append("FREE CHANGES (do these first, no cost): " + "; ".join(free_lines))
+    if cheap:
+        lines.append("CHEAP UPGRADES: " + "; ".join(
+            f"{r['name']} (+{round(r['impact'])}% {r['cat'].lower()}, {r['cost']})" for r in cheap[:4]))
+    if chase:
+        lines.append("LONG-TERM CHASE (save up — do NOT tell the player to buy now): " + "; ".join(
+            f"{r['name']} ({r['cost']}, used by {round(r['adopt'])}% of top builds)" for r in chase[:3]))
+    facts = "\n".join(lines)
+
+    # Priority order — defensive gates, then free, then cheap, chase last.
+    pr = []
+    if sc.get("ehpStatus") == "critical":
+        pr.append(f"Survival is CRITICAL ({sc.get('ehp','?')} EHP) — add life and cap resistances on your gear (cheap). Fix this before anything else.")
+    if sc.get("resistStatus") and sc.get("resistStatus") != "positive":
+        pr.append(f"Cap your resistances ({sc.get('resistSummary','?')}) — cheap, and it stops one-shots.")
+    if sc.get("ehpStatus") == "warning":
+        pr.append(f"Shore up survival ({sc.get('ehp','?')} EHP) soon — cheap defensive gear.")
+    if free_lines:
+        pr.append("Make your FREE changes (the passive/gem swaps above) — biggest impact for zero cost.")
+    if cheap:
+        pr.append(f"Then the cheap upgrades: {', '.join(r['name'] for r in cheap[:2])}.")
+    if chase:
+        pr.append(f"Long-term goal only (expensive, don't buy yet): {chase[0]['name']} ({chase[0]['cost']}).")
+    if pr:
+        facts += "\n\nPRIORITY ORDER (ranked by LAMA — affordable + high-impact first; coach in this exact order):\n" + \
+                 "\n".join(f"{i+1}. {p}" for i, p in enumerate(pr[:5]))
+    return facts
+
+
+async def _coach_tree_swaps(char, archetype, loop) -> list:
+    """Free passive-tree swaps vs the top build for this archetype (summaries)."""
+    try:
+        from pob_decoder import decode_pob_code
+        from tree_analyzer import TreeAnalyzer
+        player_pob = decode_pob_code(char.pob_code) if char.pob_code else None
+        if not player_pob or not player_pob.passive_nodes:
+            return []
+        char_class = char.ascendancy or char.char_class
+        profile = await loop.run_in_executor(
+            None, builds_client.fetch_archetype_profile, char_class, archetype.main_skill)
+        top_nodes = None
+        if profile and profile.get("featuredCharacters"):
+            tc = profile["featuredCharacters"][0]
+            top_char = await loop.run_in_executor(
+                None, _lookup_character_with_fallback, tc.get("account", ""), tc.get("name", ""))
+            if top_char and top_char.pob_code:
+                tp = decode_pob_code(top_char.pob_code)
+                top_nodes = tp.passive_nodes if tp else None
+        analyzer = TreeAnalyzer()
+        analysis = await loop.run_in_executor(None, analyzer.analyze, player_pob.passive_nodes, top_nodes)
+        return [s.impact_summary for s in (analysis.swap_recommendations or [])
+                if getattr(s, "impact_summary", "")][:3]
+    except Exception as e:
+        logger.debug(f"coach tree swaps failed: {e}")
+        return []
 
 
 def _ollama_available() -> bool:
@@ -1754,50 +1883,6 @@ def _ollama_chat(system: str, user: str, model: str = COACH_MODEL, timeout: int 
     }, timeout=timeout)
     r.raise_for_status()
     return ((r.json() or {}).get("message", {}) or {}).get("content", "").strip()
-
-
-def _compute_coach_priorities(sc: dict, synergy: list) -> list:
-    """Rank issues deterministically (defense gates before damage) so the model narrates."""
-    pr = []
-    if sc.get("ehpStatus") == "critical":
-        pr.append(f"Survival is CRITICAL: only {sc.get('ehp','?')} EHP — fix this before chasing damage.")
-    if sc.get("resistStatus") and sc.get("resistStatus") != "positive":
-        pr.append(f"Resistances are not capped ({sc.get('resistSummary','?')}) — cap them; it is cheap and stops one-shots.")
-    if sc.get("ehpStatus") == "warning":
-        pr.append(f"Survival is a little low ({sc.get('ehp','?')} EHP) — worth shoring up soon.")
-    for cat in synergy:
-        if cat.get("status") in ("critical", "warning") and cat.get("missing"):
-            top = sorted(cat["missing"], key=lambda m: m.get("estimatedPct", 0) or 0, reverse=True)[:2]
-            names = ", ".join(m.get("name", "") for m in top if m.get("name"))
-            if names:
-                pr.append(f"{cat.get('label','Damage')}: add {names} (the highest-impact missing pieces).")
-    return pr[:4]
-
-
-def _build_coach_facts(exp: dict, char) -> str:
-    sc = exp.get("scorecard", {}) or {}
-    synergy = exp.get("synergyMap", []) or []
-    lines = [
-        f"CHARACTER: {char.name} — {char.ascendancy or char.char_class}, Level {char.level}, main skill {sc.get('dpsSkill') or 'unknown'}.",
-        f"DPS: {sc.get('dpsLabel','unknown')} ({sc.get('dpsPercentile','?')}th percentile among this build).",
-        f"SURVIVAL: {sc.get('ehp','?')} EHP (status: {sc.get('ehpStatus','?')}).",
-        f"RESISTANCES: {sc.get('resistSummary','?')}.",
-    ]
-    for cat in synergy:
-        miss = (cat.get("missing") or [])[:3]
-        if miss:
-            items = "; ".join(
-                f"{m.get('name')} (+{round(m.get('estimatedPct',0) or 0)}% impact, used by {round(m.get('adoptionPct',0) or 0)}% of top builds)"
-                for m in miss if m.get("name")
-            )
-            if items:
-                lines.append(f"MISSING FOR {(cat.get('label') or '').upper()}: {items}")
-    facts = "\n".join(lines)
-    priorities = _compute_coach_priorities(sc, synergy)
-    if priorities:
-        facts += "\n\nPRIORITY ORDER (already ranked by LAMA — coach in this exact order):\n" + \
-                 "\n".join(f"{i+1}. {p}" for i, p in enumerate(priorities))
-    return facts
 
 
 class CoachRequest(BaseModel):
@@ -1826,7 +1911,8 @@ async def character_coach(req: CoachRequest):
     except Exception as e:
         logger.error(f"coach: analysis failed: {e}")
         return JSONResponse(status_code=500, content={"error": "Analysis failed"})
-    facts = _build_coach_facts(exp, char)
+    swaps = await _coach_tree_swaps(char, archetype, loop)
+    facts = _build_coach_facts(exp, char, swaps)
     model = (req.model or COACH_MODEL).strip()
     try:
         coaching = await loop.run_in_executor(None, _ollama_chat, COACH_SYSTEM, facts, model)
