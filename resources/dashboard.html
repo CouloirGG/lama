@@ -1301,6 +1301,9 @@
         for (const e of (assets.data.edges || [])) {
           const a = nd[e.from], b = nd[e.to];
           if (!a || !b || a.x == null || b.x == null) continue;
+          // Skip the main-tree <-> ascendancy bridge edge: the ascendancy sits
+          // far away (its own panel in-game), so that edge is a long stray line.
+          if (!!a.ascendancyId !== !!b.ascendancyId) continue;
           const ia = String(e.from), ib = String(e.to), asc = a.ascendancyId || b.ascendancyId || null;
           if (a.group != null && a.group === b.group && a.orbit === b.orbit && a.orbit > 0) {
             const g = groups[a.group] || groups[String(a.group)];
