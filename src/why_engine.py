@@ -1443,6 +1443,12 @@ class WhyEngine:
 
                 missing_popular = []
                 for mod_norm, pct in slot_mods[:5]:
+                    ml = mod_norm.lower()
+                    # Item Rarity / Quantity are currency-farming stats, not build
+                    # power — don't recommend them as a gear/DPS upgrade (the
+                    # farming value lives in the Fund It panel instead).
+                    if "rarity of item" in ml or "quantity of item" in ml:
+                        continue
                     if mod_norm not in player_mods and pct >= 30:
                         missing_popular.append(f"{mod_norm.replace('#', 'X')} ({pct:.0f}%)")
 
