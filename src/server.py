@@ -1766,17 +1766,20 @@ def _cost_tier(m: dict, budget: float = 0.0) -> dict:
     name = m.get("name") or ""
     nl = name.lower()
     slot = (m.get("slot") or "").lower()
-    # Free: support-gem swaps, passive/keystone tree changes.
-    if nl.startswith("support:") or m.get("sourceType") == "keystone" or "passive" in slot:
+    # Free: only passive/keystone tree changes (a respec, genuinely no cost).
+    # NB: PoE2 "Support: X" gems are TRADEABLE items — some (Rakiata's Flow etc.)
+    # are very expensive — so they are NOT free.
+    if m.get("sourceType") == "keystone" or "passive" in slot:
         return {"tier": "free", "cost": "free"}
     # Improving gear the player already owns (craft/buy a better-rolled rare) — affordable.
     if "missing key mods" in nl or (not slot and "(" in name):
         return {"tier": "cheap", "cost": "cheap — improve gear you already own"}
-    # A specific item to acquire — price it against the live economy.
+    # Price it against the live economy (strip a "Support:" prefix to the item name).
+    lookup_name = name.split(":", 1)[1].strip() if nl.startswith("support:") else name
     div = None
     if price_cache:
         try:
-            pd = price_cache.lookup(name, "", 0)
+            pd = price_cache.lookup(lookup_name, "", 0)
             if pd and pd.get("divine_value"):
                 div = round(pd["divine_value"], 2)
         except Exception:
@@ -1784,8 +1787,10 @@ def _cost_tier(m: dict, budget: float = 0.0) -> dict:
     threshold = budget if budget and budget > 0 else CHEAP_DIV_MAX
     if div is not None:
         return {"tier": "cheap" if div <= threshold else "chase", "cost": f"~{div} div", "div": div}
-    if slot in GEAR_SLOTS:   # an unpriced/illiquid unique top builds run = a chase item
-        return {"tier": "chase", "cost": "expensive chase unique"}
+    # Unpriced but tradeable (a support gem or a unique gear slot): can't call it
+    # free or guess a tier — flag it honestly as something to price-check.
+    if nl.startswith("support:") or slot in GEAR_SLOTS:
+        return {"tier": "chase", "cost": "tradeable — check price"}
     return {"tier": "cheap", "cost": "minor upgrade"}
 
 
