@@ -1633,6 +1633,82 @@
       );
     }
 
+    function FundingPanel({ account, character }) {
+      const [data, setData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState("");
+
+      useEffect(() => {
+        if (!account || !character) return;
+        setLoading(true); setError("");
+        api("/api/character/funding", "POST", { account, character })
+          .then(d => { setLoading(false); if (d.error) setError(d.error); else setData(d); })
+          .catch(() => { setLoading(false); setError("Failed to build a funding plan."); });
+      }, [account, character]);
+
+      if (loading) return (
+        <div className="flex-1 flex flex-col items-center justify-center py-16 gap-3">
+          <div className="w-8 h-8 border-2 border-tertiary border-t-transparent rounded-full" style={{ animation: "spin 0.8s linear infinite" }} />
+          <span className="text-sm text-on-surface-variant font-sans">Working out how to fund your build…</span>
+        </div>
+      );
+      if (error) return <p className="text-sm text-error font-sans p-6">{error}</p>;
+      if (!data) return null;
+
+      const stageColor = { budget: "text-primary-container", mid: "text-tertiary", geared: "text-secondary" }[data.stage] || "text-on-surface";
+      const gap = data.gap;
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-6 py-4 border-b border-outline-variant/20">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-label uppercase tracking-wide text-on-surface-variant">Your stage</span>
+              <span className={`text-sm font-bold ${stageColor}`}>{data.stageLabel}</span>
+              {data.stageWhy && <span className="text-[10px] text-outline">({data.stageWhy})</span>}
+            </div>
+            {gap && gap.items && gap.items.length > 0 && (
+              <p className="text-xs text-on-surface-variant mt-2">
+                Working toward:{" "}
+                {gap.items.map((g, i) => (
+                  <span key={i}><span className="text-secondary">{g.name}</span>{g.cost ? ` (${g.cost})` : ""}{i < gap.items.length - 1 ? ", " : ""}</span>
+                ))}
+                {gap.totalDiv ? <span> — ~{gap.totalDiv} div to go.</span> : null}
+              </p>
+            )}
+          </div>
+          <div className="px-6 py-4 space-y-3">
+            <p className="text-[10px] font-label uppercase tracking-wide text-on-surface-variant">Best currency for you right now</p>
+            {(data.strategies || []).map((s, i) => (
+              <div key={i} className="bg-surface-container-low border-l-2 border-tertiary/60 p-3">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="text-sm font-bold text-on-surface">{s.name}</span>
+                  <span className="text-[9px] font-label uppercase text-tertiary bg-tertiary/10 px-1.5 py-0.5">{s.tag}</span>
+                </div>
+                <p className="text-xs text-primary-container mb-1">{s.income}</p>
+                <p className="text-[11px] text-on-surface-variant leading-snug">{s.barrier}</p>
+                <p className="text-[11px] text-on-surface-variant leading-snug mt-1">{s.how}</p>
+              </div>
+            ))}
+            {data.earlyTip && (
+              <div className="bg-surface-container-lowest border border-outline-variant/15 p-3">
+                <p className="text-[11px] text-on-surface-variant leading-snug">{data.earlyTip}</p>
+              </div>
+            )}
+          </div>
+          <div className="px-6 py-4 border-t border-outline-variant/15">
+            <p className="text-[10px] font-label uppercase tracking-wide text-on-surface-variant mb-2">Universal currency tips</p>
+            <ul className="space-y-1.5">
+              {(data.universal || []).map((t, i) => (
+                <li key={i} className="text-[11px] text-on-surface-variant leading-snug flex gap-2"><span className="text-tertiary">•</span><span>{t}</span></li>
+              ))}
+            </ul>
+          </div>
+          <p className="text-[10px] text-outline px-6 pb-4 pt-1">
+            Grounded in the current 0.5.0 farming meta — numbers are community estimates. Always check poe.ninja before selling.
+          </p>
+        </div>
+      );
+    }
+
     function BudgetPlanner({ account, character }) {
       const [data, setData] = useState(null);
       const [loading, setLoading] = useState(true);
@@ -1770,6 +1846,7 @@
       const [compareOpen, setCompareOpen] = useState(false);
       const [budgetOpen, setBudgetOpen] = useState(false);
       const [coachOpen, setCoachOpen] = useState(false);
+      const [fundingOpen, setFundingOpen] = useState(false);
       const [compareQuery, setCompareQuery] = useState("");
       const [compareResult, setCompareResult] = useState(null);
       const [compareLoading, setCompareLoading] = useState(false);
@@ -1848,6 +1925,14 @@
             >
               <Icon name="savings" className="text-xs text-primary-container" />
               <span className="text-xs font-label">Budget</span>
+            </button>
+            <button
+              onClick={() => setFundingOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface hover:border-tertiary transition-colors"
+              title="How to fund it — currency farming for your stage"
+            >
+              <Icon name="payments" className="text-xs text-tertiary" />
+              <span className="text-xs font-label">Fund It</span>
             </button>
             {/* Health pills */}
             <div className={`flex items-center gap-1.5 px-3 py-1 ${dpsOk ? "bg-primary-container/10" : "bg-error/10"}`}>
@@ -2109,6 +2194,22 @@
                 </button>
               </div>
               <BudgetPlanner account={account} character={character} />
+            </div>
+          )}
+
+          {/* ── HOW TO FUND IT (overlay) ── */}
+          {fundingOpen && (
+            <div className="absolute inset-0 z-40 bg-surface flex flex-col overflow-hidden">
+              <div className="flex items-center gap-3 px-6 py-3 border-b border-outline-variant/20 shrink-0">
+                <Icon name="payments" className="text-base text-tertiary" />
+                <span className="font-headline text-lg text-on-surface">How to Fund It</span>
+                <span className="text-xs text-on-surface-variant">currency farming for {charData.name}</span>
+                <div className="flex-1" />
+                <button onClick={() => setFundingOpen(false)} className="text-on-surface-variant hover:text-on-surface" title="Close">
+                  <Icon name="close" className="text-lg" />
+                </button>
+              </div>
+              <FundingPanel account={account} character={character} />
             </div>
           )}
 

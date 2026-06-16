@@ -1733,10 +1733,13 @@ COACH_SYSTEM = (
     "with their cost (e.g. 'down the line, the ~700 div Headhunter'). NEVER open with an "
     "expensive item and never imply the player should buy it now.\n"
     "- LAMA has already ranked the priorities by impact AND affordability; coach in that order.\n"
+    "- If a FUNDING fact is given, close by telling the player HOW to start earning the currency "
+    "for the chase goal — name the farming method and its rough income from that fact. Never "
+    "invent a farming strategy not in the facts.\n"
     "Write 4-6 short sentences straight to the player: lead with the free/cheap priority #1 and "
-    "WHY, cover the next free/cheap ones naming only the facts' items/stats, then close by naming "
-    "the chase goal with its cost as something to work toward. End with one line of encouragement. "
-    "Plain friendly prose only — no markdown headers or bullet lists."
+    "WHY, cover the next free/cheap ones naming only the facts' items/stats, then name the chase "
+    "goal with its cost as something to work toward and (if given) how to fund it. End with one "
+    "line of encouragement. Plain friendly prose only — no markdown headers or bullet lists."
 )
 
 
@@ -1788,7 +1791,7 @@ def _classify_missing(synergy: list) -> tuple:
                 continue
             t = _cost_tier(m)
             rec = {"name": name, "cat": label, "impact": m.get("estimatedPct") or 0,
-                   "adopt": adopt, "cost": t["cost"]}
+                   "adopt": adopt, "cost": t["cost"], "div": t.get("div")}
             (free if t["tier"] == "free" else cheap if t["tier"] == "cheap" else chase).append(rec)
     for b in (free, cheap, chase):
         b.sort(key=lambda r: (-(r["impact"] or 0), -(r["adopt"] or 0)))
@@ -1816,6 +1819,17 @@ def _build_coach_facts(exp: dict, char, swaps: list) -> str:
     if chase:
         lines.append("LONG-TERM CHASE (save up — do NOT tell the player to buy now): " + "; ".join(
             f"{r['name']} ({r['cost']}, used by {round(r['adopt'])}% of top builds)" for r in chase[:3]))
+        # Grounded funding guidance for this player's stage (so the coach can
+        # tell them HOW to earn the currency, not just that it's expensive).
+        try:
+            import farming
+            fst = farming.classify_stage(sc, char.level)
+            strat = next((s for s in farming.STRATEGIES if fst["stage"] in s["stages"]), None)
+            if strat:
+                lines.append(f"FUNDING (the player is '{fst['label']}'): to earn currency for the chase items, "
+                             f"their best fit is {strat['name']} — {strat['income']}")
+        except Exception as e:
+            logger.debug(f"coach funding hint failed: {e}")
     facts = "\n".join(lines)
 
     # Priority order — defensive gates, then free, then cheap, chase last.
@@ -1920,6 +1934,34 @@ async def character_coach(req: CoachRequest):
         logger.error(f"coach: ollama failed: {e}")
         return JSONResponse(status_code=502, content={"error": f"Coach model failed: {e}"})
     return {"coaching": coaching, "model": model, "facts": facts}
+
+
+class FundingRequest(BaseModel):
+    account: str
+    character: str
+
+
+@app.post("/api/character/funding")
+async def character_funding(req: FundingRequest):
+    """Personalized, grounded 'how to fund it' currency-farming plan: classify the
+    player's progression stage and surface the farming strategies that fit, plus
+    the divine gap to their chase items."""
+    if not req.account.strip() or not req.character.strip():
+        return JSONResponse(status_code=400, content={"error": "Account and character required"})
+    loop = asyncio.get_running_loop()
+    char = await loop.run_in_executor(None, _lookup_character_with_fallback, req.account.strip(), req.character.strip())
+    if not char:
+        return JSONResponse(status_code=404, content={"error": "Character not found"})
+    archetype = classify_build(char)
+    try:
+        exp = (await loop.run_in_executor(None, why_engine_instance.explain_character, char, archetype)).to_dict()
+    except Exception as e:
+        logger.error(f"funding: analysis failed: {e}")
+        return JSONResponse(status_code=500, content={"error": "Analysis failed"})
+    sc = exp.get("scorecard", {}) or {}
+    _free, _cheap, chase = _classify_missing(exp.get("synergyMap", []) or [])
+    import farming
+    return farming.funding_plan(sc, char.level, chase)
 
 
 class TreeAnalysisRequest(BaseModel):
