@@ -1824,7 +1824,13 @@ def _build_coach_facts(exp: dict, char, swaps: list, budget: float = 0.0) -> str
     if budget and budget > 0:
         lines.append(f"PLAYER BUDGET: ~{budget:g} divine spendable right now — keep every recommendation within reach of this.")
     # Free actions: passive-tree swaps (no cost) then free gem/keystone changes.
-    free_lines = [f"passive tree swap — {s}" for s in (swaps or [])[:3]]
+    # Trim the verbose gain/lose detail to keep the prompt (and so the LLM
+    # generation) short — keep the swap action + its top benefit.
+    def _short_swap(s):
+        action = s.split(". Gain:")[0].strip()
+        gain = s.split("Gain:")[1].split("Lose:")[0].split(";")[0].strip() if "Gain:" in s else ""
+        return f"{action} (gain {gain})" if gain else action
+    free_lines = [f"passive tree swap — {_short_swap(s)}" for s in (swaps or [])[:2]]
     free_lines += [f"{r['name']} (+{round(r['impact'])}% {r['cat'].lower()}, free)" for r in free[:3]]
     if free_lines:
         lines.append("FREE CHANGES (do these first, no cost): " + "; ".join(free_lines))
@@ -1908,7 +1914,7 @@ def _ollama_chat(system: str, user: str, model: str = COACH_MODEL, timeout: int 
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
         "stream": False,
-        "options": {"temperature": 0.3},
+        "options": {"temperature": 0.3, "num_predict": 260},
     }, timeout=timeout)
     r.raise_for_status()
     return ((r.json() or {}).get("message", {}) or {}).get("content", "").strip()
@@ -1950,12 +1956,16 @@ async def character_coach(req: CoachRequest):
     if not char:
         return JSONResponse(status_code=404, content={"error": "Character not found"})
     archetype = classify_build(char)
+    # Run the build analysis and the (free) tree-swap fetch concurrently — both
+    # hit the network, so overlapping them shaves several seconds off the coach.
+    swaps_task = asyncio.create_task(_coach_tree_swaps(char, archetype, loop))
     try:
         exp = (await loop.run_in_executor(None, why_engine_instance.explain_character, char, archetype)).to_dict()
     except Exception as e:
+        swaps_task.cancel()
         logger.error(f"coach: analysis failed: {e}")
         return JSONResponse(status_code=500, content={"error": "Analysis failed"})
-    swaps = await _coach_tree_swaps(char, archetype, loop)
+    swaps = await swaps_task
     facts = _build_coach_facts(exp, char, swaps, _resolve_budget(req.budget))
     model = (req.model or COACH_MODEL).strip()
     try:
