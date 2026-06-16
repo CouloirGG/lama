@@ -1226,12 +1226,14 @@
         fetch(`${base}/assets/skills.json`).then(r => r.json()),
         fetch(`${base}/assets/skills-disabled.json`).then(r => r.json()),
         fetch(`${base}/assets/frame.json`).then(r => r.json()),
+        fetch(`${base}/assets/line.json`).then(r => r.json()),
         loadImg(`${base}/assets/skills.webp`),
         loadImg(`${base}/assets/skills-disabled.webp`),
         loadImg(`${base}/assets/frame.webp`),
-      ]).then(([data, skills, sdis, frame, skillsImg, sdisImg, frameImg]) => ({
-        data, skills: skills.frames, sdis: sdis.frames, frame: frame.frames,
-        skillsImg, sdisImg, frameImg,
+        loadImg(`${base}/assets/line.webp`),
+      ]).then(([data, skills, sdis, frame, line, skillsImg, sdisImg, frameImg, lineImg]) => ({
+        data, skills: skills.frames, sdis: sdis.frames, frame: frame.frames, line: line.frames,
+        skillsImg, sdisImg, frameImg, lineImg,
       })).catch(e => { _tree2Promise = null; throw e; });
       return _tree2Promise;
     }
@@ -1356,24 +1358,46 @@
 
         // edges: faint skeleton, then bright allocated path
         ctx.lineCap = "round";
-        const pathEdges = (allocated) => {
+        // Straight connections use the in-game line sprite (stretched + rotated,
+        // culled); same-orbit arcs stay stroked since the sprite atlas only ships
+        // full orbit-ring textures, not per-arc segments.
+        const lineN = assets.line && assets.line["line:LineConnectorNormal"];
+        const lineA = assets.line && assets.line["line:LineConnectorActive"];
+        const drawStraight = (e, spr, alpha) => {
+          const ax = SX(e.ax), ay = SY(e.ay), bx = SX(e.bx), by = SY(e.by);
+          if ((ax < 0 && bx < 0) || (ax > W && bx > W) || (ay < 0 && by < 0) || (ay > H && by > H)) return;
+          const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy);
+          if (!len) return;
+          const r = spr.frame, h = Math.max(1, r.h * 2 * v.scale);
+          ctx.save(); ctx.globalAlpha = alpha; ctx.translate(ax, ay); ctx.rotate(Math.atan2(dy, dx));
+          ctx.drawImage(assets.lineImg, r.x, r.y, r.w, r.h, 0, -h / 2, len, h);
+          ctx.restore();
+        };
+        // Two passes (unallocated under allocated). Straights via sprite, arcs via stroke.
+        const arcPath = (allocated) => {
           ctx.beginPath();
           for (const e of geom.edges) {
-            if (e.asc && !playerAsc.has(e.asc)) continue;
+            if (!e.arc || (e.asc && !playerAsc.has(e.asc))) continue;
             if ((p.has(e.ia) && p.has(e.ib)) !== allocated) continue;
-            if (e.arc) {
-              const r = e.r * v.scale, ccx = SX(e.cx), ccy = SY(e.cy);
-              ctx.moveTo(ccx + r * Math.cos(e.a1), ccy + r * Math.sin(e.a1));
-              ctx.arc(ccx, ccy, r, e.a1, e.a1 + e.da, e.da < 0);
-            } else {
-              ctx.moveTo(SX(e.ax), SY(e.ay)); ctx.lineTo(SX(e.bx), SY(e.by));
-            }
+            const r = e.r * v.scale, ccx = SX(e.cx), ccy = SY(e.cy);
+            ctx.moveTo(ccx + r * Math.cos(e.a1), ccy + r * Math.sin(e.a1));
+            ctx.arc(ccx, ccy, r, e.a1, e.a1 + e.da, e.da < 0);
           }
         };
-        pathEdges(false);
-        ctx.lineWidth = Math.max(0.5, 8 * v.scale); ctx.strokeStyle = "rgba(159,141,129,0.18)"; ctx.stroke();
-        pathEdges(true);
-        ctx.lineWidth = Math.max(1.2, 18 * v.scale); ctx.strokeStyle = "rgba(255,183,123,0.85)"; ctx.stroke();
+        for (let pass = 0; pass < 2; pass++) {
+          const allocated = pass === 1;
+          if (lineN && lineA) {
+            for (const e of geom.edges) {
+              if (e.arc || (e.asc && !playerAsc.has(e.asc))) continue;
+              if ((p.has(e.ia) && p.has(e.ib)) !== allocated) continue;
+              drawStraight(e, allocated ? lineA : lineN, allocated ? 0.95 : 0.5);
+            }
+          }
+          arcPath(allocated);
+          ctx.lineWidth = allocated ? Math.max(1.2, 18 * v.scale) : Math.max(0.5, 8 * v.scale);
+          ctx.strokeStyle = allocated ? "rgba(255,183,123,0.85)" : "rgba(159,141,129,0.18)";
+          ctx.stroke();
+        }
 
         // nodes (culled). Each sprite is drawn at its TRUE world size: atlas
         // exports at scale 0.5, so world px = sprite px * 2. Returns the screen
