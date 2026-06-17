@@ -2096,6 +2096,24 @@
       const synergy = whyInsights?.synergyMap || [];
       const slots = insights?.slotSummary || [];
 
+      // Cross-link the plan (left) with the build (right), by gear slot.
+      const [highlightSlot, setHighlightSlot] = useState(null);
+      const [highlightRecSlot, setHighlightRecSlot] = useState(null);
+      const linkToGear = (slot) => {           // a recommendation -> its equipment item
+        if (!slot) return;
+        setExpandedSlot(slot); setHighlightSlot(slot);
+        setTimeout(() => { const el = document.getElementById("equip-" + slot); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }, 60);
+        setTimeout(() => setHighlightSlot(s => (s === slot ? null : s)), 2600);
+      };
+      const linkToRec = (slot) => {            // an equipment item -> its recommendation
+        if (!slot) return;
+        const el = document.getElementById("rec-" + slot);
+        if (!el) return;
+        setHighlightRecSlot(slot);
+        setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+        setTimeout(() => setHighlightRecSlot(s => (s === slot ? null : s)), 2600);
+      };
+
       useEffect(() => {
         if (!account || !character || !charData) return;
         api("/api/character/tree-analysis", "POST", { account, character })
@@ -2233,11 +2251,15 @@
 
                     {/* Not working — each is an actionable upgrade */}
                     {cat.missing?.map((m, i) => (
-                      <div key={i} className="bg-surface-container-low border-l-2 border-error/60 p-3 mb-1.5">
+                      <div key={i} id={m.slot ? `rec-${m.slot}` : undefined}
+                           onClick={() => m.slot && linkToGear(m.slot)}
+                           className={`bg-surface-container-low border-l-2 border-error/60 p-3 mb-1.5 transition-all ${m.slot ? "cursor-pointer hover:bg-surface-container" : ""} ${highlightRecSlot === m.slot && m.slot ? "ring-2 ring-tertiary" : ""}`}
+                           title={m.slot ? "Show this item in your equipment" : undefined}>
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1">
                             <span className="font-headline text-sm text-on-surface">{m.name}</span>
                             {m.slot && <span className="text-[10px] text-outline ml-2">{m.slot}</span>}
+                            {m.slot && <Icon name="my_location" className="text-[11px] text-outline ml-1" />}
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {m.estimatedPct > 0 && (
@@ -2288,10 +2310,12 @@
                 const popular = slotPopular[sl.slot] || [];
 
                 return (
-                  <div key={sl.slot} className={`mb-1 ${needsUpgrade ? "border-l-2 border-error/40" : "border-l-2 border-primary-container/20"}`}>
+                  <div key={sl.slot} id={`equip-${sl.slot}`}
+                       className={`mb-1 transition-all ${highlightSlot === sl.slot ? "ring-2 ring-tertiary" : ""} ${needsUpgrade ? "border-l-2 border-error/40" : "border-l-2 border-primary-container/20"}`}>
                     <div
                       className="flex items-center gap-2 py-2 px-3 cursor-pointer hover:bg-surface-container-low transition-all"
-                      onClick={() => setExpandedSlot(isOpen ? null : sl.slot)}
+                      onClick={() => { setExpandedSlot(isOpen ? null : sl.slot); linkToRec(sl.slot); }}
+                      title="Toggle alternatives · jump to its recommendation"
                     >
                       <Icon name={slotIcon(sl.slot)} className={`text-sm ${isUnique ? "text-secondary" : "text-on-surface-variant"}`} />
                       <div className="flex-1 min-w-0">
