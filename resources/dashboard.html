@@ -1536,6 +1536,9 @@
       useEffect(() => {
         const cv = canvasRef.current; if (!cv) return;
         const onWheel = (e) => {
+          // Plain scroll falls through to the page; only zoom with Ctrl/Cmd held
+          // (or the +/- buttons), so you can scroll past the tree normally.
+          if (!(e.ctrlKey || e.metaKey)) return;
           e.preventDefault(); const v = viewRef.current; if (!v) return;
           const r = cv.getBoundingClientRect();
           const mx = e.clientX - r.left, my = e.clientY - r.top;
@@ -1631,6 +1634,11 @@
                 transform: `${flipX ? "translateX(-100%)" : ""} ${flipY ? "translateY(-100%)" : ""}`.trim() };
       }
       const pinInfo = pinned ? nodeInfo(pinned) : null;
+      const zoomBy = (f) => {
+        const v = viewRef.current; if (!v) return;
+        v.scale = Math.max(0.008, Math.min(0.5, v.scale * f));
+        setHover(null); draw();
+      };
       return (
         <div className="mb-3">
           <div className="relative">
@@ -1671,7 +1679,17 @@
                 {pinInfo.why && <div className="text-[11px] text-secondary mt-1.5 leading-snug border-t border-outline-variant/15 pt-1.5">{pinInfo.why}</div>}
               </div>
             )}
-            <span className="absolute bottom-1.5 right-2 text-[9px] text-outline pointer-events-none">click a node to pin · scroll to zoom · drag to pan</span>
+            <div className="absolute top-2 right-2 z-20 flex flex-col shadow-lg">
+              <button onClick={() => zoomBy(1.3)} title="Zoom in"
+                      className="w-7 h-7 flex items-center justify-center bg-surface-container/90 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface">
+                <Icon name="add" className="text-sm" />
+              </button>
+              <button onClick={() => zoomBy(1 / 1.3)} title="Zoom out"
+                      className="w-7 h-7 flex items-center justify-center bg-surface-container/90 border border-t-0 border-outline-variant/40 text-on-surface-variant hover:text-on-surface">
+                <Icon name="remove" className="text-sm" />
+              </button>
+            </div>
+            <span className="absolute bottom-1.5 right-2 text-[9px] text-outline pointer-events-none">drag to pan · +/− or Ctrl+scroll to zoom · click a node to pin</span>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
             {legend.map(([c, label]) => (
