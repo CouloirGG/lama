@@ -1884,6 +1884,88 @@ def _build_whatif(exp: dict) -> dict:
     }
 
 
+_TREE_NODE_INDEX = None
+
+
+def _tree_node_index() -> dict:
+    """id -> {name, stats, keystone, notable} from the GGG tree export (cached)."""
+    global _TREE_NODE_INDEX
+    if _TREE_NODE_INDEX is not None:
+        return _TREE_NODE_INDEX
+    idx = {}
+    try:
+        import json
+        p = os.path.join(os.path.dirname(__file__), "..", "resources", "data", "tree2", "data.json")
+        with open(p, encoding="utf-8") as f:
+            d = json.load(f)
+        nodes = d.get("nodes", d)
+        it = nodes.items() if isinstance(nodes, dict) else ((v.get("id"), v) for v in nodes)
+        for nid, v in it:
+            if isinstance(v, dict):
+                idx[str(nid)] = {
+                    "name": v.get("name") or "",
+                    "stats": v.get("stats") or [],
+                    "keystone": bool(v.get("isKeystone")),
+                    "notable": bool(v.get("isNotable")),
+                }
+    except Exception as e:
+        logger.debug(f"tree node index failed: {e}")
+    _TREE_NODE_INDEX = idx
+    return idx
+
+
+# Tree text patterns that mark a node as carrying a real drawback (not just an upside).
+_DRAWBACK_PATTERNS = ("you have no ", "deal no ", "no inherent ", "cannot ", "maximum life is 1",
+                      "bypass", "50% more mana cost", "more mana cost of skills")
+
+
+def _allocated_drawbacks(char) -> list:
+    """Allocated keystones/notables that carry a build-defining tradeoff, read from
+    GGG's own tree text. Includes nodes that TRANSFORM your gear's modifiers (e.g.
+    Way of the Stonefist), since those can silently strip a stat that was on the gear."""
+    out = []
+    try:
+        from pob_decoder import decode_pob_code
+        pob = decode_pob_code(char.pob_code) if getattr(char, "pob_code", None) else None
+        if not pob or not getattr(pob, "passive_nodes", None):
+            return out
+        idx = _tree_node_index()
+        for nid in (str(n) for n in pob.passive_nodes):
+            info = idx.get(nid)
+            if not info or not (info["keystone"] or info["notable"]):
+                continue
+            lines, transform = [], False
+            for s in info["stats"]:
+                sl = s.lower()
+                if any(p in sl for p in _DRAWBACK_PATTERNS):
+                    lines.append(s.replace("\n", " "))
+                if "transformed" in sl and "modifier" in sl:
+                    transform = True
+            if lines or transform:
+                out.append({"name": info["name"], "drawbacks": lines,
+                            "transforms_gear": transform, "keystone": info["keystone"]})
+    except Exception as e:
+        logger.debug(f"allocated drawbacks failed: {e}")
+    return out
+
+
+def _blame(drawbacks: list, keyword: str) -> str:
+    """If an allocated node explicitly causes (or could strip) a `keyword` stat, name it."""
+    for d in drawbacks:
+        for line in d["drawbacks"]:
+            if keyword in line.lower():
+                return f" Likely cause: you've allocated {d['name']} — \"{line}\"."
+    # The "rewrites your gear" fallback only makes sense for stats that live as
+    # explicit gear mods (mana/life regen). ES sustain is a recharge mechanic, not
+    # something a glove transform plausibly caused — don't speculate there.
+    if keyword in ("mana", "life"):
+        for d in drawbacks:
+            if d.get("transforms_gear"):
+                return (f" Likely cause: {d['name']} rewrites your gear's explicit modifiers, which can "
+                        f"strip {keyword} that was on that gear — re-check that gear's mods.")
+    return ""
+
+
 def _supporting_stats(char) -> list:
     """DPS-supporting-stat problems from PoB: you can't deal damage if you run
     out of resource. Detects mana/life sustain deficits."""
@@ -1894,6 +1976,7 @@ def _supporting_stats(char) -> list:
         if not pob:
             return out
         a = pob.stats.all_stats or {}
+        drawbacks = _allocated_drawbacks(char)
 
         def g(k):
             try:
@@ -1916,7 +1999,7 @@ def _supporting_stats(char) -> list:
                 "summary": (f"You spend ~{round(cost)} mana/s but only recover ~{round(regen)}/s "
                             f"(~{ratio:.1f}x your regen) — about {secs:.0f}s of attacking before you're dry. "
                             f"Add mana regeneration, mana leech, or reduce the skill's mana cost. Fix this BEFORE "
-                            f"chasing more DPS — faster attacks just drain mana faster."),
+                            f"chasing more DPS — faster attacks just drain mana faster." + _blame(drawbacks, "mana")),
             })
 
         # Life-cost sustain (life-cost / blood-magic style skills).
@@ -1932,7 +2015,7 @@ def _supporting_stats(char) -> list:
                 "gate": True,
                 "summary": (f"You spend ~{round(lcost)} life/s casting but only recover ~{round(lregen)}/s "
                             f"(~{lratio:.1f}x) — risky on a life-cost build. Add life leech/regen, or more max "
-                            f"life to cast and survive. Fix this before chasing more DPS."),
+                            f"life to cast and survive. Fix this before chasing more DPS." + _blame(drawbacks, "life")),
             })
 
         # --- Defensive coherence: do your survival layers actually hold up? ---
@@ -1967,7 +2050,7 @@ def _supporting_stats(char) -> list:
                             f"recharge, which only starts after ~2s of NOT taking a hit, so in a sustained "
                             f"fight it never comes back. 'Faster ES recharge' nodes don't fix this — they "
                             f"change when recharge STARTS, not whether it can. Add Energy Shield leech "
-                            f"(refills as you hit) or recharge-rate, {tail}."),
+                            f"(refills as you hit) or recharge-rate, {tail}." + _blame(drawbacks, "energy shield")),
             })
 
         # CI on a thin ES pool: ES is now your only HP and it's small for endgame.
