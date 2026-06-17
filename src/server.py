@@ -1763,8 +1763,9 @@ COACH_SYSTEM = (
     "keystone, passive, price, number, or mechanic that is not in the facts.\n"
     "- This is Path of Exile 2, NOT Path of Exile 1; never reference PoE1-only items or mechanics.\n"
     "- RESOURCE & DEFENCE GATES come first. If a FACT shows a mana/life-sustain deficit (spending the "
-    "resource faster than it recovers), an Energy Shield with no leech/regen, or a Chaos Inoculation "
-    "build that can't sustain or grow its ES, that is a HARD gate — address it before any damage "
+    "resource faster than it recovers), an Energy Shield with no Recharge sustain (PoE2 has NO ES leech "
+    "— ES recovers only via Recharge), or a Chaos Inoculation build that can't sustain or grow its ES, "
+    "that is a HARD gate — address it before any damage "
     "advice, and do NOT tell the player to add attack speed or more DPS until it's fixed (that makes "
     "it worse). You can't deal damage when you're out of mana or dead. When a SUPPORTING STAT fact "
     "says a fix WON'T help (e.g. 'faster ES recharge nodes don't fix this'), never recommend that fix.\n"
@@ -2046,11 +2047,13 @@ def _supporting_stats(char) -> list:
                 "label": "Energy Shield sustain",
                 "severity": "critical" if is_ci else "warning",
                 "gate": True,
-                "summary": (f"{lead} — but you have no ES leech and no ES regen. ES only refills via "
-                            f"recharge, which only starts after ~2s of NOT taking a hit, so in a sustained "
-                            f"fight it never comes back. 'Faster ES recharge' nodes don't fix this — they "
-                            f"change when recharge STARTS, not whether it can. Add Energy Shield leech "
-                            f"(refills as you hit) or recharge-rate, {tail}." + _blame(drawbacks, "energy shield")),
+                "summary": (f"{lead} — but you have no Energy Shield regen, and PoE2 has no ES leech, so "
+                            f"Recharge is your ONLY way to refill it. Recharge only starts ~2s after you STOP "
+                            f"taking hits, so under sustained fire it barely triggers. Make recharge usable: "
+                            f"stack Energy Shield Recharge RATE (refills faster once it starts) plus faster "
+                            f"start of recharge — and as a Monk, the node that cuts recharge delay per Combo "
+                            f"spent lets ES recharge mid-rotation. Otherwise lean on not getting hit "
+                            f"(evasion/block), {tail}." + _blame(drawbacks, "energy shield")),
             })
 
         # CI on a thin ES pool: ES is now your only HP and it's small for endgame.
