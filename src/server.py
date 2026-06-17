@@ -2346,17 +2346,17 @@ async def character_tree_analysis(req: TreeAnalysisRequest):
         # GGG node-id sets for the canvas renderer (small payload; the canvas
         # pulls geometry + sprites from the cached /tree2 export client-side).
         try:
-            import tree2
+            # The analyzer now runs on the same GGG 0.5.0 export the canvas uses,
+            # so its swap node ids are 0.5.0-native — use them directly.
             result["treeNodes"] = {
                 "player": [str(n) for n in player_pob.passive_nodes],
                 "top": [str(n) for n in (top_nodes or [])],
-                "swapTake": tree2.names_to_ids(s.take_notable for s in analysis.swap_recommendations),
-                "swapRefund": tree2.names_to_ids(s.refund_notable for s in analysis.swap_recommendations),
+                "swapTake": [s.take_id for s in analysis.swap_recommendations if s.take_id],
+                "swapRefund": [s.refund_id for s in analysis.swap_recommendations if s.refund_id],
             }
-            # Per-swap node ids so clicking a swap can snap the tree to it.
             for sw in result.get("swapRecommendations", []):
-                sw["takeNodes"] = tree2.names_to_ids([sw.get("take", "")])
-                sw["refundNodes"] = tree2.names_to_ids([sw.get("refund", "")])
+                sw["takeNodes"] = [sw["takeId"]] if sw.get("takeId") else []
+                sw["refundNodes"] = [sw["refundId"]] if sw.get("refundId") else []
         except Exception as e:
             logger.debug(f"treeNodes build failed (non-fatal): {e}")
 

@@ -1453,30 +1453,33 @@
         }
       }, [assets, geom, sets, playerAsc]);
 
-      // Click a swap recommendation -> fit both its nodes in view + circle the
-      // take (blue) and refund (gold) nodes distinctly, with a pulse.
+      // Click a swap -> circle take (blue) + refund (gold). Swaps are point
+      // reallocations, so the two nodes can be far apart: frame both when they're
+      // close, otherwise center on the TAKE node (where you go to allocate).
       useEffect(() => {
         if (!focus || !assets || !geom || !viewRef.current) return;
         const take = (focus.take || []).map(String), refund = (focus.refund || []).map(String);
-        const allIds = [...take, ...refund];
-        if (!allIds.length) return;
         const cv = canvasRef.current; if (!cv) return;
         const rect = cv.getBoundingClientRect();
         const cw = Math.max(300, Math.floor(rect.width)), ch = Math.max(300, Math.floor(rect.height));
         if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
         const nd = assets.data.nodes;
-        let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9, c = 0;
-        for (const id of allIds) {
-          const n = nd[id]; if (!n || n.x == null) continue;
-          minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x);
-          miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y); c++;
-        }
-        if (!c) return;
+        const tn = take.map(id => nd[id]).filter(n => n && n.x != null);
+        const rn = refund.map(id => nd[id]).filter(n => n && n.x != null);
+        const all = [...tn, ...rn];
+        if (!all.length) return;
+        let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+        for (const n of all) { minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x); miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y); }
         const v = viewRef.current;
-        v.cx = (minx + maxx) / 2; v.cy = (miny + maxy) / 2;
-        // Zoom so both nodes fit with padding, but stay readable.
-        const bw = Math.max(900, maxx - minx), bh = Math.max(900, maxy - miny);
-        v.scale = Math.max(0.18, Math.min(0.5, Math.min(cv.width / (bw * 1.9), cv.height / (bh * 1.9))));
+        const span = Math.max(maxx - minx, maxy - miny);
+        if (span < 2600 && tn.length && rn.length) {   // local swap — frame both
+          v.cx = (minx + maxx) / 2; v.cy = (miny + maxy) / 2;
+          const bw = Math.max(900, maxx - minx), bh = Math.max(900, maxy - miny);
+          v.scale = Math.max(0.22, Math.min(0.5, Math.min(cv.width / (bw * 1.9), cv.height / (bh * 1.9))));
+        } else {                                        // far apart — go to the take node
+          const t = tn[0] || rn[0];
+          v.cx = t.x; v.cy = t.y; v.scale = Math.max(v.scale, 0.42);
+        }
         pulseRef.current = { take: new Set(take), refund: new Set(refund), start: performance.now() };
         let raf;
         const tick = () => {

@@ -22,8 +22,10 @@ from typing import Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger("tree_analyzer")
 
-TREE_DATA_PATH = Path(__file__).parent.parent / "resources" / "data" / "passive_tree.json"
-TREE_DOWNLOAD_URL = "https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding-PoE2/master/src/TreeData/0_4/tree.json"
+# Use GGG's official 0.5.0 web export — the SAME tree the canvas renders, so
+# swap node ids/positions match the live game (the old PoB 0.4 tree was stale
+# and the analyzer's swap pairings no longer held). Managed by tree2.py.
+TREE_DATA_PATH = Path(__file__).parent.parent / "resources" / "data" / "tree2" / "data.json"
 
 
 @dataclass
@@ -39,6 +41,8 @@ class TreeNode:
     group: int = 0
     orbit: int = 0
     orbit_index: int = 0
+    x: float = 0.0
+    y: float = 0.0
     connections: List[str] = field(default_factory=list)
 
 
@@ -56,6 +60,8 @@ class SwapRecommendation:
     net_points: int  # positive = saves points, negative = costs more
     impact_summary: str  # plain language summary
     priority: float = 0.0  # higher = more impactful
+    refund_id: str = ""  # tree node id (0.5.0) of the refund notable
+    take_id: str = ""    # tree node id (0.5.0) of the take notable
 
 
 @dataclass
@@ -94,6 +100,8 @@ class TreeAnalysis:
                     "netPoints": s.net_points,
                     "summary": s.impact_summary,
                     "priority": s.priority,
+                    "refundId": s.refund_id,
+                    "takeId": s.take_id,
                 }
                 for s in self.swap_recommendations
             ],
@@ -113,27 +121,8 @@ class TreeAnalyzer:
         self._loaded = False
 
     def _node_position(self, node: "TreeNode") -> Optional[Tuple[float, float]]:
-        """True (x, y) of a node: group centre offset along its orbit.
-
-        PoE trees arrange each group's nodes on concentric orbits; position =
-        group centre + orbitRadius[orbit] rotated by the node's orbit angle.
-        Falls back to the bare group centre if orbit data is unavailable.
-        """
-        cached = self._pos_cache.get(node.id)
-        if cached is not None:
-            return cached
-        centre = self._groups.get(node.group)
-        if not centre:
-            return None
-        gx, gy = centre
-        r = self._orbit_radii[node.orbit] if node.orbit < len(self._orbit_radii) else 0
-        try:
-            ang = self._orbit_angles[node.orbit][node.orbit_index]
-        except (IndexError, TypeError):
-            ang = 0.0
-        pos = (gx + r * math.sin(ang), gy - r * math.cos(ang))
-        self._pos_cache[node.id] = pos
-        return pos
+        """Node (x, y) — the GGG export provides absolute coordinates directly."""
+        return (node.x, node.y)
 
     def _ensure_loaded(self):
         if self._loaded:
@@ -145,71 +134,61 @@ class TreeAnalyzer:
         self._loaded = True
 
     def _load_tree(self) -> Optional[dict]:
-        """Load tree.json from disk or download."""
+        """Load GGG's 0.5.0 tree export (downloaded + cached by tree2)."""
+        if not TREE_DATA_PATH.exists():
+            try:
+                import tree2
+                tree2.ensure_assets()
+            except Exception as e:
+                logger.warning(f"tree2 asset fetch failed: {e}")
         if TREE_DATA_PATH.exists():
             try:
                 with open(TREE_DATA_PATH, encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
                 logger.warning(f"Failed to load tree data: {e}")
-
-        # Download
-        try:
-            import requests
-            logger.info("Downloading passive tree data...")
-            resp = requests.get(TREE_DOWNLOAD_URL, timeout=30,
-                                headers={"User-Agent": "LAMA/1.0"})
-            if resp.status_code == 200:
-                TREE_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-                with open(TREE_DATA_PATH, "w", encoding="utf-8") as f:
-                    f.write(resp.text)
-                return resp.json()
-        except Exception as e:
-            logger.warning(f"Failed to download tree data: {e}")
         return None
 
     def _parse_tree(self, tree_data: dict):
-        """Parse tree.json into nodes and graph."""
-        raw_nodes = tree_data.get("nodes", {})
+        """Parse the GGG export into nodes + an undirected adjacency graph."""
+        raw_nodes = tree_data.get("nodes", {}) or {}
 
         for nid, raw in raw_nodes.items():
+            nid = str(nid)
+            conns = [str(c) for c in (raw.get("out") or [])]
+            conns += [str(c) for c in (raw.get("in") or [])]
             node = TreeNode(
                 id=nid,
                 name=raw.get("name", ""),
-                stats=raw.get("stats", []),
-                is_notable=raw.get("isNotable", False),
-                is_keystone=raw.get("isKeystone", False),
-                is_mastery="Mastery" in raw.get("name", ""),
-                ascendancy=raw.get("ascendancyName", ""),
+                stats=raw.get("stats", []) or [],
+                is_notable=bool(raw.get("isNotable")),
+                is_keystone=bool(raw.get("isKeystone")),
+                is_mastery=bool(raw.get("isMastery")) or "Mastery" in (raw.get("name") or ""),
+                ascendancy=raw.get("ascendancyId") or "",
                 group=raw.get("group", 0),
                 orbit=raw.get("orbit", 0),
                 orbit_index=raw.get("orbitIndex", 0),
-                connections=[str(c["id"]) for c in raw.get("connections", [])],
+                x=raw.get("x", 0.0) or 0.0,
+                y=raw.get("y", 0.0) or 0.0,
+                connections=conns,
             )
             self._nodes[nid] = node
 
-        # Orbit geometry constants (radius per orbit + angle per orbit-index)
-        consts = tree_data.get("constants", {}) or {}
-        self._orbit_radii = consts.get("orbitRadii", []) or []
-        self._orbit_angles = consts.get("orbitAnglesByOrbit", []) or []
+        # Group centres (the GGG export keys groups by string id).
+        for gid, grp in (tree_data.get("groups", {}) or {}).items():
+            if isinstance(grp, dict):
+                self._groups[str(gid)] = (grp.get("x", 0), grp.get("y", 0))
 
-        # Parse groups for positions
-        raw_groups = tree_data.get("groups", [])
-        for gid, grp in enumerate(raw_groups):
-            if grp and isinstance(grp, dict):
-                self._groups[gid] = (grp.get("x", 0), grp.get("y", 0))
-
-        # Build bidirectional graph
+        # Build the undirected graph from out/in (dedup, skip self-loops).
         for nid, node in self._nodes.items():
-            if nid not in self._graph:
-                self._graph[nid] = set()
+            self._graph.setdefault(nid, set())
             for cid in node.connections:
+                if cid == nid:
+                    continue
                 self._graph[nid].add(cid)
-                if cid not in self._graph:
-                    self._graph[cid] = set()
-                self._graph[cid].add(nid)
+                self._graph.setdefault(cid, set()).add(nid)
 
-        logger.info(f"Passive tree loaded: {len(self._nodes)} nodes, "
+        logger.info(f"Passive tree (0.5.0) loaded: {len(self._nodes)} nodes, "
                      f"{sum(1 for n in self._nodes.values() if n.is_notable)} notables")
 
     def shortest_path(self, start: str, end: str) -> Optional[List[str]]:
@@ -354,6 +333,8 @@ class TreeAnalyzer:
                     net_points=net,
                     impact_summary=summary,
                     priority=priority,
+                    refund_id=str(ext["id"]),
+                    take_id=str(miss["id"]),
                 ))
 
         # Filter out impractical swaps (>6 points to reach target)
