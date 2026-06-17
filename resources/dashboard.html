@@ -1472,13 +1472,14 @@
         for (const n of all) { minx = Math.min(minx, n.x); maxx = Math.max(maxx, n.x); miny = Math.min(miny, n.y); maxy = Math.max(maxy, n.y); }
         const v = viewRef.current;
         const span = Math.max(maxx - minx, maxy - miny);
+        // Center on whichever side was clicked (default take); frame both if close.
+        const primary = focus.primary === "refund" ? (rn[0] || tn[0]) : (tn[0] || rn[0]);
         if (span < 2600 && tn.length && rn.length) {   // local swap — frame both
           v.cx = (minx + maxx) / 2; v.cy = (miny + maxy) / 2;
           const bw = Math.max(900, maxx - minx), bh = Math.max(900, maxy - miny);
           v.scale = Math.max(0.22, Math.min(0.5, Math.min(cv.width / (bw * 1.9), cv.height / (bh * 1.9))));
-        } else {                                        // far apart — go to the take node
-          const t = tn[0] || rn[0];
-          v.cx = t.x; v.cy = t.y; v.scale = Math.max(v.scale, 0.42);
+        } else if (primary) {                           // far apart — go to the clicked node
+          v.cx = primary.x; v.cy = primary.y; v.scale = Math.max(v.scale, 0.42);
         }
         pulseRef.current = { take: new Set(take), refund: new Set(refund), start: performance.now() };
         let raf;
@@ -2353,17 +2354,17 @@
                   <PassiveTreeCanvas treeNodes={treeAnalysis.treeNodes} swaps={treeAnalysis.swapRecommendations} focus={treeFocus} />
                   <div className="mt-3 space-y-1.5">
                     {(treeAnalysis.swapRecommendations || []).slice(0, 4).map((s, i) => (
-                      <div key={i} onClick={() => setTreeFocus({ take: s.takeNodes || [], refund: s.refundNodes || [], ts: Date.now() })}
-                           className="bg-surface-container-low border-l-2 border-secondary/60 p-3 cursor-pointer hover:bg-surface-container transition-colors"
-                           title="Show on the tree">
+                      <div key={i} className="bg-surface-container-low border-l-2 border-secondary/60 p-3">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-error line-through text-sm">{s.refund}</span>
+                          <span onClick={() => setTreeFocus({ take: s.takeNodes || [], refund: s.refundNodes || [], primary: "refund", ts: Date.now() })}
+                                className="text-error line-through text-sm cursor-pointer hover:opacity-80" title="Show the perk to REFUND on the tree">{s.refund}</span>
                           <Icon name="arrow_forward" className="text-xs text-outline" />
-                          <span className="text-tertiary text-sm font-bold">{s.take}</span>
-                          <Icon name="my_location" className="text-[11px] text-outline" />
+                          <span onClick={() => setTreeFocus({ take: s.takeNodes || [], refund: s.refundNodes || [], primary: "take", ts: Date.now() })}
+                                className="text-tertiary text-sm font-bold cursor-pointer hover:opacity-80" title="Show the perk to TAKE on the tree">{s.take}</span>
                           <span className="text-[10px] text-outline ml-auto">{s.netPoints > 0 ? `saves ${s.netPoints} pts` : s.netPoints < 0 ? `costs ${-s.netPoints} pts` : "same cost"}</span>
                         </div>
                         <p className="text-xs font-body text-on-surface-variant">{s.summary}</p>
+                        <p className="text-[10px] text-outline mt-1">Click <span className="text-error">refund</span> or <span className="text-tertiary">take</span> above to find it on the tree.</p>
                       </div>
                     ))}
                   </div>
