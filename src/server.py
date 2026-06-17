@@ -1762,10 +1762,12 @@ COACH_SYSTEM = (
     "- Use ONLY the facts given. NEVER invent or name a specific item, unique, flask, gem, "
     "keystone, passive, price, number, or mechanic that is not in the facts.\n"
     "- This is Path of Exile 2, NOT Path of Exile 1; never reference PoE1-only items or mechanics.\n"
-    "- RESOURCE GATES come first. If a FACT shows a mana- or life-sustain deficit (spending the "
-    "resource faster than it recovers), that is a HARD gate — address it before any damage advice, "
-    "and do NOT tell the player to add attack speed or more DPS until it's fixed (that makes it "
-    "worse). You can't deal damage when you're out of mana.\n"
+    "- RESOURCE & DEFENCE GATES come first. If a FACT shows a mana/life-sustain deficit (spending the "
+    "resource faster than it recovers), an Energy Shield with no leech/regen, or a Chaos Inoculation "
+    "build that can't sustain or grow its ES, that is a HARD gate — address it before any damage "
+    "advice, and do NOT tell the player to add attack speed or more DPS until it's fixed (that makes "
+    "it worse). You can't deal damage when you're out of mana or dead. When a SUPPORTING STAT fact "
+    "says a fix WON'T help (e.g. 'faster ES recharge nodes don't fix this'), never recommend that fix.\n"
     "- MONEY MATTERS — assume the player is on a tight budget (a few divine at most). ALWAYS "
     "lead with the FREE and CHEAP changes (passive/gem swaps, capping resistances, improving "
     "gear they already own). Cover those first and explain the impact.\n"
@@ -1931,6 +1933,54 @@ def _supporting_stats(char) -> list:
                 "summary": (f"You spend ~{round(lcost)} life/s casting but only recover ~{round(lregen)}/s "
                             f"(~{lratio:.1f}x) — risky on a life-cost build. Add life leech/regen, or more max "
                             f"life to cast and survive. Fix this before chasing more DPS."),
+            })
+
+        # --- Defensive coherence: do your survival layers actually hold up? ---
+        # Stat-by-stat advice can quietly steer a player into an incoherent
+        # defence (e.g. take CI without the ES to back it). Catch the classics.
+        life = float(getattr(pob.stats, "life", 0) or 0)
+        es = float(getattr(pob.stats, "energy_shield", 0) or 0)
+        es_leech = g("EnergyShieldLeechGainRate")
+        es_regen = g("EnergyShieldRegenRecovery")
+        level = float(getattr(char, "level", 0) or 0)
+        is_ci = life <= 5 and es > 0  # Chaos Inoculation sets max life to 1
+
+        # ES is a primary defence (CI, or ES is the bigger pool) but has no
+        # in-combat sustain. Recharge only starts after ~2s of NOT being hit, so
+        # under sustained fire it never refills. This is the CI trap, and "faster
+        # ES recharge" nodes do nothing for it.
+        es_primary = es > 0 and (is_ci or es >= max(life, 1))
+        if es_primary and es_leech <= 0 and es_regen <= 0:
+            if is_ci:
+                lead = (f"You're running Chaos Inoculation — life is 1, so your ~{round(es)} "
+                        f"Energy Shield is your ENTIRE health pool")
+                tail = "or drop CI and keep your life pool"
+            else:
+                lead = (f"Energy Shield (~{round(es)}) is your main defence — bigger than your "
+                        f"~{round(life)} life")
+                tail = "or lean back on life"
+            out.append({
+                "label": "Energy Shield sustain",
+                "severity": "critical" if is_ci else "warning",
+                "gate": True,
+                "summary": (f"{lead} — but you have no ES leech and no ES regen. ES only refills via "
+                            f"recharge, which only starts after ~2s of NOT taking a hit, so in a sustained "
+                            f"fight it never comes back. 'Faster ES recharge' nodes don't fix this — they "
+                            f"change when recharge STARTS, not whether it can. Add Energy Shield leech "
+                            f"(refills as you hit) or recharge-rate, {tail}."),
+            })
+
+        # CI on a thin ES pool: ES is now your only HP and it's small for endgame.
+        es_floor = max(4000.0, level * 55)
+        if is_ci and level >= 65 and es < es_floor:
+            out.append({
+                "label": "Chaos Inoculation viability",
+                "severity": "warning",
+                "gate": True,
+                "summary": (f"With CI your ~{round(es)} ES is your whole health pool — thin for level "
+                            f"{round(level)} (aim for ~{round(es_floor/1000)}k+ at this stage). CI only pays "
+                            f"off with a LARGE ES pool; below that you're squishier than you'd be on life+ES. "
+                            f"Either grow ES hard (% increased ES, ES on every slot) or drop CI."),
             })
     except Exception as e:
         logger.debug(f"supporting stats failed: {e}")
