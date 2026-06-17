@@ -2095,6 +2095,7 @@
       const sc = whyInsights?.scorecard;
       const synergy = whyInsights?.synergyMap || [];
       const slots = insights?.slotSummary || [];
+      const sustainGate = (whyInsights?.supportingStats || []).find(s => s.gate);
 
       // Cross-link the plan (left) with the build (right), by gear slot.
       const [highlightSlot, setHighlightSlot] = useState(null);
@@ -2236,6 +2237,15 @@
                       <div className="flex-1 h-px bg-outline-variant/20" />
                       {hasIssues && <span className="text-[10px] font-label text-error uppercase">{cat.missing.length} to fix</span>}
                     </div>
+
+                    {/* Resource-sustain gate: don't chase DPS while starving for mana/life */}
+                    {cat.category === "dps" && sustainGate && (
+                      <div className="mb-2 px-3 py-2 bg-error/10 border-l-2 border-error">
+                        <p className="text-[11px] text-error leading-snug">
+                          <span className="font-bold">Fix {sustainGate.label.toLowerCase()} first.</span> Adding attack speed or DPS below widens the gap — you can't deal damage when you run dry.
+                        </p>
+                      </div>
+                    )}
 
                     {/* Working — compact green items */}
                     {cat.contributors?.length > 0 && (

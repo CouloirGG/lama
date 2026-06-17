@@ -1762,6 +1762,10 @@ COACH_SYSTEM = (
     "- Use ONLY the facts given. NEVER invent or name a specific item, unique, flask, gem, "
     "keystone, passive, price, number, or mechanic that is not in the facts.\n"
     "- This is Path of Exile 2, NOT Path of Exile 1; never reference PoE1-only items or mechanics.\n"
+    "- RESOURCE GATES come first. If a FACT shows a mana- or life-sustain deficit (spending the "
+    "resource faster than it recovers), that is a HARD gate — address it before any damage advice, "
+    "and do NOT tell the player to add attack speed or more DPS until it's fixed (that makes it "
+    "worse). You can't deal damage when you're out of mana.\n"
     "- MONEY MATTERS — assume the player is on a tight budget (a few divine at most). ALWAYS "
     "lead with the FREE and CHEAP changes (passive/gem swaps, capping resistances, improving "
     "gear they already own). Cover those first and explain the impact.\n"
@@ -1895,29 +1899,38 @@ def _supporting_stats(char) -> list:
             except Exception:
                 return 0.0
 
-        # Mana sustain: cost/s vs regen + leech, and how long the pool lasts.
+        # Mana sustain: cost/s vs regen + leech. A deficit is a GATE — you can't
+        # deal damage when you're out of mana, and faster attacks drain it faster.
         cost = g("ManaPerSecondCost")
         regen = g("ManaRegenRecovery") + g("ManaLeechGainRate")
         pool = g("ManaUnreserved") or g("Mana")
         if cost > 0 and cost > regen * 1.05:
             secs = pool / (cost - regen) if cost > regen else 999
+            ratio = (cost / regen) if regen > 0 else 99
             out.append({
                 "label": "Mana sustain",
-                "severity": "critical" if secs < 4 else "warning",
-                "summary": (f"You spend ~{round(cost)} mana/s attacking but only recover ~{round(regen)}/s — "
-                            f"about {secs:.0f}s before you're dry. Add mana regeneration, mana leech, or reduce "
-                            f"the skill's mana cost; you can't deal damage when you're out of mana."),
+                "severity": "critical" if (ratio >= 1.8 or secs < 4) else "warning",
+                "gate": True,
+                "summary": (f"You spend ~{round(cost)} mana/s but only recover ~{round(regen)}/s "
+                            f"(~{ratio:.1f}x your regen) — about {secs:.0f}s of attacking before you're dry. "
+                            f"Add mana regeneration, mana leech, or reduce the skill's mana cost. Fix this BEFORE "
+                            f"chasing more DPS — faster attacks just drain mana faster."),
             })
 
         # Life-cost sustain (life-cost / blood-magic style skills).
         lcost = g("LifePerSecondCost")
         lregen = g("LifeRegenRecovery") + g("LifeLeechGainRate")
         if lcost > 0 and lcost > lregen * 1.05:
+            lratio = (lcost / lregen) if lregen > 0 else 99
+            lpool = g("LifeUnreserved") or g("Life")
+            lsecs = lpool / (lcost - lregen) if lcost > lregen else 999
             out.append({
                 "label": "Life sustain",
-                "severity": "warning",
-                "summary": (f"You spend ~{round(lcost)} life/s casting but only recover ~{round(lregen)}/s — "
-                            f"risky on a life-cost build. Add life leech/regen, or more max life to cast and survive."),
+                "severity": "critical" if (lratio >= 1.8 or lsecs < 4) else "warning",
+                "gate": True,
+                "summary": (f"You spend ~{round(lcost)} life/s casting but only recover ~{round(lregen)}/s "
+                            f"(~{lratio:.1f}x) — risky on a life-cost build. Add life leech/regen, or more max "
+                            f"life to cast and survive. Fix this before chasing more DPS."),
             })
     except Exception as e:
         logger.debug(f"supporting stats failed: {e}")
